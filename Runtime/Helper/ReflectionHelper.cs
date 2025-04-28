@@ -9,7 +9,7 @@
     using System.Runtime.CompilerServices;
     using Extensions;
 
-    public delegate void FieldSetter<TInstance, in TValue>(ref TInstance instance, TValue value);
+    internal delegate void FieldSetter<TInstance, in TValue>(ref TInstance instance, TValue value);
 
     internal static class ReflectionHelpers
     {

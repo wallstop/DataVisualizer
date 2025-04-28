@@ -3,6 +3,7 @@
     using System;
     using System.IO;
     using Data;
+    using Helper;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.UIElements;
@@ -11,8 +12,7 @@
     {
         private DataVisualizerSettings _settings;
         private Action _onCloseCallback;
-        private bool _settingsChanged = false;
-        private TextField _dataFolderPathDisplay; // Keep field reference if needed by SelectDataFolder
+        private TextField _dataFolderPathDisplay;
 
         public static DataVisualizerSettingsPopup CreateAndConfigureInstance(
             DataVisualizerSettings settingsToEdit,
@@ -20,13 +20,13 @@
         )
         {
             DataVisualizerSettingsPopup window = CreateInstance<DataVisualizerSettingsPopup>();
-            // Configure the instance BEFORE it's shown
+
             window.titleContent = new GUIContent("Data Visualizer Settings");
             window._settings = settingsToEdit;
             window._onCloseCallback = onCloseCallback;
-            window.minSize = new Vector2(370, 130); // Keep size constraints
+            window.minSize = new Vector2(370, 130);
             window.maxSize = new Vector2(370, 130);
-            return window; // Return the ready-to-show instance
+            return window;
         }
 
         public void CreateGUI()
@@ -43,19 +43,19 @@
                 return;
             }
 
-            _settingsChanged = false; // Reset flag
             Toggle prefsToggle = new("Use Settings Asset for State:")
             {
                 value = _settings.persistStateInSettingsAsset,
             };
             prefsToggle.RegisterValueChangedCallback(evt =>
             {
-                if (_settings.persistStateInSettingsAsset != evt.newValue)
+                if (_settings.persistStateInSettingsAsset == evt.newValue)
                 {
-                    _settings.persistStateInSettingsAsset = evt.newValue;
-                    EditorUtility.SetDirty(_settings);
-                    _settingsChanged = true;
+                    return;
                 }
+
+                _settings.persistStateInSettingsAsset = evt.newValue;
+                EditorUtility.SetDirty(_settings);
             });
             root.Add(prefsToggle);
 
@@ -117,8 +117,7 @@
             }
 
             string currentRelativePath = displayField.value;
-            string projectRoot = Path.GetFullPath(Directory.GetCurrentDirectory())
-                .Replace('\\', '/');
+            string projectRoot = Path.GetFullPath(Directory.GetCurrentDirectory()).SanitizePath();
             string currentFullPath = Path.Combine(projectRoot, currentRelativePath);
             string startDir = Directory.Exists(currentFullPath)
                 ? currentFullPath
@@ -130,42 +129,40 @@
                 ""
             );
 
-            if (!string.IsNullOrWhiteSpace(selectedAbsolutePath))
+            if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
             {
-                string projectAssetsPath = Path.GetFullPath(Application.dataPath)
-                    .Replace('\\', '/');
-                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).Replace('\\', '/');
+                return;
+            }
 
-                if (
-                    !selectedAbsolutePath.StartsWith(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
+            string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
+            selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
+
+            if (
+                !selectedAbsolutePath.StartsWith(
+                    projectAssetsPath,
+                    StringComparison.OrdinalIgnoreCase
                 )
-                {
-                    EditorUtility.DisplayDialog(
-                        "Invalid Folder",
-                        "The selected folder must be inside the project's 'Assets' directory.",
-                        "OK"
-                    );
-                    return;
-                }
+            )
+            {
+                EditorUtility.DisplayDialog(
+                    "Invalid Folder",
+                    "The selected folder must be inside the project's 'Assets' directory.",
+                    "OK"
+                );
+                return;
+            }
 
-                string relativePath = "Assets";
-                if (projectAssetsPath.Length < selectedAbsolutePath.Length)
-                {
-                    relativePath += selectedAbsolutePath.Substring(projectAssetsPath.Length);
-                }
+            string relativePath = "Assets";
+            if (projectAssetsPath.Length < selectedAbsolutePath.Length)
+            {
+                relativePath += selectedAbsolutePath[projectAssetsPath.Length..];
+            }
 
-                if (
-                    !string.Equals(_settings.DataFolderPath, relativePath, StringComparison.Ordinal)
-                )
-                {
-                    _settings._dataFolderPath = relativePath;
-                    EditorUtility.SetDirty(_settings);
-                    _settingsChanged = true;
-                    displayField.value = _settings.DataFolderPath;
-                }
+            if (!string.Equals(_settings.DataFolderPath, relativePath, StringComparison.Ordinal))
+            {
+                _settings._dataFolderPath = relativePath;
+                EditorUtility.SetDirty(_settings);
+                displayField.value = _settings.DataFolderPath;
             }
         }
 

@@ -2,6 +2,7 @@
 {
     using System;
     using System.IO;
+    using Helper;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.UIElements;
@@ -98,7 +99,7 @@
                 return;
             }
             string newPath = Path.Combine(directory, newName + Path.GetExtension(_originalPath))
-                .Replace('\\', '/');
+                .SanitizePath();
 
             string validationError = AssetDatabase.ValidateMoveAsset(_originalPath, newPath);
             if (!string.IsNullOrWhiteSpace(validationError))

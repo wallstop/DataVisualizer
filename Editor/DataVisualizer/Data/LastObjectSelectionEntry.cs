@@ -7,5 +7,10 @@
     {
         public string typeName = string.Empty;
         public string objectGuid = string.Empty;
+
+        public LastObjectSelectionEntry Clone()
+        {
+            return new LastObjectSelectionEntry { typeName = typeName, objectGuid = objectGuid };
+        }
     }
 }

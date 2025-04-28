@@ -1,18 +1,17 @@
 ﻿namespace WallstopStudios.Editor.DataVisualizer
 {
 #if UNITY_EDITOR
-#if ODIN_INSPECTOR
-#endif
     using System;
     using System.Collections.Generic;
     using System.ComponentModel;
     using System.IO;
     using System.Linq;
     using Components;
-    using Components.UnityHelpers.Editor;
     using Data;
     using Helper;
+#if ODIN_INSPECTOR
     using Sirenix.OdinInspector.Editor;
+#endif
     using UnityEditor;
     using UnityEditor.UIElements;
     using UnityEngine;
@@ -22,6 +21,7 @@
 
     public sealed class DataVisualizer : EditorWindow
     {
+        private const string PackageId = "com.wallstop-studios.data-visualizer";
         private const string PrefsPrefix = "WallstopStudios.DataVisualizer.";
 
         private const string PrefsSplitterOuterKey = PrefsPrefix + "SplitterOuterFixedPaneWidth";
@@ -92,9 +92,9 @@
         private float _lastDragUpdateTime;
         private SerializedObject _currentInspectorScriptableObject;
 
-        private string _userStateFilePath; // Full path, determined in OnEnable
-        private DataVisualizerUserState _userState; // Holds state when using file persistence
-        private bool _userStateDirty = false; // Track if file needs saving
+        private string _userStateFilePath;
+        private DataVisualizerUserState _userState;
+        private bool _userStateDirty;
 
         private DataVisualizerSettings _settings;
         private VisualElement _settingsPopup;
@@ -129,7 +129,7 @@
             }
             else
             {
-                _userState = new DataVisualizerUserState(); // Have an empty object if using settings asset
+                _userState = new DataVisualizerUserState();
             }
 
             LoadScriptableObjectTypes();
@@ -186,6 +186,10 @@
 
         public static void SignalRefresh()
         {
+            if (!HasOpenInstances<DataVisualizer>())
+            {
+                return;
+            }
             DataVisualizer window = GetWindow<DataVisualizer>(false, null, false);
             if (window != null)
             {
@@ -200,8 +204,6 @@
 
         private void RefreshAllViews()
         {
-            if (_settings == null) { }
-
             string previousNamespaceKey =
                 _selectedType != null ? GetNamespaceKey(_selectedType) : null;
             string previousTypeName = _selectedType?.Name;
@@ -409,7 +411,7 @@
             }
 
             Debug.LogError(
-                $"Failed to load or create DataVisualizerSettings. Using temporary instance."
+                "Failed to load or create DataVisualizerSettings. Using temporary instance."
             );
             settings = CreateInstance<DataVisualizerSettings>();
             settings._dataFolderPath = DataVisualizerSettings.DefaultDataFolderPath;
@@ -553,7 +555,7 @@
             string savedObjectGuid = null;
             if (_selectedType != null)
             {
-                savedObjectGuid = GetLastSelectedObjectGuidForType(_selectedType.Name); // Use helper
+                savedObjectGuid = GetLastSelectedObjectGuidForType(_selectedType.Name);
             }
             BaseDataObject objectToSelect = null;
 
@@ -616,6 +618,19 @@
             );
             if (!string.IsNullOrWhiteSpace(packageRoot))
             {
+                if (!packageRoot.Contains(PackageId, StringComparison.OrdinalIgnoreCase))
+                {
+                    int dataVisualizerIndex = packageRoot.LastIndexOf(
+                        "DataVisualizer",
+                        StringComparison.Ordinal
+                    );
+                    if (0 <= dataVisualizerIndex)
+                    {
+                        packageRoot = packageRoot[..dataVisualizerIndex];
+                        packageRoot += PackageId;
+                    }
+                }
+
                 char pathSeparator = Path.DirectorySeparatorChar;
                 string styleSheetPath =
                     $"{packageRoot}{pathSeparator}Editor{pathSeparator}DataVisualizer{pathSeparator}Styles{pathSeparator}DataVisualizerStyles.uss";
@@ -627,7 +642,25 @@
                     styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
                         unityRelativeStyleSheetPath
                     );
+                    if (styleSheet == null)
+                    {
+                        Debug.LogError(
+                            $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
+                        );
+                    }
                 }
+                else
+                {
+                    Debug.LogError(
+                        $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
+                    );
+                }
+            }
+            else
+            {
+                Debug.LogError(
+                    $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
+                );
             }
             if (styleSheet != null)
             {
@@ -635,7 +668,9 @@
             }
             else
             {
-                Debug.LogError($"Failed to find Data Visualizer style sheet.");
+                Debug.LogError(
+                    $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
+                );
             }
 
             VisualElement headerRow = new()
@@ -663,11 +698,11 @@
                 }
 
                 bool wasSettingsAssetMode = _settings.persistStateInSettingsAsset;
-                // Show the modal window, passing settings and the callback with the original mode
-                var popupWindow = DataVisualizerSettingsPopup.CreateAndConfigureInstance(
-                    _settings,
-                    () => HandleSettingsPopupClosed(wasSettingsAssetMode) // Pass callback referencing original mode
-                );
+                DataVisualizerSettingsPopup popupWindow =
+                    DataVisualizerSettingsPopup.CreateAndConfigureInstance(
+                        _settings,
+                        () => HandleSettingsPopupClosed(wasSettingsAssetMode)
+                    );
                 popupWindow.ShowModal();
             })
             {
@@ -765,39 +800,24 @@
             }
 
             bool currentModeIsSettingsAsset = _settings.persistStateInSettingsAsset;
-            bool migrationNeeded = (previousModeWasSettingsAsset != currentModeIsSettingsAsset);
+            bool migrationNeeded = previousModeWasSettingsAsset != currentModeIsSettingsAsset;
 
-            // 4. Perform Migration if needed
             if (migrationNeeded)
             {
-                Debug.Log(
-                    $"Persistence mode changed from {(previousModeWasSettingsAsset ? "SettingsAsset" : "UserFile")} to {(currentModeIsSettingsAsset ? "SettingsAsset" : "UserFile")}. Migrating state..."
-                );
-                MigratePersistenceState(migrateToSettingsAsset: currentModeIsSettingsAsset); // Pass the NEW mode as target
-
-                // 5. Persist Migrated Data
+                MigratePersistenceState(migrateToSettingsAsset: currentModeIsSettingsAsset);
                 if (currentModeIsSettingsAsset)
                 {
-                    // Data was migrated TO settings asset, MarkSettingsDirty was called inside Migrate...
-                    // Save the settings asset again to persist migrated list data etc.
                     if (EditorUtility.IsDirty(_settings))
-                    { // Check if migration actually changed anything
-                        Debug.Log("Saving settings asset again after migration.");
+                    {
                         AssetDatabase.SaveAssets();
                     }
                 }
                 else
                 {
-                    // Data was migrated TO user state object (_userState)
-                    // Save the user state file
-                    Debug.Log("Saving user state file after migration.");
-                    SaveUserStateToFile(); // Save the migrated state to the JSON file
+                    SaveUserStateToFile();
                 }
             }
 
-            // 6. Optional: Force a full refresh of the main window UI
-            //    This might be good practice after changing persistence method or settings.
-            Debug.Log("Scheduling full refresh after settings close.");
             ScheduleRefresh();
         }
 
@@ -1072,196 +1092,6 @@
         }
 #endif
 
-        private void SelectDataFolder()
-        {
-            if (_settings == null)
-            {
-                return;
-            }
-
-            string currentFullPath = Path.GetFullPath(
-                Path.Combine(Directory.GetCurrentDirectory(), _settings.DataFolderPath)
-            );
-            string startDir = Directory.Exists(currentFullPath)
-                ? currentFullPath
-                : Application.dataPath;
-
-            string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
-                "Select Data Folder",
-                startDir,
-                string.Empty
-            );
-
-            if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
-            {
-                return;
-            }
-
-            string projectAssetsPath = Path.GetFullPath(Application.dataPath);
-            selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
-            projectAssetsPath = projectAssetsPath.SanitizePath();
-            if (
-                !selectedAbsolutePath.StartsWith(
-                    projectAssetsPath,
-                    StringComparison.OrdinalIgnoreCase
-                )
-            )
-            {
-                Debug.LogError($"Selected folder must be inside the project's Assets folder.");
-                EditorUtility.DisplayDialog(
-                    "Invalid Folder",
-                    "The selected folder must be inside the project's 'Assets' directory.",
-                    "OK"
-                );
-                return;
-            }
-
-            string relativePath;
-            if (selectedAbsolutePath.Equals(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
-            {
-                relativePath = "Assets";
-            }
-            else
-            {
-                relativePath = "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-            }
-
-            if (
-                string.Equals(
-                    _settings.DataFolderPath,
-                    relativePath,
-                    StringComparison.OrdinalIgnoreCase
-                )
-            )
-            {
-                return;
-            }
-
-            _settings._dataFolderPath = relativePath;
-            EditorUtility.SetDirty(_settings);
-            AssetDatabase.SaveAssets();
-            _dataFolderPathDisplay.text = _settings.DataFolderPath;
-            Debug.Log($"Data folder updated to: {_settings.DataFolderPath}");
-        }
-
-        private void BuildSettingsPopup()
-        {
-            _settingsPopup.Clear();
-
-            _settingsPopup.Add(
-                new Label("Settings")
-                {
-                    style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 10 },
-                }
-            );
-
-            Button closeButton = new(() => _settingsPopup.style.display = DisplayStyle.None)
-            {
-                text = "X",
-                style =
-                {
-                    position = Position.Absolute,
-                    top = 2,
-                    right = 2,
-                    width = 20,
-                    height = 20,
-                },
-            };
-            _settingsPopup.Add(closeButton);
-
-            VisualElement prefsToggleContainer = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    marginBottom = 10,
-                },
-            };
-            _settingsPopup.Add(prefsToggleContainer);
-
-            Toggle prefsToggle = new("Use Settings Asset for State:")
-            {
-                value = _settings.persistStateInSettingsAsset,
-                tooltip =
-                    $"If checked, window state (selection, order, collapse) is saved within the DataVisualizerSettings asset file.{Environment.NewLine}If unchecked state is saved locally in a JSON file (persistent data path).",
-            };
-            prefsToggle.RegisterValueChangedCallback(evt =>
-            {
-                if (_settings != null)
-                {
-                    bool newModeIsSettingsAsset = evt.newValue;
-                    bool previousModeWasSettingsAsset = _settings.persistStateInSettingsAsset;
-
-                    if (previousModeWasSettingsAsset != newModeIsSettingsAsset)
-                    {
-                        // Update flag FIRST
-                        _settings.persistStateInSettingsAsset = newModeIsSettingsAsset;
-                        Debug.Log(
-                            $"Persistence mode changed to: {(newModeIsSettingsAsset ? "Settings Asset" : "User File")}"
-                        );
-
-                        // Perform Migration
-                        MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset); // Pass the NEW mode flag
-
-                        // Mark settings SO dirty (flag changed, maybe data too)
-                        MarkSettingsDirty();
-                        // Save settings SO immediately to persist flag change and potential migrated data
-                        AssetDatabase.SaveAssets();
-
-                        // Save user state file if THAT is the new mode
-                        if (!newModeIsSettingsAsset)
-                        {
-                            SaveUserStateToFile();
-                        }
-
-                        Debug.Log("Persistence mode change and migration complete.");
-                    }
-                }
-            });
-            prefsToggleContainer.Add(prefsToggle);
-
-            VisualElement dataFolderContainer = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    marginBottom = 5,
-                },
-            };
-            _settingsPopup.Add(dataFolderContainer);
-
-            dataFolderContainer.Add(
-                new Label("Data Folder:") { style = { width = 80, flexShrink = 0 } }
-            );
-
-            _dataFolderPathDisplay = new Label(_settings?.DataFolderPath ?? "N/A")
-            {
-                name = "data-folder-display",
-                style =
-                {
-                    flexGrow = 1,
-                    backgroundColor = new Color(0.1f, 0.1f, 0.1f),
-                    paddingBottom = 2,
-                    paddingLeft = 2,
-                    paddingRight = 2,
-                    paddingTop = 2,
-                    marginLeft = 5,
-                    marginRight = 5,
-                },
-                pickingMode = PickingMode.Ignore,
-            };
-            dataFolderContainer.Add(_dataFolderPathDisplay);
-
-            Button selectFolderButton = new(SelectDataFolder)
-            {
-                text = "Select...",
-                style = { flexShrink = 0 },
-            };
-            dataFolderContainer.Add(selectFolderButton);
-        }
-
         private void BuildNamespaceView()
         {
             if (_namespaceListContainer == null)
@@ -1315,6 +1145,7 @@
                 bool isCollapsed = GetIsNamespaceCollapsed(key);
                 ApplyNamespaceCollapsedState(indicator, typesContainer, isCollapsed, false);
 
+                // ReSharper disable once HeapView.CanAvoidClosure
                 indicator.RegisterCallback<PointerDownEvent>(evt =>
                 {
                     if (evt.button != 0 || evt.propagationPhase == PropagationPhase.TrickleDown)
@@ -1368,6 +1199,7 @@
                     typeItem.Add(typeLabel);
 
                     typeItem.RegisterCallback<PointerDownEvent>(OnTypePointerDown);
+                    // ReSharper disable once HeapView.CanAvoidClosure
                     typeItem.RegisterCallback<PointerUpEvent>(evt =>
                     {
                         if (_isDragging || evt.button != 0)
@@ -1540,6 +1372,7 @@
                 return;
             }
 
+            // ReSharper disable once RedundantAssignment
             bool useOdinInspector = false;
 #if ODIN_INSPECTOR
             useOdinInspector =
@@ -1572,6 +1405,7 @@
                     if (_odinInspectorContainer == null)
                     {
                         _odinInspectorContainer = new IMGUIContainer(
+                            // ReSharper disable once AccessToDisposedClosure
                             () => _odinPropertyTree?.Draw()
                         )
                         {
@@ -1581,6 +1415,7 @@
                     }
                     else
                     {
+                        // ReSharper disable once AccessToDisposedClosure
                         _odinInspectorContainer.onGUIHandler = () => _odinPropertyTree?.Draw();
                     }
 
@@ -1654,7 +1489,7 @@
                             )
                         )
                         {
-                            propertyField.RegisterValueChangeCallback(evt =>
+                            propertyField.RegisterValueChangeCallback(_ =>
                             {
                                 _currentInspectorScriptableObject.ApplyModifiedProperties();
                                 rootVisualElement
@@ -1688,82 +1523,89 @@
         private void DeleteObject(BaseDataObject objectToDelete)
         {
             if (objectToDelete == null)
+            {
                 return;
-            string objectName = objectToDelete.name; // Capture name before potential deletion
+            }
 
-            // --- Show Custom Confirmation Dialog ---
-            var popup = ConfirmActionPopup.CreateAndConfigureInstance(
+            string objectName = objectToDelete.name;
+
+            ConfirmActionPopup popup = ConfirmActionPopup.CreateAndConfigureInstance(
                 title: "Confirm Delete",
-                message: $"Are you sure you want to delete the asset '{objectName}'?\nThis action cannot be undone.",
-                confirmButtonText: "Delete", // Text for the confirmation button
-                cancelButtonText: "Cancel", // Text for the cancel button
+                message: $"Are you sure you want to delete the asset <b>'{objectName}'</b>?{Environment.NewLine}This action cannot be undone.",
+                confirmButtonText: "Delete",
+                cancelButtonText: "Cancel",
                 position,
-                onComplete: (confirmed) =>
-                { // Callback executed AFTER popup closes
-                    // Only proceed if the user clicked "Delete" (confirmed is true)
-                    if (confirmed)
+                onComplete: confirmed =>
+                {
+                    if (!confirmed)
                     {
-                        // --- Deletion Logic (Now inside the callback) ---
-                        string path = AssetDatabase.GetAssetPath(objectToDelete);
-                        if (string.IsNullOrEmpty(path))
+                        return;
+                    }
+
+                    string path = AssetDatabase.GetAssetPath(objectToDelete);
+                    if (string.IsNullOrWhiteSpace(path))
+                    {
+                        Debug.LogError(
+                            $"Could not find asset path for '{objectName}' post-confirmation. Cannot delete."
+                        );
+                        ScheduleRefresh();
+                        return;
+                    }
+
+                    int currentIndex = _selectedObjects.IndexOf(objectToDelete);
+                    if (0 <= currentIndex)
+                    {
+                        _selectedObjects.RemoveAt(currentIndex);
+                    }
+                    bool removed = _objectVisualElementMap.Remove(
+                        objectToDelete,
+                        out VisualElement visualElement
+                    );
+                    bool deleted = AssetDatabase.DeleteAsset(path);
+
+                    if (deleted)
+                    {
+                        AssetDatabase.Refresh();
+                        if (removed)
                         {
-                            Debug.LogError(
-                                $"Could not find asset path for '{objectName}' post-confirmation. Cannot delete."
-                            );
-                            // Maybe refresh UI here just in case?
-                            ScheduleRefresh();
+                            visualElement?.RemoveFromHierarchy();
+                        }
+
+                        if (_selectedObject != objectToDelete)
+                        {
                             return;
                         }
 
-                        Debug.Log($"User confirmed deletion. Attempting to delete asset: {path}");
-
-                        // Remove from internal list and map FIRST
-                        bool removed = _selectedObjects.Remove(objectToDelete);
-                        _objectVisualElementMap.Remove(objectToDelete, out var visualElement);
-
-                        // Delete the asset file
-                        bool deleted = AssetDatabase.DeleteAsset(path);
-
-                        if (deleted)
+                        BaseDataObject objectToSelect = null;
+                        if (0 <= currentIndex)
                         {
-                            Debug.Log($"Asset '{path}' deleted successfully.");
-                            // Don't need SaveAssets after DeleteAsset usually. Refresh is good.
-                            AssetDatabase.Refresh();
-
-                            // Remove visual element from the list container
-                            visualElement?.RemoveFromHierarchy();
-
-                            // Clear selection if the deleted object was selected
-                            if (_selectedObject == objectToDelete)
+                            if (currentIndex < _selectedObjects.Count)
                             {
-                                SelectObject(null); // Clears selection & updates inspector
+                                objectToSelect = _selectedObjects[currentIndex];
                             }
-                            // The AssetPostprocessor might trigger a refresh anyway,
-                            // but removing the element manually provides immediate feedback.
+                            else
+                            {
+                                int nextIndex = currentIndex - 1;
+                                if (0 <= nextIndex)
+                                {
+                                    objectToSelect = _selectedObjects[nextIndex];
+                                }
+                                else if (0 < _selectedObjects.Count)
+                                {
+                                    objectToSelect = _selectedObjects[0];
+                                }
+                            }
                         }
-                        else
-                        {
-                            Debug.LogError(
-                                $"Failed to delete asset at '{path}'. Rebuilding view to sync."
-                            );
-                            // Rebuild view fully to reflect actual state if delete failed
-                            ScheduleRefresh(); // Use the reliable refresh mechanism
-                        }
-                        // --- End Deletion Logic ---
+                        SelectObject(objectToSelect);
                     }
                     else
                     {
-                        Debug.Log("User cancelled deletion.");
+                        ScheduleRefresh();
                     }
-                } // End callback lambda
-            ); // End CreateAndConfigureInstance call
+                }
+            );
 
-            // --- End Custom Confirmation Dialog ---
-
-            // Show the popup modally relative to this DataVisualizer window
-            // This ensures it's centered and blocks input to the parent.
             popup.ShowModalUtility();
-            // Remove the old EditorUtility.DisplayDialog call entirely
         }
 
         private void OpenRenamePopup(BaseDataObject objectToRename)
@@ -1788,7 +1630,7 @@
 
             RenameAssetPopup.ShowWindow(
                 currentPath,
-                (renameSuccessful) =>
+                renameSuccessful =>
                 {
                     if (renameSuccessful)
                     {
@@ -1803,7 +1645,7 @@
                             BuildObjectsView();
                         }
                     }
-                    mainVisualizerWindow?.Focus();
+                    mainVisualizerWindow.Focus();
                 }
             );
         }
@@ -1900,71 +1742,51 @@
             }
         }
 
-        // Helper method called when a Type is selected to decide which object to auto-select
         private BaseDataObject DetermineObjectToAutoSelect()
         {
-            BaseDataObject objectToSelect = null;
-
-            // 1. Ensure there's a selected type and objects have been loaded for it
             if (_selectedType == null || _selectedObjects == null || _selectedObjects.Count == 0)
             {
-                // Debug.Log("DetermineObjectToAutoSelect: No selected type or no objects loaded.");
-                return null; // No objects available for this type
+                return null;
             }
 
-            // 2. Get the last selected Object GUID using the persistence helper
-            //    The helper handles checking _settings.PersistStateInSettingsAsset
+            BaseDataObject objectToSelect = null;
             string savedObjectGuid = GetLastSelectedObjectGuidForType(_selectedType.Name);
-            // ... (Find objectToSelect using savedObjectGuid, fallback to first object) ...
-            if (!string.IsNullOrEmpty(savedObjectGuid))
+            if (!string.IsNullOrWhiteSpace(savedObjectGuid))
             {
-                objectToSelect = _selectedObjects.FirstOrDefault(obj =>
+                objectToSelect = _selectedObjects.Find(obj =>
                     obj != null
-                    && AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(obj))
-                        == savedObjectGuid
+                    && string.Equals(
+                        AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(obj)),
+                        savedObjectGuid,
+                        StringComparison.Ordinal
+                    )
                 );
             }
-            if (objectToSelect == null && _selectedObjects.Count > 0)
-            { // Fallback
-                objectToSelect = _selectedObjects[0];
-            }
 
-            // Debug.Log($"DetermineObjectToAutoSelect: Checking for last object for type '{_selectedType.Name}'. Saved GUID: '{savedObjectGuid ?? "None"}'");
-
-            // 3. Try to find the object matching the GUID in the current list
-            if (!string.IsNullOrEmpty(savedObjectGuid))
+            if (!string.IsNullOrWhiteSpace(savedObjectGuid))
             {
-                objectToSelect = _selectedObjects.FirstOrDefault(obj =>
+                objectToSelect = _selectedObjects.Find(obj =>
                 {
                     if (obj == null)
+                    {
                         return false;
-                    string path = AssetDatabase.GetAssetPath(obj);
-                    // Safely compare GUIDs
-                    return !string.IsNullOrEmpty(path)
-                        && AssetDatabase.AssetPathToGUID(path) == savedObjectGuid;
-                });
+                    }
 
-                if (objectToSelect != null)
-                {
-                    // Debug.Log($"DetermineObjectToAutoSelect: Found last selected object by GUID: {objectToSelect.name}");
-                }
-                else
-                {
-                    // Debug.Log($"DetermineObjectToAutoSelect: Saved object GUID '{savedObjectGuid}' not found or invalid for type '{_selectedType.Name}'.");
-                    // Optionally clear the now-stale preference?
-                    // ClearLastSelectedObjectGuid();
-                }
+                    string path = AssetDatabase.GetAssetPath(obj);
+                    return !string.IsNullOrWhiteSpace(path)
+                        && string.Equals(
+                            AssetDatabase.AssetPathToGUID(path),
+                            savedObjectGuid,
+                            StringComparison.Ordinal
+                        );
+                });
             }
 
-            // 4. Fallback: If no GUID was saved, or the saved object wasn't found
             if (objectToSelect == null)
             {
-                // Select the first object in the list (_selectedObjects should be correctly sorted by LoadObjectTypes)
                 objectToSelect = _selectedObjects[0];
-                // Debug.Log($"DetermineObjectToAutoSelect: Falling back to first object: {objectToSelect?.name}");
             }
 
-            // Return the object to be selected (could be last selected, first, or potentially null if list was empty initially)
             return objectToSelect;
         }
 
@@ -2014,10 +1836,9 @@
                     return;
                 }
 
-                if (!string.IsNullOrEmpty(typeName))
+                if (!string.IsNullOrWhiteSpace(typeName))
                 {
-                    SetLastSelectedTypeName(typeName); // Save *new* type
-                    // DO NOT clear object Guid here. Let SelectObject(null) handle clearing for the type that WAS selected.
+                    SetLastSelectedTypeName(typeName);
                 }
             }
             catch (Exception e)
@@ -2051,7 +1872,7 @@
             Label titleLabel = element.Q<Label>(className: "object-item__label");
             if (titleLabel == null)
             {
-                Debug.LogError($"Could not find title label within object item element.");
+                Debug.LogError("Could not find title label within object item element.");
                 return;
             }
 
@@ -2187,15 +2008,13 @@
                 if (_selectedType != null)
                 {
                     string typeName = _selectedType.Name;
-                    // Debug.Log($"Clearing last object pref for type {typeName} due to null/invalid selection.");
-                    // Call SET with null guid to clear/remove the entry for this specific type
                     SetLastSelectedObjectGuidForType(typeName, null);
                 }
             }
 
             _currentInspectorScriptableObject?.Dispose();
             _currentInspectorScriptableObject =
-                (dataObject != null) ? new SerializedObject(dataObject) : null;
+                dataObject != null ? new SerializedObject(dataObject) : null;
             BuildInspectorView();
         }
 
@@ -2525,12 +2344,7 @@
         private void PerformObjectDrop()
         {
             int targetIndex = _inPlaceGhost?.userData is int index ? index : -1;
-
-            if (_inPlaceGhost != null)
-            {
-                _inPlaceGhost.RemoveFromHierarchy();
-            }
-
+            _inPlaceGhost?.RemoveFromHierarchy();
             if (
                 _draggedElement == null
                 || _draggedData is not BaseDataObject draggedObject
@@ -2902,19 +2716,14 @@
                 try
                 {
                     string json = File.ReadAllText(_userStateFilePath);
-                    _userState = JsonUtility.FromJson<DataVisualizerUserState>(json); // Or your preferred JSON lib
+                    _userState = JsonUtility.FromJson<DataVisualizerUserState>(json);
                     if (_userState == null)
-                    { // Handle case where file is empty or invalid JSON
+                    {
                         Debug.LogWarning(
                             $"User state file '{_userStateFilePath}' was empty or invalid. Creating new state."
                         );
                         _userState = new DataVisualizerUserState();
                     }
-                    else
-                    {
-                        Debug.Log("Loaded user state from file.");
-                    }
-                    // Optional: Version check/migration if _userState.Version is old
                 }
                 catch (Exception e)
                 {
@@ -2926,26 +2735,23 @@
             }
             else
             {
-                Debug.Log(
-                    $"User state file not found at '{_userStateFilePath}'. Creating new state."
-                );
                 _userState = new DataVisualizerUserState();
-                // No need to save immediately, save happens on first change.
             }
-            _userStateDirty = false; // Reset dirty flag after loading
+            _userStateDirty = false;
         }
 
         private void SaveUserStateToFile()
         {
             if (_userState == null)
-                return; // Should not happen if loaded correctly
+            {
+                return;
+            }
 
             try
             {
-                string json = JsonUtility.ToJson(_userState, true); // Use pretty print
+                string json = JsonUtility.ToJson(_userState, true);
                 File.WriteAllText(_userStateFilePath, json);
-                _userStateDirty = false; // Reset dirty flag after saving
-                // Debug.Log($"User state saved to '{_userStateFilePath}'");
+                _userStateDirty = false;
             }
             catch (Exception e)
             {
@@ -2953,130 +2759,52 @@
             }
         }
 
-        // Helper to mark user state dirty and trigger save (if in file mode)
         private void MarkUserStateDirty()
         {
-            if (!_settings.persistStateInSettingsAsset)
+            if (_settings.persistStateInSettingsAsset)
             {
-                _userStateDirty = true;
-                // Save immediately? Or rely on OnDisable/periodically?
-                // Let's save immediately for simplicity now.
-                SaveUserStateToFile();
+                return;
             }
+
+            _userStateDirty = true;
+            SaveUserStateToFile();
         }
 
-        // Update Migration Method
         private void MigratePersistenceState(bool migrateToSettingsAsset)
         {
-            Debug.Log(
-                $"Migrating persistence state. Target is now: {(migrateToSettingsAsset ? "Settings Asset" : "User File")}"
-            );
             if (_settings == null)
+            {
                 return;
+            }
+
             if (!migrateToSettingsAsset && _userState == null)
             {
-                LoadUserStateFromFile(); // Ensure user state loaded if migrating TO file
+                LoadUserStateFromFile();
                 if (_userState == null)
                 {
-                    Debug.LogError(
-                        "Cannot migrate state to file: User state failed to load/create."
-                    );
                     return;
                 }
             }
 
             try
             {
-                if (migrateToSettingsAsset) // Migrating FROM User File TO Settings Object
+                if (migrateToSettingsAsset)
                 {
-                    Debug.Log("Migrating FROM User File TO Settings Object...");
                     if (_userState == null)
                     {
-                        Debug.LogWarning("User state is null during migration to settings asset.");
                         return;
                     }
 
-                    // Simple Key/Value Pairs
-                    _settings.lastSelectedNamespaceKey = _userState.lastSelectedNamespaceKey;
-                    _settings.lastSelectedTypeName = _userState.lastSelectedTypeName;
-                    // --- Migrate Last Object Selections List ---
-                    _settings.lastObjectSelections =
-                        _userState
-                            .LastObjectSelections?.Select(us => new LastObjectSelectionEntry
-                            {
-                                typeName = us.typeName,
-                                objectGuid = us.objectGuid,
-                            })
-                            .ToList() ?? new List<LastObjectSelectionEntry>();
-                    // ---
-
-                    // Lists (create copies)
-                    _settings.namespaceOrder = new List<string>(
-                        _userState.namespaceOrder ?? new List<string>()
-                    );
-                    _settings.typeOrder =
-                        _userState
-                            .typeOrders?.Select(uo => new NamespaceTypeOrder()
-                            {
-                                namespaceKey = uo.namespaceKey,
-                                typeNames = new List<string>(uo.typeNames ?? new List<string>()),
-                            })
-                            .ToList() ?? new List<NamespaceTypeOrder>();
-                    _settings.namespaceCollapseStates =
-                        _userState
-                            .NamespaceCollapseStates?.Select(ucs => new NamespaceCollapseState()
-                            {
-                                namespaceKey = ucs.namespaceKey,
-                                isCollapsed = ucs.isCollapsed,
-                            })
-                            .ToList() ?? new List<NamespaceCollapseState>();
-
-                    MarkSettingsDirty(); // Mark settings dirty as they received data
-                    Debug.Log("Migration TO Settings Object complete.");
+                    _settings.HydrateFrom(_userState);
+                    MarkSettingsDirty();
+                    Debug.Log("Migration to Settings Object complete.");
                 }
-                else // Migrating FROM Settings Object TO User File
+                else
                 {
-                    Debug.Log("Migrating FROM Settings Object TO User File...");
-                    if (_userState == null)
-                        _userState = new DataVisualizerUserState(); // Ensure instance exists
-
-                    // Simple Key/Value Pairs
-                    _userState.lastSelectedNamespaceKey = _settings.lastSelectedNamespaceKey;
-                    _userState.lastSelectedTypeName = _settings.lastSelectedTypeName;
-                    // --- Migrate Last Object Selections List ---
-                    _userState.LastObjectSelections =
-                        _settings
-                            .lastObjectSelections?.Select(so => new LastObjectSelectionEntry
-                            {
-                                typeName = so.typeName,
-                                objectGuid = so.objectGuid,
-                            })
-                            .ToList() ?? new List<LastObjectSelectionEntry>();
-                    // ---
-
-                    // Lists (create copies)
-                    _userState.namespaceOrder = new List<string>(
-                        _settings.namespaceOrder ?? new List<string>()
-                    );
-                    _userState.typeOrders =
-                        _settings
-                            .typeOrder?.Select(so => new NamespaceTypeOrder
-                            {
-                                namespaceKey = so.namespaceKey,
-                                typeNames = new List<string>(so.typeNames ?? new List<string>()),
-                            })
-                            .ToList() ?? new List<NamespaceTypeOrder>();
-                    _userState.NamespaceCollapseStates =
-                        _settings
-                            .namespaceCollapseStates?.Select(scs => new NamespaceCollapseState
-                            {
-                                namespaceKey = scs.namespaceKey,
-                                isCollapsed = scs.isCollapsed,
-                            })
-                            .ToList() ?? new List<NamespaceCollapseState>();
-
-                    MarkUserStateDirty(); // Mark user state dirty so it gets saved
-                    Debug.Log("Migration TO User File complete.");
+                    _userState ??= new DataVisualizerUserState();
+                    _userState.HydrateFrom(_settings);
+                    MarkUserStateDirty();
+                    Debug.Log("Migration to User File complete.");
                 }
             }
             catch (Exception e)
@@ -3085,12 +2813,13 @@
             }
         }
 
-        // --- Specific Persistence Accessors ---
-
         private string GetLastSelectedNamespaceKey()
         {
             if (_settings == null)
+            {
                 return null;
+            }
+
             return _settings.persistStateInSettingsAsset
                 ? _settings.lastSelectedNamespaceKey
                 : _userState?.lastSelectedNamespaceKey;
@@ -3099,30 +2828,51 @@
         private void SetLastSelectedNamespaceKey(string value)
         {
             if (_settings == null)
+            {
                 return;
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                if (_settings.lastSelectedNamespaceKey != value)
+                if (
+                    string.Equals(
+                        _settings.lastSelectedNamespaceKey,
+                        value,
+                        StringComparison.Ordinal
+                    )
+                )
                 {
-                    _settings.lastSelectedNamespaceKey = value;
-                    MarkSettingsDirty();
+                    return;
                 }
+
+                _settings.lastSelectedNamespaceKey = value;
+                MarkSettingsDirty();
             }
             else if (_userState != null)
             {
-                if (_userState.lastSelectedNamespaceKey != value)
+                if (
+                    string.Equals(
+                        _userState.lastSelectedNamespaceKey,
+                        value,
+                        StringComparison.Ordinal
+                    )
+                )
                 {
-                    _userState.lastSelectedNamespaceKey = value;
-                    MarkUserStateDirty();
+                    return;
                 }
+
+                _userState.lastSelectedNamespaceKey = value;
+                MarkUserStateDirty();
             }
         }
 
         private string GetLastSelectedTypeName()
-        { // Type depends on the *context* of the last namespace
+        {
             if (_settings == null)
+            {
                 return null;
-            // This state is simple enough to store directly without context mapping for now
+            }
+
             return _settings.persistStateInSettingsAsset
                 ? _settings.lastSelectedTypeName
                 : _userState?.lastSelectedTypeName;
@@ -3130,134 +2880,149 @@
 
         private void SetLastSelectedTypeName(string value)
         {
-            Debug.Log($"Setting Last Selected Type Name to '{value}'");
             if (_settings == null)
+            {
                 return;
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                if (_settings.lastSelectedTypeName != value)
+                if (string.Equals(_settings.lastSelectedTypeName, value, StringComparison.Ordinal))
                 {
-                    _settings.lastSelectedTypeName = value;
-                    MarkSettingsDirty();
+                    return;
                 }
+
+                _settings.lastSelectedTypeName = value;
+                MarkSettingsDirty();
             }
             else if (_userState != null)
             {
-                if (_userState.lastSelectedTypeName != value)
+                if (string.Equals(_userState.lastSelectedTypeName, value, StringComparison.Ordinal))
                 {
-                    _userState.lastSelectedTypeName = value;
-                    MarkUserStateDirty();
+                    return;
                 }
+
+                _userState.lastSelectedTypeName = value;
+                MarkUserStateDirty();
             }
         }
 
         private string GetLastSelectedObjectGuidForType(string typeName)
         {
-            if (_settings == null || string.IsNullOrEmpty(typeName))
+            if (_settings == null || string.IsNullOrWhiteSpace(typeName))
+            {
                 return null;
+            }
 
             if (_settings.persistStateInSettingsAsset)
             {
-                // Use helper on settings object or find manually
                 return _settings.GetLastObjectForType(typeName);
-                // Manual find: return _settings.InternalLastObjectSelections?.Find(e => e.TypeName == typeName)?.ObjectGuid;
             }
-            else
+
+            if (_userState == null)
             {
-                if (_userState == null)
-                    LoadUserStateFromFile(); // Load if needed
-                // Use helper on user state object or find manually
-                return _userState?.GetLastObjectForType(typeName);
-                // Manual find: return _userState?.LastObjectSelections?.Find(e => e.TypeName == typeName)?.ObjectGuid;
+                LoadUserStateFromFile();
             }
+
+            return _userState?.GetLastObjectForType(typeName);
         }
 
         private void SetLastSelectedObjectGuidForType(string typeName, string objectGuid)
         {
-            Debug.Log($"Setting Last Selected Object Guid for Type '{typeName}' to '{objectGuid}'");
-            if (_settings == null || string.IsNullOrEmpty(typeName))
+            if (_settings == null || string.IsNullOrWhiteSpace(typeName))
+            {
                 return;
+            }
 
             if (_settings.persistStateInSettingsAsset)
             {
-                // Use helper on settings object
                 _settings.SetLastObjectForType(typeName, objectGuid);
-                MarkSettingsDirty(); // Mark dirty as list might have changed
+                MarkSettingsDirty();
             }
             else if (_userState != null)
             {
-                // Use helper on user state object
                 _userState.SetLastObjectForType(typeName, objectGuid);
-                MarkUserStateDirty(); // Mark user state dirty as list might have changed
+                MarkUserStateDirty();
             }
         }
 
         private List<string> GetNamespaceOrder()
         {
             if (_settings == null)
+            {
                 return new List<string>();
-            // Ensure list exists in chosen backend
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                if (_settings.namespaceOrder == null)
-                    _settings.namespaceOrder = new List<string>();
-                return _settings.namespaceOrder;
+                return _settings.namespaceOrder ?? (_settings.namespaceOrder = new List<string>());
             }
-            else
+            if (_userState == null)
             {
-                if (_userState == null)
-                    LoadUserStateFromFile(); // Load if missing
-                if (_userState.namespaceOrder == null)
-                    _userState.namespaceOrder = new List<string>();
-                return _userState.namespaceOrder;
+                LoadUserStateFromFile();
             }
+
+            _userState!.namespaceOrder ??= new List<string>();
+            return _userState.namespaceOrder;
         }
 
         private void SetNamespaceOrder(List<string> value)
         {
             if (_settings == null || value == null)
+            {
                 return;
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                // Check if different before assigning and marking dirty
                 if (
-                    _settings.namespaceOrder == null
-                    || !_settings.namespaceOrder.SequenceEqual(value)
+                    _settings.namespaceOrder != null
+                    && _settings.namespaceOrder.SequenceEqual(value)
                 )
                 {
-                    _settings.namespaceOrder = new List<string>(value); // Assign copy
-                    MarkSettingsDirty();
+                    return;
                 }
+
+                _settings.namespaceOrder = new List<string>(value);
+                MarkSettingsDirty();
             }
             else if (_userState != null)
             {
                 if (
-                    _userState.namespaceOrder == null
-                    || !_userState.namespaceOrder.SequenceEqual(value)
+                    _userState.namespaceOrder != null
+                    && _userState.namespaceOrder.SequenceEqual(value)
                 )
                 {
-                    _userState.namespaceOrder = new List<string>(value); // Assign copy
-                    MarkUserStateDirty();
+                    return;
                 }
+
+                _userState.namespaceOrder = new List<string>(value);
+                MarkUserStateDirty();
             }
         }
 
         private List<string> GetTypeOrderForNamespace(string namespaceKey)
         {
-            if (_settings == null || string.IsNullOrEmpty(namespaceKey))
+            if (_settings == null || string.IsNullOrWhiteSpace(namespaceKey))
+            {
                 return new List<string>();
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                var entry = _settings.typeOrder?.Find(o =>
+                NamespaceTypeOrder entry = _settings.typeOrder?.Find(o =>
                     string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
-                return entry?.typeNames ?? new List<string>(); // Return empty if not found
+                return entry?.typeNames ?? new List<string>();
             }
             else
             {
                 if (_userState == null)
+                {
                     LoadUserStateFromFile();
-                var entry = _userState.typeOrders?.Find(o =>
+                }
+
+                NamespaceTypeOrder entry = _userState!.typeOrders?.Find(o =>
                     string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
                 return entry?.typeNames ?? new List<string>();
@@ -3266,48 +3031,60 @@
 
         private void SetTypeOrderForNamespace(string namespaceKey, List<string> typeNames)
         {
-            if (_settings == null || string.IsNullOrEmpty(namespaceKey) || typeNames == null)
+            if (_settings == null || string.IsNullOrWhiteSpace(namespaceKey) || typeNames == null)
+            {
                 return;
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                // Use helper to get/create entry, check if different
-                var entryList = _settings.GetOrCreateTypeOrderList(namespaceKey);
-                if (!entryList.SequenceEqual(typeNames))
+                List<string> entryList = _settings.GetOrCreateTypeOrderList(namespaceKey);
+                if (entryList.SequenceEqual(typeNames))
                 {
-                    entryList.Clear();
-                    entryList.AddRange(typeNames);
-                    MarkSettingsDirty();
+                    return;
                 }
+
+                entryList.Clear();
+                entryList.AddRange(typeNames);
+                MarkSettingsDirty();
             }
             else if (_userState != null)
             {
-                var entryList = _userState.GetOrCreateTypeOrderList(namespaceKey);
-                if (!entryList.SequenceEqual(typeNames))
+                List<string> entryList = _userState.GetOrCreateTypeOrderList(namespaceKey);
+                if (entryList.SequenceEqual(typeNames))
                 {
-                    entryList.Clear();
-                    entryList.AddRange(typeNames);
-                    MarkUserStateDirty();
+                    return;
                 }
+
+                entryList.Clear();
+                entryList.AddRange(typeNames);
+                MarkUserStateDirty();
             }
         }
 
         private bool GetIsNamespaceCollapsed(string namespaceKey)
         {
-            if (_settings == null || string.IsNullOrEmpty(namespaceKey))
-                return false; // Default to expanded
+            if (_settings == null || string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return false;
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                var entry = _settings.namespaceCollapseStates?.Find(o =>
+                NamespaceCollapseState entry = _settings.namespaceCollapseStates?.Find(o =>
                     string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
-                return entry?.isCollapsed ?? false; // Default to false (expanded)
+                return entry?.isCollapsed ?? false;
             }
             else
             {
                 if (_userState == null)
+                {
                     LoadUserStateFromFile();
-                var entry = _userState.NamespaceCollapseStates?.Find(o =>
-                    o.namespaceKey == namespaceKey
+                }
+
+                NamespaceCollapseState entry = _userState!.NamespaceCollapseStates?.Find(o =>
+                    string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
                 return entry?.isCollapsed ?? false;
             }
@@ -3315,29 +3092,34 @@
 
         private void SetIsNamespaceCollapsed(string namespaceKey, bool isCollapsed)
         {
-            if (_settings == null || string.IsNullOrEmpty(namespaceKey))
+            if (_settings == null || string.IsNullOrWhiteSpace(namespaceKey))
+            {
                 return;
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                var entry = _settings.GetOrCreateCollapseState(namespaceKey);
-                if (entry.isCollapsed != isCollapsed)
+                NamespaceCollapseState entry = _settings.GetOrCreateCollapseState(namespaceKey);
+                if (entry.isCollapsed == isCollapsed)
                 {
-                    entry.isCollapsed = isCollapsed;
-                    MarkSettingsDirty();
+                    return;
                 }
+
+                entry.isCollapsed = isCollapsed;
+                MarkSettingsDirty();
             }
             else if (_userState != null)
             {
-                var entry = _userState.GetOrCreateCollapseState(namespaceKey);
-                if (entry.isCollapsed != isCollapsed)
+                NamespaceCollapseState entry = _userState.GetOrCreateCollapseState(namespaceKey);
+                if (entry.isCollapsed == isCollapsed)
                 {
-                    entry.isCollapsed = isCollapsed;
-                    MarkUserStateDirty();
+                    return;
                 }
+
+                entry.isCollapsed = isCollapsed;
+                MarkUserStateDirty();
             }
         }
-
-        // Remove generic helpers Set/Get/DeletePersistentString/Bool
 
         private static int CompareUsingCustomOrder(
             string keyA,

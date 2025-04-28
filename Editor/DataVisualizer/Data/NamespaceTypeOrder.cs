@@ -8,5 +8,14 @@
     {
         public string namespaceKey = string.Empty;
         public List<string> typeNames = new();
+
+        public NamespaceTypeOrder Clone()
+        {
+            return new NamespaceTypeOrder
+            {
+                namespaceKey = namespaceKey,
+                typeNames = new(typeNames),
+            };
+        }
     }
 }

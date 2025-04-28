@@ -2,6 +2,8 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
+    using UnityEditor;
 
     [Serializable]
     public sealed class DataVisualizerUserState
@@ -15,6 +17,31 @@
 
         public List<LastObjectSelectionEntry> LastObjectSelections = new();
         public List<NamespaceCollapseState> NamespaceCollapseStates = new();
+
+        public void HydrateFrom(DataVisualizerSettings settings)
+        {
+            if (settings == null)
+            {
+                return;
+            }
+
+            lastSelectedNamespaceKey = settings.lastSelectedNamespaceKey;
+            lastSelectedTypeName = settings.lastSelectedTypeName;
+            namespaceOrder = settings.namespaceOrder?.ToList() ?? new List<string>();
+            typeOrders =
+                settings.typeOrder?.Select(order => order.Clone()).ToList()
+                ?? new List<NamespaceTypeOrder>();
+            LastObjectSelections =
+                settings.lastObjectSelections?.Select(selection => selection.Clone()).ToList()
+                ?? new List<LastObjectSelectionEntry>();
+            NamespaceCollapseStates =
+                settings.namespaceCollapseStates?.Select(selection => selection.Clone()).ToList()
+                ?? new List<NamespaceCollapseState>();
+
+#if UNITY_EDITOR
+            EditorUtility.SetDirty(settings);
+#endif
+        }
 
         public void SetLastObjectForType(string typeName, string guid)
         {

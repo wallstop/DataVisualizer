@@ -1,6 +1,7 @@
 ﻿namespace WallstopStudios.Editor.DataVisualizer.Unity
 {
 #if UNITY_EDITOR
+    using System.Linq;
     using Data;
     using UnityEditor;
     using UnityEngine;
@@ -15,48 +16,23 @@
             string[] movedFromAssetPaths
         )
         {
-            bool needsRefresh = false;
-
-            foreach (string path in deletedAssets)
+            bool needsRefresh = deletedAssets.Where(IsAsset).Any();
+            if (!needsRefresh)
             {
-                if (!path.EndsWith(".asset", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                needsRefresh = true;
-                break;
+                needsRefresh = importedAssets
+                    .Where(IsAsset)
+                    .Select(AssetDatabase.LoadAssetAtPath<ScriptableObject>)
+                    .Any(asset => asset is BaseDataObject or DataVisualizerSettings);
             }
 
             if (!needsRefresh)
             {
-                foreach (string path in importedAssets)
-                {
-                    if (!path.EndsWith(".asset", System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    ScriptableObject asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
-                    if (asset is BaseDataObject or DataVisualizerSettings)
-                    {
-                        needsRefresh = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!needsRefresh)
-            {
-                for (int i = 0; i < movedAssets.Length; i++)
+                for (int i = 0; i < movedAssets.Length && i < movedFromAssetPaths.Length; i++)
                 {
                     string newPath = movedAssets[i];
                     string oldPath = movedFromAssetPaths[i];
 
-                    if (
-                        newPath.EndsWith(".asset", System.StringComparison.OrdinalIgnoreCase)
-                        || oldPath.EndsWith(".asset", System.StringComparison.OrdinalIgnoreCase)
-                    )
+                    if (IsAsset(newPath) || IsAsset(oldPath))
                     {
                         needsRefresh = true;
                         break;
@@ -69,6 +45,9 @@
                 EditorApplication.delayCall += DataVisualizer.SignalRefresh;
             }
         }
+
+        internal static bool IsAsset(string path) =>
+            path.EndsWith(".asset", System.StringComparison.OrdinalIgnoreCase);
     }
 #endif
 }

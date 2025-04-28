@@ -1,6 +1,7 @@
 ﻿namespace WallstopStudios.Editor.DataVisualizer.Unity
 {
 #if UNITY_EDITOR
+    using System.Linq;
     using Data;
     using UnityEditor;
     using WallstopStudios.DataVisualizer;
@@ -14,13 +15,8 @@
             bool needsRefresh = false;
             DataVisualizer openWindow = null;
 
-            foreach (string path in paths)
+            foreach (string path in paths.Where(DataVisualizerAssetProcessor.IsAsset))
             {
-                if (!path.EndsWith(".asset", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
                 System.Type assetType = AssetDatabase.GetMainAssetTypeAtPath(path);
 
                 if (assetType == null)
@@ -29,37 +25,26 @@
                 }
 
                 bool isSettingsAsset = typeof(DataVisualizerSettings).IsAssignableFrom(assetType);
-                bool isBDOAsset = typeof(BaseDataObject).IsAssignableFrom(assetType);
+                bool isBaseDatObject = typeof(BaseDataObject).IsAssignableFrom(assetType);
 
-                if (isBDOAsset)
-                { // Always refresh if a BaseDataObject is saved
+                if (isBaseDatObject)
+                {
                     needsRefresh = true;
                 }
                 else if (isSettingsAsset)
                 {
-                    // Only refresh from settings save IF the window is NOT using EditorPrefs
-                    // (because if using EditorPrefs, saving settings file doesn't affect window state)
-                    var settingsInstance = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(
-                        path
-                    );
+                    DataVisualizerSettings settingsInstance =
+                        AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(path);
                     if (settingsInstance != null && !settingsInstance.persistStateInSettingsAsset)
                     {
-                        needsRefresh = true; // Settings file changed AND it's the active persistence method
+                        needsRefresh = true;
                     }
                 }
 
                 if (needsRefresh)
                 {
-                    if (openWindow == null)
-                    {
-                        openWindow = EditorWindow.GetWindow<DataVisualizer>(false, null, false);
-                    }
-
-                    if (openWindow != null)
-                    {
-                        needsRefresh = true;
-                        break;
-                    }
+                    openWindow = EditorWindow.GetWindow<DataVisualizer>(false, null, false);
+                    break;
                 }
             }
 
