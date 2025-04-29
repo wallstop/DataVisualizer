@@ -10,6 +10,7 @@
     using Data;
     using Helper;
 #if ODIN_INSPECTOR
+    using Sirenix.OdinInspector;
     using Sirenix.OdinInspector.Editor;
 #endif
     using UnityEditor;
@@ -58,9 +59,10 @@
         }
 
         private readonly List<(string key, List<Type> types)> _scriptableObjectTypes = new();
-        private readonly Dictionary<BaseDataObject, VisualElement> _objectVisualElementMap = new();
-        private readonly List<BaseDataObject> _selectedObjects = new();
-        private BaseDataObject _selectedObject;
+        private readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
+            new();
+        private readonly List<ScriptableObject> _selectedObjects = new();
+        private ScriptableObject _selectedObject;
         private VisualElement _selectedElement;
 
         private VisualElement _namespaceListContainer;
@@ -73,6 +75,10 @@
         private TwoPaneSplitView _innerSplitView;
         private VisualElement _namespaceColumnElement;
         private VisualElement _objectColumnElement;
+
+        private VisualElement _typeAddPopover; // Changed from _typeAddPopup
+        private Button _addTypeButton; // Need reference to the button for positioning
+        private bool _isTypePopoverOpen = false; // Track state
 
         private float _lastSavedOuterWidth = -1f;
         private float _lastSavedInnerWidth = -1f;
@@ -97,7 +103,8 @@
         private bool _userStateDirty;
 
         private DataVisualizerSettings _settings;
-        private VisualElement _settingsPopup;
+
+        //private VisualElement _settingsPopup;
         private Label _dataFolderPathDisplay;
 #if ODIN_INSPECTOR
         private PropertyTree _odinPropertyTree;
@@ -156,6 +163,7 @@
 
         private void Cleanup()
         {
+            CloseAddTypePopover();
             CancelDrag();
             _saveWidthsTask?.Pause();
             if (!_settings.persistStateInSettingsAsset && _userStateDirty)
@@ -557,7 +565,7 @@
             {
                 savedObjectGuid = GetLastSelectedObjectGuidForType(_selectedType.Name);
             }
-            BaseDataObject objectToSelect = null;
+            ScriptableObject objectToSelect = null;
 
             if (!string.IsNullOrWhiteSpace(savedObjectGuid) && 0 < _selectedObjects.Count)
             {
@@ -611,70 +619,7 @@
         {
             VisualElement root = rootVisualElement;
             root.Clear();
-
-            StyleSheet styleSheet = null;
-            string packageRoot = DirectoryHelper.FindPackageRootPath(
-                DirectoryHelper.GetCallerScriptDirectory()
-            );
-            if (!string.IsNullOrWhiteSpace(packageRoot))
-            {
-                if (
-                    packageRoot.StartsWith("Packages", StringComparison.OrdinalIgnoreCase)
-                    && !packageRoot.Contains(PackageId, StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    int dataVisualizerIndex = packageRoot.LastIndexOf(
-                        "DataVisualizer",
-                        StringComparison.Ordinal
-                    );
-                    if (0 <= dataVisualizerIndex)
-                    {
-                        packageRoot = packageRoot[..dataVisualizerIndex];
-                        packageRoot += PackageId;
-                    }
-                }
-
-                char pathSeparator = Path.DirectorySeparatorChar;
-                string styleSheetPath =
-                    $"{packageRoot}{pathSeparator}Editor{pathSeparator}DataVisualizer{pathSeparator}Styles{pathSeparator}DataVisualizerStyles.uss";
-                string unityRelativeStyleSheetPath = DirectoryHelper.AbsoluteToUnityRelativePath(
-                    styleSheetPath
-                );
-                if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
-                {
-                    styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                        unityRelativeStyleSheetPath
-                    );
-                    if (styleSheet == null)
-                    {
-                        Debug.LogError(
-                            $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
-                        );
-                    }
-                }
-                else
-                {
-                    Debug.LogError(
-                        $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
-                    );
-                }
-            }
-            else
-            {
-                Debug.LogError(
-                    $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
-                );
-            }
-            if (styleSheet != null)
-            {
-                root.styleSheets.Add(styleSheet);
-            }
-            else
-            {
-                Debug.LogError(
-                    $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
-                );
-            }
+            TryLoadStyleSheet(root);
 
             VisualElement headerRow = new()
             {
@@ -755,39 +700,136 @@
             _outerSplitView.Add(_innerSplitView);
             root.Add(_outerSplitView);
 
-            _settingsPopup = new VisualElement
+            _typeAddPopover = new VisualElement
             {
-                name = "settings-popup",
+                name = "type-add-popover",
                 style =
                 {
                     position = Position.Absolute,
-                    top = 30,
-                    left = 10,
-                    width = 350,
-                    backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.95f),
+                    width = 250, // Or auto? Let's try fixed first
+                    maxHeight = 400, // Prevent excessive height
+                    backgroundColor = new Color(0.22f, 0.22f, 0.22f, 1f), // Slightly different bg
                     borderLeftWidth = 1,
                     borderRightWidth = 1,
                     borderTopWidth = 1,
                     borderBottomWidth = 1,
-                    borderBottomColor = Color.gray,
-                    borderLeftColor = Color.gray,
-                    borderRightColor = Color.gray,
-                    borderTopColor = Color.gray,
-                    borderBottomLeftRadius = 5,
-                    borderBottomRightRadius = 5,
-                    borderTopLeftRadius = 5,
-                    borderTopRightRadius = 5,
-                    paddingBottom = 10,
-                    paddingLeft = 10,
-                    paddingRight = 10,
-                    paddingTop = 10,
-                    display = DisplayStyle.None,
+                    borderBottomColor = Color.black,
+                    borderLeftColor = Color.black,
+                    borderRightColor = Color.black,
+                    borderTopColor = Color.black,
+                    display = DisplayStyle.None, // Start hidden
                 },
             };
-            root.Add(_settingsPopup);
+
+            var typePopoverScrollView = new ScrollView(ScrollViewMode.Vertical);
+            typePopoverScrollView.style.flexGrow = 1;
+            _typeAddPopover.Add(typePopoverScrollView);
+            // Add content container for list items inside scrollview
+            var typeListContainer = new VisualElement { name = "type-add-list-content" };
+            typePopoverScrollView.Add(typeListContainer);
+
+            root.Add(_typeAddPopover);
+
+            // _settingsPopup = new VisualElement
+            // {
+            //     name = "settings-popup",
+            //     style =
+            //     {
+            //         position = Position.Absolute,
+            //         top = 30,
+            //         left = 10,
+            //         width = 350,
+            //         backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.95f),
+            //         borderLeftWidth = 1,
+            //         borderRightWidth = 1,
+            //         borderTopWidth = 1,
+            //         borderBottomWidth = 1,
+            //         borderBottomColor = Color.gray,
+            //         borderLeftColor = Color.gray,
+            //         borderRightColor = Color.gray,
+            //         borderTopColor = Color.gray,
+            //         borderBottomLeftRadius = 5,
+            //         borderBottomRightRadius = 5,
+            //         borderTopLeftRadius = 5,
+            //         borderTopRightRadius = 5,
+            //         paddingBottom = 10,
+            //         paddingLeft = 10,
+            //         paddingRight = 10,
+            //         paddingTop = 10,
+            //         display = DisplayStyle.None,
+            //     },
+            // };
+            // root.Add(_settingsPopup);
             BuildNamespaceView();
             BuildObjectsView();
             BuildInspectorView();
+        }
+
+        private void TryLoadStyleSheet(VisualElement root)
+        {
+            StyleSheet styleSheet = null;
+            string packageRoot = DirectoryHelper.FindPackageRootPath(
+                DirectoryHelper.GetCallerScriptDirectory()
+            );
+            if (!string.IsNullOrWhiteSpace(packageRoot))
+            {
+                if (
+                    packageRoot.StartsWith("Packages", StringComparison.OrdinalIgnoreCase)
+                    && !packageRoot.Contains(PackageId, StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    int dataVisualizerIndex = packageRoot.LastIndexOf(
+                        "DataVisualizer",
+                        StringComparison.Ordinal
+                    );
+                    if (0 <= dataVisualizerIndex)
+                    {
+                        packageRoot = packageRoot[..dataVisualizerIndex];
+                        packageRoot += PackageId;
+                    }
+                }
+
+                char pathSeparator = Path.DirectorySeparatorChar;
+                string styleSheetPath =
+                    $"{packageRoot}{pathSeparator}Editor{pathSeparator}DataVisualizer{pathSeparator}Styles{pathSeparator}DataVisualizerStyles.uss";
+                string unityRelativeStyleSheetPath = DirectoryHelper.AbsoluteToUnityRelativePath(
+                    styleSheetPath
+                );
+                if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
+                {
+                    styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                        unityRelativeStyleSheetPath
+                    );
+                    if (styleSheet == null)
+                    {
+                        Debug.LogError(
+                            $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
+                        );
+                    }
+                }
+                else
+                {
+                    Debug.LogError(
+                        $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
+                    );
+                }
+            }
+            else
+            {
+                Debug.LogError(
+                    $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
+                );
+            }
+            if (styleSheet != null)
+            {
+                root.styleSheets.Add(styleSheet);
+            }
+            else
+            {
+                Debug.LogError(
+                    $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
+                );
+            }
         }
 
         private void HandleSettingsPopupClosed(bool previousModeWasSettingsAsset)
@@ -836,6 +878,47 @@
                     height = Length.Percent(100),
                 },
             };
+
+            var nsHeader = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    justifyContent = Justify.SpaceBetween,
+                    alignItems = Align.Center,
+                    paddingBottom = 3,
+                    paddingLeft = 3,
+                    paddingRight = 3,
+                    paddingTop = 3,
+                    borderBottomWidth = 1,
+                    borderBottomColor = Color.gray,
+                    height = 24,
+                    flexShrink = 0,
+                },
+            };
+            nsHeader.Add(
+                new Label("Namespaces")
+                {
+                    style = { unityFontStyleAndWeight = FontStyle.Bold, paddingLeft = 2 },
+                }
+            );
+            // Add Type Button
+            _addTypeButton = new Button(ToggleAddTypePopover)
+            {
+                text = "+",
+                tooltip = "Manage Visible Types",
+                style =
+                {
+                    width = 20,
+                    height = 20,
+                    paddingLeft = 0,
+                    paddingRight = 0,
+                },
+            };
+            _addTypeButton.AddToClassList("icon-button");
+            nsHeader.Add(_addTypeButton);
+            namespaceColumn.Add(nsHeader);
+
             ScrollView namespaceScrollView = new(ScrollViewMode.Vertical)
             {
                 name = "namespace-scrollview",
@@ -843,21 +926,245 @@
             };
             _namespaceListContainer = new VisualElement { name = "namespace-list" };
             namespaceScrollView.Add(_namespaceListContainer);
-            namespaceColumn.Add(
-                new Label("Namespaces")
-                {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        paddingBottom = 5,
-                        paddingLeft = 3,
-                        marginTop = 4,
-                        marginLeft = 1,
-                    },
-                }
-            );
             namespaceColumn.Add(namespaceScrollView);
             return namespaceColumn;
+        }
+
+        private void ToggleAddTypePopover()
+        {
+            if (_isTypePopoverOpen)
+            {
+                CloseAddTypePopover();
+            }
+            else
+            {
+                OpenAddTypePopover();
+            }
+        }
+
+        private void OpenAddTypePopover()
+        {
+            if (
+                _isTypePopoverOpen
+                || _typeAddPopover == null
+                || _addTypeButton == null
+                || _settings == null
+            )
+                return;
+
+            // 1. Find ALL non-abstract ScriptableObject types
+            List<Type> allSOTypes = TypeCache
+                .GetTypesDerivedFrom<ScriptableObject>()
+                .Where(t => !t.IsAbstract && !t.IsGenericType)
+                .OrderBy(t => GetNamespaceKey(t))
+                .ThenBy(t => t.Name)
+                .ToList();
+
+            // 2. Get currently managed types
+            List<string> managedTypeFullNames = GetManagedTypeNames();
+            HashSet<string> managedSet = new HashSet<string>(managedTypeFullNames);
+
+            // 3. Get the container inside the popover's scrollview
+            var listContent = _typeAddPopover.Q<VisualElement>("type-add-list-content");
+            if (listContent == null)
+                return;
+            listContent.Clear(); // Clear previous list
+
+            // 4. Populate List (Simplified - No Search/Filter yet)
+            var groupedTypes = allSOTypes
+                .GroupBy(t => GetNamespaceKey(t)) // Use helper
+                .OrderBy(g => g.Key);
+
+            foreach (var group in groupedTypes)
+            {
+                var nsLabel = new Label(group.Key); // TODO: Add USS class ListNamespaceClassName
+                nsLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+                nsLabel.style.marginTop = 4;
+                nsLabel.style.marginLeft = 4;
+                listContent.Add(nsLabel);
+
+                foreach (Type type in group.OrderBy(t => t.Name))
+                {
+                    bool isManaged = managedSet.Contains(type.FullName);
+                    var typeLabel = new Label($"  {type.Name}"); // Indent slightly
+                    typeLabel.style.paddingTop = 1;
+                    typeLabel.style.paddingBottom = 1;
+                    typeLabel.style.marginLeft = 10;
+
+                    if (isManaged)
+                    {
+                        typeLabel.SetEnabled(false); // Disable selection
+                        typeLabel.style.opacity = 0.5f; // Visually indicate disabled
+                    }
+                    else
+                    {
+                        // Add click handler using RegisterCallbackOnTarget (avoids closure issues)
+                        typeLabel.RegisterCallback<PointerDownEvent, Type>(
+                            HandleTypeSelectionFromPopover,
+                            type
+                        );
+                        typeLabel.RegisterCallback<MouseEnterEvent>(evt =>
+                            typeLabel.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
+                        );
+                        typeLabel.RegisterCallback<MouseLeaveEvent>(evt =>
+                            typeLabel.style.backgroundColor = Color.clear
+                        );
+                    }
+                    listContent.Add(typeLabel);
+                }
+            }
+
+            // 5. Position the Popover below the Add button
+            // Use geometry only available after layout pass - schedule positioning
+            _addTypeButton
+                .schedule.Execute(() =>
+                {
+                    if (_addTypeButton == null || _typeAddPopover == null)
+                        return; // Check if elements still exist
+
+                    // Convert button's bottom-left corner to the root's coordinate space
+                    Vector2 buttonPos = _addTypeButton.worldBound.position;
+                    Vector2 buttonSize = _addTypeButton.worldBound.size;
+                    // Position relative to rootVisualElement which is the popover's parent
+                    Vector2 localPos = rootVisualElement.WorldToLocal(buttonPos);
+
+                    _typeAddPopover.style.left = localPos.x;
+                    _typeAddPopover.style.top = localPos.y + buttonSize.y + 2; // Position below button + small gap
+
+                    // Optional: Ensure it doesn't go off-screen (basic clamp)
+                    float maxWidth = rootVisualElement.resolvedStyle.width - localPos.x - 10;
+                    _typeAddPopover.style.maxWidth = Mathf.Max(100, maxWidth); // Ensure min width
+                    float maxHeight =
+                        rootVisualElement.resolvedStyle.height
+                        - (localPos.y + buttonSize.y + 2)
+                        - 10;
+                    _typeAddPopover.style.maxHeight = Mathf.Max(100, maxHeight);
+
+                    // 6. Show the Popover
+                    _typeAddPopover.style.display = DisplayStyle.Flex;
+                    _isTypePopoverOpen = true;
+                    // Debug.Log("Opened Type Popover");
+
+                    // 7. Register Capture handler to detect clicks outside
+                    // Use TrickleDown to catch event early, Capture to ensure this element gets it.
+                    rootVisualElement.RegisterCallback<PointerDownEvent>(
+                        HandleClickOutsidePopover,
+                        TrickleDown.TrickleDown
+                    );
+                })
+                .ExecuteLater(1); // Delay slightly for button layout
+        }
+
+        // Handler attached to ROOT to close popover on outside click
+        private void HandleClickOutsidePopover(PointerDownEvent evt)
+        {
+            if (!_isTypePopoverOpen || _typeAddPopover == null)
+                return;
+
+            // Check if the click target is the popover itself or one of its children
+            VisualElement target = evt.target as VisualElement;
+            bool clickInside = false;
+            while (target != null)
+            {
+                if (target == _typeAddPopover || target == _addTypeButton)
+                { // Allow clicking button again to close
+                    clickInside = true;
+                    break;
+                }
+                target = target.parent;
+            }
+
+            // If the click was outside, close the popover
+            if (!clickInside)
+            {
+                // Debug.Log("Clicked outside popover.");
+                CloseAddTypePopover();
+                // Important: Stop propagation so the outside click doesn't trigger something else unintentionally
+                evt.StopPropagation();
+            }
+            // If click was inside, do nothing here, let the item click handler work.
+        }
+
+        private void HandleTypeSelectionFromPopover(PointerDownEvent evt, Type selectedType)
+        {
+            if (selectedType != null)
+            {
+                Debug.Log($"User selected type to add: {selectedType.FullName}");
+                List<string> currentManagedList = GetManagedTypeNames();
+                if (!currentManagedList.Contains(selectedType.FullName))
+                {
+                    currentManagedList.Add(selectedType.FullName);
+                    if (_settings.persistStateInSettingsAsset)
+                    {
+                        MarkSettingsDirty();
+                        AssetDatabase.SaveAssets();
+                    }
+                    else
+                    {
+                        MarkUserStateDirty();
+                    } // Triggers file save
+
+                    // Refresh UI
+                    LoadScriptableObjectTypes();
+                    BuildNamespaceView();
+                }
+            }
+            CloseAddTypePopover(); // Close after selection
+            evt.StopPropagation(); // Consume the click
+        }
+
+        private void CloseAddTypePopover()
+        {
+            if (!_isTypePopoverOpen || _typeAddPopover == null)
+                return;
+
+            _typeAddPopover.style.display = DisplayStyle.None; // Hide it
+            _isTypePopoverOpen = false;
+            // Unregister the global click handler
+            rootVisualElement.UnregisterCallback<PointerDownEvent>(
+                HandleClickOutsidePopover,
+                TrickleDown.TrickleDown
+            );
+            // Debug.Log("Closed Type Popover");
+        }
+
+        private void OpenAddTypePopup()
+        {
+            // 1. Find ALL non-abstract ScriptableObject types
+            List<Type> allSOTypes = TypeCache
+                .GetTypesDerivedFrom<ScriptableObject>()
+                .Where(t => !t.IsAbstract && !t.IsGenericType)
+                .OrderBy(t => GetNamespaceKey(t)) // Order by namespace
+                .ThenBy(t => t.Name)
+                .ToList();
+
+            // 2. Get currently managed types to exclude them or show checkmarks
+            List<string> managedTypeFullNames = GetManagedTypeNames();
+            HashSet<string> managedSet = new HashSet<string>(managedTypeFullNames);
+
+            // 3. *** Show a Type Selection Popup Window ***
+            // This requires a dedicated EditorWindow (e.g., TypeSelectionPopup).
+            // For now, we'll just log the action and manually add one type for testing.
+            Debug.Log(
+                $"Opening Add Type Popup (Not Implemented). Found {allSOTypes.Count} potential types."
+            );
+            EditorUtility.DisplayDialog(
+                "Add Type",
+                "Type selection popup not fully implemented.\nPlease manually edit 'DataVisualizerSettings > Internal Managed Type Names' or the User State file for now.",
+                "OK"
+            );
+
+            // --- Placeholder: Manually add a type for testing ---
+            // Type typeToAdd = typeof(UnityEngine.Texture); // Example non-BDO type
+            // if (typeToAdd != null && typeof(ScriptableObject).IsAssignableFrom(typeToAdd) && !managedSet.Contains(typeToAdd.FullName)) {
+            //     managedTypeFullNames.Add(typeToAdd.FullName);
+            //     if (_settings.PersistStateInSettingsAsset) MarkSettingsDirty(); else MarkUserStateDirty();
+            //     Debug.Log($"DEBUG: Added {typeToAdd.FullName} to managed list.");
+            //     // Refresh UI
+            //     LoadScriptableObjectTypes();
+            //     BuildNamespaceView();
+            // }
+            // --- End Placeholder ---
         }
 
         private VisualElement CreateObjectColumn()
@@ -880,8 +1187,7 @@
                 style =
                 {
                     flexDirection = FlexDirection.Row,
-                    //justifyContent = Justify.SpaceBetween,
-                    justifyContent = Justify.FlexStart,
+                    justifyContent = Justify.SpaceBetween,
                     alignItems = Align.Center,
                     paddingBottom = 3,
                     paddingTop = 3,
@@ -1033,14 +1339,14 @@
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
 
-                BaseDataObject newObject = AssetDatabase.LoadAssetAtPath<BaseDataObject>(
+                ScriptableObject newObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
                     uniquePath
                 );
 
                 if (newObject != null)
                 {
                     _selectedObjects.Insert(0, newObject);
-                    UpdateAndSaveObjectCustomOrder();
+                    UpdateAndSaveObjectOrderList(_selectedType, _selectedObjects);
                     BuildObjectsView();
                     SelectObject(newObject);
                 }
@@ -1080,11 +1386,9 @@
             }
 
             const string titleFieldName = nameof(BaseDataObject._title);
-            bool titlePotentiallyChanged = string.Equals(
-                property.Name,
-                titleFieldName,
-                StringComparison.Ordinal
-            );
+            bool titlePotentiallyChanged =
+                string.Equals(property.Name, titleFieldName, StringComparison.Ordinal)
+                || string.Equals(property.Name, nameof(name), StringComparison.Ordinal);
 
             if (titlePotentiallyChanged)
             {
@@ -1225,7 +1529,7 @@
                         );
 
                         LoadObjectTypes(clickedType);
-                        BaseDataObject objectToSelect = DetermineObjectToAutoSelect();
+                        ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
                         BuildObjectsView();
                         SelectObject(objectToSelect);
                         evt.StopPropagation();
@@ -1258,7 +1562,7 @@
                 _objectListContainer.Add(emptyLabel);
             }
 
-            foreach (BaseDataObject dataObject in _selectedObjects)
+            foreach (ScriptableObject dataObject in _selectedObjects)
             {
                 if (dataObject == null)
                 {
@@ -1279,7 +1583,16 @@
                 contentArea.AddToClassList(ObjectItemContentClass);
                 objectItemRow.Add(contentArea);
 
-                Label titleLabel = new(dataObject.Title) { name = "object-item-label" };
+                string title;
+                if (dataObject is BaseDataObject baseDataObject)
+                {
+                    title = baseDataObject.Title;
+                }
+                else
+                {
+                    title = dataObject.name;
+                }
+                Label titleLabel = new(title) { name = "object-item-label" };
                 titleLabel.AddToClassList("object-item__label");
                 contentArea.Add(titleLabel);
 
@@ -1378,9 +1691,23 @@
             // ReSharper disable once RedundantAssignment
             bool useOdinInspector = false;
 #if ODIN_INSPECTOR
-            useOdinInspector =
-                !_selectedObject.GetType().IsAttributeDefined(out CustomDataVisualization attribute)
-                || attribute.UseOdinInspector;
+
+            Type objectType = _selectedObject.GetType();
+            if (objectType.IsAttributeDefined(out CustomDataVisualization customVisualization))
+            {
+                useOdinInspector = customVisualization.UseOdinInspector;
+            }
+            else if (_selectedObject is SerializedScriptableObject)
+            {
+                useOdinInspector = true;
+            }
+            else if (
+                objectType.IsAttributeDefined<ShowOdinSerializedPropertiesInInspectorAttribute>()
+                && typeof(ISerializationCallbackReceiver).IsAssignableFrom(objectType)
+            )
+            {
+                useOdinInspector = true;
+            }
 
             if (useOdinInspector)
             {
@@ -1514,16 +1841,19 @@
                 }
             }
 
-            VisualElement customElement = _selectedObject.BuildGUI(
-                new DataVisualizerGUIContext(_currentInspectorScriptableObject)
-            );
-            if (customElement != null)
+            if (_selectedObject is BaseDataObject baseDataObject)
             {
-                _inspectorContainer.Add(customElement);
+                VisualElement customElement = baseDataObject.BuildGUI(
+                    new DataVisualizerGUIContext(_currentInspectorScriptableObject)
+                );
+                if (customElement != null)
+                {
+                    _inspectorContainer.Add(customElement);
+                }
             }
         }
 
-        private void DeleteObject(BaseDataObject objectToDelete)
+        private void DeleteObject(ScriptableObject objectToDelete)
         {
             if (objectToDelete == null)
             {
@@ -1559,6 +1889,8 @@
                     if (0 <= currentIndex)
                     {
                         _selectedObjects.RemoveAt(currentIndex);
+                        if (_selectedType != null)
+                            UpdateAndSaveObjectOrderList(_selectedType, _selectedObjects);
                     }
                     bool removed = _objectVisualElementMap.Remove(
                         objectToDelete,
@@ -1579,7 +1911,7 @@
                             return;
                         }
 
-                        BaseDataObject objectToSelect = null;
+                        ScriptableObject objectToSelect = null;
                         if (0 <= currentIndex)
                         {
                             if (currentIndex < _selectedObjects.Count)
@@ -1611,7 +1943,7 @@
             popup.ShowModalUtility();
         }
 
-        private void OpenRenamePopup(BaseDataObject objectToRename)
+        private void OpenRenamePopup(ScriptableObject objectToRename)
         {
             if (objectToRename == null)
             {
@@ -1653,7 +1985,7 @@
             );
         }
 
-        private void CloneObject(BaseDataObject originalObject)
+        private void CloneObject(ScriptableObject originalObject)
         {
             if (originalObject == null)
             {
@@ -1671,7 +2003,7 @@
                 return;
             }
 
-            BaseDataObject cloneInstance = Instantiate(originalObject);
+            ScriptableObject cloneInstance = Instantiate(originalObject);
             if (cloneInstance == null)
             {
                 EditorUtility.DisplayDialog(
@@ -1681,7 +2013,12 @@
                 );
                 return;
             }
-            cloneInstance._assetGuid = Guid.NewGuid().ToString();
+
+            // Nullify asset guid references
+            if (cloneInstance is BaseDataObject baseDataObject)
+            {
+                baseDataObject._assetGuid = string.Empty;
+            }
 
             string originalDirectory = Path.GetDirectoryName(originalPath);
             if (string.IsNullOrWhiteSpace(originalDirectory))
@@ -1697,11 +2034,16 @@
             string directory = originalDirectory.SanitizePath();
             string originalName = Path.GetFileNameWithoutExtension(originalPath);
             string extension = Path.GetExtension(originalPath);
-            string proposedName = $"{originalName} (Clone){extension}";
-            string proposedPath = Path.Combine(directory, proposedName).SanitizePath();
-            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
-            string uniqueName = Path.GetFileNameWithoutExtension(uniquePath);
-            cloneInstance._title = uniqueName;
+            string proposedPath;
+            string uniquePath;
+            int count = 0;
+            do
+            {
+                string proposedName =
+                    $"{originalName} (Clone{(count++ == 0 ? string.Empty : $" {count}")}){extension}";
+                proposedPath = Path.Combine(directory, proposedName).SanitizePath();
+                uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
+            } while (string.Equals(uniquePath, proposedPath, StringComparison.Ordinal));
 
             try
             {
@@ -1709,11 +2051,17 @@
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
 
-                BaseDataObject cloneAsset = AssetDatabase.LoadAssetAtPath<BaseDataObject>(
+                ScriptableObject cloneAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
                     uniquePath
                 );
                 if (cloneAsset != null)
                 {
+                    if (cloneAsset is BaseDataObject cloneDataObject)
+                    {
+                        cloneDataObject._title = proposedName;
+                        cloneDataObject.OnValidate();
+                    }
+
                     int originalIndex = _selectedObjects.IndexOf(originalObject);
                     if (0 <= originalIndex)
                     {
@@ -1724,7 +2072,7 @@
                         _selectedObjects.Add(cloneAsset);
                     }
 
-                    UpdateAndSaveObjectCustomOrder();
+                    UpdateAndSaveObjectOrderList(cloneAsset.GetType(), _selectedObjects);
                     BuildObjectsView();
                     SelectObject(cloneAsset);
                 }
@@ -1745,14 +2093,14 @@
             }
         }
 
-        private BaseDataObject DetermineObjectToAutoSelect()
+        private ScriptableObject DetermineObjectToAutoSelect()
         {
             if (_selectedType == null || _selectedObjects == null || _selectedObjects.Count == 0)
             {
                 return null;
             }
 
-            BaseDataObject objectToSelect = null;
+            ScriptableObject objectToSelect = null;
             string savedObjectGuid = GetLastSelectedObjectGuidForType(_selectedType.Name);
             if (!string.IsNullOrWhiteSpace(savedObjectGuid))
             {
@@ -1850,7 +2198,7 @@
             }
         }
 
-        private void RefreshSelectedElementVisuals(BaseDataObject dataObject)
+        private void RefreshSelectedElementVisuals(ScriptableObject dataObject)
         {
             if (
                 dataObject == null
@@ -1863,7 +2211,7 @@
         }
 
         private void UpdateObjectTitleRepresentation(
-            BaseDataObject dataObject,
+            ScriptableObject dataObject,
             VisualElement element
         )
         {
@@ -1879,7 +2227,15 @@
                 return;
             }
 
-            string currentTitle = dataObject.Title;
+            string currentTitle;
+            if (dataObject is BaseDataObject baseDataObject)
+            {
+                currentTitle = baseDataObject.Title;
+            }
+            else
+            {
+                currentTitle = dataObject.name;
+            }
             if (titleLabel.text != currentTitle)
             {
                 titleLabel.text = currentTitle;
@@ -1888,85 +2244,129 @@
 
         private void LoadObjectTypes(Type type)
         {
+            if (type == null)
+            {
+                return;
+            }
+
             _selectedObjects.Clear();
-            foreach (string assetGuid in AssetDatabase.FindAssets($"t:{type.Name}"))
+            _objectVisualElementMap.Clear();
+
+            List<string> customGuidOrder = GetObjectOrderForType(type.FullName); // Use helper
+            HashSet<string> orderedGuidsSet = new HashSet<string>(customGuidOrder);
+
+            // 2. Find assets and map GUID to object
+            Dictionary<string, BaseDataObject> objectsByGuid =
+                new Dictionary<string, BaseDataObject>();
+            // FindAssets now works for any ScriptableObject type name
+            string[] assetGuids = AssetDatabase.FindAssets($"t:{type.Name}");
+            foreach (string assetGuid in assetGuids)
             {
                 string assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
-                if (string.IsNullOrWhiteSpace(assetPath))
-                {
+                if (string.IsNullOrEmpty(assetPath))
                     continue;
-                }
-
-                Object asset = AssetDatabase.LoadAssetAtPath<Object>(assetPath);
-                if (asset is BaseDataObject dataObject && dataObject != null)
+                // Load as base class, but check type just in case FindAssets was too broad
+                ScriptableObject asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(assetPath);
+                // Make sure it's the correct type AND can be cast to BaseDataObject for list compatibility
+                // *** Correction: List should now be List<ScriptableObject> ***
+                // Let's change _selectedObjects to List<ScriptableObject>
+                if (asset != null && asset.GetType() == type) // Check exact type
                 {
-                    _selectedObjects.Add(dataObject);
+                    if (!string.IsNullOrEmpty(assetGuid))
+                    {
+                        // Cast to BaseDataObject might fail now, need to store as ScriptableObject
+                        // We'll handle BaseDataObject specific things elsewhere
+                        objectsByGuid[assetGuid] = asset as BaseDataObject; // Store as BDO for now, NEED TO CHANGE LIST TYPE
+                    }
                 }
             }
-            _selectedObjects.Sort(
-                (lhs, rhs) =>
+
+            List<ScriptableObject> sortedObjects = new List<ScriptableObject>();
+
+            // 3. Build sorted list based on custom GUID order
+            foreach (string guid in customGuidOrder)
+            {
+                // Need to load the asset by GUID to get the ScriptableObject reference
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (!string.IsNullOrEmpty(path))
                 {
-                    if (0 <= lhs._customOrder && 0 <= rhs._customOrder)
-                    {
-                        int comparison = lhs._customOrder.CompareTo(rhs._customOrder);
-                        if (comparison != 0)
-                        {
-                            return comparison;
-                        }
+                    ScriptableObject dataObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
+                        path
+                    );
+                    if (dataObject != null && dataObject.GetType() == type)
+                    { // Check type again
+                        sortedObjects.Add(dataObject);
+                        // Remove from map to track remaining items (use path as key?) No, use GUID. Need to rebuild map.
+                        objectsByGuid.Remove(guid); // Assumes keys were GUIDs in the map populated above
                     }
-                    return string.Compare(lhs.Title, rhs.Title, StringComparison.OrdinalIgnoreCase);
                 }
+            }
+
+            // 4. Add remaining objects (newly created, not in saved order)
+            //    Sort alphabetically by asset name
+            List<ScriptableObject> remainingObjects = objectsByGuid
+                .Values.Select(bdo => (ScriptableObject)bdo)
+                .ToList(); // Get remaining SOs
+            remainingObjects.Sort(
+                (a, b) => string.Compare(a.name, b.name, StringComparison.OrdinalIgnoreCase)
             );
-            SelectObject(null);
+            sortedObjects.AddRange(remainingObjects);
+
+            // 5. Assign to the main list (assuming _selectedObjects is List<ScriptableObject>)
+            _selectedObjects.Clear(); // Ensure clear before adding range
+            _selectedObjects.AddRange(sortedObjects);
+
+            // Reset selection and inspector
+            SelectObject(null); // Clear previous object selection
         }
 
         private void LoadScriptableObjectTypes()
         {
-            _scriptableObjectTypes.Clear();
-            foreach (Type type in TypeCache.GetTypesDerivedFrom<BaseDataObject>())
-            {
-                if (type.IsAbstract)
-                {
-                    continue;
-                }
-
-                string key = GetNamespaceKey(type);
-
-                List<Type> types;
-                int index = _scriptableObjectTypes.FindIndex(kvp =>
-                    string.Equals(key, kvp.key, StringComparison.OrdinalIgnoreCase)
-                );
-                if (index < 0)
-                {
-                    types = new List<Type>();
-                    _scriptableObjectTypes.Add((key, types));
-                }
-                else
-                {
-                    types = _scriptableObjectTypes[index].types;
-                }
-                types.Add(type);
-            }
-
             if (_settings == null)
-            {
                 _settings = LoadOrCreateSettings();
-            }
+
+            List<string> managedTypeFullNames = GetManagedTypeNames(); // Use helper
+            HashSet<string> managedTypeSet = new HashSet<string>(managedTypeFullNames); // Faster lookups
+
+            List<Type> allSOTypes = TypeCache
+                .GetTypesDerivedFrom<ScriptableObject>()
+                .Where(t => !t.IsAbstract && !t.IsGenericType)
+                .ToList();
+
+            // Filter based on managed list OR if it inherits from BaseDataObject (default inclusion)
+            List<Type> typesToDisplay = allSOTypes
+                .Where(t =>
+                    managedTypeSet.Contains(t.FullName)
+                    || typeof(BaseDataObject).IsAssignableFrom(t)
+                )
+                .ToList();
+
+            var groups = typesToDisplay
+                .GroupBy(GetNamespaceKey) // Use existing namespace key logic
+                .Select(g => (key: g.Key, types: g.ToList()));
+
+            _scriptableObjectTypes.Clear();
+            _scriptableObjectTypes.AddRange(groups); // Add the filtered and grouped types
 
             List<string> customNamespaceOrder = GetNamespaceOrder();
             _scriptableObjectTypes.Sort(
                 (lhs, rhs) => CompareUsingCustomOrder(lhs.key, rhs.key, customNamespaceOrder)
             );
+
             foreach ((string key, List<Type> types) in _scriptableObjectTypes)
             {
+                // Use GetTypeOrderForNamespace helper
                 List<string> customTypeNameOrder = GetTypeOrderForNamespace(key);
                 types.Sort(
                     (lhs, rhs) => CompareUsingCustomOrder(lhs.Name, rhs.Name, customTypeNameOrder)
                 );
             }
+            Debug.Log(
+                $"Loaded {_scriptableObjectTypes.Sum(g => g.types.Count)} managed types in {_scriptableObjectTypes.Count} namespaces."
+            );
         }
 
-        private void SelectObject(BaseDataObject dataObject)
+        private void SelectObject(ScriptableObject dataObject)
         {
             _selectedElement?.RemoveFromClassList("selected");
             _selectedObject = dataObject;
@@ -2024,7 +2424,7 @@
         private void OnObjectPointerDown(PointerDownEvent evt)
         {
             VisualElement targetElement = evt.currentTarget as VisualElement;
-            if (targetElement?.userData is not BaseDataObject clickedObject)
+            if (targetElement?.userData is not ScriptableObject clickedObject)
             {
                 return;
             }
@@ -2091,6 +2491,7 @@
                     string dragText = _draggedData switch
                     {
                         BaseDataObject dataObj => dataObj.Title,
+                        ScriptableObject dataObj => dataObj.name,
                         string nsKey => nsKey,
                         Type type => type.Name,
                         _ => "Dragging Item",
@@ -2350,7 +2751,7 @@
             _inPlaceGhost?.RemoveFromHierarchy();
             if (
                 _draggedElement == null
-                || _draggedData is not BaseDataObject draggedObject
+                || _draggedData is not ScriptableObject draggedObject
                 || _objectListContainer == null
             )
             {
@@ -2384,7 +2785,8 @@
                 int dataInsertIndex = targetIndex;
                 dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _selectedObjects.Count);
                 _selectedObjects.Insert(dataInsertIndex, draggedObject);
-                UpdateAndSaveObjectCustomOrder();
+                if (_selectedType != null)
+                    UpdateAndSaveObjectOrderList(_selectedType, _selectedObjects);
             }
         }
 
@@ -2647,32 +3049,6 @@
             }
         }
 
-        private void UpdateAndSaveObjectCustomOrder()
-        {
-            List<Object> dirtyObjects = new();
-            for (int i = 0; i < _selectedObjects.Count; i++)
-            {
-                BaseDataObject obj = _selectedObjects[i];
-                if (obj == null)
-                {
-                    continue;
-                }
-
-                int newOrder = i + 1;
-                if (obj._customOrder != newOrder)
-                {
-                    obj._customOrder = newOrder;
-                    EditorUtility.SetDirty(obj);
-                    dirtyObjects.Add(obj);
-                }
-            }
-
-            if (0 < dirtyObjects.Count)
-            {
-                AssetDatabase.SaveAssets();
-            }
-        }
-
         private void CancelDrag()
         {
             if (_inPlaceGhost != null)
@@ -2769,6 +3145,36 @@
             SaveUserStateToFile();
         }
 
+        private void UpdateAndSaveObjectOrderList(Type type, List<ScriptableObject> orderedObjects) // Takes List<ScriptableObject> now
+        {
+            if (type == null || orderedObjects == null)
+                return;
+
+            List<string> orderedGuids = new List<string>();
+            foreach (ScriptableObject obj in orderedObjects)
+            {
+                if (obj == null)
+                    continue;
+                string path = AssetDatabase.GetAssetPath(obj);
+                if (!string.IsNullOrEmpty(path))
+                {
+                    string guid = AssetDatabase.AssetPathToGUID(path);
+                    if (!string.IsNullOrEmpty(guid))
+                        orderedGuids.Add(guid);
+                }
+                else
+                {
+                    // Object might be newly created/not saved, can't include in saved order yet
+                    Debug.LogWarning(
+                        $"Cannot get path/GUID for object '{obj.name}' during order save."
+                    );
+                }
+            }
+
+            // Use the persistence helper to save the list
+            SetObjectOrderForType(type.FullName, orderedGuids); // Use FullName as key
+        }
+
         private void MigratePersistenceState(bool migrateToSettingsAsset)
         {
             if (_settings == null)
@@ -2822,6 +3228,76 @@
             return _settings.persistStateInSettingsAsset
                 ? _settings.lastSelectedNamespaceKey
                 : _userState?.lastSelectedNamespaceKey;
+        }
+
+        private List<string> GetManagedTypeNames()
+        {
+            if (_settings == null)
+                return new List<string>();
+            if (_settings.persistStateInSettingsAsset)
+            {
+                if (_settings.managedTypeNames == null)
+                    _settings.managedTypeNames = new List<string>();
+                return _settings.managedTypeNames;
+            }
+            else
+            {
+                if (_userState == null)
+                    LoadUserStateFromFile();
+                if (_userState.managedTypeNames == null)
+                    _userState.managedTypeNames = new List<string>();
+                return _userState.managedTypeNames;
+            }
+        }
+
+        // Add SetManagedTypeNames if needed, or just modify list directly and mark dirty/save
+
+        private List<string> GetObjectOrderForType(string typeFullName)
+        {
+            if (_settings == null || string.IsNullOrEmpty(typeFullName))
+                return new List<string>();
+            if (_settings.persistStateInSettingsAsset)
+            {
+                var entry = _settings.objectOrders?.Find(o =>
+                    string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
+                );
+                return entry?.ObjectGuids ?? new List<string>();
+            }
+            else
+            {
+                if (_userState == null)
+                    LoadUserStateFromFile();
+                var entry = _userState.objectOrders?.Find(o =>
+                    string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
+                );
+                return entry?.ObjectGuids ?? new List<string>();
+            }
+        }
+
+        private void SetObjectOrderForType(string typeFullName, List<string> objectGuids)
+        {
+            if (_settings == null || string.IsNullOrEmpty(typeFullName) || objectGuids == null)
+                return;
+            if (_settings.persistStateInSettingsAsset)
+            {
+                var entryList = _settings.GetOrCreateObjectOrderList(typeFullName); // Use helper
+                if (!entryList.SequenceEqual(objectGuids))
+                { // Check if different
+                    entryList.Clear();
+                    entryList.AddRange(objectGuids);
+                    MarkSettingsDirty();
+                }
+            }
+            else if (_userState != null)
+            {
+                var entryList = _userState.GetOrCreateObjectOrderList(typeFullName); // Use helper
+                if (!entryList.SequenceEqual(objectGuids))
+                {
+                    entryList.Clear();
+                    entryList.AddRange(objectGuids);
+                    MarkUserStateDirty(); // Triggers save
+                }
+            }
         }
 
         private void SetLastSelectedNamespaceKey(string value)
@@ -3082,7 +3558,7 @@
                     LoadUserStateFromFile();
                 }
 
-                NamespaceCollapseState entry = _userState!.NamespaceCollapseStates?.Find(o =>
+                NamespaceCollapseState entry = _userState!.namespaceCollapseStates?.Find(o =>
                     string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
                 return entry?.isCollapsed ?? false;

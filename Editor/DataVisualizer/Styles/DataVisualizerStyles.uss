@@ -160,3 +160,30 @@
     padding: 5px;
     font-size: 11px;
 }
+
+.type-selection-list-item {
+    margin-left: 15px; /* Indent type under namespace */
+    margin-top: 1px;
+    margin-bottom: 1px;
+    /* Remove default button padding/border for list look */
+    padding: 2px 5px;
+    border-width: 0;
+    background-color: transparent;
+    align-content: left;
+    font-size: 12px;
+}
+.type-selection-list-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+.type-selection-list-item--disabled {
+    opacity: 0.5;
+}
+.type-selection-list-namespace {
+    /* Style for namespace headers */
+    margin-top: 8px;
+    margin-left: 5px;
+    margin-bottom: 2px;
+    font-size: 11px;
+    color: grey;
+    -unity-font-style: bold;
+}

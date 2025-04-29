@@ -40,6 +40,15 @@
             return false;
         }
 
+        public static bool IsAttributeDefined<T>(
+            this ICustomAttributeProvider provider,
+            bool inherit = true
+        )
+            where T : Attribute
+        {
+            return IsAttributeDefined(provider, out T _, inherit);
+        }
+
         public static Dictionary<string, PropertyInfo> LoadStaticPropertiesForType<T>()
         {
             Type type = typeof(T);
