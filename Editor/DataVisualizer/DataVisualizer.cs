@@ -618,7 +618,10 @@
             );
             if (!string.IsNullOrWhiteSpace(packageRoot))
             {
-                if (!packageRoot.Contains(PackageId, StringComparison.OrdinalIgnoreCase))
+                if (
+                    packageRoot.StartsWith("Packages", StringComparison.OrdinalIgnoreCase)
+                    && !packageRoot.Contains(PackageId, StringComparison.OrdinalIgnoreCase)
+                )
                 {
                     int dataVisualizerIndex = packageRoot.LastIndexOf(
                         "DataVisualizer",
@@ -1503,20 +1506,20 @@
                         _inspectorContainer.Add(propertyField);
                         enterChildren = false;
                     }
-
-                    VisualElement customElement = _selectedObject.BuildGUI(
-                        new DataVisualizerGUIContext(_currentInspectorScriptableObject)
-                    );
-                    if (customElement != null)
-                    {
-                        _inspectorContainer.Add(customElement);
-                    }
                 }
                 catch (Exception e)
                 {
                     Debug.LogError($"Error creating standard inspector. {e}");
                     _inspectorContainer.Add(new Label($"Inspector Error: {e.Message}"));
                 }
+            }
+
+            VisualElement customElement = _selectedObject.BuildGUI(
+                new DataVisualizerGUIContext(_currentInspectorScriptableObject)
+            );
+            if (customElement != null)
+            {
+                _inspectorContainer.Add(customElement);
             }
         }
 
@@ -2563,14 +2566,14 @@
             {
                 VisualElement child = container.ElementAt(i);
 
-                float childMidY = child.layout.yMin + child.resolvedStyle.height / 2f;
+                float childMidY = child.layout.yMin + child.layout.height / 2;
                 if (localPointerPos.y < childMidY)
                 {
                     targetIndex = index;
                     break;
                 }
 
-                if (child != _draggedElement)
+                if (child != _draggedElement && i != childCount - 1)
                 {
                     index++;
                 }
