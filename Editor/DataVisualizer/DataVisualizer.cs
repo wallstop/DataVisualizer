@@ -2561,21 +2561,14 @@
             int targetIndex = -1;
             Vector2 localPointerPos = container.WorldToLocal(pointerPosition);
 
-            int index = 0;
             for (int i = 0; i < childCount; ++i)
             {
                 VisualElement child = container.ElementAt(i);
-
-                float childMidY = child.layout.yMin + child.layout.height / 2;
-                if (localPointerPos.y < childMidY)
+                float yMin = child.layout.yMin + child.layout.height / 2;
+                if (localPointerPos.y < yMin)
                 {
-                    targetIndex = index;
+                    targetIndex = i;
                     break;
-                }
-
-                if (child != _draggedElement && i != childCount - 1)
-                {
-                    index++;
                 }
             }
 
@@ -2598,6 +2591,9 @@
 
             if (targetIndex != _lastGhostInsertIndex || positioningParent != _lastGhostParent)
             {
+                Debug.Log(
+                    $"TargetIndex {targetIndex}, LastInsertionIndex {_lastGhostInsertIndex}."
+                );
                 if (_inPlaceGhost.parent != null && _inPlaceGhost.parent != positioningParent)
                 {
                     _inPlaceGhost.RemoveFromHierarchy();
