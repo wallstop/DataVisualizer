@@ -41,6 +41,7 @@
         private const string ObjectItemContentClass = "object-item-content";
         private const string ObjectItemActionsClass = "object-item-actions";
         private const string ActionButtonClass = "action-button";
+        private const string ListNamespaceClassName = "type-selection-list-namespace";
 
         private const string ArrowCollapsed = "►";
         private const string ArrowExpanded = "▼";
@@ -977,11 +978,128 @@
 
             foreach (var group in groupedTypes)
             {
-                var nsLabel = new Label(group.Key); // TODO: Add USS class ListNamespaceClassName
-                nsLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-                nsLabel.style.marginTop = 4;
-                nsLabel.style.marginLeft = 4;
+                var nsLabel = new Label(group.Key)
+                {
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Bold,
+                        marginTop = 5,
+                        marginLeft = 5,
+                        paddingBottom = 2,
+                        paddingLeft = 2,
+                        paddingRight = 2,
+                        paddingTop = 2,
+                    },
+                }; // TODO: Add USS class ListNamespaceClassName
+
+                nsLabel.AddToClassList(ListNamespaceClassName); // Apply namespace style class
                 listContent.Add(nsLabel);
+
+                List<Type> addableTypesInGroup = group
+                    .Where(t => !managedSet.Contains(t.FullName))
+                    .ToList();
+                int addableCount = addableTypesInGroup.Count;
+
+                if (addableCount > 1)
+                {
+                    // Make it visually interactive
+                    nsLabel.tooltip = $"Click to add {addableCount} types from this namespace.";
+                    nsLabel.AddToClassList("clickable"); // Add a class for potential hover styles
+                    nsLabel.RegisterCallback<MouseEnterEvent>(evt =>
+                        nsLabel.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
+                    );
+                    nsLabel.RegisterCallback<MouseLeaveEvent>(evt =>
+                        nsLabel.style.backgroundColor = Color.clear
+                    );
+
+                    // Store data needed for the click handler
+                    var clickContext = new
+                    {
+                        NamespaceKey = group.Key,
+                        AddableTypes = addableTypesInGroup,
+                    };
+
+                    // Add the PointerDown handler
+                    nsLabel.RegisterCallback<PointerDownEvent>(evt =>
+                    {
+                        if (evt.button == 0) // Left click
+                        {
+                            // Access context captured by the lambda
+                            string clickedNamespace = clickContext.NamespaceKey;
+                            List<Type> typesToAdd = clickContext.AddableTypes;
+                            int countToAdd = typesToAdd.Count;
+
+                            if (countToAdd == 0)
+                                return; // Nothing to add
+
+                            // --- Confirmation Dialog ---
+                            string message =
+                                $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '{clickedNamespace}' to Data Visualizer?";
+                            var confirmPopup = ConfirmActionPopup.CreateAndConfigureInstance(
+                                title: "Add Namespace Types",
+                                message: message,
+                                confirmButtonText: "Add",
+                                cancelButtonText: "Cancel",
+                                parentPosition: position, // Center on DataVisualizer
+                                onComplete: (confirmed) =>
+                                {
+                                    if (confirmed)
+                                    {
+                                        bool stateChanged = false;
+                                        List<string> currentManagedList = GetManagedTypeNames(); // Get list ref
+                                        foreach (Type typeToAdd in typesToAdd)
+                                        {
+                                            // Double check it wasn't added somehow while dialog was open
+                                            if (!currentManagedList.Contains(typeToAdd.FullName))
+                                            {
+                                                currentManagedList.Add(typeToAdd.FullName);
+                                                stateChanged = true;
+                                            }
+                                        }
+
+                                        if (stateChanged)
+                                        {
+                                            // Mark appropriate backend dirty and save state
+                                            if (_settings.persistStateInSettingsAsset)
+                                            {
+                                                MarkSettingsDirty();
+                                                AssetDatabase.SaveAssets();
+                                            }
+                                            else
+                                            {
+                                                MarkUserStateDirty();
+                                            } // Triggers file save
+
+                                            Debug.Log(
+                                                $"Added {countToAdd} types from namespace '{clickedNamespace}'."
+                                            );
+
+                                            // Close the type add popover first
+                                            CloseAddTypePopover();
+                                            // Refresh the main window UI completely
+                                            ScheduleRefresh(); // Use full refresh to ensure everything updates
+                                        }
+                                        else
+                                        {
+                                            // Close popover even if nothing ended up being added
+                                            CloseAddTypePopover();
+                                        }
+                                    }
+                                    // If not confirmed, do nothing, popup closes automatically via callback
+                                }
+                            ); // End CreateAndConfigureInstance
+                            confirmPopup.ShowModal(); // Show confirmation modally
+                            // --- End Confirmation ---
+
+                            evt.StopPropagation(); // Stop this click from closing the popover immediately
+                        }
+                    }); // End Namespace Label Click Handler
+                }
+                else
+                {
+                    // Optional: Style namespace header differently if it has no addable types
+                    nsLabel.style.opacity = 0.6f;
+                }
 
                 foreach (Type type in group.OrderBy(t => t.Name))
                 {
@@ -1053,6 +1171,14 @@
                     );
                 })
                 .ExecuteLater(1); // Delay slightly for button layout
+
+            _typeAddPopover.style.display = DisplayStyle.Flex;
+            _isTypePopoverOpen = true;
+            // 7. Register Capture handler to detect clicks outside
+            rootVisualElement.RegisterCallback<PointerDownEvent>(
+                HandleClickOutsidePopover,
+                TrickleDown.TrickleDown
+            );
         }
 
         // Handler attached to ROOT to close popover on outside click
@@ -2058,7 +2184,7 @@
                 {
                     if (cloneAsset is BaseDataObject cloneDataObject)
                     {
-                        cloneDataObject._title = proposedName;
+                        cloneDataObject._title = cloneAsset.name;
                         cloneDataObject.OnValidate();
                     }
 

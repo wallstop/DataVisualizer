@@ -169,7 +169,6 @@
     padding: 2px 5px;
     border-width: 0;
     background-color: transparent;
-    align-content: left;
     font-size: 12px;
 }
 .type-selection-list-item:hover {
@@ -186,4 +185,9 @@
     font-size: 11px;
     color: grey;
     -unity-font-style: bold;
+}
+
+.type-selection-list-namespace.clickable:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    cursor: link; /* Indicate clickable */
 }
