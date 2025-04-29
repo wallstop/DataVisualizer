@@ -42,6 +42,8 @@
         private const string ObjectItemActionsClass = "object-item-actions";
         private const string ActionButtonClass = "action-button";
         private const string ListNamespaceClassName = "type-selection-list-namespace";
+        private const string ListItemClassName = "type-selection-list-item";
+        private const string ListItemDisabledClassName = "type-selection-list-item--disabled";
 
         private const string ArrowCollapsed = "►";
         private const string ArrowExpanded = "▼";
@@ -978,6 +980,38 @@
 
             foreach (var group in groupedTypes)
             {
+                var namespaceGroupContainer = new VisualElement()
+                {
+                    name = $"ns-group-container-{group.Key}",
+                };
+                listContent.Add(namespaceGroupContainer); // Add top-level container to list
+
+                // --- Header (Clickable for Collapse/Expand) ---
+                var header = new VisualElement
+                {
+                    name = $"ns-header-{group.Key}",
+                    style =
+                    {
+                        flexDirection = FlexDirection.Row,
+                        alignItems = Align.Center,
+                        paddingBottom = 2,
+                        paddingLeft = 2,
+                        paddingRight = 2,
+                        paddingTop = 2,
+                        marginTop = 3,
+                        backgroundColor = new Color(0.28f, 0.28f, 0.28f),
+                    },
+                };
+                header.AddToClassList("namespace-header"); // Use existing class or new one
+                namespaceGroupContainer.Add(header);
+
+                var indicator = new Label(ArrowCollapsed) { name = $"ns-indicator-{group.Key}" }; // Default collapsed
+                indicator.AddToClassList("namespace-indicator"); // Use existing class or new one
+                indicator.style.width = 16;
+                indicator.style.marginRight = 3;
+                indicator.style.unityFontStyleAndWeight = FontStyle.Bold;
+                header.Add(indicator);
+
                 var nsLabel = new Label(group.Key)
                 {
                     style =
@@ -993,7 +1027,15 @@
                 }; // TODO: Add USS class ListNamespaceClassName
 
                 nsLabel.AddToClassList(ListNamespaceClassName); // Apply namespace style class
-                listContent.Add(nsLabel);
+                header.Add(nsLabel);
+
+                var typesSubContainer = new VisualElement()
+                {
+                    name = $"types-subcontainer-{group.Key}",
+                };
+                typesSubContainer.style.marginLeft = 15; // Indent types
+                typesSubContainer.style.display = DisplayStyle.None; // <<< START COLLAPSED
+                namespaceGroupContainer.Add(typesSubContainer); // Add AFTER header
 
                 List<Type> addableTypesInGroup = group
                     .Where(t => !managedSet.Contains(t.FullName))
@@ -1105,14 +1147,12 @@
                 {
                     bool isManaged = managedSet.Contains(type.FullName);
                     var typeLabel = new Label($"  {type.Name}"); // Indent slightly
-                    typeLabel.style.paddingTop = 1;
-                    typeLabel.style.paddingBottom = 1;
-                    typeLabel.style.marginLeft = 10;
+                    typeLabel.AddToClassList(ListItemClassName); // Apply basic list item class
 
                     if (isManaged)
                     {
                         typeLabel.SetEnabled(false); // Disable selection
-                        typeLabel.style.opacity = 0.5f; // Visually indicate disabled
+                        typeLabel.AddToClassList(ListItemDisabledClassName); // Apply disabled style
                     }
                     else
                     {
@@ -1128,7 +1168,52 @@
                             typeLabel.style.backgroundColor = Color.clear
                         );
                     }
-                    listContent.Add(typeLabel);
+                    typesSubContainer.Add(typeLabel);
+                }
+
+                if (typesSubContainer.childCount > 0) // Only make header clickable if there are types within
+                {
+                    // Add hover effect to header itself
+                    header.RegisterCallback<MouseEnterEvent>(evt =>
+                        header.style.backgroundColor = new Color(0.35f, 0.35f, 0.35f)
+                    );
+                    header.RegisterCallback<MouseLeaveEvent>(evt =>
+                        header.style.backgroundColor = new Color(0.28f, 0.28f, 0.28f)
+                    ); // Restore original
+
+                    // Click handler on header TO TOGGLE
+                    header.RegisterCallback<PointerDownEvent>(evt =>
+                    {
+                        if (evt.button == 0)
+                        {
+                            // Find the specific indicator and types container for *this* header instance
+                            var currentIndicator = header.Q<Label>(
+                                className: "namespace-indicator"
+                            );
+                            var currentTypesContainer = header.parent.Q<VisualElement>(
+                                $"types-subcontainer-{group.Key}"
+                            ); // Find sibling by name
+
+                            if (currentIndicator != null && currentTypesContainer != null)
+                            {
+                                bool nowCollapsed =
+                                    currentTypesContainer.style.display == DisplayStyle.None;
+                                currentTypesContainer.style.display = nowCollapsed
+                                    ? DisplayStyle.Flex
+                                    : DisplayStyle.None; // Toggle display
+                                currentIndicator.text = nowCollapsed
+                                    ? ArrowExpanded
+                                    : ArrowCollapsed; // Toggle arrow
+                            }
+                            evt.StopPropagation(); // Prevent click outside handler closing popover
+                        }
+                    });
+                }
+                else
+                {
+                    // Optionally style header differently if it contains no types at all
+                    header.style.opacity = 0.7f;
+                    indicator.text = " "; // No arrow if nothing to expand
                 }
             }
 
@@ -1252,45 +1337,6 @@
                 TrickleDown.TrickleDown
             );
             // Debug.Log("Closed Type Popover");
-        }
-
-        private void OpenAddTypePopup()
-        {
-            // 1. Find ALL non-abstract ScriptableObject types
-            List<Type> allSOTypes = TypeCache
-                .GetTypesDerivedFrom<ScriptableObject>()
-                .Where(t => !t.IsAbstract && !t.IsGenericType)
-                .OrderBy(t => GetNamespaceKey(t)) // Order by namespace
-                .ThenBy(t => t.Name)
-                .ToList();
-
-            // 2. Get currently managed types to exclude them or show checkmarks
-            List<string> managedTypeFullNames = GetManagedTypeNames();
-            HashSet<string> managedSet = new HashSet<string>(managedTypeFullNames);
-
-            // 3. *** Show a Type Selection Popup Window ***
-            // This requires a dedicated EditorWindow (e.g., TypeSelectionPopup).
-            // For now, we'll just log the action and manually add one type for testing.
-            Debug.Log(
-                $"Opening Add Type Popup (Not Implemented). Found {allSOTypes.Count} potential types."
-            );
-            EditorUtility.DisplayDialog(
-                "Add Type",
-                "Type selection popup not fully implemented.\nPlease manually edit 'DataVisualizerSettings > Internal Managed Type Names' or the User State file for now.",
-                "OK"
-            );
-
-            // --- Placeholder: Manually add a type for testing ---
-            // Type typeToAdd = typeof(UnityEngine.Texture); // Example non-BDO type
-            // if (typeToAdd != null && typeof(ScriptableObject).IsAssignableFrom(typeToAdd) && !managedSet.Contains(typeToAdd.FullName)) {
-            //     managedTypeFullNames.Add(typeToAdd.FullName);
-            //     if (_settings.PersistStateInSettingsAsset) MarkSettingsDirty(); else MarkUserStateDirty();
-            //     Debug.Log($"DEBUG: Added {typeToAdd.FullName} to managed list.");
-            //     // Refresh UI
-            //     LoadScriptableObjectTypes();
-            //     BuildNamespaceView();
-            // }
-            // --- End Placeholder ---
         }
 
         private VisualElement CreateObjectColumn()
