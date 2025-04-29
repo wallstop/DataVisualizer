@@ -21,6 +21,10 @@
     margin-right: 5px; /* Add some space between label and action buttons */
 }
 
+.clickable:hover {
+    cursor: link; /* Indicate clickable */
+}
+
 .object-item:hover {
     background-color: rgba(100, 100, 100, 0.4);
     border-color: rgba(180, 180, 180, 0.7);
@@ -97,7 +101,6 @@
 .namespace-header {
     flex-direction: row;
     align-items: center;
-    cursor: link;
 }
 
 .namespace-indicator {
@@ -140,13 +143,13 @@
 }
 
 .delete-button {
-    color: rgb(217, 83, 79) !important; 
+    color: rgb(217, 83, 79) !important;
     -unity-font-style: bold;
 }
 
 .delete-button:hover {
-    color: rgb(200, 60, 56) !important; 
-    background-color: rgba(217, 83, 79, 0.1); 
+    color: rgb(200, 60, 56) !important;
+    background-color: rgba(217, 83, 79, 0.1);
 }
 
 .namespace-group-item--empty {
@@ -171,12 +174,15 @@
     background-color: transparent;
     font-size: 12px;
 }
+
 .type-selection-list-item:hover {
     background-color: rgba(255, 255, 255, 0.1);
 }
+
 .type-selection-list-item--disabled {
     opacity: 0.5;
 }
+
 .type-selection-list-namespace {
     /* Style for namespace headers */
     margin-top: 8px;
@@ -187,7 +193,28 @@
     -unity-font-style: bold;
 }
 
-.type-selection-list-namespace.clickable:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    cursor: link; /* Indicate clickable */
+
+
+.unity-text-field__placeholder > .unity-base-text-field__input {
+    color: #969696
+}
+
+.popover-namespace-header { /* Style for the clickable header */
+    flex-direction: row;
+    align-items: center;
+    padding: 2px;
+    font-size: 11px;
+    color: grey;
+    -unity-font-style: bold;
+    background-color: transparent;
+    border-width: 0;
+}
+
+.popover-namespace-indicator { /* Style for the arrow */
+    /*
+               indicator.style.width = 16;
+                    indicator.style.marginRight = 3;
+                    indicator.style.unityFontStyleAndWeight = FontStyle.Bold;
+     */
+    width: 12px;
 }

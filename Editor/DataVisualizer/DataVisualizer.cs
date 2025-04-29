@@ -6,8 +6,10 @@
     using System.ComponentModel;
     using System.IO;
     using System.Linq;
+    using System.Text.RegularExpressions;
     using Components;
     using Data;
+    using Extensions;
     using Helper;
 #if ODIN_INSPECTOR
     using Sirenix.OdinInspector;
@@ -44,6 +46,12 @@
         private const string ListNamespaceClassName = "type-selection-list-namespace";
         private const string ListItemClassName = "type-selection-list-item";
         private const string ListItemDisabledClassName = "type-selection-list-item--disabled";
+        private const string PopoverListItemClassName = "type-selection-list-item";
+        private const string PopoverListItemDisabledClassName =
+            "type-selection-list-item--disabled";
+        private const string PopoverListNamespaceClassName = "type-selection-list-namespace";
+        private const string PopoverNamespaceHeaderClassName = "popover-namespace-header"; // For the header row
+        private const string PopoverNamespaceIndicatorClassName = "popover-namespace-indicator"; // For the arrow
 
         private const string ArrowCollapsed = "►";
         private const string ArrowExpanded = "▼";
@@ -81,6 +89,8 @@
 
         private VisualElement _typeAddPopover; // Changed from _typeAddPopup
         private Button _addTypeButton; // Need reference to the button for positioning
+        private TextField _typeSearchField; // <-- ADD Search Field Reference
+        private VisualElement _typePopoverListContainer; // <-- ADD Container reference
         private bool _isTypePopoverOpen = false; // Track state
 
         private float _lastSavedOuterWidth = -1f;
@@ -104,6 +114,8 @@
         private string _userStateFilePath;
         private DataVisualizerUserState _userState;
         private bool _userStateDirty;
+
+        private List<Type> _relevantScriptableObjectTypes;
 
         private DataVisualizerSettings _settings;
 
@@ -661,6 +673,7 @@
                 name = "settings-button",
             };
             settingsButton.AddToClassList("icon-button");
+            settingsButton.AddToClassList("clickable");
             headerRow.Add(settingsButton);
 
             float initialOuterWidth = EditorPrefs.GetFloat(
@@ -724,12 +737,29 @@
                 },
             };
 
-            var typePopoverScrollView = new ScrollView(ScrollViewMode.Vertical);
-            typePopoverScrollView.style.flexGrow = 1;
+            _typeSearchField = new TextField
+            {
+                name = "type-search-field",
+                style =
+                {
+                    marginLeft = 4,
+                    marginRight = 4,
+                    marginTop = 4,
+                    marginBottom = 2,
+                },
+            };
+            _typeSearchField.SetPlaceholderText("Search...");
+            _typeSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue)); // Filter on change
+            _typeAddPopover.Add(_typeSearchField);
+
+            var typePopoverScrollView = new ScrollView(ScrollViewMode.Vertical)
+            {
+                style = { flexGrow = 1 },
+            };
             _typeAddPopover.Add(typePopoverScrollView);
             // Add content container for list items inside scrollview
-            var typeListContainer = new VisualElement { name = "type-add-list-content" };
-            typePopoverScrollView.Add(typeListContainer);
+            _typePopoverListContainer = new VisualElement { name = "type-add-list-content" };
+            typePopoverScrollView.Add(_typePopoverListContainer);
 
             root.Add(_typeAddPopover);
 
@@ -919,6 +949,7 @@
                 },
             };
             _addTypeButton.AddToClassList("icon-button");
+            _addTypeButton.AddToClassList("clickable");
             nsHeader.Add(_addTypeButton);
             namespaceColumn.Add(nsHeader);
 
@@ -955,267 +986,7 @@
             )
                 return;
 
-            // 1. Find ALL non-abstract ScriptableObject types
-            List<Type> allSOTypes = TypeCache
-                .GetTypesDerivedFrom<ScriptableObject>()
-                .Where(t => !t.IsAbstract && !t.IsGenericType)
-                .OrderBy(t => GetNamespaceKey(t))
-                .ThenBy(t => t.Name)
-                .ToList();
-
-            // 2. Get currently managed types
-            List<string> managedTypeFullNames = GetManagedTypeNames();
-            HashSet<string> managedSet = new HashSet<string>(managedTypeFullNames);
-
-            // 3. Get the container inside the popover's scrollview
-            var listContent = _typeAddPopover.Q<VisualElement>("type-add-list-content");
-            if (listContent == null)
-                return;
-            listContent.Clear(); // Clear previous list
-
-            // 4. Populate List (Simplified - No Search/Filter yet)
-            var groupedTypes = allSOTypes
-                .GroupBy(t => GetNamespaceKey(t)) // Use helper
-                .OrderBy(g => g.Key);
-
-            foreach (var group in groupedTypes)
-            {
-                var namespaceGroupContainer = new VisualElement()
-                {
-                    name = $"ns-group-container-{group.Key}",
-                };
-                listContent.Add(namespaceGroupContainer); // Add top-level container to list
-
-                // --- Header (Clickable for Collapse/Expand) ---
-                var header = new VisualElement
-                {
-                    name = $"ns-header-{group.Key}",
-                    style =
-                    {
-                        flexDirection = FlexDirection.Row,
-                        alignItems = Align.Center,
-                        paddingBottom = 2,
-                        paddingLeft = 2,
-                        paddingRight = 2,
-                        paddingTop = 2,
-                        marginTop = 3,
-                        backgroundColor = new Color(0.28f, 0.28f, 0.28f),
-                    },
-                };
-                header.AddToClassList("namespace-header"); // Use existing class or new one
-                namespaceGroupContainer.Add(header);
-
-                var indicator = new Label(ArrowCollapsed) { name = $"ns-indicator-{group.Key}" }; // Default collapsed
-                indicator.AddToClassList("namespace-indicator"); // Use existing class or new one
-                indicator.style.width = 16;
-                indicator.style.marginRight = 3;
-                indicator.style.unityFontStyleAndWeight = FontStyle.Bold;
-                header.Add(indicator);
-
-                var nsLabel = new Label(group.Key)
-                {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        marginTop = 5,
-                        marginLeft = 5,
-                        paddingBottom = 2,
-                        paddingLeft = 2,
-                        paddingRight = 2,
-                        paddingTop = 2,
-                    },
-                }; // TODO: Add USS class ListNamespaceClassName
-
-                nsLabel.AddToClassList(ListNamespaceClassName); // Apply namespace style class
-                header.Add(nsLabel);
-
-                var typesSubContainer = new VisualElement()
-                {
-                    name = $"types-subcontainer-{group.Key}",
-                };
-                typesSubContainer.style.marginLeft = 15; // Indent types
-                typesSubContainer.style.display = DisplayStyle.None; // <<< START COLLAPSED
-                namespaceGroupContainer.Add(typesSubContainer); // Add AFTER header
-
-                List<Type> addableTypesInGroup = group
-                    .Where(t => !managedSet.Contains(t.FullName))
-                    .ToList();
-                int addableCount = addableTypesInGroup.Count;
-
-                if (addableCount > 1)
-                {
-                    // Make it visually interactive
-                    nsLabel.tooltip = $"Click to add {addableCount} types from this namespace.";
-                    nsLabel.AddToClassList("clickable"); // Add a class for potential hover styles
-                    nsLabel.RegisterCallback<MouseEnterEvent>(evt =>
-                        nsLabel.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
-                    );
-                    nsLabel.RegisterCallback<MouseLeaveEvent>(evt =>
-                        nsLabel.style.backgroundColor = Color.clear
-                    );
-
-                    // Store data needed for the click handler
-                    var clickContext = new
-                    {
-                        NamespaceKey = group.Key,
-                        AddableTypes = addableTypesInGroup,
-                    };
-
-                    // Add the PointerDown handler
-                    nsLabel.RegisterCallback<PointerDownEvent>(evt =>
-                    {
-                        if (evt.button == 0) // Left click
-                        {
-                            // Access context captured by the lambda
-                            string clickedNamespace = clickContext.NamespaceKey;
-                            List<Type> typesToAdd = clickContext.AddableTypes;
-                            int countToAdd = typesToAdd.Count;
-
-                            if (countToAdd == 0)
-                                return; // Nothing to add
-
-                            // --- Confirmation Dialog ---
-                            string message =
-                                $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '{clickedNamespace}' to Data Visualizer?";
-                            var confirmPopup = ConfirmActionPopup.CreateAndConfigureInstance(
-                                title: "Add Namespace Types",
-                                message: message,
-                                confirmButtonText: "Add",
-                                cancelButtonText: "Cancel",
-                                parentPosition: position, // Center on DataVisualizer
-                                onComplete: (confirmed) =>
-                                {
-                                    if (confirmed)
-                                    {
-                                        bool stateChanged = false;
-                                        List<string> currentManagedList = GetManagedTypeNames(); // Get list ref
-                                        foreach (Type typeToAdd in typesToAdd)
-                                        {
-                                            // Double check it wasn't added somehow while dialog was open
-                                            if (!currentManagedList.Contains(typeToAdd.FullName))
-                                            {
-                                                currentManagedList.Add(typeToAdd.FullName);
-                                                stateChanged = true;
-                                            }
-                                        }
-
-                                        if (stateChanged)
-                                        {
-                                            // Mark appropriate backend dirty and save state
-                                            if (_settings.persistStateInSettingsAsset)
-                                            {
-                                                MarkSettingsDirty();
-                                                AssetDatabase.SaveAssets();
-                                            }
-                                            else
-                                            {
-                                                MarkUserStateDirty();
-                                            } // Triggers file save
-
-                                            Debug.Log(
-                                                $"Added {countToAdd} types from namespace '{clickedNamespace}'."
-                                            );
-
-                                            // Close the type add popover first
-                                            CloseAddTypePopover();
-                                            // Refresh the main window UI completely
-                                            ScheduleRefresh(); // Use full refresh to ensure everything updates
-                                        }
-                                        else
-                                        {
-                                            // Close popover even if nothing ended up being added
-                                            CloseAddTypePopover();
-                                        }
-                                    }
-                                    // If not confirmed, do nothing, popup closes automatically via callback
-                                }
-                            ); // End CreateAndConfigureInstance
-                            confirmPopup.ShowModal(); // Show confirmation modally
-                            // --- End Confirmation ---
-
-                            evt.StopPropagation(); // Stop this click from closing the popover immediately
-                        }
-                    }); // End Namespace Label Click Handler
-                }
-                else
-                {
-                    // Optional: Style namespace header differently if it has no addable types
-                    nsLabel.style.opacity = 0.6f;
-                }
-
-                foreach (Type type in group.OrderBy(t => t.Name))
-                {
-                    bool isManaged = managedSet.Contains(type.FullName);
-                    var typeLabel = new Label($"  {type.Name}"); // Indent slightly
-                    typeLabel.AddToClassList(ListItemClassName); // Apply basic list item class
-
-                    if (isManaged)
-                    {
-                        typeLabel.SetEnabled(false); // Disable selection
-                        typeLabel.AddToClassList(ListItemDisabledClassName); // Apply disabled style
-                    }
-                    else
-                    {
-                        // Add click handler using RegisterCallbackOnTarget (avoids closure issues)
-                        typeLabel.RegisterCallback<PointerDownEvent, Type>(
-                            HandleTypeSelectionFromPopover,
-                            type
-                        );
-                        typeLabel.RegisterCallback<MouseEnterEvent>(evt =>
-                            typeLabel.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
-                        );
-                        typeLabel.RegisterCallback<MouseLeaveEvent>(evt =>
-                            typeLabel.style.backgroundColor = Color.clear
-                        );
-                    }
-                    typesSubContainer.Add(typeLabel);
-                }
-
-                if (typesSubContainer.childCount > 0) // Only make header clickable if there are types within
-                {
-                    // Add hover effect to header itself
-                    header.RegisterCallback<MouseEnterEvent>(evt =>
-                        header.style.backgroundColor = new Color(0.35f, 0.35f, 0.35f)
-                    );
-                    header.RegisterCallback<MouseLeaveEvent>(evt =>
-                        header.style.backgroundColor = new Color(0.28f, 0.28f, 0.28f)
-                    ); // Restore original
-
-                    // Click handler on header TO TOGGLE
-                    header.RegisterCallback<PointerDownEvent>(evt =>
-                    {
-                        if (evt.button == 0)
-                        {
-                            // Find the specific indicator and types container for *this* header instance
-                            var currentIndicator = header.Q<Label>(
-                                className: "namespace-indicator"
-                            );
-                            var currentTypesContainer = header.parent.Q<VisualElement>(
-                                $"types-subcontainer-{group.Key}"
-                            ); // Find sibling by name
-
-                            if (currentIndicator != null && currentTypesContainer != null)
-                            {
-                                bool nowCollapsed =
-                                    currentTypesContainer.style.display == DisplayStyle.None;
-                                currentTypesContainer.style.display = nowCollapsed
-                                    ? DisplayStyle.Flex
-                                    : DisplayStyle.None; // Toggle display
-                                currentIndicator.text = nowCollapsed
-                                    ? ArrowExpanded
-                                    : ArrowCollapsed; // Toggle arrow
-                            }
-                            evt.StopPropagation(); // Prevent click outside handler closing popover
-                        }
-                    });
-                }
-                else
-                {
-                    // Optionally style header differently if it contains no types at all
-                    header.style.opacity = 0.7f;
-                    indicator.text = " "; // No arrow if nothing to expand
-                }
-            }
+            BuildTypeAddList();
 
             // 5. Position the Popover below the Add button
             // Use geometry only available after layout pass - schedule positioning
@@ -1246,6 +1017,7 @@
                     // 6. Show the Popover
                     _typeAddPopover.style.display = DisplayStyle.Flex;
                     _isTypePopoverOpen = true;
+
                     // Debug.Log("Opened Type Popover");
 
                     // 7. Register Capture handler to detect clicks outside
@@ -1264,6 +1036,288 @@
                 HandleClickOutsidePopover,
                 TrickleDown.TrickleDown
             );
+        }
+
+        private void BuildTypeAddList(string filter = null)
+        {
+            if (string.Equals("Search...", filter, StringComparison.Ordinal))
+            {
+                filter = null;
+            }
+            if (_typePopoverListContainer == null)
+            {
+                return;
+            }
+
+            _typePopoverListContainer.Clear(); // Clear previous items
+
+            List<string> searchTerms = string.IsNullOrWhiteSpace(filter)
+                ? new List<string>()
+                : filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+            bool isFiltering = searchTerms.Count > 0;
+
+            List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
+            List<string> managedTypeFullNames = GetManagedTypeNames();
+            HashSet<string> managedSet = new(managedTypeFullNames);
+
+            // 3. Group Types by Namespace
+            var groupedTypes = allObjectTypes
+                .GroupBy(GetNamespaceKey) // Use static helper
+                .OrderBy(grouping => grouping.Key);
+
+            // 4. Iterate Groups and Build UI
+            bool foundMatches = false;
+            foreach (IGrouping<string, Type> group in groupedTypes)
+            {
+                string namespaceKey = group.Key;
+                List<Type> addableTypes = new List<Type>();
+                var typesToShowInGroup = new List<VisualElement>(); // VEs for types passing filter
+
+                // Check if namespace itself matches filter terms (for potential highlighting/expansion)
+                bool namespaceMatchesAll =
+                    isFiltering
+                    && searchTerms.All(term =>
+                        namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    );
+
+                // Filter types within the group
+                foreach (Type type in group.OrderBy(t => t.Name))
+                {
+                    string typeName = type.Name;
+                    bool typeMatchesSearch =
+                        !isFiltering
+                        || searchTerms.All(term =>
+                            typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                            || namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase) // Term must be in Type OR Namespace
+                        );
+
+                    if (typeMatchesSearch)
+                    {
+                        bool isManaged = managedSet.Contains(type.FullName);
+                        var typeLabel = new Label($"  {type.Name}");
+                        typeLabel.style.paddingTop = 1;
+                        typeLabel.style.paddingBottom = 1;
+                        typeLabel.style.marginLeft = 10;
+                        typeLabel.AddToClassList(PopoverListItemClassName); // Apply base style
+
+                        if (isManaged)
+                        {
+                            typeLabel.SetEnabled(false);
+                            typeLabel.AddToClassList(PopoverListItemDisabledClassName);
+                        }
+                        else
+                        {
+                            // Add click handler for individual type selection
+                            typeLabel.RegisterCallback<PointerDownEvent, Type>(
+                                HandleTypeSelectionFromPopover,
+                                type
+                            );
+                            typeLabel.RegisterCallback<MouseEnterEvent>(evt =>
+                                typeLabel.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
+                            );
+                            typeLabel.RegisterCallback<MouseLeaveEvent>(evt =>
+                                typeLabel.style.backgroundColor = Color.clear
+                            );
+                        }
+
+                        addableTypes.Add(type);
+                        typesToShowInGroup.Add(typeLabel); // Add VE to list for this group
+                    }
+                } // End foreach Type
+
+                // 5. Add Namespace Group to UI if it's relevant
+                if (typesToShowInGroup.Count > 0) // Only add group if it contains visible types
+                {
+                    foundMatches = true; // Mark that we found something
+
+                    // --- Create Namespace Group Elements ---
+                    var namespaceGroupContainer = new VisualElement()
+                    {
+                        name = $"ns-group-container-{group.Key}",
+                    };
+                    var header = new VisualElement { name = $"ns-header-{group.Key}" };
+                    header.AddToClassList(PopoverNamespaceHeaderClassName); // Use specific class
+
+                    // Force expand if filtering is active, otherwise default collapsed
+                    bool startCollapsed = !isFiltering;
+                    var indicator = new Label(startCollapsed ? ArrowCollapsed : ArrowExpanded)
+                    {
+                        name = $"ns-indicator-{group.Key}",
+                    };
+                    indicator.AddToClassList(PopoverNamespaceIndicatorClassName);
+                    indicator.AddToClassList("clickable");
+
+                    var nsLabel = new Label(group.Key) { name = $"ns-name-{group.Key}" };
+                    nsLabel.AddToClassList(PopoverListNamespaceClassName); // Reuse existing class for style
+                    nsLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    nsLabel.style.flexGrow = 1;
+
+                    var clickContext = new
+                    {
+                        NamespaceKey = group.Key,
+                        AddableTypes = addableTypes,
+                    };
+
+                    if (typesToShowInGroup.Count > 1)
+                    {
+                        nsLabel.AddToClassList("clickable"); // Add a class for potential hover styles
+                        nsLabel.RegisterCallback<MouseEnterEvent>(evt =>
+                            nsLabel.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
+                        );
+                        nsLabel.RegisterCallback<MouseLeaveEvent>(evt =>
+                            nsLabel.style.backgroundColor = Color.clear
+                        );
+
+                        nsLabel.RegisterCallback<PointerDownEvent>(evt =>
+                        {
+                            if (evt.button == 0) // Left click
+                            {
+                                // Access context captured by the lambda
+                                string clickedNamespace = clickContext.NamespaceKey;
+                                List<Type> typesToAdd = clickContext.AddableTypes;
+                                int countToAdd = typesToAdd.Count;
+
+                                if (countToAdd == 0)
+                                    return; // Nothing to add
+
+                                // --- Confirmation Dialog ---
+                                string message =
+                                    $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '{clickedNamespace}' to Data Visualizer?";
+                                var confirmPopup = ConfirmActionPopup.CreateAndConfigureInstance(
+                                    title: "Add Namespace Types",
+                                    message: message,
+                                    confirmButtonText: "Add",
+                                    cancelButtonText: "Cancel",
+                                    parentPosition: this.position, // Center on DataVisualizer
+                                    onComplete: (confirmed) =>
+                                    {
+                                        if (confirmed)
+                                        {
+                                            bool stateChanged = false;
+                                            List<string> currentManagedList = GetManagedTypeNames(); // Get list ref
+                                            foreach (Type typeToAdd in typesToAdd)
+                                            {
+                                                // Double check it wasn't added somehow while dialog was open
+                                                if (
+                                                    !currentManagedList.Contains(typeToAdd.FullName)
+                                                )
+                                                {
+                                                    currentManagedList.Add(typeToAdd.FullName);
+                                                    stateChanged = true;
+                                                }
+                                            }
+
+                                            if (stateChanged)
+                                            {
+                                                // Mark appropriate backend dirty and save state
+                                                if (_settings.persistStateInSettingsAsset)
+                                                {
+                                                    MarkSettingsDirty();
+                                                    AssetDatabase.SaveAssets();
+                                                }
+                                                else
+                                                {
+                                                    MarkUserStateDirty();
+                                                } // Triggers file save
+
+                                                Debug.Log(
+                                                    $"Added {countToAdd} types from namespace '{clickedNamespace}'."
+                                                );
+
+                                                // Close the type add popover first
+                                                CloseAddTypePopover();
+                                                // Refresh the main window UI completely
+                                                ScheduleRefresh(); // Use full refresh to ensure everything updates
+                                            }
+                                            else
+                                            {
+                                                // Close popover even if nothing ended up being added
+                                                CloseAddTypePopover();
+                                            }
+                                        }
+                                        // If not confirmed, do nothing, popup closes automatically via callback
+                                    }
+                                ); // End CreateAndConfigureInstance
+                                confirmPopup.ShowModal(); // Show confirmation modally
+                                // --- End Confirmation ---
+
+                                evt.StopPropagation(); // Stop this click from closing the popover immediately
+                            }
+                        }); // End Namespace Label Click Handler
+                    }
+
+                    header.Add(indicator);
+                    header.Add(nsLabel);
+
+                    var typesSubContainer = new VisualElement()
+                    {
+                        name = $"types-subcontainer-{group.Key}",
+                    };
+                    typesSubContainer.style.marginLeft = 15; // Indent types
+                    // Set initial display based on filtering
+                    typesSubContainer.style.display = startCollapsed
+                        ? DisplayStyle.None
+                        : DisplayStyle.Flex;
+
+                    // Add the filtered type VEs to the sub-container
+                    foreach (var typeVE in typesToShowInGroup)
+                    {
+                        typesSubContainer.Add(typeVE);
+                    }
+
+                    // Add header and sub-container to the group container
+                    namespaceGroupContainer.Add(header);
+                    namespaceGroupContainer.Add(typesSubContainer);
+
+                    // Add toggle handler to header
+                    indicator.RegisterCallback<PointerDownEvent>(evt =>
+                    {
+                        if (evt.button == 0)
+                        {
+                            var currentIndicator = header.Q<Label>(
+                                className: PopoverNamespaceIndicatorClassName
+                            );
+                            var currentTypesContainer = header.parent.Q<VisualElement>(
+                                $"types-subcontainer-{group.Key}"
+                            );
+                            if (currentIndicator != null && currentTypesContainer != null)
+                            {
+                                bool nowCollapsed =
+                                    currentTypesContainer.style.display == DisplayStyle.None;
+                                currentTypesContainer.style.display = nowCollapsed
+                                    ? DisplayStyle.Flex
+                                    : DisplayStyle.None;
+                                currentIndicator.text = nowCollapsed
+                                    ? ArrowExpanded
+                                    : ArrowCollapsed;
+                            }
+                            evt.StopPropagation(); // Prevent click outside handler closing popover
+                        }
+                    });
+
+                    // Add the whole group to the main list container in the popover
+                    _typePopoverListContainer.Add(namespaceGroupContainer);
+                } // End if (typesToShowInGroup.Count > 0)
+            } // End foreach namespace group
+
+            // Optional: Display "No results" message if filtering yields nothing
+            if (isFiltering && !foundMatches)
+            {
+                _typePopoverListContainer.Add(
+                    new Label("No matching types found.")
+                    {
+                        style =
+                        {
+                            color = Color.grey,
+                            paddingBottom = 10,
+                            paddingTop = 10,
+                            paddingLeft = 10,
+                            paddingRight = 10,
+                            unityTextAlign = TextAnchor.MiddleCenter,
+                        },
+                    }
+                );
+            }
         }
 
         // Handler attached to ROOT to close popover on outside click
@@ -1402,6 +1456,7 @@
                 },
             };
             createButton.AddToClassList("icon-button");
+            createButton.AddToClassList("clickable");
             objectHeader.Add(createButton);
             objectColumn.Add(objectHeader);
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
@@ -1603,6 +1658,8 @@
 
                 Label indicator = new(ArrowExpanded) { name = $"namespace-indicator-{key}" };
                 indicator.AddToClassList(NamespaceIndicatorClass);
+                indicator.AddToClassList("clickable");
+                ;
                 header.Add(indicator);
 
                 Label namespaceLabel = new(key)
@@ -1675,6 +1732,7 @@
                     typeItem.AddToClassList(TypeItemClass);
                     Label typeLabel = new(type.Name) { name = "type-item-label" };
                     typeLabel.AddToClassList(TypeLabelClass);
+                    typeLabel.AddToClassList("clickable");
                     typeItem.Add(typeLabel);
 
                     typeItem.RegisterCallback<PointerDownEvent>(OnTypePointerDown);
@@ -1746,6 +1804,7 @@
                     name = $"object-item-row-{dataObject.GetInstanceID()}",
                 };
                 objectItemRow.AddToClassList(ObjectItemClass);
+                objectItemRow.AddToClassList("clickable");
                 objectItemRow.style.flexDirection = FlexDirection.Row;
                 objectItemRow.style.alignItems = Align.Center;
                 objectItemRow.userData = dataObject;
@@ -1753,6 +1812,7 @@
 
                 VisualElement contentArea = new() { name = "content" };
                 contentArea.AddToClassList(ObjectItemContentClass);
+                contentArea.AddToClassList("clickable");
                 objectItemRow.Add(contentArea);
 
                 string title;
@@ -1766,6 +1826,7 @@
                 }
                 Label titleLabel = new(title) { name = "object-item-label" };
                 titleLabel.AddToClassList("object-item__label");
+                titleLabel.AddToClassList("clickable");
                 contentArea.Add(titleLabel);
 
                 VisualElement actionsArea = new()
@@ -2203,8 +2264,23 @@
                 return;
             }
 
+            const string pattern = @"\(Clone(\s+-?\d+)?\)";
+
             string directory = originalDirectory.SanitizePath();
             string originalName = Path.GetFileNameWithoutExtension(originalPath);
+            originalName = Regex.Replace(originalName, pattern, string.Empty);
+            if (originalName.EndsWith(' '))
+            {
+                int lastIndex = originalName.Length - 1;
+                for (; 0 <= lastIndex; --lastIndex)
+                {
+                    if (!char.IsWhiteSpace(originalName[lastIndex]))
+                    {
+                        break;
+                    }
+                }
+                originalName = originalName.Substring(0, lastIndex + 1);
+            }
             string extension = Path.GetExtension(originalPath);
             string proposedPath;
             string uniquePath;
@@ -2215,7 +2291,7 @@
                     $"{originalName} (Clone{(count++ == 0 ? string.Empty : $" {count}")}){extension}";
                 proposedPath = Path.Combine(directory, proposedName).SanitizePath();
                 uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
-            } while (string.Equals(uniquePath, proposedPath, StringComparison.Ordinal));
+            } while (!string.Equals(uniquePath, proposedPath, StringComparison.Ordinal));
 
             try
             {
@@ -2500,13 +2576,10 @@
             List<string> managedTypeFullNames = GetManagedTypeNames(); // Use helper
             HashSet<string> managedTypeSet = new HashSet<string>(managedTypeFullNames); // Faster lookups
 
-            List<Type> allSOTypes = TypeCache
-                .GetTypesDerivedFrom<ScriptableObject>()
-                .Where(t => !t.IsAbstract && !t.IsGenericType)
-                .ToList();
+            List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
 
             // Filter based on managed list OR if it inherits from BaseDataObject (default inclusion)
-            List<Type> typesToDisplay = allSOTypes
+            List<Type> typesToDisplay = allObjectTypes
                 .Where(t =>
                     managedTypeSet.Contains(t.FullName)
                     || typeof(BaseDataObject).IsAssignableFrom(t)
@@ -2536,6 +2609,14 @@
             Debug.Log(
                 $"Loaded {_scriptableObjectTypes.Sum(g => g.types.Count)} managed types in {_scriptableObjectTypes.Count} namespaces."
             );
+        }
+
+        private List<Type> LoadRelevantScriptableObjectTypes()
+        {
+            return _relevantScriptableObjectTypes ??= TypeCache
+                .GetTypesDerivedFrom<ScriptableObject>()
+                .Where(t => !t.IsAbstract && !t.IsGenericType)
+                .ToList();
         }
 
         private void SelectObject(ScriptableObject dataObject)
