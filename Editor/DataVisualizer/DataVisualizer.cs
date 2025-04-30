@@ -9,7 +9,6 @@
     using System.Reflection;
     using System.Text;
     using System.Text.RegularExpressions;
-    using Components;
     using Data;
     using Extensions;
     using Helper;
@@ -46,9 +45,6 @@
         private const string ObjectItemContentClass = "object-item-content";
         private const string ObjectItemActionsClass = "object-item-actions";
         private const string ActionButtonClass = "action-button";
-        private const string ListNamespaceClassName = "type-selection-list-namespace";
-        private const string ListItemClassName = "type-selection-list-item";
-        private const string ListItemDisabledClassName = "type-selection-list-item--disabled";
         private const string PopoverListItemClassName = "type-selection-list-item";
         private const string PopoverListItemDisabledClassName =
             "type-selection-list-item--disabled";
@@ -56,6 +52,7 @@
         private const string PopoverNamespaceHeaderClassName = "popover-namespace-header";
         private const string PopoverNamespaceIndicatorClassName = "popover-namespace-indicator";
         private const string SearchResultItemClass = "search-result-item";
+        private const string SearchResultHighlightClass = "search-result-item--highlighted";
 
         private const string ArrowCollapsed = "►";
         private const string ArrowExpanded = "▼";
@@ -81,9 +78,12 @@
         private readonly List<ScriptableObject> _selectedObjects = new();
         private readonly List<ScriptableObject> _allManagedSOsCache = new();
         private readonly Dictionary<Type, VisualElement> _namespaceCache = new();
+        private readonly List<VisualElement> _currentSearchResultItems = new();
 
         private ScriptableObject _selectedObject;
         private VisualElement _selectedElement;
+
+        private int _searchHighlightIndex = -1;
 
         private VisualElement _namespaceListContainer;
         private VisualElement _objectListContainer;
@@ -102,7 +102,7 @@
         private VisualElement _typeAddPopover;
         private VisualElement _activePopover;
         private VisualElement _confirmNamespaceAddPopover;
-        private VisualElement _activeNestedPopover = null;
+        private VisualElement _activeNestedPopover;
         private object _popoverContext;
 
         private TextField _searchField;
@@ -298,6 +298,7 @@
             {
                 return;
             }
+
             DataVisualizer window = GetWindow<DataVisualizer>(false, null, false);
             if (window != null)
             {
@@ -740,6 +741,7 @@
             root.Add(headerRow);
 
             Button settingsButton = null;
+            // ReSharper disable once AccessToModifiedClosure
             settingsButton = new Button(() => TogglePopover(_settingsPopover, settingsButton))
             {
                 text = "…",
@@ -772,6 +774,7 @@
                 },
                 this
             );
+            _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
             headerRow.Add(_searchField);
 
             float initialOuterWidth = EditorPrefs.GetFloat(
@@ -879,10 +882,10 @@
             root.Add(_typeAddPopover);
 
             _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
-            _confirmNamespaceAddPopover.style.width = 300; // Adjust size
+            _confirmNamespaceAddPopover.style.width = 300;
             _confirmNamespaceAddPopover.style.minHeight = 80;
             _confirmNamespaceAddPopover.style.maxHeight = 150;
-            root.Add(_confirmNamespaceAddPopover); // Add to root
+            root.Add(_confirmNamespaceAddPopover);
 
             BuildNamespaceView();
             BuildObjectsView();
@@ -980,6 +983,115 @@
             root.style.fontSize = 14;
         }
 
+        private void HandleSearchKeyDown(KeyDownEvent evt)
+        {
+            if (
+                _activePopover != _searchPopover
+                || _searchPopover.style.display == DisplayStyle.None
+                || _currentSearchResultItems.Count == 0
+            )
+            {
+                return;
+            }
+
+            bool highlightChanged = false;
+
+            switch (evt.keyCode)
+            {
+                case KeyCode.DownArrow:
+                {
+                    _searchHighlightIndex++;
+                    if (_searchHighlightIndex >= _currentSearchResultItems.Count)
+                    {
+                        _searchHighlightIndex = 0;
+                    }
+
+                    highlightChanged = true;
+                    break;
+                }
+                case KeyCode.UpArrow:
+                {
+                    _searchHighlightIndex--;
+                    if (_searchHighlightIndex < 0)
+                    {
+                        _searchHighlightIndex = _currentSearchResultItems.Count - 1;
+                    }
+
+                    highlightChanged = true;
+                    break;
+                }
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                {
+                    if (
+                        _searchHighlightIndex >= 0
+                        && _searchHighlightIndex < _currentSearchResultItems.Count
+                    )
+                    {
+                        if (
+                            _currentSearchResultItems[_searchHighlightIndex].userData
+                            is ScriptableObject selectedObject
+                        )
+                        {
+                            NavigateToObject(selectedObject);
+                        }
+
+                        evt.PreventDefault();
+                        evt.StopPropagation();
+                    }
+
+                    break;
+                }
+                case KeyCode.Escape:
+                {
+                    CloseActivePopover();
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    break;
+                }
+                default:
+                {
+                    return;
+                }
+            }
+
+            if (highlightChanged)
+            {
+                UpdateSearchResultHighlight();
+                evt.PreventDefault();
+                evt.StopPropagation();
+            }
+        }
+
+        private void UpdateSearchResultHighlight()
+        {
+            if (_currentSearchResultItems == null || _searchPopover == null)
+            {
+                return;
+            }
+
+            ScrollView scrollView = _searchPopover.Q<ScrollView>("search-scroll");
+
+            for (int i = 0; i < _currentSearchResultItems.Count; i++)
+            {
+                VisualElement item = _currentSearchResultItems[i];
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (i == _searchHighlightIndex)
+                {
+                    item.AddToClassList(SearchResultHighlightClass);
+                    scrollView?.ScrollTo(item);
+                }
+                else
+                {
+                    item.RemoveFromClassList(SearchResultHighlightClass);
+                }
+            }
+        }
+
         private void PerformSearch(string searchText)
         {
             searchText = searchText?.Trim();
@@ -989,19 +1101,12 @@
             }
 
             _lastSearchString = searchText;
-            // TODO REMOVE IF THIS IS BAD
             _searchPopover.Clear();
+            _currentSearchResultItems.Clear();
+            _searchHighlightIndex = -1;
 
-            if (!_isSearchCachePopulated)
+            if (!_isSearchCachePopulated || string.IsNullOrWhiteSpace(searchText))
             {
-                _searchPopover.Clear();
-                CloseActivePopover();
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(searchText))
-            {
-                _searchPopover.Clear();
                 CloseActivePopover();
                 return;
             }
@@ -1012,14 +1117,11 @@
             );
             if (searchTerms.Length == 0)
             {
-                _searchPopover.Clear();
                 CloseActivePopover();
                 return;
             }
 
-            List<Tuple<ScriptableObject, SearchResultMatchInfo>> results =
-                new List<Tuple<ScriptableObject, SearchResultMatchInfo>>();
-
+            List<(ScriptableObject refernce, SearchResultMatchInfo match)> results = new();
             foreach (ScriptableObject obj in _allManagedSOsCache)
             {
                 if (obj == null)
@@ -1027,87 +1129,45 @@
                     continue;
                 }
 
-                SearchResultMatchInfo matchInfo = CheckMatch(obj, searchTerms); // Get detailed info
-                if (matchInfo.IsMatch) // Check overall match flag
+                SearchResultMatchInfo matchInfo = CheckMatch(obj, searchTerms);
+                if (!matchInfo.isMatch)
                 {
-                    results.Add(Tuple.Create(obj, matchInfo));
-                    if (results.Count >= MaxSearchResults)
-                        break;
+                    continue;
+                }
+
+                results.Add((obj, matchInfo));
+                if (results.Count >= MaxSearchResults)
+                {
+                    break;
                 }
             }
 
-            // Dictionary<ScriptableObject, VisualElement> currentElements =
-            //     _searchPopover.childCount > 0
-            //         ? _searchPopover
-            //             .ElementAt(0)
-            //             .Children()
-            //             .Where(child => child.userData is ScriptableObject)
-            //             .ToDictionary(child => child.userData as ScriptableObject, child => child)
-            //         : new Dictionary<ScriptableObject, VisualElement>();
-            // HashSet<ScriptableObject> seen = new();
-
             if (results.Count > 0)
             {
-                // ScrollView scrollView;
-                // if (_searchPopover.childCount == 0)
-                // {
-                //     scrollView = new ScrollView(ScrollViewMode.Vertical)
-                //     {
-                //         name = "search-scroll",
-                //         style = { flexGrow = 1 },
-                //     };
-                //     _searchPopover.Add(scrollView);
-                // }
-                // else
-                // {
-                //     scrollView = _searchPopover.ElementAt(0) as ScrollView;
-                // }
-
-                var scrollView =
+                ScrollView scrollView =
                     _searchPopover.Q<ScrollView>("search-scroll")
-                    ?? new ScrollView { style = { flexGrow = 1 } };
-                var listContainer =
+                    ?? new ScrollView { name = "search-scroll", style = { flexGrow = 1 } };
+                VisualElement listContainer =
                     scrollView.Q<VisualElement>("search-list-content")
                     ?? new VisualElement { name = "search-list-content" };
                 listContainer.Clear();
                 if (scrollView.parent != _searchPopover)
-                    _searchPopover.Add(scrollView);
-                if (listContainer.parent != scrollView)
-                    scrollView.Add(listContainer);
-
-                foreach (var resultTuple in results)
                 {
-                    // seen.Add(resultObj);
-                    // if (currentElements.ContainsKey(resultObj))
-                    // {
-                    //     continue;
-                    // }
+                    _searchPopover.Add(scrollView);
+                }
 
-                    ScriptableObject resultObj = resultTuple.Item1;
-                    SearchResultMatchInfo resultInfo = resultTuple.Item2;
-                    // Get terms that actually matched *this specific object* for highlighting
-                    var termsMatchingThisObject = resultInfo.AllMatchedTerms.ToList();
+                if (listContainer.parent != scrollView)
+                {
+                    scrollView.Add(listContainer);
+                }
 
-                    // VisualElement resultItem = new() { name = "result-item", userData = resultObj };
-                    // resultItem.AddToClassList(SearchResultItemClass);
-                    // resultItem.style.flexDirection = FlexDirection.Row;
-                    // resultItem.style.justifyContent = Justify.SpaceBetween;
-                    // resultItem.style.paddingLeft = new StyleLength(new Length(4, LengthUnit.Pixel));
-                    // resultItem.style.paddingRight = new StyleLength(
-                    //     new Length(4, LengthUnit.Pixel)
-                    // );
-                    // resultItem.style.paddingBottom = new StyleLength(
-                    //     new Length(4, LengthUnit.Pixel)
-                    // );
-                    // resultItem.style.paddingTop = new StyleLength(new Length(4, LengthUnit.Pixel));
-
-                    var resultItem = new VisualElement
-                    {
-                        name = "result-item",
-                        userData = resultObj,
-                    };
+                foreach ((ScriptableObject resultObj, SearchResultMatchInfo resultInfo) in results)
+                {
+                    List<string> termsMatchingThisObject = resultInfo.AllMatchedTerms.ToList();
+                    VisualElement resultItem = new() { name = "result-item", userData = resultObj };
                     resultItem.AddToClassList(SearchResultItemClass);
-                    resultItem.style.flexDirection = FlexDirection.Column; // Stack main info + context
+                    resultItem.AddToClassList("clickable");
+                    resultItem.style.flexDirection = FlexDirection.Column;
                     resultItem.style.paddingBottom = new StyleLength(
                         new Length(4, LengthUnit.Pixel)
                     );
@@ -1116,64 +1176,31 @@
                         new Length(4, LengthUnit.Pixel)
                     );
                     resultItem.style.paddingTop = new StyleLength(new Length(4, LengthUnit.Pixel));
-                    // Add click handler to navigate
+
+                    // ReSharper disable once HeapView.CanAvoidClosure
                     resultItem.RegisterCallback<PointerDownEvent>(evt =>
                     {
-                        if (evt.button == 0 && resultItem.userData is ScriptableObject clickedObj)
+                        if (
+                            evt.button != 0
+                            || resultItem.userData is not ScriptableObject clickedObj
+                        )
                         {
-                            NavigateToObject(clickedObj);
-                            evt.StopPropagation();
+                            return;
                         }
+
+                        NavigateToObject(clickedObj);
+                        evt.StopPropagation();
                     });
-                    // Add hover effects
-                    resultItem.RegisterCallback<MouseEnterEvent>(evt =>
-                        resultItem.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
+                    resultItem.RegisterCallback<MouseEnterEvent, VisualElement>(
+                        (_, context) => context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
+                        resultItem
                     );
-                    resultItem.RegisterCallback<MouseLeaveEvent>(evt =>
-                        resultItem.style.backgroundColor = Color.clear
+                    resultItem.RegisterCallback<MouseLeaveEvent, VisualElement>(
+                        (_, context) => context.style.backgroundColor = Color.clear,
+                        resultItem
                     );
 
-                    // resultItem.RegisterCallback<PointerDownEvent>(evt =>
-                    // {
-                    //     if (
-                    //         evt.button != 0
-                    //         || resultItem.userData is not ScriptableObject clickedObj
-                    //     )
-                    //     {
-                    //         return;
-                    //     }
-                    //
-                    //     NavigateToObject(clickedObj);
-                    //     evt.StopPropagation();
-                    // });
-                    // resultItem.RegisterCallback<MouseEnterEvent, VisualElement>(
-                    //     (_, context) => context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
-                    //     resultItem
-                    // );
-                    // resultItem.RegisterCallback<MouseLeaveEvent, VisualElement>(
-                    //     (_, context) => context.style.backgroundColor = Color.clear,
-                    //     resultItem
-                    // );
-
-                    // Label nameLabel = new(resultObj.name)
-                    // {
-                    //     style = { flexGrow = 1, unityTextAlign = TextAnchor.MiddleLeft },
-                    // };
-                    // Label typeLabel = new(resultObj.GetType().Name)
-                    // {
-                    //     style =
-                    //     {
-                    //         color = Color.grey,
-                    //         fontSize = 10,
-                    //         unityTextAlign = TextAnchor.MiddleRight,
-                    //     },
-                    // };
-                    //
-                    // resultItem.Add(nameLabel);
-                    // resultItem.Add(typeLabel);
-                    // scrollView.Add(resultItem);
-
-                    var mainInfoRow = new VisualElement
+                    VisualElement mainInfoRow = new()
                     {
                         style =
                         {
@@ -1181,9 +1208,9 @@
                             justifyContent = Justify.SpaceBetween,
                         },
                     };
+                    mainInfoRow.AddToClassList("clickable");
 
-                    // Create highlighted labels using the helper
-                    var nameLabel = CreateHighlightedLabel(
+                    Label nameLabel = CreateHighlightedLabel(
                         resultObj.name,
                         termsMatchingThisObject,
                         "result-name-label"
@@ -1191,8 +1218,9 @@
                     nameLabel.style.flexGrow = 1;
                     nameLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
                     nameLabel.style.marginRight = 10;
+                    nameLabel.AddToClassList("clickable");
 
-                    var typeLabel = CreateHighlightedLabel(
+                    Label typeLabel = CreateHighlightedLabel(
                         resultObj.GetType().Name,
                         termsMatchingThisObject,
                         "result-type-label"
@@ -1201,6 +1229,7 @@
                     typeLabel.style.fontSize = 10;
                     typeLabel.style.unityTextAlign = TextAnchor.MiddleRight;
                     typeLabel.style.flexShrink = 0;
+                    typeLabel.AddToClassList("clickable");
 
                     mainInfoRow.Add(nameLabel);
                     mainInfoRow.Add(typeLabel);
@@ -1208,48 +1237,37 @@
 
                     if (!resultInfo.MatchInPrimaryField)
                     {
-                        var contextContainer = new VisualElement { style = { marginTop = 2 } };
+                        VisualElement contextContainer = new() { style = { marginTop = 2 } };
                         resultItem.Add(contextContainer);
 
-                        // Get details for reflected fields where matches occurred for this object
-                        var reflectedDetails = resultInfo
-                            .MatchedFields.Where(mf =>
-                                mf.FieldName != MatchSource.ObjectName
-                                && mf.FieldName != MatchSource.TypeName
-                                && mf.FieldName != MatchSource.GUID
+                        IEnumerable<IGrouping<string, MatchDetail>> reflectedDetails = resultInfo
+                            .matchedFields.Where(mf =>
+                                mf.fieldName != MatchSource.ObjectName
+                                && mf.fieldName != MatchSource.TypeName
+                                && mf.fieldName != MatchSource.GUID
                             )
-                            .GroupBy(mf => mf.FieldName) // Group by property name
-                            .Take(2); // Limit context lines shown for brevity
+                            .GroupBy(mf => mf.fieldName)
+                            .Take(2);
 
-                        foreach (var fieldGroup in reflectedDetails)
+                        foreach (IGrouping<string, MatchDetail> fieldGroup in reflectedDetails)
                         {
                             string fieldName = fieldGroup.Key;
-                            // Use value from the first detail found for this field
-                            string fieldValue = fieldGroup.First().MatchedValue;
-                            // Highlight the value based on terms that matched *this specific object*
-                            var contextLabel = CreateHighlightedLabel(
+                            string fieldValue = fieldGroup.First().matchedValue;
+                            Label contextLabel = CreateHighlightedLabel(
                                 $"{fieldName}: {fieldValue}",
                                 termsMatchingThisObject,
                                 "result-context-label"
                             );
                             contextLabel.style.fontSize = 9;
                             contextLabel.style.color = Color.gray;
-                            contextLabel.style.marginLeft = 5; // Indent context slightly
+                            contextLabel.style.marginLeft = 5;
                             contextContainer.Add(contextLabel);
                         }
                     }
-                    // --- End Context Row ---
 
-                    listContainer.Add(resultItem); // Add item to the list container
+                    listContainer.Add(resultItem);
+                    _currentSearchResultItems.Add(resultItem);
                 }
-
-                // foreach (KeyValuePair<ScriptableObject, VisualElement> entry in currentElements)
-                // {
-                //     if (!seen.Contains(entry.Key))
-                //     {
-                //         entry.Value.RemoveFromHierarchy();
-                //     }
-                // }
 
                 if (_activePopover != _searchPopover)
                 {
@@ -1265,7 +1283,7 @@
 
         private SearchResultMatchInfo CheckMatch(ScriptableObject obj, string[] lowerSearchTerms)
         {
-            var resultInfo = new SearchResultMatchInfo();
+            SearchResultMatchInfo resultInfo = new();
             if (obj == null || lowerSearchTerms == null || lowerSearchTerms.Length == 0)
             {
                 return resultInfo;
@@ -1278,21 +1296,18 @@
                 ? string.Empty
                 : AssetDatabase.AssetPathToGUID(assetPath);
 
-            HashSet<string> termsFound = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // Track which terms found a match
-
             foreach (string term in lowerSearchTerms)
             {
                 bool termMatchedThisLoop = false;
-                List<MatchDetail> detailsForThisTerm = new List<MatchDetail>();
+                List<MatchDetail> detailsForThisTerm = new();
 
                 if (objectName.Contains(term, StringComparison.OrdinalIgnoreCase))
                 {
                     detailsForThisTerm.Add(
-                        new MatchDetail
+                        new MatchDetail(term)
                         {
-                            FieldName = MatchSource.ObjectName,
-                            MatchedValue = objectName,
-                            MatchedTerms = new List<string> { term },
+                            fieldName = MatchSource.ObjectName,
+                            matchedValue = objectName,
                         }
                     );
                     termMatchedThisLoop = true;
@@ -1300,32 +1315,25 @@
                 if (typeName.Contains(term, StringComparison.OrdinalIgnoreCase))
                 {
                     detailsForThisTerm.Add(
-                        new MatchDetail
+                        new MatchDetail(term)
                         {
-                            FieldName = MatchSource.TypeName,
-                            MatchedValue = typeName,
-                            MatchedTerms = new List<string> { term },
+                            fieldName = MatchSource.TypeName,
+                            matchedValue = typeName,
                         }
                     );
                     termMatchedThisLoop = true;
                 }
                 if (
-                    !string.IsNullOrEmpty(guid)
+                    !string.IsNullOrWhiteSpace(guid)
                     && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
                 )
                 {
                     detailsForThisTerm.Add(
-                        new MatchDetail
-                        {
-                            FieldName = MatchSource.GUID,
-                            MatchedValue = guid,
-                            MatchedTerms = new List<string> { term },
-                        }
+                        new MatchDetail(term) { fieldName = MatchSource.GUID, matchedValue = guid }
                     );
                     termMatchedThisLoop = true;
                 }
 
-                // 2. If not found yet, check reflected properties
                 if (!termMatchedThisLoop)
                 {
                     MatchDetail reflectedMatch = SearchStringProperties(
@@ -1337,18 +1345,16 @@
                     );
                     if (reflectedMatch != null)
                     {
-                        reflectedMatch.MatchedTerms = new List<string> { term }; // Ensure term list is correct
+                        reflectedMatch.matchedTerms.Add(term);
                         detailsForThisTerm.Add(reflectedMatch);
                         termMatchedThisLoop = true;
                     }
                 }
 
-                // If this term was found somewhere, record it and add details
                 if (termMatchedThisLoop)
                 {
-                    termsFound.Add(term);
-                    resultInfo.IsMatch = true;
-                    resultInfo.MatchedFields.AddRange(detailsForThisTerm);
+                    resultInfo.isMatch = true;
+                    resultInfo.matchedFields.AddRange(detailsForThisTerm);
                 }
             }
 
@@ -1357,83 +1363,69 @@
 
         private Label CreateHighlightedLabel(
             string fullText,
-            IEnumerable<string> termsToHighlight,
+            IReadOnlyList<string> termsToHighlight,
             string baseStyleClass = null
         )
         {
-            var label = new Label();
-            if (!string.IsNullOrEmpty(baseStyleClass))
+            Label label = new();
+            if (!string.IsNullOrWhiteSpace(baseStyleClass))
+            {
                 label.AddToClassList(baseStyleClass);
-            label.enableRichText = true; // Enable rich text processing
+            }
+
+            label.enableRichText = true;
 
             if (
-                string.IsNullOrEmpty(fullText)
+                string.IsNullOrWhiteSpace(fullText)
                 || termsToHighlight == null
                 || !termsToHighlight.Any()
             )
             {
-                label.text = fullText; // No highlighting needed
+                label.text = fullText;
                 return label;
             }
 
-            // Use StringBuilder for efficient string construction
-            StringBuilder richText = new StringBuilder();
-            string lowerFullText = fullText.ToLowerInvariant();
+            StringBuilder richText = new();
             int currentIndex = 0;
 
-            // Find all match positions for all terms, avoiding overlaps favouring earlier matches
-            var matches = termsToHighlight
-                .Where(term => !string.IsNullOrEmpty(term)) // Ignore empty terms
+            List<Tuple<int, int>> matches = termsToHighlight
+                .Where(term => !string.IsNullOrWhiteSpace(term))
                 .SelectMany(term =>
                 {
-                    var termLower = term.ToLowerInvariant();
-                    var indices = new List<Tuple<int, int>>();
+                    List<Tuple<int, int>> indices = new();
                     int start = 0;
                     while (
-                        (
-                            start = lowerFullText.IndexOf(
-                                termLower,
-                                start,
-                                StringComparison.OrdinalIgnoreCase
-                            )
-                        ) != -1
+                        (start = fullText.IndexOf(term, start, StringComparison.OrdinalIgnoreCase))
+                        >= 0
                     )
                     {
-                        indices.Add(Tuple.Create(start, term.Length)); // Store original term length
-                        start += term.Length; // Move past this match to find next
+                        indices.Add(Tuple.Create(start, term.Length));
+                        start += term.Length;
                     }
                     return indices;
                 })
                 .Where(t => t != null)
-                .OrderBy(t => t.Item1) // Sort by start index
+                .OrderBy(t => t.Item1)
                 .ToList();
 
-            // Iterate through sorted matches and build the rich text string
-            foreach (var match in matches)
+            foreach ((int startIndex, int length) in matches)
             {
-                int startIndex = match.Item1;
-                int length = match.Item2;
-
-                // Check if this match overlaps with the text already processed
-                if (startIndex >= currentIndex)
+                if (startIndex < currentIndex)
                 {
-                    // Append text BEFORE the current match (escape it)
-                    richText.Append(
-                        EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
-                    );
-                    // Append the highlighted match using <b> tags (escape content within tags)
-                    richText.Append("<color=yellow>");
-                    richText.Append("<b>");
-                    richText.Append(EscapeRichText(fullText.Substring(startIndex, length)));
-                    richText.Append("</b>");
-                    richText.Append("</color>");
-                    // Update the current position in the original string
-                    currentIndex = startIndex + length;
+                    continue;
                 }
-                // Else: This match starts before the previous one ended - skip to avoid bad tags
+
+                richText.Append(
+                    EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
+                );
+                richText.Append("<color=yellow>");
+                richText.Append("<b>");
+                richText.Append(EscapeRichText(fullText.Substring(startIndex, length)));
+                richText.Append("</b>");
+                richText.Append("</color>");
+                currentIndex = startIndex + length;
             }
 
-            // Append any remaining text after the last match (escape it)
             if (currentIndex < fullText.Length)
             {
                 richText.Append(EscapeRichText(fullText.Substring(currentIndex)));
@@ -1445,16 +1437,14 @@
 
         private string EscapeRichText(string input)
         {
-            if (string.IsNullOrEmpty(input))
-                return "";
-            // Basic escaping for characters used in UIElements rich text tags
-            return input.Replace("<", "&lt;").Replace(">", "&gt;");
-            // Add .Replace("&", "&amp;") if needed, but often not required for content
+            return string.IsNullOrWhiteSpace(input)
+                ? ""
+                : input.Replace("<", "&lt;").Replace(">", "&gt;");
         }
 
-        private MatchDetail SearchStringProperties(
+        private static MatchDetail SearchStringProperties(
             object obj,
-            string lowerSearchTerm,
+            string searchTerm,
             int currentDepth,
             int maxDepth,
             HashSet<object> visited
@@ -1507,17 +1497,13 @@
                         string stringValue = fieldValue as string;
                         if (
                             !string.IsNullOrWhiteSpace(stringValue)
-                            && stringValue.Contains(
-                                lowerSearchTerm,
-                                StringComparison.OrdinalIgnoreCase
-                            )
+                            && stringValue.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
                         )
                         {
-                            return new MatchDetail
+                            return new MatchDetail(searchTerm)
                             {
-                                FieldName = field.Name, // The actual property name
-                                MatchedValue = stringValue, // The full string value
-                                MatchedTerms = new List<string> { lowerSearchTerm }, // Term found
+                                fieldName = field.Name,
+                                matchedValue = stringValue,
                             };
                         }
                     }
@@ -1530,7 +1516,7 @@
                     {
                         MatchDetail nestedMatch = SearchStringProperties(
                             fieldValue,
-                            lowerSearchTerm,
+                            searchTerm,
                             currentDepth + 1,
                             maxDepth,
                             visited
@@ -1567,17 +1553,11 @@
             {
                 LoadObjectTypes(_selectedType);
                 BuildNamespaceView();
-                BuildObjectsView();
-            }
-            else
-            {
-                BuildObjectsView();
             }
 
+            BuildObjectsView();
             SelectObject(targetObject);
-
             CloseActivePopover();
-
             _selectedElement
                 ?.schedule.Execute(() =>
                 {
@@ -1586,7 +1566,7 @@
                 .ExecuteLater(10);
         }
 
-        private VisualElement CreatePopoverBase(string name)
+        private static VisualElement CreatePopoverBase(string name)
         {
             VisualElement popover = new()
             {
@@ -1619,14 +1599,13 @@
 
         private void CloseNestedPopover()
         {
-            if (_activeNestedPopover != null)
+            if (_activeNestedPopover == null)
             {
-                // Debug.Log($"Closing nested popover: {_activeNestedPopover.name}");
-                _activeNestedPopover.style.display = DisplayStyle.None;
-                _activeNestedPopover = null;
-                // NOTE: Do NOT unregister the main HandleClickOutsidePopover here.
-                // The main popover is still open.
+                return;
             }
+
+            _activeNestedPopover.style.display = DisplayStyle.None;
+            _activeNestedPopover = null;
         }
 
         private void OpenPopover(
@@ -1638,11 +1617,10 @@
         {
             if (!isNested)
             {
-                CloseActivePopover(); // This will handle closing nested first if it exists
+                CloseActivePopover();
             }
             else
             {
-                // If opening a nested one, close any *existing* nested one first
                 CloseNestedPopover();
             }
 
@@ -1655,36 +1633,29 @@
             if (isNested)
             {
                 _activeNestedPopover = popover;
-                // Debug.Log($"OpenPopover: Set _activeNestedPopover to '{_activeNestedPopover?.name}'");
             }
             else
             {
-                _activePopover = popover; // Mark this one as the main active popover
-                // Debug.Log($"OpenPopover: Set _activePopover to '{_activePopover?.name}'");
+                _activePopover = popover;
             }
 
             triggerElement
                 .schedule.Execute(() =>
                 {
-                    var currentlyActive = isNested ? _activeNestedPopover : _activePopover;
+                    VisualElement currentlyActive = isNested
+                        ? _activeNestedPopover
+                        : _activePopover;
                     if (currentlyActive != popover)
+                    {
                         return;
+                    }
 
                     Rect triggerBounds = triggerElement.worldBound;
-                    Vector2 popoverSize = new(
-                        !float.IsNaN(popover.resolvedStyle.width)
-                            ? popover.resolvedStyle.width
-                            : 300,
-                        !float.IsNaN(popover.resolvedStyle.height)
-                            ? popover.resolvedStyle.height
-                            : 150
-                    );
                     Vector2 localPos = rootVisualElement.WorldToLocal(triggerBounds.position);
                     popover.style.left = localPos.x;
                     popover.style.top = localPos.y + triggerBounds.height + 2;
-
                     popover.style.display = DisplayStyle.Flex;
-                    _isTypePopoverOpen = (popover == _typeAddPopover);
+                    _isTypePopoverOpen = popover == _typeAddPopover;
 
                     if (!isNested)
                     {
@@ -1692,7 +1663,7 @@
                             .schedule.Execute(() =>
                             {
                                 if (_activePopover == popover)
-                                { // Check main popover status
+                                {
                                     rootVisualElement.RegisterCallback<PointerDownEvent>(
                                         HandleClickOutsidePopover,
                                         TrickleDown.TrickleDown
@@ -1701,24 +1672,19 @@
                             })
                             .ExecuteLater(10);
                     }
-                    // rootVisualElement
-                    //     .schedule.Execute(() =>
-                    //     {
-                    //         if (_activePopover == popover)
-                    //         {
-                    //             rootVisualElement.RegisterCallback<PointerDownEvent>(
-                    //                 HandleClickOutsidePopover,
-                    //                 TrickleDown.TrickleDown
-                    //             );
-                    //         }
-                    //     })
-                    //     .ExecuteLater(10);
                 })
                 .ExecuteLater(1);
         }
 
         private void CloseActivePopover()
         {
+            if (_activePopover == _searchPopover)
+            {
+                _currentSearchResultItems.Clear();
+                _searchHighlightIndex = -1;
+                _lastSearchString = null;
+            }
+
             CloseNestedPopover();
             CloseAddTypePopover();
 
@@ -1764,10 +1730,8 @@
                 }
             }
 
-            // If click was inside nested, do nothing here (let its buttons handle it)
             if (clickInsideNested)
             {
-                // Debug.Log("Click inside NESTED popover.");
                 return;
             }
 
@@ -1781,8 +1745,6 @@
                         clickInsideMain = true;
                         break;
                     }
-                    // Optional: Treat click on original trigger button as "inside"?
-                    // if (target == _settingsButton || target == _addTypeButton) { clickInsideMain = true; break; }
                     current = current.parent;
                 }
             }
@@ -1792,34 +1754,24 @@
                 && _activeNestedPopover.style.display == DisplayStyle.Flex
             )
             {
-                // A nested popover is open
                 if (clickInsideMain)
                 {
-                    // Click was inside main popover BUT outside nested one. Close nested only.
-                    // Debug.Log("Clicked inside main popover, closing nested popover.");
                     CloseNestedPopover();
                 }
                 else
                 {
-                    // Click was outside BOTH popovers. Close the main one (which closes nested).
-                    // Debug.Log("Clicked outside both popovers, closing main.");
                     CloseActivePopover();
                 }
             }
             else if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
             {
-                // Only a main popover is open
                 if (!clickInsideMain)
                 {
-                    // Click was outside the main popover. Close it.
-                    // Debug.Log("Clicked outside main popover, closing it.");
                     CloseActivePopover();
                 }
-                // Else: Click was inside main popover, do nothing here.
             }
             else
             {
-                // Safety cleanup: No popover seems active, remove handler just in case.
                 rootVisualElement.UnregisterCallback<PointerDownEvent>(
                     HandleClickOutsidePopover,
                     TrickleDown.TrickleDown
@@ -2313,7 +2265,9 @@
                 || _addTypeButton == null
                 || _settings == null
             )
+            {
                 return;
+            }
 
             BuildTypeAddList();
 
@@ -2408,44 +2362,46 @@
                             || namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
                         );
 
-                    if (typeMatchesSearch)
+                    if (!typeMatchesSearch)
                     {
-                        bool isManaged = managedSet.Contains(type.FullName);
-                        var typeLabel = CreateHighlightedLabel(
-                            $"  {type.Name}",
-                            searchTerms,
-                            PopoverListItemClassName
-                        );
-                        typeLabel.style.paddingTop = 1;
-                        typeLabel.style.paddingBottom = 1;
-                        typeLabel.style.marginLeft = 10;
-                        typeLabel.AddToClassList(PopoverListItemClassName);
-
-                        if (isManaged)
-                        {
-                            typeLabel.SetEnabled(false);
-                            typeLabel.AddToClassList(PopoverListItemDisabledClassName);
-                        }
-                        else
-                        {
-                            typeLabel.RegisterCallback<PointerDownEvent, Type>(
-                                HandleTypeSelectionFromPopover,
-                                type
-                            );
-                            typeLabel.RegisterCallback<MouseEnterEvent, Label>(
-                                (_, context) =>
-                                    context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
-                                typeLabel
-                            );
-                            typeLabel.RegisterCallback<MouseLeaveEvent, Label>(
-                                (_, context) => context.style.backgroundColor = Color.clear,
-                                typeLabel
-                            );
-                        }
-
-                        addableTypes.Add(type);
-                        typesToShowInGroup.Add(typeLabel);
+                        continue;
                     }
+
+                    bool isManaged = managedSet.Contains(type.FullName);
+                    Label typeLabel = CreateHighlightedLabel(
+                        $"  {type.Name}",
+                        searchTerms,
+                        PopoverListItemClassName
+                    );
+                    typeLabel.style.paddingTop = 1;
+                    typeLabel.style.paddingBottom = 1;
+                    typeLabel.style.marginLeft = 10;
+                    typeLabel.AddToClassList(PopoverListItemClassName);
+
+                    if (isManaged)
+                    {
+                        typeLabel.SetEnabled(false);
+                        typeLabel.AddToClassList(PopoverListItemDisabledClassName);
+                    }
+                    else
+                    {
+                        typeLabel.RegisterCallback<PointerDownEvent, Type>(
+                            HandleTypeSelectionFromPopover,
+                            type
+                        );
+                        typeLabel.RegisterCallback<MouseEnterEvent, Label>(
+                            (_, context) =>
+                                context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
+                            typeLabel
+                        );
+                        typeLabel.RegisterCallback<MouseLeaveEvent, Label>(
+                            (_, context) => context.style.backgroundColor = Color.clear,
+                            typeLabel
+                        );
+                    }
+
+                    addableTypes.Add(type);
+                    typesToShowInGroup.Add(typeLabel);
                 }
 
                 if (typesToShowInGroup.Count > 0)
@@ -2467,14 +2423,14 @@
                     indicator.AddToClassList(PopoverNamespaceIndicatorClassName);
                     indicator.AddToClassList("clickable");
 
-                    var nsLabel = CreateHighlightedLabel(
+                    Label namespaceLabel = CreateHighlightedLabel(
                         group.Key,
                         searchTerms,
                         PopoverListNamespaceClassName
                     );
-                    nsLabel.AddToClassList(PopoverListNamespaceClassName);
-                    nsLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-                    nsLabel.style.flexGrow = 1;
+                    namespaceLabel.AddToClassList(PopoverListNamespaceClassName);
+                    namespaceLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    namespaceLabel.style.flexGrow = 1;
 
                     var clickContext = new
                     {
@@ -2484,20 +2440,20 @@
 
                     if (typesToShowInGroup.Count > 1)
                     {
-                        nsLabel.AddToClassList("type-selection-list-namespace--not-empty");
-                        nsLabel.AddToClassList("clickable");
-                        nsLabel.RegisterCallback<MouseEnterEvent, Label>(
+                        namespaceLabel.AddToClassList("type-selection-list-namespace--not-empty");
+                        namespaceLabel.AddToClassList("clickable");
+                        namespaceLabel.RegisterCallback<MouseEnterEvent, Label>(
                             (_, context) =>
                                 context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
-                            nsLabel
+                            namespaceLabel
                         );
-                        nsLabel.RegisterCallback<MouseLeaveEvent, Label>(
+                        namespaceLabel.RegisterCallback<MouseLeaveEvent, Label>(
                             (_, context) => context.style.backgroundColor = Color.clear,
-                            nsLabel
+                            namespaceLabel
                         );
 
                         // ReSharper disable once HeapView.CanAvoidClosure
-                        nsLabel.RegisterCallback<PointerDownEvent>(evt =>
+                        namespaceLabel.RegisterCallback<PointerDownEvent>(evt =>
                         {
                             if (evt.button != 0)
                             {
@@ -2513,85 +2469,22 @@
                                 return;
                             }
 
-                            // TODO: CONVERT THIS TO UI TOOLKIT
-                            string message =
-                                $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '{clickedNamespace}' to Data Visualizer?";
-
                             BuildConfirmNamespaceAddPopoverContent(clickedNamespace, typesToAdd);
-
-                            // 2. Open it as a nested popover, positioned relative to the clicked label
-                            //    We use OpenPopover but it needs context to know it's nested.
-                            //    Let's modify OpenPopover slightly or add OpenNestedPopover.
-                            //    Let's modify OpenPopover for simplicity.
-                            OpenPopover(_confirmNamespaceAddPopover, nsLabel, isNested: true); // Pass clicked label as trigger, add nested flag
-                            // --- End Show Inline Confirmation ---
-
-                            evt.StopPropagation(); // Stop this click from closing the main popover immediately
-
-                            // ConfirmActionPopup confirmPopup =
-                            //     ConfirmActionPopup.CreateAndConfigureInstance(
-                            //         title: "Add Namespace Types",
-                            //         message: message,
-                            //         confirmButtonText: "<b><color=green>Add</color></b>",
-                            //         cancelButtonText: "<b><color=red>Cancel</color></b>",
-                            //         parentPosition: position,
-                            //         onComplete: confirmed =>
-                            //         {
-                            //             if (!confirmed)
-                            //             {
-                            //                 return;
-                            //             }
-                            //
-                            //             bool stateChanged = false;
-                            //             List<string> currentManagedList = GetManagedTypeNames();
-                            //             foreach (Type typeToAdd in typesToAdd)
-                            //             {
-                            //                 if (currentManagedList.Contains(typeToAdd.FullName))
-                            //                 {
-                            //                     continue;
-                            //                 }
-                            //
-                            //                 currentManagedList.Add(typeToAdd.FullName);
-                            //                 stateChanged = true;
-                            //             }
-                            //
-                            //             if (stateChanged)
-                            //             {
-                            //                 if (_settings.persistStateInSettingsAsset)
-                            //                 {
-                            //                     MarkSettingsDirty();
-                            //                     AssetDatabase.SaveAssets();
-                            //                 }
-                            //                 else
-                            //                 {
-                            //                     MarkUserStateDirty();
-                            //                 }
-                            //
-                            //                 Debug.Log(
-                            //                     $"Added {countToAdd} types from namespace '{clickedNamespace}'."
-                            //                 );
-                            //
-                            //                 CloseAddTypePopover();
-                            //                 ScheduleRefresh();
-                            //             }
-                            //             else
-                            //             {
-                            //                 CloseAddTypePopover();
-                            //             }
-                            //         }
-                            //     );
-                            // confirmPopup.ShowModal();
-                            //
-                            // evt.StopPropagation();
+                            OpenPopover(
+                                _confirmNamespaceAddPopover,
+                                namespaceLabel,
+                                isNested: true
+                            );
+                            evt.StopPropagation();
                         });
                     }
                     else
                     {
-                        nsLabel.AddToClassList("type-selection-list-namespace--empty");
+                        namespaceLabel.AddToClassList("type-selection-list-namespace--empty");
                     }
 
                     header.Add(indicator);
-                    header.Add(nsLabel);
+                    header.Add(namespaceLabel);
 
                     VisualElement typesSubContainer = new()
                     {
@@ -2905,23 +2798,26 @@
         )
         {
             if (_confirmNamespaceAddPopover == null)
+            {
                 return;
-            _confirmNamespaceAddPopover.Clear(); // Clear previous content
+            }
+
+            _confirmNamespaceAddPopover.Clear();
 
             int countToAdd = typesToAdd.Count;
             if (countToAdd == 0)
-                return; // Should not happen if called correctly
+            {
+                return;
+            }
 
-            // Style the popover root slightly differently if desired
             _confirmNamespaceAddPopover.style.paddingBottom = 10;
             _confirmNamespaceAddPopover.style.paddingTop = 10;
             _confirmNamespaceAddPopover.style.paddingLeft = 10;
             _confirmNamespaceAddPopover.style.paddingRight = 10;
 
-            // Message
             string message =
                 $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '{namespaceKey}' to Data Visualizer?";
-            var messageLabel = new Label(message)
+            Label messageLabel = new(message)
             {
                 style =
                 {
@@ -2932,34 +2828,32 @@
             };
             _confirmNamespaceAddPopover.Add(messageLabel);
 
-            // Button Container
-            var buttonContainer = new VisualElement
+            VisualElement buttonContainer = new()
             {
                 style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
             };
             _confirmNamespaceAddPopover.Add(buttonContainer);
 
-            // Cancel Button
-            var cancelButton = new Button(CloseNestedPopover)
+            Button cancelButton = new(CloseNestedPopover)
             {
-                text = "Cancel",
+                text = "<b><color=red>Cancel</color></b>",
                 style = { marginRight = 5 },
             };
             buttonContainer.Add(cancelButton);
 
-            // Confirmation Button
-            var confirmButton = new Button(() =>
+            Button confirmButton = new(() =>
             {
-                // --- Perform Add Logic ---
                 bool stateChanged = false;
                 List<string> currentManagedList = GetManagedTypeNames();
                 foreach (Type typeToAdd in typesToAdd)
                 {
-                    if (!currentManagedList.Contains(typeToAdd.FullName))
+                    if (currentManagedList.Contains(typeToAdd.FullName))
                     {
-                        currentManagedList.Add(typeToAdd.FullName);
-                        stateChanged = true;
+                        continue;
                     }
+
+                    currentManagedList.Add(typeToAdd.FullName);
+                    stateChanged = true;
                 }
 
                 if (stateChanged)
@@ -2972,25 +2866,17 @@
                     else
                     {
                         MarkUserStateDirty();
-                    } // Triggers file save
-                    Debug.Log($"Added {countToAdd} types from namespace '{namespaceKey}'.");
+                    }
                 }
-                // --- End Add Logic ---
-
-                // Close BOTH popovers after action
-                CloseActivePopover(); // CloseActivePopover handles nested closing
-
-                // Refresh main UI if state changed
+                CloseActivePopover();
                 if (stateChanged)
                 {
                     ScheduleRefresh();
                 }
             })
             {
-                text = "Add",
+                text = "<b><color=green>Add</color></b>",
             };
-            // Optional styling
-            // confirmButton.AddToClassList("button-primary");
             buttonContainer.Add(confirmButton);
         }
 
@@ -3279,9 +3165,9 @@
 
             // ReSharper disable once RedundantAssignment
             bool useOdinInspector = false;
+            Type objectType = _selectedObject.GetType();
 #if ODIN_INSPECTOR
 
-            Type objectType = _selectedObject.GetType();
             if (objectType.IsAttributeDefined(out CustomDataVisualization customVisualization))
             {
                 useOdinInspector = customVisualization.UseOdinInspector;
@@ -3430,17 +3316,90 @@
                 }
             }
 
+            VisualElement customElement = TryGetCustomVisualElement(objectType);
+            if (customElement != null)
+            {
+                _inspectorContainer.Add(customElement);
+            }
+        }
+
+        private VisualElement TryGetCustomVisualElement(Type objectType)
+        {
             if (_selectedObject is BaseDataObject baseDataObject)
             {
-                VisualElement customElement = baseDataObject.BuildGUI(
+                return baseDataObject.BuildGUI(
                     new DataVisualizerGUIContext(_currentInspectorScriptableObject)
                 );
-                if (customElement != null)
+            }
+
+            // TODO: CACHE
+            MethodInfo visualMethod = objectType
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Where(method => method.ReturnType.IsAssignableFrom(typeof(VisualElement)))
+                .OrderBy(method => method.GetParameters().Length)
+                .Where(method =>
                 {
-                    _inspectorContainer.Add(customElement);
+                    ParameterInfo[] parameters = method.GetParameters();
+                    if (parameters.Length == 0)
+                    {
+                        return true;
+                    }
+
+                    return parameters[0].ParameterType == typeof(SerializedObject);
+                })
+                .FirstOrDefault();
+            if (visualMethod == null)
+            {
+                return null;
+            }
+
+            ParameterInfo[] parameters = visualMethod.GetParameters();
+            if (parameters.Length == 0)
+            {
+                return visualMethod.Invoke(_selectedObject, Array.Empty<object>()) as VisualElement;
+            }
+
+            if (parameters[0].ParameterType == typeof(SerializedObject))
+            {
+                List<object> arguments = new(parameters.Length)
+                {
+                    _currentInspectorScriptableObject,
+                };
+                for (int i = 1; i < parameters.Length; i++)
+                {
+                    ParameterInfo parameter = parameters[i];
+                    if (parameter.ParameterType.IsValueType)
+                    {
+                        try
+                        {
+                            var parameterInstance = Activator.CreateInstance(
+                                parameter.ParameterType
+                            );
+                            arguments.Add(parameterInstance);
+                        }
+                        catch
+                        {
+                            arguments.Add(null);
+                        }
+                    }
+                    else
+                    {
+                        arguments.Add(null);
+                    }
+                }
+
+                try
+                {
+                    return visualMethod.Invoke(_selectedObject, arguments.ToArray())
+                        as VisualElement;
+                }
+                catch
+                {
+                    // Swallow
                 }
             }
-            // TODO: DO REFLECTION / DATABRAIN CO-OP
+
+            return null;
         }
 
         private void CloneObject(ScriptableObject originalObject)

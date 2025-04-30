@@ -375,3 +375,18 @@
     -unity-font-style: bold;
     color: #FFE485; /* Match main highlight color */
 }
+
+.search-result-item--highlighted {
+    /* Example: Use a distinct background color */
+    background-color: #4A6A8A; /* Similar to selection color or different */
+    /* Example: Or add/change a border */
+    /* border-left-width: 3px; */
+    /* border-left-color: cornflowerblue; */
+}
+/* Ensure highlighted text is still readable */
+.search-result-item--highlighted Label {
+    /* color: white; */ /* Adjust if needed */
+}
+.search-result-item--highlighted .result-type-label { /* Keep type label distinct maybe? */
+    /* color: lightgrey; */
+}

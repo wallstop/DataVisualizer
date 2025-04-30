@@ -13,7 +13,6 @@
         private static string[] OnWillSaveAssets(string[] paths)
         {
             bool needsRefresh = false;
-            DataVisualizer openWindow = null;
 
             foreach (string path in paths.Where(DataVisualizerAssetProcessor.IsAsset))
             {
@@ -30,30 +29,33 @@
                 if (isBaseDatObject)
                 {
                     needsRefresh = true;
-                }
-                else if (isSettingsAsset)
-                {
-                    DataVisualizerSettings settingsInstance =
-                        AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(path);
-                    if (settingsInstance != null && !settingsInstance.persistStateInSettingsAsset)
-                    {
-                        needsRefresh = true;
-                    }
-                }
-
-                if (needsRefresh)
-                {
-                    openWindow = EditorWindow.GetWindow<DataVisualizer>(false, null, false);
                     break;
                 }
+
+                if (!isSettingsAsset)
+                {
+                    continue;
+                }
+
+                DataVisualizerSettings settingsInstance =
+                    AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(path);
+                if (settingsInstance == null || settingsInstance.persistStateInSettingsAsset)
+                {
+                    continue;
+                }
+
+                needsRefresh = true;
+                break;
             }
 
-            if (needsRefresh && openWindow != null && !RefreshSignalThisSave)
+            if (!needsRefresh || RefreshSignalThisSave)
             {
-                EditorApplication.delayCall += DataVisualizer.SignalRefresh;
-                RefreshSignalThisSave = true;
-                EditorApplication.delayCall += ResetSignalFlag;
+                return paths;
             }
+
+            EditorApplication.delayCall += DataVisualizer.SignalRefresh;
+            RefreshSignalThisSave = true;
+            EditorApplication.delayCall += ResetSignalFlag;
             return paths;
         }
 
