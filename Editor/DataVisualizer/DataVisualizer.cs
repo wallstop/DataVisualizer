@@ -11,6 +11,8 @@
     using Data;
     using Extensions;
     using Helper;
+    using JetBrains.Annotations;
+    using Palmmedia.ReportGenerator.Core.Parser.Analysis;
 #if ODIN_INSPECTOR
     using Sirenix.OdinInspector;
     using Sirenix.OdinInspector.Editor;
@@ -20,6 +22,7 @@
     using UnityEngine;
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer;
+    using Assembly = System.Reflection.Assembly;
 
     public sealed class DataVisualizer : EditorWindow
     {
@@ -49,11 +52,14 @@
         private const string PopoverListItemDisabledClassName =
             "type-selection-list-item--disabled";
         private const string PopoverListNamespaceClassName = "type-selection-list-namespace";
-        private const string PopoverNamespaceHeaderClassName = "popover-namespace-header"; // For the header row
-        private const string PopoverNamespaceIndicatorClassName = "popover-namespace-indicator"; // For the arrow
+        private const string PopoverNamespaceHeaderClassName = "popover-namespace-header";
+        private const string PopoverNamespaceIndicatorClassName = "popover-namespace-indicator";
+        private const string SearchResultItemClass = "search-result-item";
 
         private const string ArrowCollapsed = "►";
         private const string ArrowExpanded = "▼";
+
+        private const int MaxSearchResults = 25;
 
         private const float DragDistanceThreshold = 5f;
         private const float DragUpdateThrottleTime = 0.05f;
@@ -72,6 +78,9 @@
         private readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
             new();
         private readonly List<ScriptableObject> _selectedObjects = new();
+        private readonly List<ScriptableObject> _allManagedSOsCache = new List<ScriptableObject>();
+        private readonly Dictionary<string, ScriptableObject> _currentMatch = new();
+
         private ScriptableObject _selectedObject;
         private VisualElement _selectedElement;
 
@@ -92,6 +101,11 @@
         private VisualElement _typeAddPopover; // Changed from _typeAddPopup
         private VisualElement _activePopover = null;
         private object _popoverContext = null; // Store target object for rename/delete
+
+        private TextField _searchField;
+        private VisualElement _searchPopover;
+        private bool _isSearchCachePopulated = false;
+        private string _lastSearchString = null; // Prevent unnecessary searches
 
         private Button _addTypeButton; // Need reference to the button for positioning
         private TextField _typeSearchField; // <-- ADD Search Field Reference
@@ -141,6 +155,8 @@
 
         private void OnEnable()
         {
+            _isSearchCachePopulated = false; // Reset cache flag
+
             _objectVisualElementMap.Clear();
             _selectedObject = null;
             _selectedElement = null;
@@ -164,6 +180,7 @@
             rootVisualElement
                 .schedule.Execute(() =>
                 {
+                    PopulateSearchCache();
                     RestorePreviousSelection();
                     StartPeriodicWidthSave();
                 })
@@ -183,6 +200,8 @@
 
         private void Cleanup()
         {
+            _allManagedSOsCache.Clear(); // Clear cache
+            _isSearchCachePopulated = false;
             CloseAddTypePopover();
             CancelDrag();
             _saveWidthsTask?.Pause();
@@ -210,6 +229,53 @@
             _odinInspectorContainer?.Dispose();
             _odinInspectorContainer = null;
 #endif
+        }
+
+        private void PopulateSearchCache()
+        {
+            if (_settings == null)
+                _settings = LoadOrCreateSettings();
+            Debug.Log("Populating global ScriptableObject search cache...");
+            _allManagedSOsCache.Clear();
+            var managedTypes = _scriptableObjectTypes.SelectMany(tuple => tuple.types).ToHashSet();
+            HashSet<string> uniqueGuids = new HashSet<string>();
+
+            foreach (
+                var type in AppDomain
+                    .CurrentDomain.GetAssemblies()
+                    .SelectMany(assembly => assembly.GetTypes())
+                    .Where(managedTypes.Contains)
+            )
+            {
+                string[] guids = AssetDatabase.FindAssets($"t:{type.Name}"); // Use simple name for FindAssets
+                foreach (string guid in guids)
+                {
+                    if (!uniqueGuids.Add(guid))
+                    {
+                        continue;
+                    } // Avoid duplicates if type hierarchy overlaps
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    if (!string.IsNullOrEmpty(path))
+                    {
+                        ScriptableObject obj =
+                            AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+
+                        // Final type check
+                        if (obj != null)
+                        {
+                            _allManagedSOsCache.Add(obj);
+                        }
+                    }
+                }
+            }
+
+            // Approach 2 (Potentially Faster?): Find *all* SOs, then filter?
+            // string[] allSOGuids = AssetDatabase.FindAssets("t:ScriptableObject");
+            // foreach(string guid in allSOGuids) { ... LoadAsset... check if GetType().FullName is in managedTypeNames ... }
+            // Might load too many unnecessary assets initially. Stick with Approach 1 for now.
+
+            _isSearchCachePopulated = true;
+            Debug.Log($"Search cache populated with {_allManagedSOsCache.Count} objects.");
         }
 
         public static void SignalRefresh()
@@ -328,6 +394,7 @@
             }
 
             SelectObject(_selectedObject);
+            PopulateSearchCache();
         }
 
         private VisualElement FindAncestorNamespaceGroup(VisualElement startingElement)
@@ -659,37 +726,37 @@
             root.Add(headerRow);
 
             Button settingsButton = null;
-            settingsButton = new Button(
-                () => TogglePopover(_settingsPopover, settingsButton)
-            // {
-            //     if (_settings == null)
-            //     {
-            //         _settings = LoadOrCreateSettings();
-            //     }
-            //
-            //     bool wasSettingsAssetMode = _settings.persistStateInSettingsAsset;
-            //     DataVisualizerSettingsPopup popupWindow =
-            //         DataVisualizerSettingsPopup.CreateAndConfigureInstance(
-            //             _settings,
-            //             () => HandleSettingsPopupClosed(wasSettingsAssetMode)
-            //         );
-            //     popupWindow.ShowModal();
-            // }
-            )
+            settingsButton = new Button(() => TogglePopover(_settingsPopover, settingsButton))
             {
                 text = "…",
                 name = "settings-button",
                 tooltip = "Open Settings",
             };
 
-            void TriggerSettings()
-            {
-                ;
-            }
-
             settingsButton.AddToClassList("icon-button");
             settingsButton.AddToClassList("clickable");
             headerRow.Add(settingsButton);
+
+            _searchField = new TextField
+            {
+                name = "global-search-field",
+                style = { flexGrow = 1, marginRight = 10 }, // Grow to fill space
+            };
+            _searchField.SetPlaceholderText("Search...");
+            _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue));
+            _searchField.RegisterCallback<FocusInEvent>(evt =>
+            { // Re-open popover on focus if results exist
+                if (
+                    !string.IsNullOrWhiteSpace(_searchField.value)
+                    && _searchPopover.childCount > 0
+                    && _activePopover != _searchPopover
+                )
+                {
+                    // Check if already open? OpenPopover handles closing others.
+                    OpenPopover(_searchPopover, _searchField);
+                }
+            });
+            headerRow.Add(_searchField);
 
             float initialOuterWidth = EditorPrefs.GetFloat(
                 PrefsSplitterOuterKey,
@@ -742,6 +809,11 @@
             _confirmDeletePopover = CreatePopoverBase("confirm-delete-popover");
             // Content built dynamically when opened
             root.Add(_confirmDeletePopover);
+
+            _searchPopover = CreatePopoverBase("search-popover"); // Adjust size
+            _searchPopover.style.flexGrow = 1; // Grow to fill space
+            _searchPopover.style.height = 500; // Shrink to fit space
+            root.Add(_searchPopover);
 
             _typeAddPopover = new VisualElement
             {
@@ -885,11 +957,261 @@
             root.style.fontSize = 14;
         }
 
-        private VisualElement CreatePopoverBase(
-            string name,
-            float width = 350,
-            float maxHeight = 250
-        )
+        private void PerformSearch(string searchText)
+        {
+            searchText = searchText?.Trim(); // Trim whitespace
+            // Avoid searching repeatedly for the exact same string if value changes rapidly
+            if (searchText == _lastSearchString)
+                return;
+            _lastSearchString = searchText;
+
+            // Ensure cache is ready
+            if (!_isSearchCachePopulated)
+            {
+                _searchPopover.Clear();
+                // Optionally show "indexing..." message or just wait?
+                // For now, just don't search yet. Cache populated from OnEnable schedule.
+                Debug.LogWarning("Search cache not populated yet.");
+                CloseActivePopover(); // Ensure popover is closed if cache not ready
+                return;
+            }
+
+            // If search is empty, close popover and exit
+            if (string.IsNullOrWhiteSpace(searchText))
+            {
+                _searchPopover.Clear();
+                CloseActivePopover();
+                return;
+            }
+
+            List<string> searchTerms = searchText
+                .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(t => t.ToLowerInvariant())
+                .ToList();
+            if (searchTerms.Count == 0)
+            {
+                _searchPopover.Clear();
+                CloseActivePopover();
+                return;
+            }
+
+            List<ScriptableObject> results = new List<ScriptableObject>();
+            foreach (ScriptableObject obj in _allManagedSOsCache)
+            {
+                if (obj == null)
+                    continue; // Skip if cache contains nulls somehow
+
+                if (CheckMatch(obj, searchTerms))
+                {
+                    results.Add(obj);
+                    if (results.Count >= MaxSearchResults)
+                    {
+                        break; // Stop searching once limit reached
+                    }
+                }
+            }
+
+            Dictionary<ScriptableObject, VisualElement> currentElements =
+                _searchPopover.childCount > 0
+                    ? _searchPopover
+                        .ElementAt(0)
+                        .Children()
+                        .Where(child => child.userData is ScriptableObject)
+                        .ToDictionary(child => child.userData as ScriptableObject, child => child)
+                    : new Dictionary<ScriptableObject, VisualElement>();
+            HashSet<ScriptableObject> seen = new();
+
+            // --- Build Results UI ---
+            if (results.Count > 0)
+            {
+                ScrollView scrollView;
+                if (_searchPopover.childCount == 0)
+                {
+                    scrollView = new ScrollView(ScrollViewMode.Vertical) { name = "search-scroll" };
+                    scrollView.style.flexGrow = 1; // Allow scrolling
+                    _searchPopover.Add(scrollView);
+                }
+                else
+                {
+                    scrollView = _searchPopover.ElementAt(0) as ScrollView;
+                }
+
+                foreach (ScriptableObject resultObj in results)
+                {
+                    seen.Add(resultObj);
+                    if (currentElements.ContainsKey(resultObj))
+                    {
+                        continue;
+                    }
+
+                    // Use a Button or a Label inside a clickable VE
+                    var resultItem = new VisualElement
+                    {
+                        name = "result-item",
+                        userData = resultObj,
+                    };
+                    resultItem.AddToClassList(SearchResultItemClass); // Add styling class
+                    resultItem.style.flexDirection = FlexDirection.Row; // Name and type side-by-side
+                    resultItem.style.justifyContent = Justify.SpaceBetween;
+                    resultItem.style.paddingLeft = new StyleLength(new Length(4, LengthUnit.Pixel));
+                    resultItem.style.paddingRight = new StyleLength(
+                        new Length(4, LengthUnit.Pixel)
+                    );
+                    resultItem.style.paddingBottom = new StyleLength(
+                        new Length(4, LengthUnit.Pixel)
+                    );
+                    resultItem.style.paddingTop = new StyleLength(new Length(4, LengthUnit.Pixel));
+
+                    resultItem.RegisterCallback<PointerDownEvent>(evt =>
+                    {
+                        if (evt.button == 0 && resultItem.userData is ScriptableObject clickedObj)
+                        {
+                            NavigateToObject(clickedObj); // Navigate on click
+                            evt.StopPropagation();
+                        }
+                    });
+                    resultItem.RegisterCallback<MouseEnterEvent>(evt =>
+                        resultItem.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
+                    );
+                    resultItem.RegisterCallback<MouseLeaveEvent>(evt =>
+                        resultItem.style.backgroundColor = Color.clear
+                    );
+
+                    var nameLabel = new Label(resultObj.name)
+                    {
+                        style = { flexGrow = 1, unityTextAlign = TextAnchor.MiddleLeft },
+                    };
+                    var typeLabel = new Label(resultObj.GetType().Name)
+                    {
+                        style =
+                        {
+                            color = Color.grey,
+                            fontSize = 10,
+                            unityTextAlign = TextAnchor.MiddleRight,
+                        },
+                    };
+
+                    resultItem.Add(nameLabel);
+                    resultItem.Add(typeLabel);
+                    scrollView.Add(resultItem); // Add to scroll view
+                }
+
+                foreach (var entry in currentElements)
+                {
+                    if (!seen.Contains(entry.Key))
+                    {
+                        Debug.Log($"Removing {entry.Key.name} from search heirarchy.");
+                        entry.Value.RemoveFromHierarchy();
+                    }
+                }
+
+                if (_activePopover != _searchPopover)
+                {
+                    // Show and position the popover below the search field
+                    OpenPopover(_searchPopover, _searchField);
+                }
+            }
+            else
+            {
+                _searchPopover.Clear();
+                // Optional: Show "No Results" message?
+                // _searchPopover.Add(new Label("No results found.") { style = { color = Color.grey, padding = 10 } });
+                // OpenPopover(_searchPopover, _searchField); // Show empty popover? Or close?
+                CloseActivePopover(); // Close if no results
+            }
+        }
+
+        private bool CheckMatch(ScriptableObject obj, List<string> lowerSearchTerms)
+        {
+            if (obj == null || lowerSearchTerms == null || lowerSearchTerms.Count == 0)
+                return false;
+
+            // Get searchable strings ONCE
+            string objNameLower = obj.name.ToLowerInvariant();
+            string typeNameLower = obj.GetType().Name.ToLowerInvariant(); // Or FullName? Let's use Name.
+            string guid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(obj));
+            // Add more fields? Reflection here would be slow if done per-object per-search.
+            // Consider pre-caching searchable strings if performance is needed.
+
+            // Check if ALL terms match
+            foreach (string term in lowerSearchTerms)
+            {
+                bool termFound = false;
+                if (objNameLower.Contains(term))
+                    termFound = true;
+                else if (typeNameLower.Contains(term))
+                    termFound = true;
+                else if (
+                    !string.IsNullOrEmpty(guid)
+                    && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
+                )
+                    termFound = true; // Exact match for GUID search
+                // else if (SearchStringProperties(obj, term)) termFound = true; // Optional reflection search
+
+                if (!termFound)
+                    return false; // If ANY term is not found, the object doesn't match
+            }
+
+            return true; // All terms were found
+        }
+
+        private void NavigateToObject(ScriptableObject targetObject)
+        {
+            if (targetObject == null)
+                return;
+            Debug.Log($"Navigating to object: {targetObject.name} ({targetObject.GetType().Name})");
+
+            // 1. Determine Type and Namespace
+            Type targetType = targetObject.GetType();
+            string namespaceKey = GetNamespaceKey(targetType);
+
+            // 2. Ensure Namespace/Type are visible/selected in first column
+            // Find namespace group VE - requires BuildNamespaceView to have run
+            // Find type VE - requires BuildNamespaceView
+            // Expand namespace if needed
+            // Select type VE visually
+            // This is complex if the type wasn't previously selected. Might need parts of RestorePreviousSelection logic.
+
+            // Simpler: Just set the internal state and reload relevant views
+            bool typeChanged = _selectedType != targetType;
+
+            _selectedType = targetType;
+            // Find and update _selectedTypeElement? Or let refresh handle it? Let refresh handle.
+
+            if (typeChanged)
+            {
+                // Reload objects for the NEW type
+                LoadObjectTypes(_selectedType); // Reloads _selectedObjects
+                // Need to rebuild lists to show correct items before selection
+                BuildNamespaceView(); // Rebuild to potentially show different managed types? No, just ensure type selection is visually updated maybe.
+                BuildObjectsView(); // Rebuild object list
+            }
+            else
+            {
+                // Type didn't change, ensure object list view is current
+                // (It should be if search cache is up to date, but rebuild for safety?)
+                BuildObjectsView();
+            }
+
+            // 3. Select the target object
+            SelectObject(targetObject); // Selects object, updates inspector
+
+            // 4. Close the search popover
+            CloseActivePopover();
+
+            // Optional: Ensure the selected object is scrolled into view
+            if (_selectedElement != null)
+            {
+                _selectedElement
+                    .schedule.Execute(() =>
+                    { // Schedule scroll after potential layout changes
+                        _objectScrollView?.ScrollTo(_selectedElement);
+                    })
+                    .ExecuteLater(10);
+            }
+        }
+
+        private VisualElement CreatePopoverBase(string name)
         {
             var popover = new VisualElement
             {
@@ -897,11 +1219,8 @@
                 style =
                 {
                     position = Position.Absolute,
-                    width = width,
                     minWidth = 200,
-                    maxWidth = 500, // Allow some flexibility maybe
                     minHeight = 50,
-                    maxHeight = maxHeight,
                     backgroundColor = new Color(0.22f, 0.22f, 0.22f, 0.98f),
                     borderLeftWidth = 1,
                     borderRightWidth = 1,
@@ -989,6 +1308,7 @@
         // Call this to close the currently active popover
         private void CloseActivePopover()
         {
+            Debug.Log("Closing active popover.");
             CloseAddTypePopover();
 
             if (_activePopover != null)
@@ -1023,10 +1343,21 @@
             VisualElement target = evt.target as VisualElement;
             // Also check against original trigger buttons if they shouldn't close it
             bool clickInside = false;
+
+            VisualElement trigger = null; // Identify which element opened the current popover
+
+            // Determine the trigger based on the active popover
+            if (_activePopover == _searchPopover)
+                trigger = _searchField;
+            else if (_activePopover == _settingsPopover)
+                trigger = null; // Settings button ref might be local, harder to check
+            else if (_activePopover == _typeAddPopover)
+                trigger = _addTypeButton;
+
             VisualElement current = target;
             while (current != null)
             {
-                if (current == _activePopover)
+                if (current == _activePopover || current == trigger)
                 { // Click was inside the active popover
                     clickInside = true;
                     break;
