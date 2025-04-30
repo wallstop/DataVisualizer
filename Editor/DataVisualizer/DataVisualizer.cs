@@ -6,13 +6,12 @@
     using System.ComponentModel;
     using System.IO;
     using System.Linq;
+    using System.Reflection;
     using System.Text.RegularExpressions;
     using Components;
     using Data;
     using Extensions;
     using Helper;
-    using JetBrains.Annotations;
-    using Palmmedia.ReportGenerator.Core.Parser.Analysis;
 #if ODIN_INSPECTOR
     using Sirenix.OdinInspector;
     using Sirenix.OdinInspector.Editor;
@@ -22,7 +21,6 @@
     using UnityEngine;
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer;
-    using Assembly = System.Reflection.Assembly;
 
     public sealed class DataVisualizer : EditorWindow
     {
@@ -37,6 +35,7 @@
 
         private const string NamespaceItemClass = "namespace-item";
         private const string NamespaceHeaderClass = "namespace-header";
+        private const string NamespaceGroupHeaderClass = "namespace-group-header";
         private const string NamespaceIndicatorClass = "namespace-indicator";
         private const string NamespaceLabelClass = "namespace-item__label";
         private const string TypeItemClass = "type-item";
@@ -78,8 +77,8 @@
         private readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
             new();
         private readonly List<ScriptableObject> _selectedObjects = new();
-        private readonly List<ScriptableObject> _allManagedSOsCache = new List<ScriptableObject>();
-        private readonly Dictionary<string, ScriptableObject> _currentMatch = new();
+        private readonly List<ScriptableObject> _allManagedSOsCache = new();
+        private readonly Dictionary<Type, VisualElement> _namespaceCache = new();
 
         private ScriptableObject _selectedObject;
         private VisualElement _selectedElement;
@@ -98,19 +97,19 @@
         private VisualElement _settingsPopover;
         private VisualElement _renamePopover;
         private VisualElement _confirmDeletePopover;
-        private VisualElement _typeAddPopover; // Changed from _typeAddPopup
-        private VisualElement _activePopover = null;
-        private object _popoverContext = null; // Store target object for rename/delete
+        private VisualElement _typeAddPopover;
+        private VisualElement _activePopover;
+        private object _popoverContext;
 
         private TextField _searchField;
         private VisualElement _searchPopover;
-        private bool _isSearchCachePopulated = false;
-        private string _lastSearchString = null; // Prevent unnecessary searches
+        private bool _isSearchCachePopulated;
+        private string _lastSearchString;
 
-        private Button _addTypeButton; // Need reference to the button for positioning
-        private TextField _typeSearchField; // <-- ADD Search Field Reference
-        private VisualElement _typePopoverListContainer; // <-- ADD Container reference
-        private bool _isTypePopoverOpen = false; // Track state
+        private Button _addTypeButton;
+        private TextField _typeSearchField;
+        private VisualElement _typePopoverListContainer;
+        private bool _isTypePopoverOpen;
 
         private float _lastSavedOuterWidth = -1f;
         private float _lastSavedInnerWidth = -1f;
@@ -138,7 +137,6 @@
 
         private DataVisualizerSettings _settings;
 
-        //private VisualElement _settingsPopup;
         private Label _dataFolderPathDisplay;
 #if ODIN_INSPECTOR
         private PropertyTree _odinPropertyTree;
@@ -155,8 +153,7 @@
 
         private void OnEnable()
         {
-            _isSearchCachePopulated = false; // Reset cache flag
-
+            _isSearchCachePopulated = false;
             _objectVisualElementMap.Clear();
             _selectedObject = null;
             _selectedElement = null;
@@ -200,7 +197,7 @@
 
         private void Cleanup()
         {
-            _allManagedSOsCache.Clear(); // Clear cache
+            _allManagedSOsCache.Clear();
             _isSearchCachePopulated = false;
             CloseAddTypePopover();
             CancelDrag();
@@ -234,34 +231,37 @@
         private void PopulateSearchCache()
         {
             if (_settings == null)
+            {
                 _settings = LoadOrCreateSettings();
-            Debug.Log("Populating global ScriptableObject search cache...");
+            }
+
             _allManagedSOsCache.Clear();
-            var managedTypes = _scriptableObjectTypes.SelectMany(tuple => tuple.types).ToHashSet();
-            HashSet<string> uniqueGuids = new HashSet<string>();
+            HashSet<Type> managedTypes = _scriptableObjectTypes
+                .SelectMany(tuple => tuple.types)
+                .ToHashSet();
+            HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
 
             foreach (
-                var type in AppDomain
+                Type type in AppDomain
                     .CurrentDomain.GetAssemblies()
                     .SelectMany(assembly => assembly.GetTypes())
                     .Where(managedTypes.Contains)
             )
             {
-                string[] guids = AssetDatabase.FindAssets($"t:{type.Name}"); // Use simple name for FindAssets
+                string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
                 foreach (string guid in guids)
                 {
                     if (!uniqueGuids.Add(guid))
                     {
                         continue;
-                    } // Avoid duplicates if type hierarchy overlaps
+                    }
                     string path = AssetDatabase.GUIDToAssetPath(guid);
-                    if (!string.IsNullOrEmpty(path))
+                    if (!string.IsNullOrWhiteSpace(path))
                     {
                         ScriptableObject obj =
                             AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
 
-                        // Final type check
-                        if (obj != null)
+                        if (obj != null && obj.GetType() == type)
                         {
                             _allManagedSOsCache.Add(obj);
                         }
@@ -269,13 +269,23 @@
                 }
             }
 
-            // Approach 2 (Potentially Faster?): Find *all* SOs, then filter?
-            // string[] allSOGuids = AssetDatabase.FindAssets("t:ScriptableObject");
-            // foreach(string guid in allSOGuids) { ... LoadAsset... check if GetType().FullName is in managedTypeNames ... }
-            // Might load too many unnecessary assets initially. Stick with Approach 1 for now.
+            _allManagedSOsCache.Sort(
+                (a, b) =>
+                {
+                    int comparison = string.Compare(a.name, b.name, StringComparison.Ordinal);
+                    if (comparison != 0)
+                    {
+                        return comparison;
+                    }
+                    return string.Compare(
+                        a.GetType().FullName,
+                        b.GetType().FullName,
+                        StringComparison.Ordinal
+                    );
+                }
+            );
 
             _isSearchCachePopulated = true;
-            Debug.Log($"Search cache populated with {_allManagedSOsCache.Count} objects.");
         }
 
         public static void SignalRefresh()
@@ -740,22 +750,24 @@
             _searchField = new TextField
             {
                 name = "global-search-field",
-                style = { flexGrow = 1, marginRight = 10 }, // Grow to fill space
+                style = { flexGrow = 1, marginRight = 10 },
             };
             _searchField.SetPlaceholderText("Search...");
             _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue));
-            _searchField.RegisterCallback<FocusInEvent>(evt =>
-            { // Re-open popover on focus if results exist
-                if (
-                    !string.IsNullOrWhiteSpace(_searchField.value)
-                    && _searchPopover.childCount > 0
-                    && _activePopover != _searchPopover
-                )
+            _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
+                (_, context) =>
                 {
-                    // Check if already open? OpenPopover handles closing others.
-                    OpenPopover(_searchPopover, _searchField);
-                }
-            });
+                    if (
+                        !string.IsNullOrWhiteSpace(context._searchField.value)
+                        && context._searchPopover.childCount > 0
+                        && context._activePopover != context._searchPopover
+                    )
+                    {
+                        context.OpenPopover(context._searchPopover, context._searchField);
+                    }
+                },
+                this
+            );
             headerRow.Add(_searchField);
 
             float initialOuterWidth = EditorPrefs.GetFloat(
@@ -799,20 +811,20 @@
             root.Add(_outerSplitView);
 
             _settingsPopover = CreatePopoverBase("settings-popover");
-            BuildSettingsPopoverContent(); // Build static content once
+            BuildSettingsPopoverContent();
             root.Add(_settingsPopover);
 
             _renamePopover = CreatePopoverBase("rename-popover");
-            // Content built dynamically when opened
+
             root.Add(_renamePopover);
 
             _confirmDeletePopover = CreatePopoverBase("confirm-delete-popover");
-            // Content built dynamically when opened
+
             root.Add(_confirmDeletePopover);
 
-            _searchPopover = CreatePopoverBase("search-popover"); // Adjust size
-            _searchPopover.style.flexGrow = 1; // Grow to fill space
-            _searchPopover.style.height = 500; // Shrink to fit space
+            _searchPopover = CreatePopoverBase("search-popover");
+            _searchPopover.style.flexGrow = 1;
+            _searchPopover.style.height = 500;
             root.Add(_searchPopover);
 
             _typeAddPopover = new VisualElement
@@ -821,9 +833,9 @@
                 style =
                 {
                     position = Position.Absolute,
-                    width = 250, // Or auto? Let's try fixed first
-                    maxHeight = 400, // Prevent excessive height
-                    backgroundColor = new Color(0.22f, 0.22f, 0.22f, 1f), // Slightly different bg
+                    width = 250,
+                    maxHeight = 400,
+                    backgroundColor = new Color(0.22f, 0.22f, 0.22f, 1f),
                     borderLeftWidth = 1,
                     borderRightWidth = 1,
                     borderTopWidth = 1,
@@ -832,7 +844,7 @@
                     borderLeftColor = Color.black,
                     borderRightColor = Color.black,
                     borderTopColor = Color.black,
-                    display = DisplayStyle.None, // Start hidden
+                    display = DisplayStyle.None,
                 },
             };
 
@@ -848,15 +860,15 @@
                 },
             };
             _typeSearchField.SetPlaceholderText("Search...");
-            _typeSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue)); // Filter on change
+            _typeSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue));
             _typeAddPopover.Add(_typeSearchField);
 
-            var typePopoverScrollView = new ScrollView(ScrollViewMode.Vertical)
+            ScrollView typePopoverScrollView = new(ScrollViewMode.Vertical)
             {
                 style = { flexGrow = 1 },
             };
             _typeAddPopover.Add(typePopoverScrollView);
-            // Add content container for list items inside scrollview
+
             _typePopoverListContainer = new VisualElement { name = "type-add-list-content" };
             typePopoverScrollView.Add(_typePopoverListContainer);
 
@@ -959,24 +971,21 @@
 
         private void PerformSearch(string searchText)
         {
-            searchText = searchText?.Trim(); // Trim whitespace
-            // Avoid searching repeatedly for the exact same string if value changes rapidly
-            if (searchText == _lastSearchString)
-                return;
-            _lastSearchString = searchText;
-
-            // Ensure cache is ready
-            if (!_isSearchCachePopulated)
+            searchText = searchText?.Trim();
+            if (string.Equals(searchText, _lastSearchString, StringComparison.OrdinalIgnoreCase))
             {
-                _searchPopover.Clear();
-                // Optionally show "indexing..." message or just wait?
-                // For now, just don't search yet. Cache populated from OnEnable schedule.
-                Debug.LogWarning("Search cache not populated yet.");
-                CloseActivePopover(); // Ensure popover is closed if cache not ready
                 return;
             }
 
-            // If search is empty, close popover and exit
+            _lastSearchString = searchText;
+
+            if (!_isSearchCachePopulated)
+            {
+                _searchPopover.Clear();
+                CloseActivePopover();
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(searchText))
             {
                 _searchPopover.Clear();
@@ -984,29 +993,31 @@
                 return;
             }
 
-            List<string> searchTerms = searchText
-                .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(t => t.ToLowerInvariant())
-                .ToList();
-            if (searchTerms.Count == 0)
+            string[] searchTerms = searchText.Split(
+                new[] { ' ' },
+                StringSplitOptions.RemoveEmptyEntries
+            );
+            if (searchTerms.Length == 0)
             {
                 _searchPopover.Clear();
                 CloseActivePopover();
                 return;
             }
 
-            List<ScriptableObject> results = new List<ScriptableObject>();
+            List<ScriptableObject> results = new();
             foreach (ScriptableObject obj in _allManagedSOsCache)
             {
                 if (obj == null)
-                    continue; // Skip if cache contains nulls somehow
+                {
+                    continue;
+                }
 
                 if (CheckMatch(obj, searchTerms))
                 {
                     results.Add(obj);
                     if (results.Count >= MaxSearchResults)
                     {
-                        break; // Stop searching once limit reached
+                        break;
                     }
                 }
             }
@@ -1021,14 +1032,16 @@
                     : new Dictionary<ScriptableObject, VisualElement>();
             HashSet<ScriptableObject> seen = new();
 
-            // --- Build Results UI ---
             if (results.Count > 0)
             {
                 ScrollView scrollView;
                 if (_searchPopover.childCount == 0)
                 {
-                    scrollView = new ScrollView(ScrollViewMode.Vertical) { name = "search-scroll" };
-                    scrollView.style.flexGrow = 1; // Allow scrolling
+                    scrollView = new ScrollView(ScrollViewMode.Vertical)
+                    {
+                        name = "search-scroll",
+                        style = { flexGrow = 1 },
+                    };
                     _searchPopover.Add(scrollView);
                 }
                 else
@@ -1044,14 +1057,9 @@
                         continue;
                     }
 
-                    // Use a Button or a Label inside a clickable VE
-                    var resultItem = new VisualElement
-                    {
-                        name = "result-item",
-                        userData = resultObj,
-                    };
-                    resultItem.AddToClassList(SearchResultItemClass); // Add styling class
-                    resultItem.style.flexDirection = FlexDirection.Row; // Name and type side-by-side
+                    VisualElement resultItem = new() { name = "result-item", userData = resultObj };
+                    resultItem.AddToClassList(SearchResultItemClass);
+                    resultItem.style.flexDirection = FlexDirection.Row;
                     resultItem.style.justifyContent = Justify.SpaceBetween;
                     resultItem.style.paddingLeft = new StyleLength(new Length(4, LengthUnit.Pixel));
                     resultItem.style.paddingRight = new StyleLength(
@@ -1064,24 +1072,31 @@
 
                     resultItem.RegisterCallback<PointerDownEvent>(evt =>
                     {
-                        if (evt.button == 0 && resultItem.userData is ScriptableObject clickedObj)
+                        if (
+                            evt.button != 0
+                            || resultItem.userData is not ScriptableObject clickedObj
+                        )
                         {
-                            NavigateToObject(clickedObj); // Navigate on click
-                            evt.StopPropagation();
+                            return;
                         }
+
+                        NavigateToObject(clickedObj);
+                        evt.StopPropagation();
                     });
-                    resultItem.RegisterCallback<MouseEnterEvent>(evt =>
-                        resultItem.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
+                    resultItem.RegisterCallback<MouseEnterEvent, VisualElement>(
+                        (_, context) => context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
+                        resultItem
                     );
-                    resultItem.RegisterCallback<MouseLeaveEvent>(evt =>
-                        resultItem.style.backgroundColor = Color.clear
+                    resultItem.RegisterCallback<MouseLeaveEvent, VisualElement>(
+                        (_, context) => context.style.backgroundColor = Color.clear,
+                        resultItem
                     );
 
-                    var nameLabel = new Label(resultObj.name)
+                    Label nameLabel = new(resultObj.name)
                     {
                         style = { flexGrow = 1, unityTextAlign = TextAnchor.MiddleLeft },
                     };
-                    var typeLabel = new Label(resultObj.GetType().Name)
+                    Label typeLabel = new(resultObj.GetType().Name)
                     {
                         style =
                         {
@@ -1093,127 +1108,199 @@
 
                     resultItem.Add(nameLabel);
                     resultItem.Add(typeLabel);
-                    scrollView.Add(resultItem); // Add to scroll view
+                    scrollView.Add(resultItem);
                 }
 
-                foreach (var entry in currentElements)
+                foreach (KeyValuePair<ScriptableObject, VisualElement> entry in currentElements)
                 {
                     if (!seen.Contains(entry.Key))
                     {
-                        Debug.Log($"Removing {entry.Key.name} from search heirarchy.");
                         entry.Value.RemoveFromHierarchy();
                     }
                 }
 
                 if (_activePopover != _searchPopover)
                 {
-                    // Show and position the popover below the search field
                     OpenPopover(_searchPopover, _searchField);
                 }
             }
             else
             {
                 _searchPopover.Clear();
-                // Optional: Show "No Results" message?
-                // _searchPopover.Add(new Label("No results found.") { style = { color = Color.grey, padding = 10 } });
-                // OpenPopover(_searchPopover, _searchField); // Show empty popover? Or close?
-                CloseActivePopover(); // Close if no results
+                CloseActivePopover();
             }
         }
 
-        private bool CheckMatch(ScriptableObject obj, List<string> lowerSearchTerms)
+        private bool CheckMatch(ScriptableObject obj, string[] lowerSearchTerms)
         {
-            if (obj == null || lowerSearchTerms == null || lowerSearchTerms.Count == 0)
-                return false;
-
-            // Get searchable strings ONCE
-            string objNameLower = obj.name.ToLowerInvariant();
-            string typeNameLower = obj.GetType().Name.ToLowerInvariant(); // Or FullName? Let's use Name.
-            string guid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(obj));
-            // Add more fields? Reflection here would be slow if done per-object per-search.
-            // Consider pre-caching searchable strings if performance is needed.
-
-            // Check if ALL terms match
-            foreach (string term in lowerSearchTerms)
+            if (obj == null || lowerSearchTerms == null || lowerSearchTerms.Length == 0)
             {
-                bool termFound = false;
-                if (objNameLower.Contains(term))
-                    termFound = true;
-                else if (typeNameLower.Contains(term))
-                    termFound = true;
-                else if (
-                    !string.IsNullOrEmpty(guid)
-                    && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
-                )
-                    termFound = true; // Exact match for GUID search
-                // else if (SearchStringProperties(obj, term)) termFound = true; // Optional reflection search
-
-                if (!termFound)
-                    return false; // If ANY term is not found, the object doesn't match
+                return false;
             }
 
-            return true; // All terms were found
+            string objNameLower = obj.name;
+            string typeNameLower = obj.GetType().Name;
+            string assetPath = AssetDatabase.GetAssetPath(obj);
+            string guid = string.IsNullOrWhiteSpace(assetPath)
+                ? string.Empty
+                : AssetDatabase.AssetPathToGUID(assetPath);
+
+            foreach (string term in lowerSearchTerms)
+            {
+                bool termFound =
+                    objNameLower.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || typeNameLower.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || !string.IsNullOrWhiteSpace(guid)
+                        && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
+                    || SearchStringProperties(obj, term, 0, 10, new HashSet<object>());
+
+                if (!termFound)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private bool SearchStringProperties(
+            object obj,
+            string lowerSearchTerm,
+            int currentDepth,
+            int maxDepth,
+            HashSet<object> visited
+        )
+        {
+            if (obj == null || currentDepth > maxDepth)
+            {
+                return false;
+            }
+
+            Type objType = obj.GetType();
+
+            if (
+                objType.IsPrimitive
+                || objType == typeof(Vector2)
+                || objType == typeof(Vector3)
+                || objType == typeof(Vector4)
+                || objType == typeof(Quaternion)
+                || objType == typeof(Color)
+                || objType == typeof(Rect)
+                || objType == typeof(Bounds)
+            )
+            {
+                return false;
+            }
+
+            if (obj is string stringObj)
+            {
+                return stringObj.Contains(lowerSearchTerm, StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (!objType.IsValueType)
+            {
+                if (!visited.Add(obj))
+                {
+                    return false;
+                }
+            }
+
+            try
+            {
+                FieldInfo[] fields = objType.GetFields(
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic
+                );
+                foreach (FieldInfo field in fields)
+                {
+                    object fieldValue = field.GetValue(obj);
+                    if (fieldValue == null)
+                    {
+                        continue;
+                    }
+
+                    if (field.FieldType == typeof(string))
+                    {
+                        string stringValue = fieldValue as string;
+                        if (
+                            !string.IsNullOrWhiteSpace(stringValue)
+                            && stringValue.Contains(
+                                lowerSearchTerm,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        )
+                        {
+                            return true;
+                        }
+                    }
+                    else if (
+                        (
+                            field.FieldType.IsClass
+                            || field.FieldType is { IsValueType: true, IsPrimitive: false }
+                        ) && !typeof(UnityEngine.Object).IsAssignableFrom(field.FieldType)
+                    )
+                    {
+                        if (
+                            SearchStringProperties(
+                                fieldValue,
+                                lowerSearchTerm,
+                                currentDepth + 1,
+                                maxDepth,
+                                visited
+                            )
+                        )
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Swallow
+            }
+
+            return false;
         }
 
         private void NavigateToObject(ScriptableObject targetObject)
         {
             if (targetObject == null)
+            {
                 return;
-            Debug.Log($"Navigating to object: {targetObject.name} ({targetObject.GetType().Name})");
+            }
 
-            // 1. Determine Type and Namespace
             Type targetType = targetObject.GetType();
-            string namespaceKey = GetNamespaceKey(targetType);
 
-            // 2. Ensure Namespace/Type are visible/selected in first column
-            // Find namespace group VE - requires BuildNamespaceView to have run
-            // Find type VE - requires BuildNamespaceView
-            // Expand namespace if needed
-            // Select type VE visually
-            // This is complex if the type wasn't previously selected. Might need parts of RestorePreviousSelection logic.
-
-            // Simpler: Just set the internal state and reload relevant views
             bool typeChanged = _selectedType != targetType;
 
             _selectedType = targetType;
-            // Find and update _selectedTypeElement? Or let refresh handle it? Let refresh handle.
 
             if (typeChanged)
             {
-                // Reload objects for the NEW type
-                LoadObjectTypes(_selectedType); // Reloads _selectedObjects
-                // Need to rebuild lists to show correct items before selection
-                BuildNamespaceView(); // Rebuild to potentially show different managed types? No, just ensure type selection is visually updated maybe.
-                BuildObjectsView(); // Rebuild object list
+                LoadObjectTypes(_selectedType);
+                BuildNamespaceView();
+                BuildObjectsView();
             }
             else
             {
-                // Type didn't change, ensure object list view is current
-                // (It should be if search cache is up to date, but rebuild for safety?)
                 BuildObjectsView();
             }
 
-            // 3. Select the target object
-            SelectObject(targetObject); // Selects object, updates inspector
+            SelectObject(targetObject);
 
-            // 4. Close the search popover
             CloseActivePopover();
 
-            // Optional: Ensure the selected object is scrolled into view
-            if (_selectedElement != null)
-            {
-                _selectedElement
-                    .schedule.Execute(() =>
-                    { // Schedule scroll after potential layout changes
-                        _objectScrollView?.ScrollTo(_selectedElement);
-                    })
-                    .ExecuteLater(10);
-            }
+            _selectedElement
+                ?.schedule.Execute(() =>
+                {
+                    _objectScrollView?.ScrollTo(_selectedElement);
+                })
+                .ExecuteLater(10);
         }
 
         private VisualElement CreatePopoverBase(string name)
         {
-            var popover = new VisualElement
+            VisualElement popover = new()
             {
                 name = name,
                 style =
@@ -1230,7 +1317,7 @@
                     borderLeftColor = Color.black,
                     borderRightColor = Color.black,
                     borderTopColor = Color.black,
-                    display = DisplayStyle.None, // Start hidden
+                    display = DisplayStyle.None,
                     flexDirection = FlexDirection.Column,
                     paddingBottom = 10,
                     paddingLeft = 10,
@@ -1238,101 +1325,93 @@
                     paddingTop = 10,
                 },
             };
-            popover.AddToClassList("popover"); // Add common class for potential USS
+            popover.AddToClassList("popover");
             return popover;
         }
 
-        // --- Generic Popover Management ---
-
-        // Call this when opening ANY popover
         private void OpenPopover(
             VisualElement popover,
             VisualElement triggerElement,
             object context = null
         )
         {
-            // Close any currently open popover first
             CloseActivePopover();
 
             if (popover == null || triggerElement == null)
+            {
                 return;
+            }
 
-            _popoverContext = context; // Store context (e.g., object to rename/delete)
-            _activePopover = popover; // Mark this one as active
+            _popoverContext = context;
+            _activePopover = popover;
 
-            // Schedule positioning based on the trigger element
             triggerElement
                 .schedule.Execute(() =>
                 {
                     if (_activePopover != popover || popover.style.display == DisplayStyle.Flex)
-                        return; // Don't reposition if already open or different popover active
+                    {
+                        return;
+                    }
 
                     Rect triggerBounds = triggerElement.worldBound;
-                    Vector2 popoverSize = new Vector2( // Estimate size or measure content? Start with current style size
-                        !float.IsNaN(popover.resolvedStyle.width) ? popover.resolvedStyle.width : 300,
+                    Vector2 popoverSize = new(
+                        !float.IsNaN(popover.resolvedStyle.width)
+                            ? popover.resolvedStyle.width
+                            : 300,
                         !float.IsNaN(popover.resolvedStyle.height)
                             ? popover.resolvedStyle.height
                             : 150
                     );
-                    // Simple positioning below trigger - refine as needed
                     Vector2 localPos = rootVisualElement.WorldToLocal(triggerBounds.position);
                     popover.style.left = localPos.x;
                     popover.style.top = localPos.y + triggerBounds.height + 2;
 
-                    // TODO: Add off-screen clamping logic here if necessary
+                    popover.style.display = DisplayStyle.Flex;
+                    _isTypePopoverOpen = (popover == _typeAddPopover);
 
-                    popover.style.display = DisplayStyle.Flex; // Show it
-                    _isTypePopoverOpen = (popover == _typeAddPopover); // Update flag if it's the type popover
-
-                    // Debug.Log($"Opened popover: {popover.name}");
-
-                    // Delay registration slightly to prevent immediate closure
                     rootVisualElement
                         .schedule.Execute(() =>
                         {
-                            // Only register if this popover is still the active one
                             if (_activePopover == popover)
                             {
                                 rootVisualElement.RegisterCallback<PointerDownEvent>(
                                     HandleClickOutsidePopover,
                                     TrickleDown.TrickleDown
                                 );
-                                // Debug.Log("Registered click outside handler.");
                             }
                         })
                         .ExecuteLater(10);
                 })
-                .ExecuteLater(1); // Delay for layout
+                .ExecuteLater(1);
         }
 
-        // Call this to close the currently active popover
         private void CloseActivePopover()
         {
-            Debug.Log("Closing active popover.");
             CloseAddTypePopover();
 
-            if (_activePopover != null)
+            if (_activePopover == null)
             {
-                // Debug.Log($"Closing popover: {_activePopover.name}");
-                _activePopover.style.display = DisplayStyle.None;
-                rootVisualElement.UnregisterCallback<PointerDownEvent>(
-                    HandleClickOutsidePopover,
-                    TrickleDown.TrickleDown
-                );
-                if (_activePopover == _typeAddPopover)
-                    _isTypePopoverOpen = false;
-                _activePopover = null;
-                _popoverContext = null;
-                // Debug.Log("Unregistered click outside handler.");
+                return;
             }
+
+            _activePopover.style.display = DisplayStyle.None;
+            rootVisualElement.UnregisterCallback<PointerDownEvent>(
+                HandleClickOutsidePopover,
+                TrickleDown.TrickleDown
+            );
+            if (_activePopover == _typeAddPopover)
+            {
+                _isTypePopoverOpen = false;
+            }
+
+            _activePopover = null;
+            _popoverContext = null;
         }
 
-        // Generic handler for clicking outside the active popover
         private void HandleClickOutsidePopover(PointerDownEvent evt)
         {
             if (_activePopover == null || _activePopover.style.display == DisplayStyle.None)
             {
-                // If no popover active, remove handler just in case it lingers
                 rootVisualElement.UnregisterCallback<PointerDownEvent>(
                     HandleClickOutsidePopover,
                     TrickleDown.TrickleDown
@@ -1341,51 +1420,40 @@
             }
 
             VisualElement target = evt.target as VisualElement;
-            // Also check against original trigger buttons if they shouldn't close it
             bool clickInside = false;
 
-            VisualElement trigger = null; // Identify which element opened the current popover
+            VisualElement trigger = null;
 
-            // Determine the trigger based on the active popover
             if (_activePopover == _searchPopover)
+            {
                 trigger = _searchField;
-            else if (_activePopover == _settingsPopover)
-                trigger = null; // Settings button ref might be local, harder to check
+            }
             else if (_activePopover == _typeAddPopover)
+            {
                 trigger = _addTypeButton;
+            }
 
             VisualElement current = target;
             while (current != null)
             {
                 if (current == _activePopover || current == trigger)
-                { // Click was inside the active popover
+                {
                     clickInside = true;
                     break;
                 }
-                // Check if click was on the button that opened *this specific* popover? More complex.
-                // Let's assume clicking the trigger button *again* should close it via Toggle logic.
                 current = current.parent;
             }
 
             if (!clickInside)
             {
-                // Debug.Log("Clicked outside active popover.");
-                // Need to distinguish between different popovers if their trigger buttons shouldn't close them.
-                // Simple approach: any click outside closes the active one.
                 CloseActivePopover();
-                // Don't stop propagation, allow the outside click to proceed
-                // evt.StopPropagation();
             }
-            // If click is inside, let the popover's internal handlers work
         }
 
-        // --- Specific Popover Triggers and Content Builders ---
-
-        private void BuildSettingsPopoverContent() // Was BuildSettingsPopup
+        private void BuildSettingsPopoverContent()
         {
-            _settingsPopover.Clear(); // Clear previous content if rebuilding dynamically
+            _settingsPopover.Clear();
 
-            // Title (optional)
             _settingsPopover.Add(
                 new Label("Settings")
                 {
@@ -1398,36 +1466,37 @@
                 }
             );
 
-            // Toggle
-            var prefsToggle = new Toggle("Persist State in Settings Asset:")
+            Toggle prefsToggle = new("Persist State in Settings Asset:")
             {
                 value = _settings.persistStateInSettingsAsset,
                 tooltip = "...",
             };
             prefsToggle.RegisterValueChangedCallback(evt =>
             {
-                if (_settings != null)
+                if (_settings == null)
                 {
-                    bool newModeIsSettingsAsset = evt.newValue;
-                    bool previousModeWasSettingsAsset = _settings.persistStateInSettingsAsset;
-                    if (previousModeWasSettingsAsset != newModeIsSettingsAsset)
-                    {
-                        _settings.persistStateInSettingsAsset = newModeIsSettingsAsset;
-                        Debug.Log(
-                            $"Persistence mode changed to: {(newModeIsSettingsAsset ? "Settings Asset" : "User File")}"
-                        );
-                        MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset);
-                        MarkSettingsDirty(); // Mark settings SO dirty (flag changed + maybe data)
-                        AssetDatabase.SaveAssets(); // Save SO
-                        if (!newModeIsSettingsAsset)
-                            SaveUserStateToFile(); // Save user file if migrating TO it
-                    }
+                    return;
+                }
+
+                bool newModeIsSettingsAsset = evt.newValue;
+                bool previousModeWasSettingsAsset = _settings.persistStateInSettingsAsset;
+                if (previousModeWasSettingsAsset == newModeIsSettingsAsset)
+                {
+                    return;
+                }
+
+                _settings.persistStateInSettingsAsset = newModeIsSettingsAsset;
+                MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset);
+                MarkSettingsDirty();
+                AssetDatabase.SaveAssets();
+                if (!newModeIsSettingsAsset)
+                {
+                    SaveUserStateToFile();
                 }
             });
             _settingsPopover.Add(prefsToggle);
 
-            // Data Folder Row
-            var dataFolderContainer = new VisualElement
+            VisualElement dataFolderContainer = new()
             {
                 style =
                 {
@@ -1439,7 +1508,7 @@
             dataFolderContainer.Add(
                 new Label("Data Folder:") { style = { width = 80, flexShrink = 0 } }
             );
-            var dataFolderPathDisplay = new TextField
+            TextField dataFolderPathDisplay = new()
             {
                 value = _settings.DataFolderPath,
                 isReadOnly = true,
@@ -1452,18 +1521,15 @@
                 },
             };
             dataFolderContainer.Add(dataFolderPathDisplay);
-            var selectFolderButton = new Button(
-                () => SelectDataFolderForPopover(dataFolderPathDisplay)
-            )
+            Button selectFolderButton = new(() => SelectDataFolderForPopover(dataFolderPathDisplay))
             {
                 text = "Select...",
                 style = { flexShrink = 0 },
-            }; // Call specific handler
+            };
             dataFolderContainer.Add(selectFolderButton);
             _settingsPopover.Add(dataFolderContainer);
 
-            // Close Button (optional, click outside closes)
-            var buttonContainer = new VisualElement
+            VisualElement buttonContainer = new()
             {
                 style =
                 {
@@ -1472,19 +1538,11 @@
                     marginTop = 15,
                 },
             };
-            var closeButton = new Button(CloseActivePopover) { text = "Close" }; // Generic close
+            Button closeButton = new(CloseActivePopover) { text = "Close" };
             buttonContainer.Add(closeButton);
             _settingsPopover.Add(buttonContainer);
         }
 
-        // SelectDataFolder logic needs to be back in DataVisualizer or passed context
-        // Place this method within your DataVisualizer class
-
-        /// <summary>
-        /// Handles the logic when the 'Select...' button for the Data Folder is clicked
-        /// within the settings popover.
-        /// </summary>
-        /// <param name="displayField">The TextField element from the popover used to display the path.</param>
         private void SelectDataFolderForPopover(TextField displayField)
         {
             if (_settings == null)
@@ -1498,25 +1556,21 @@
                 return;
             }
 
-            // --- Determine Starting Directory ---
-            // Try to start in the currently configured folder, otherwise default to Assets root.
             string currentRelativePath = _settings.DataFolderPath;
-            string projectRoot = Path.GetFullPath(Directory.GetCurrentDirectory())
-                .Replace('\\', '/'); // Normalize project root
-            string currentFullPath = "";
-            string startDir = Application.dataPath; // Default to Assets folder path
+            string projectRoot = Path.GetFullPath(Directory.GetCurrentDirectory()).SanitizePath();
+            string startDir = Application.dataPath;
 
-            if (!string.IsNullOrEmpty(currentRelativePath))
+            if (!string.IsNullOrWhiteSpace(currentRelativePath))
             {
                 try
                 {
-                    currentFullPath = Path.GetFullPath(
+                    string currentFullPath = Path.GetFullPath(
                             Path.Combine(projectRoot, currentRelativePath)
                         )
-                        .Replace('\\', '/');
+                        .SanitizePath();
                     if (Directory.Exists(currentFullPath))
                     {
-                        startDir = currentFullPath; // Use current path if valid
+                        startDir = currentFullPath;
                     }
                 }
                 catch (Exception ex)
@@ -1527,120 +1581,94 @@
                 }
             }
 
-            // --- Open Folder Panel ---
-            // Note: This is a native OS panel and will be truly modal, blocking Unity.
             string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
                 title: "Select Data Folder (Must be inside Assets)",
                 folder: startDir,
                 defaultName: ""
-            ); // No default name needed for folder selection
+            );
 
-            // --- Process Selection ---
-            // Check if the user selected a folder (didn't cancel)
-            if (!string.IsNullOrEmpty(selectedAbsolutePath))
+            if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
             {
-                // Normalize path separators to forward slashes for consistency
-                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).Replace('\\', '/');
-
-                // --- Validate: Must be inside Assets folder ---
-                string projectAssetsPath = Path.GetFullPath(Application.dataPath)
-                    .Replace('\\', '/');
-
-                // Check if the selected path starts with the Assets path (case-insensitive)
-                if (
-                    !selectedAbsolutePath.StartsWith(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                    EditorUtility.DisplayDialog(
-                        "Invalid Folder",
-                        "The selected folder must be inside the project's 'Assets' directory.",
-                        "OK"
-                    );
-                    return; // Exit if invalid selection
-                }
-
-                // --- Convert to relative path starting with "Assets/" ---
-                string relativePath;
-                if (
-                    selectedAbsolutePath.Equals(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    // User selected the Assets folder itself
-                    relativePath = "Assets";
-                }
-                else
-                {
-                    // Construct relative path by taking the part after Assets/
-                    // Ensure it starts with "Assets/"
-                    relativePath =
-                        "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-                    // Clean up potential double slashes if substring started with one
-                    relativePath = relativePath.Replace("//", "/");
-                }
-
-                // --- Update Settings if Path Changed ---
-                if (_settings.DataFolderPath != relativePath)
-                {
-                    Debug.Log(
-                        $"Updating Data Folder from '{_settings.DataFolderPath}' to '{relativePath}'"
-                    );
-                    _settings._dataFolderPath = relativePath;
-
-                    // Mark the ScriptableObject dirty
-                    MarkSettingsDirty(); // This helper calls EditorUtility.SetDirty(_settings);
-
-                    // Save the asset database to persist the change to the .asset file
-                    AssetDatabase.SaveAssets();
-
-                    // Update the display field passed in from the popover UI
-                    if (displayField != null)
-                    { // Double-check field isn't null
-                        displayField.value = _settings.DataFolderPath;
-                    }
-                }
-                // else: Path didn't change, do nothing.
+                return;
             }
-            // else: User cancelled the folder panel.
+
+            selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
+
+            string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
+
+            if (
+                !selectedAbsolutePath.StartsWith(
+                    projectAssetsPath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                Debug.LogError("Selected folder must be inside the project's Assets folder.");
+                EditorUtility.DisplayDialog(
+                    "Invalid Folder",
+                    "The selected folder must be inside the project's 'Assets' directory.",
+                    "OK"
+                );
+                return;
+            }
+
+            string relativePath;
+            if (selectedAbsolutePath.Equals(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
+            {
+                relativePath = "Assets";
+            }
+            else
+            {
+                relativePath = "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+                relativePath = relativePath.Replace("//", "/");
+            }
+
+            if (_settings.DataFolderPath == relativePath)
+            {
+                return;
+            }
+
+            Debug.Log(
+                $"Updating Data Folder from '{_settings.DataFolderPath}' to '{relativePath}'"
+            );
+            _settings._dataFolderPath = relativePath;
+
+            MarkSettingsDirty();
+
+            AssetDatabase.SaveAssets();
+            displayField.value = _settings.DataFolderPath;
         }
 
-        // Rename
-        private void OpenRenamePopover(ScriptableObject dataObject) // Renamed to BaseDataObject for now
+        private void OpenRenamePopover(ScriptableObject dataObject)
         {
             if (dataObject == null)
+            {
                 return;
-            string currentPath = AssetDatabase.GetAssetPath(dataObject);
-            if (string.IsNullOrEmpty(currentPath))
-                return;
+            }
 
-            BuildRenamePopoverContent(currentPath, dataObject.name); // Pass current path and name
-            // Find the rename button VE that triggered this (difficult from here)
-            // Need to get the button reference somehow, maybe store it in userData?
-            // Or just position relative to the object item row?
-            VisualElement triggerRow = _objectVisualElementMap.TryGetValue(dataObject, out var row)
-                ? row
-                : null;
+            string currentPath = AssetDatabase.GetAssetPath(dataObject);
+            if (string.IsNullOrWhiteSpace(currentPath))
+            {
+                return;
+            }
+
+            BuildRenamePopoverContent(currentPath, dataObject.name);
+            VisualElement triggerRow = _objectVisualElementMap.GetValueOrDefault(dataObject);
             if (triggerRow != null)
             {
-                OpenPopover(_renamePopover, triggerRow, currentPath); // Pass path as context
+                OpenPopover(_renamePopover, triggerRow, currentPath);
             }
         }
 
         private void BuildRenamePopoverContent(string originalPath, string originalName)
         {
             _renamePopover.Clear();
-            _renamePopover.userData = originalPath; // Store original path for confirm logic
+            _renamePopover.userData = originalPath;
 
             _renamePopover.Add(
                 new Label("Enter new name (without extension):") { style = { marginBottom = 5 } }
             );
-            var nameTextField = new TextField
+            TextField nameTextField = new()
             {
                 value = Path.GetFileNameWithoutExtension(originalName),
                 name = "rename-textfield",
@@ -1648,7 +1676,7 @@
             };
             nameTextField.schedule.Execute(() => nameTextField.SelectAll()).ExecuteLater(50);
             _renamePopover.Add(nameTextField);
-            var errorLabel = new Label
+            Label errorLabel = new()
             {
                 name = "error-label",
                 style =
@@ -1659,7 +1687,7 @@
                 },
             };
             _renamePopover.Add(errorLabel);
-            var buttonContainer = new VisualElement
+            VisualElement buttonContainer = new()
             {
                 style =
                 {
@@ -1668,12 +1696,12 @@
                     marginTop = 5,
                 },
             };
-            var cancelButton = new Button(CloseActivePopover)
+            Button cancelButton = new(CloseActivePopover)
             {
                 text = "Cancel",
                 style = { marginRight = 5 },
             };
-            var renameButton = new Button(() => HandleRenameConfirmed(nameTextField, errorLabel))
+            Button renameButton = new(() => HandleRenameConfirmed(nameTextField, errorLabel))
             {
                 text = "Rename",
             };
@@ -1685,11 +1713,11 @@
         private void HandleRenameConfirmed(TextField nameField, Label errorLabel)
         {
             errorLabel.style.display = DisplayStyle.None;
-            string originalPath = _popoverContext as string; // Get path from context
+            string originalPath = _popoverContext as string;
             string newName = nameField.value;
 
             if (
-                string.IsNullOrEmpty(originalPath)
+                string.IsNullOrWhiteSpace(originalPath)
                 || string.IsNullOrWhiteSpace(newName)
                 || newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
             )
@@ -1711,11 +1739,18 @@
             }
 
             string directory = Path.GetDirectoryName(originalPath);
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                errorLabel.text =
+                    $"Failed to find directory of original asset path '{originalPath}'.";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
             string newPath = Path.Combine(directory, newName + Path.GetExtension(originalPath))
-                .Replace('\\', '/');
+                .SanitizePath();
             string validationError = AssetDatabase.ValidateMoveAsset(originalPath, newPath);
 
-            if (!string.IsNullOrEmpty(validationError))
+            if (!string.IsNullOrWhiteSpace(validationError))
             {
                 errorLabel.text = $"Invalid: {validationError}";
                 errorLabel.style.display = DisplayStyle.Flex;
@@ -1723,12 +1758,11 @@
             }
 
             string error = AssetDatabase.RenameAsset(originalPath, newName);
-            if (string.IsNullOrEmpty(error))
+            if (string.IsNullOrWhiteSpace(error))
             {
                 Debug.Log($"Asset renamed successfully to: {newName}");
-                // AssetDatabase.SaveAssets(); // RenameAsset often triggers save implicitly? Maybe needed.
-                CloseActivePopover(); // Close on success
-                ScheduleRefresh(); // Refresh main view
+                CloseActivePopover();
+                ScheduleRefresh();
             }
             else
             {
@@ -1738,23 +1772,25 @@
             }
         }
 
-        // Confirm Delete
-        private void OpenConfirmDeletePopover(ScriptableObject dataObject) // Renamed to BaseDataObject
+        private void OpenConfirmDeletePopover(ScriptableObject dataObject)
         {
             if (dataObject == null)
+            {
                 return;
+            }
+
             BuildConfirmDeletePopoverContent(dataObject);
             VisualElement triggerRow = _objectVisualElementMap.GetValueOrDefault(dataObject);
             if (triggerRow != null)
             {
-                OpenPopover(_confirmDeletePopover, triggerRow, dataObject); // Pass object as context
+                OpenPopover(_confirmDeletePopover, triggerRow, dataObject);
             }
         }
 
         private void BuildConfirmDeletePopoverContent(ScriptableObject objectToDelete)
         {
             _confirmDeletePopover.Clear();
-            _confirmDeletePopover.userData = objectToDelete; // Store object ref
+            _confirmDeletePopover.userData = objectToDelete;
 
             _confirmDeletePopover.Add(
                 new Label($"Delete '{objectToDelete.name}'?\nThis cannot be undone.")
@@ -1762,17 +1798,17 @@
                     style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
                 }
             );
-            var buttonContainer = new VisualElement
+            VisualElement buttonContainer = new()
             {
                 style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
             };
-            var cancelButton = new Button(CloseActivePopover)
+            Button cancelButton = new(CloseActivePopover)
             {
                 text = "Cancel",
                 style = { marginRight = 5 },
             };
-            var deleteButton = new Button(HandleDeleteConfirmed) { text = "Delete" };
-            deleteButton.AddToClassList("delete-button"); // Make it red
+            Button deleteButton = new(HandleDeleteConfirmed) { text = "Delete" };
+            deleteButton.AddToClassList("delete-button");
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(deleteButton);
             _confirmDeletePopover.Add(buttonContainer);
@@ -1780,8 +1816,8 @@
 
         private void HandleDeleteConfirmed()
         {
-            BaseDataObject objectToDelete = _popoverContext as BaseDataObject;
-            CloseActivePopover(); // Close popup first
+            ScriptableObject objectToDelete = _popoverContext as ScriptableObject;
+            CloseActivePopover();
 
             if (objectToDelete == null)
             {
@@ -1790,15 +1826,14 @@
             }
 
             string path = AssetDatabase.GetAssetPath(objectToDelete);
-            if (string.IsNullOrEmpty(path))
+            if (string.IsNullOrWhiteSpace(path))
             {
                 Debug.LogError($"Delete failed: path not found for {objectToDelete.name}");
                 return;
             }
 
-            Debug.Log($"User confirmed deletion. Attempting delete: {path}");
-            bool removed = _selectedObjects.Remove(objectToDelete); // Use ScriptableObject list now
-            _objectVisualElementMap.Remove(objectToDelete, out var visualElement);
+            _selectedObjects.Remove(objectToDelete);
+            _objectVisualElementMap.Remove(objectToDelete, out VisualElement visualElement);
             bool deleted = AssetDatabase.DeleteAsset(path);
             if (deleted)
             {
@@ -1806,7 +1841,9 @@
                 AssetDatabase.Refresh();
                 visualElement?.RemoveFromHierarchy();
                 if (_selectedObject == objectToDelete)
+                {
                     SelectObject(null);
+                }
             }
             else
             {
@@ -1815,7 +1852,6 @@
             }
         }
 
-        // --- Generic Toggle Helper ---
         private void TogglePopover(VisualElement popover, VisualElement triggerElement)
         {
             if (_activePopover == popover && popover.style.display == DisplayStyle.Flex)
@@ -1824,46 +1860,13 @@
             }
             else
             {
-                // Build content specifically for settings just before opening
                 if (popover == _settingsPopover)
+                {
                     BuildSettingsPopoverContent();
-                // Rename and Delete content built in their OpenX methods
+                }
+
                 OpenPopover(popover, triggerElement);
             }
-        }
-
-        private void HandleSettingsPopupClosed(bool previousModeWasSettingsAsset)
-        {
-            if (_settings == null)
-            {
-                _settings = LoadOrCreateSettings();
-            }
-
-            if (_settings != null && EditorUtility.IsDirty(_settings))
-            {
-                AssetDatabase.SaveAssets();
-            }
-
-            bool currentModeIsSettingsAsset = _settings.persistStateInSettingsAsset;
-            bool migrationNeeded = previousModeWasSettingsAsset != currentModeIsSettingsAsset;
-
-            if (migrationNeeded)
-            {
-                MigratePersistenceState(migrateToSettingsAsset: currentModeIsSettingsAsset);
-                if (currentModeIsSettingsAsset)
-                {
-                    if (EditorUtility.IsDirty(_settings))
-                    {
-                        AssetDatabase.SaveAssets();
-                    }
-                }
-                else
-                {
-                    SaveUserStateToFile();
-                }
-            }
-
-            ScheduleRefresh();
         }
 
         private VisualElement CreateNamespaceColumn()
@@ -1879,30 +1882,14 @@
                 },
             };
 
-            var nsHeader = new VisualElement
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    justifyContent = Justify.SpaceBetween,
-                    alignItems = Align.Center,
-                    paddingBottom = 3,
-                    paddingLeft = 3,
-                    paddingRight = 3,
-                    paddingTop = 3,
-                    borderBottomWidth = 1,
-                    borderBottomColor = Color.gray,
-                    height = 24,
-                    flexShrink = 0,
-                },
-            };
+            VisualElement nsHeader = new();
             nsHeader.Add(
                 new Label("Namespaces")
                 {
                     style = { unityFontStyleAndWeight = FontStyle.Bold, paddingLeft = 2 },
                 }
             );
-            // Add Type Button
+            nsHeader.AddToClassList(NamespaceGroupHeaderClass);
             _addTypeButton = new Button(ToggleAddTypePopover)
             {
                 text = "+",
@@ -1949,50 +1936,41 @@
 
             BuildTypeAddList();
 
-            // 5. Position the Popover below the Add button
-            // Use geometry only available after layout pass - schedule positioning
             _addTypeButton
                 .schedule.Execute(() =>
                 {
                     if (_addTypeButton == null || _typeAddPopover == null)
-                        return; // Check if elements still exist
+                    {
+                        return;
+                    }
 
-                    // Convert button's bottom-left corner to the root's coordinate space
                     Vector2 buttonPos = _addTypeButton.worldBound.position;
                     Vector2 buttonSize = _addTypeButton.worldBound.size;
-                    // Position relative to rootVisualElement which is the popover's parent
                     Vector2 localPos = rootVisualElement.WorldToLocal(buttonPos);
 
                     _typeAddPopover.style.left = localPos.x;
-                    _typeAddPopover.style.top = localPos.y + buttonSize.y + 2; // Position below button + small gap
+                    _typeAddPopover.style.top = localPos.y + buttonSize.y + 2;
 
-                    // Optional: Ensure it doesn't go off-screen (basic clamp)
                     float maxWidth = rootVisualElement.resolvedStyle.width - localPos.x - 10;
-                    _typeAddPopover.style.maxWidth = Mathf.Max(100, maxWidth); // Ensure min width
+                    _typeAddPopover.style.maxWidth = Mathf.Max(100, maxWidth);
                     float maxHeight =
                         rootVisualElement.resolvedStyle.height
                         - (localPos.y + buttonSize.y + 2)
                         - 10;
                     _typeAddPopover.style.maxHeight = Mathf.Max(100, maxHeight);
 
-                    // 6. Show the Popover
                     _typeAddPopover.style.display = DisplayStyle.Flex;
                     _isTypePopoverOpen = true;
 
-                    // Debug.Log("Opened Type Popover");
-
-                    // 7. Register Capture handler to detect clicks outside
-                    // Use TrickleDown to catch event early, Capture to ensure this element gets it.
                     rootVisualElement.RegisterCallback<PointerDownEvent>(
                         HandleClickOutsidePopover,
                         TrickleDown.TrickleDown
                     );
                 })
-                .ExecuteLater(1); // Delay slightly for button layout
+                .ExecuteLater(1);
 
             _typeAddPopover.style.display = DisplayStyle.Flex;
             _isTypePopoverOpen = true;
-            // 7. Register Capture handler to detect clicks outside
             rootVisualElement.RegisterCallback<PointerDownEvent>(
                 HandleClickOutsidePopover,
                 TrickleDown.TrickleDown
@@ -2010,7 +1988,7 @@
                 return;
             }
 
-            _typePopoverListContainer.Clear(); // Clear previous items
+            _typePopoverListContainer.Clear();
 
             List<string> searchTerms = string.IsNullOrWhiteSpace(filter)
                 ? new List<string>()
@@ -2021,45 +1999,47 @@
             List<string> managedTypeFullNames = GetManagedTypeNames();
             HashSet<string> managedSet = new(managedTypeFullNames);
 
-            // 3. Group Types by Namespace
-            var groupedTypes = allObjectTypes
-                .GroupBy(GetNamespaceKey) // Use static helper
+            IOrderedEnumerable<IGrouping<string, Type>> groupedTypes = allObjectTypes
+                .GroupBy(GetNamespaceKey)
                 .OrderBy(grouping => grouping.Key);
 
-            // 4. Iterate Groups and Build UI
             bool foundMatches = false;
             foreach (IGrouping<string, Type> group in groupedTypes)
             {
                 string namespaceKey = group.Key;
-                List<Type> addableTypes = new List<Type>();
-                var typesToShowInGroup = new List<VisualElement>(); // VEs for types passing filter
+                List<Type> addableTypes = new();
+                List<VisualElement> typesToShowInGroup = new();
 
-                // Check if namespace itself matches filter terms (for potential highlighting/expansion)
                 bool namespaceMatchesAll =
                     isFiltering
                     && searchTerms.All(term =>
                         namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
                     );
 
-                // Filter types within the group
                 foreach (Type type in group.OrderBy(t => t.Name))
                 {
                     string typeName = type.Name;
                     bool typeMatchesSearch =
                         !isFiltering
+                        || namespaceMatchesAll
                         || searchTerms.All(term =>
                             typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                            || namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase) // Term must be in Type OR Namespace
+                            || namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
                         );
 
                     if (typeMatchesSearch)
                     {
                         bool isManaged = managedSet.Contains(type.FullName);
-                        var typeLabel = new Label($"  {type.Name}");
-                        typeLabel.style.paddingTop = 1;
-                        typeLabel.style.paddingBottom = 1;
-                        typeLabel.style.marginLeft = 10;
-                        typeLabel.AddToClassList(PopoverListItemClassName); // Apply base style
+                        Label typeLabel = new($"  {type.Name}")
+                        {
+                            style =
+                            {
+                                paddingTop = 1,
+                                paddingBottom = 1,
+                                marginLeft = 10,
+                            },
+                        };
+                        typeLabel.AddToClassList(PopoverListItemClassName);
 
                         if (isManaged)
                         {
@@ -2068,48 +2048,47 @@
                         }
                         else
                         {
-                            // Add click handler for individual type selection
                             typeLabel.RegisterCallback<PointerDownEvent, Type>(
                                 HandleTypeSelectionFromPopover,
                                 type
                             );
-                            typeLabel.RegisterCallback<MouseEnterEvent>(evt =>
-                                typeLabel.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
+                            typeLabel.RegisterCallback<MouseEnterEvent, Label>(
+                                (_, context) =>
+                                    context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
+                                typeLabel
                             );
-                            typeLabel.RegisterCallback<MouseLeaveEvent>(evt =>
-                                typeLabel.style.backgroundColor = Color.clear
+                            typeLabel.RegisterCallback<MouseLeaveEvent, Label>(
+                                (_, context) => context.style.backgroundColor = Color.clear,
+                                typeLabel
                             );
                         }
 
                         addableTypes.Add(type);
-                        typesToShowInGroup.Add(typeLabel); // Add VE to list for this group
+                        typesToShowInGroup.Add(typeLabel);
                     }
-                } // End foreach Type
+                }
 
-                // 5. Add Namespace Group to UI if it's relevant
-                if (typesToShowInGroup.Count > 0) // Only add group if it contains visible types
+                if (typesToShowInGroup.Count > 0)
                 {
-                    foundMatches = true; // Mark that we found something
+                    foundMatches = true;
 
-                    // --- Create Namespace Group Elements ---
-                    var namespaceGroupContainer = new VisualElement()
+                    VisualElement namespaceGroupContainer = new()
                     {
                         name = $"ns-group-container-{group.Key}",
                     };
-                    var header = new VisualElement { name = $"ns-header-{group.Key}" };
-                    header.AddToClassList(PopoverNamespaceHeaderClassName); // Use specific class
+                    VisualElement header = new() { name = $"ns-header-{group.Key}" };
+                    header.AddToClassList(PopoverNamespaceHeaderClassName);
 
-                    // Force expand if filtering is active, otherwise default collapsed
                     bool startCollapsed = !isFiltering;
-                    var indicator = new Label(startCollapsed ? ArrowCollapsed : ArrowExpanded)
+                    Label indicator = new(startCollapsed ? ArrowCollapsed : ArrowExpanded)
                     {
                         name = $"ns-indicator-{group.Key}",
                     };
                     indicator.AddToClassList(PopoverNamespaceIndicatorClassName);
                     indicator.AddToClassList("clickable");
 
-                    var nsLabel = new Label(group.Key) { name = $"ns-name-{group.Key}" };
-                    nsLabel.AddToClassList(PopoverListNamespaceClassName); // Reuse existing class for style
+                    Label nsLabel = new(group.Key) { name = $"ns-name-{group.Key}" };
+                    nsLabel.AddToClassList(PopoverListNamespaceClassName);
                     nsLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
                     nsLabel.style.flexGrow = 1;
 
@@ -2121,152 +2100,151 @@
 
                     if (typesToShowInGroup.Count > 1)
                     {
-                        nsLabel.AddToClassList("type-selection-list-namespace--not-empty"); // Apply base style
-                        nsLabel.AddToClassList("clickable"); // Add a class for potential hover styles
-                        nsLabel.RegisterCallback<MouseEnterEvent>(evt =>
-                            nsLabel.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
+                        nsLabel.AddToClassList("type-selection-list-namespace--not-empty");
+                        nsLabel.AddToClassList("clickable");
+                        nsLabel.RegisterCallback<MouseEnterEvent, Label>(
+                            (_, context) =>
+                                context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
+                            nsLabel
                         );
-                        nsLabel.RegisterCallback<MouseLeaveEvent>(evt =>
-                            nsLabel.style.backgroundColor = Color.clear
+                        nsLabel.RegisterCallback<MouseLeaveEvent, Label>(
+                            (_, context) => context.style.backgroundColor = Color.clear,
+                            nsLabel
                         );
 
+                        // ReSharper disable once HeapView.CanAvoidClosure
                         nsLabel.RegisterCallback<PointerDownEvent>(evt =>
                         {
-                            if (evt.button == 0) // Left click
+                            if (evt.button != 0)
                             {
-                                // Access context captured by the lambda
-                                string clickedNamespace = clickContext.NamespaceKey;
-                                List<Type> typesToAdd = clickContext.AddableTypes;
-                                int countToAdd = typesToAdd.Count;
+                                return;
+                            }
 
-                                if (countToAdd == 0)
-                                    return; // Nothing to add
+                            string clickedNamespace = clickContext.NamespaceKey;
+                            List<Type> typesToAdd = clickContext.AddableTypes;
+                            int countToAdd = typesToAdd.Count;
 
-                                // --- Confirmation Dialog ---
-                                string message =
-                                    $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '{clickedNamespace}' to Data Visualizer?";
-                                var confirmPopup = ConfirmActionPopup.CreateAndConfigureInstance(
+                            if (countToAdd == 0)
+                            {
+                                return;
+                            }
+
+                            // TODO: CONVERT THIS TO UI TOOLKIT
+                            string message =
+                                $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '{clickedNamespace}' to Data Visualizer?";
+                            ConfirmActionPopup confirmPopup =
+                                ConfirmActionPopup.CreateAndConfigureInstance(
                                     title: "Add Namespace Types",
                                     message: message,
-                                    confirmButtonText: "Add",
-                                    cancelButtonText: "Cancel",
-                                    parentPosition: this.position, // Center on DataVisualizer
-                                    onComplete: (confirmed) =>
+                                    confirmButtonText: "<b><color=green>Add</color></b>",
+                                    cancelButtonText: "<b><color=red>Cancel</color></b>",
+                                    parentPosition: position,
+                                    onComplete: confirmed =>
                                     {
-                                        if (confirmed)
+                                        if (!confirmed)
                                         {
-                                            bool stateChanged = false;
-                                            List<string> currentManagedList = GetManagedTypeNames(); // Get list ref
-                                            foreach (Type typeToAdd in typesToAdd)
+                                            return;
+                                        }
+
+                                        bool stateChanged = false;
+                                        List<string> currentManagedList = GetManagedTypeNames();
+                                        foreach (Type typeToAdd in typesToAdd)
+                                        {
+                                            if (currentManagedList.Contains(typeToAdd.FullName))
                                             {
-                                                // Double check it wasn't added somehow while dialog was open
-                                                if (
-                                                    !currentManagedList.Contains(typeToAdd.FullName)
-                                                )
-                                                {
-                                                    currentManagedList.Add(typeToAdd.FullName);
-                                                    stateChanged = true;
-                                                }
+                                                continue;
                                             }
 
-                                            if (stateChanged)
+                                            currentManagedList.Add(typeToAdd.FullName);
+                                            stateChanged = true;
+                                        }
+
+                                        if (stateChanged)
+                                        {
+                                            if (_settings.persistStateInSettingsAsset)
                                             {
-                                                // Mark appropriate backend dirty and save state
-                                                if (_settings.persistStateInSettingsAsset)
-                                                {
-                                                    MarkSettingsDirty();
-                                                    AssetDatabase.SaveAssets();
-                                                }
-                                                else
-                                                {
-                                                    MarkUserStateDirty();
-                                                } // Triggers file save
-
-                                                Debug.Log(
-                                                    $"Added {countToAdd} types from namespace '{clickedNamespace}'."
-                                                );
-
-                                                // Close the type add popover first
-                                                CloseAddTypePopover();
-                                                // Refresh the main window UI completely
-                                                ScheduleRefresh(); // Use full refresh to ensure everything updates
+                                                MarkSettingsDirty();
+                                                AssetDatabase.SaveAssets();
                                             }
                                             else
                                             {
-                                                // Close popover even if nothing ended up being added
-                                                CloseAddTypePopover();
+                                                MarkUserStateDirty();
                                             }
-                                        }
-                                        // If not confirmed, do nothing, popup closes automatically via callback
-                                    }
-                                ); // End CreateAndConfigureInstance
-                                confirmPopup.ShowModal(); // Show confirmation modally
-                                // --- End Confirmation ---
 
-                                evt.StopPropagation(); // Stop this click from closing the popover immediately
-                            }
-                        }); // End Namespace Label Click Handler
+                                            Debug.Log(
+                                                $"Added {countToAdd} types from namespace '{clickedNamespace}'."
+                                            );
+
+                                            CloseAddTypePopover();
+                                            ScheduleRefresh();
+                                        }
+                                        else
+                                        {
+                                            CloseAddTypePopover();
+                                        }
+                                    }
+                                );
+                            confirmPopup.ShowModal();
+
+                            evt.StopPropagation();
+                        });
                     }
                     else
                     {
-                        nsLabel.AddToClassList("type-selection-list-namespace--empty"); // Apply base style
+                        nsLabel.AddToClassList("type-selection-list-namespace--empty");
                     }
 
                     header.Add(indicator);
                     header.Add(nsLabel);
 
-                    var typesSubContainer = new VisualElement()
+                    VisualElement typesSubContainer = new()
                     {
                         name = $"types-subcontainer-{group.Key}",
+                        style =
+                        {
+                            marginLeft = 15,
+                            display = startCollapsed ? DisplayStyle.None : DisplayStyle.Flex,
+                        },
                     };
-                    typesSubContainer.style.marginLeft = 15; // Indent types
-                    // Set initial display based on filtering
-                    typesSubContainer.style.display = startCollapsed
-                        ? DisplayStyle.None
-                        : DisplayStyle.Flex;
 
-                    // Add the filtered type VEs to the sub-container
-                    foreach (var typeVE in typesToShowInGroup)
+                    foreach (VisualElement typeVisualElement in typesToShowInGroup)
                     {
-                        typesSubContainer.Add(typeVE);
+                        typesSubContainer.Add(typeVisualElement);
                     }
 
-                    // Add header and sub-container to the group container
                     namespaceGroupContainer.Add(header);
                     namespaceGroupContainer.Add(typesSubContainer);
 
-                    // Add toggle handler to header
+                    // ReSharper disable once HeapView.CanAvoidClosure
                     indicator.RegisterCallback<PointerDownEvent>(evt =>
                     {
-                        if (evt.button == 0)
+                        if (evt.button != 0)
                         {
-                            var currentIndicator = header.Q<Label>(
-                                className: PopoverNamespaceIndicatorClassName
-                            );
-                            var currentTypesContainer = header.parent.Q<VisualElement>(
-                                $"types-subcontainer-{group.Key}"
-                            );
-                            if (currentIndicator != null && currentTypesContainer != null)
-                            {
-                                bool nowCollapsed =
-                                    currentTypesContainer.style.display == DisplayStyle.None;
-                                currentTypesContainer.style.display = nowCollapsed
-                                    ? DisplayStyle.Flex
-                                    : DisplayStyle.None;
-                                currentIndicator.text = nowCollapsed
-                                    ? ArrowExpanded
-                                    : ArrowCollapsed;
-                            }
-                            evt.StopPropagation(); // Prevent click outside handler closing popover
+                            return;
                         }
+
+                        Label currentIndicator = header.Q<Label>(
+                            className: PopoverNamespaceIndicatorClassName
+                        );
+                        VisualElement currentTypesContainer = header.parent.Q<VisualElement>(
+                            $"types-subcontainer-{group.Key}"
+                        );
+                        if (currentIndicator != null && currentTypesContainer != null)
+                        {
+                            bool nowCollapsed =
+                                currentTypesContainer.style.display == DisplayStyle.None;
+                            currentTypesContainer.style.display = nowCollapsed
+                                ? DisplayStyle.Flex
+                                : DisplayStyle.None;
+                            currentIndicator.text = nowCollapsed ? ArrowExpanded : ArrowCollapsed;
+                        }
+                        evt.StopPropagation();
                     });
 
-                    // Add the whole group to the main list container in the popover
                     _typePopoverListContainer.Add(namespaceGroupContainer);
-                } // End if (typesToShowInGroup.Count > 0)
-            } // End foreach namespace group
+                }
+            }
 
-            // Optional: Display "No results" message if filtering yields nothing
             if (isFiltering && !foundMatches)
             {
                 _typePopoverListContainer.Add(
@@ -2286,41 +2264,10 @@
             }
         }
 
-        // Handler attached to ROOT to close popover on outside click
-        // private void HandleClickOutsidePopover(PointerDownEvent evt)
-        // {
-        //     if (!_isTypePopoverOpen || _typeAddPopover == null)
-        //         return;
-        //
-        //     // Check if the click target is the popover itself or one of its children
-        //     VisualElement target = evt.target as VisualElement;
-        //     bool clickInside = false;
-        //     while (target != null)
-        //     {
-        //         if (target == _typeAddPopover || target == _addTypeButton)
-        //         { // Allow clicking button again to close
-        //             clickInside = true;
-        //             break;
-        //         }
-        //         target = target.parent;
-        //     }
-        //
-        //     // If the click was outside, close the popover
-        //     if (!clickInside)
-        //     {
-        //         // Debug.Log("Clicked outside popover.");
-        //         CloseAddTypePopover();
-        //         // Important: Stop propagation so the outside click doesn't trigger something else unintentionally
-        //         evt.StopPropagation();
-        //     }
-        //     // If click was inside, do nothing here, let the item click handler work.
-        // }
-
         private void HandleTypeSelectionFromPopover(PointerDownEvent evt, Type selectedType)
         {
             if (selectedType != null)
             {
-                Debug.Log($"User selected type to add: {selectedType.FullName}");
                 List<string> currentManagedList = GetManagedTypeNames();
                 if (!currentManagedList.Contains(selectedType.FullName))
                 {
@@ -2333,30 +2280,30 @@
                     else
                     {
                         MarkUserStateDirty();
-                    } // Triggers file save
+                    }
 
-                    // Refresh UI
                     LoadScriptableObjectTypes();
                     BuildNamespaceView();
                 }
             }
-            CloseAddTypePopover(); // Close after selection
-            evt.StopPropagation(); // Consume the click
+            CloseAddTypePopover();
+            evt.StopPropagation();
         }
 
+        // TODO: UNIFY WITH POPOVER FRAMEWORK
         private void CloseAddTypePopover()
         {
             if (!_isTypePopoverOpen || _typeAddPopover == null)
+            {
                 return;
+            }
 
-            _typeAddPopover.style.display = DisplayStyle.None; // Hide it
+            _typeAddPopover.style.display = DisplayStyle.None;
             _isTypePopoverOpen = false;
-            // Unregister the global click handler
             rootVisualElement.UnregisterCallback<PointerDownEvent>(
                 HandleClickOutsidePopover,
                 TrickleDown.TrickleDown
             );
-            // Debug.Log("Closed Type Popover");
         }
 
         private VisualElement CreateObjectColumn()
@@ -2366,6 +2313,7 @@
                 name = "object-column",
                 style =
                 {
+                    // TODO: MIGRATE ALL STYLES TO USS + SPLIT STYLE SHEETS
                     borderRightWidth = 1,
                     borderRightColor = Color.gray,
                     flexDirection = FlexDirection.Column,
@@ -2563,7 +2511,7 @@
             }
 
             _namespaceListContainer.Clear();
-
+            _namespaceCache.Clear();
             foreach ((string key, List<Type> types) in _scriptableObjectTypes)
             {
                 VisualElement namespaceGroupItem = new()
@@ -2588,7 +2536,6 @@
                 Label indicator = new(ArrowExpanded) { name = $"namespace-indicator-{key}" };
                 indicator.AddToClassList(NamespaceIndicatorClass);
                 indicator.AddToClassList("clickable");
-                ;
                 header.Add(indicator);
 
                 Label namespaceLabel = new(key)
@@ -2657,6 +2604,7 @@
                         pickingMode = PickingMode.Position,
                         focusable = true,
                     };
+                    _namespaceCache[type] = typeItem;
 
                     typeItem.AddToClassList(TypeItemClass);
                     Label typeLabel = new(type.Name) { name = "type-item-label" };
@@ -2745,16 +2693,16 @@
                 contentArea.AddToClassList("clickable");
                 objectItemRow.Add(contentArea);
 
-                string title;
+                string dataObjectName;
                 if (dataObject is BaseDataObject baseDataObject)
                 {
-                    title = baseDataObject.Title;
+                    dataObjectName = baseDataObject.Title;
                 }
                 else
                 {
-                    title = dataObject.name;
+                    dataObjectName = dataObject.name;
                 }
-                Label titleLabel = new(title) { name = "object-item-label" };
+                Label titleLabel = new(dataObjectName) { name = "object-item-label" };
                 titleLabel.AddToClassList("object-item__label");
                 titleLabel.AddToClassList("clickable");
                 contentArea.Add(titleLabel);
@@ -3001,138 +2949,7 @@
                     _inspectorContainer.Add(customElement);
                 }
             }
-        }
-
-        private void DeleteObject(ScriptableObject objectToDelete)
-        {
-            if (objectToDelete == null)
-            {
-                return;
-            }
-
-            string objectName = objectToDelete.name;
-
-            ConfirmActionPopup popup = ConfirmActionPopup.CreateAndConfigureInstance(
-                title: "Confirm Delete",
-                message: $"Are you sure you want to delete the asset <b>'{objectName}'</b>?{Environment.NewLine}This action cannot be undone.",
-                confirmButtonText: "Delete",
-                cancelButtonText: "Cancel",
-                position,
-                onComplete: confirmed =>
-                {
-                    if (!confirmed)
-                    {
-                        return;
-                    }
-
-                    string path = AssetDatabase.GetAssetPath(objectToDelete);
-                    if (string.IsNullOrWhiteSpace(path))
-                    {
-                        Debug.LogError(
-                            $"Could not find asset path for '{objectName}' post-confirmation. Cannot delete."
-                        );
-                        ScheduleRefresh();
-                        return;
-                    }
-
-                    int currentIndex = _selectedObjects.IndexOf(objectToDelete);
-                    if (0 <= currentIndex)
-                    {
-                        _selectedObjects.RemoveAt(currentIndex);
-                        if (_selectedType != null)
-                            UpdateAndSaveObjectOrderList(_selectedType, _selectedObjects);
-                    }
-                    bool removed = _objectVisualElementMap.Remove(
-                        objectToDelete,
-                        out VisualElement visualElement
-                    );
-                    bool deleted = AssetDatabase.DeleteAsset(path);
-
-                    if (deleted)
-                    {
-                        AssetDatabase.Refresh();
-                        if (removed)
-                        {
-                            visualElement?.RemoveFromHierarchy();
-                        }
-
-                        if (_selectedObject != objectToDelete)
-                        {
-                            return;
-                        }
-
-                        ScriptableObject objectToSelect = null;
-                        if (0 <= currentIndex)
-                        {
-                            if (currentIndex < _selectedObjects.Count)
-                            {
-                                objectToSelect = _selectedObjects[currentIndex];
-                            }
-                            else
-                            {
-                                int nextIndex = currentIndex - 1;
-                                if (0 <= nextIndex)
-                                {
-                                    objectToSelect = _selectedObjects[nextIndex];
-                                }
-                                else if (0 < _selectedObjects.Count)
-                                {
-                                    objectToSelect = _selectedObjects[0];
-                                }
-                            }
-                        }
-                        SelectObject(objectToSelect);
-                    }
-                    else
-                    {
-                        ScheduleRefresh();
-                    }
-                }
-            );
-
-            popup.ShowModalUtility();
-        }
-
-        private void OpenRenamePopup(ScriptableObject objectToRename)
-        {
-            if (objectToRename == null)
-            {
-                return;
-            }
-
-            string currentPath = AssetDatabase.GetAssetPath(objectToRename);
-            if (string.IsNullOrWhiteSpace(currentPath))
-            {
-                EditorUtility.DisplayDialog(
-                    "Error",
-                    "Cannot rename object: Asset path not found.",
-                    "OK"
-                );
-                return;
-            }
-
-            DataVisualizer mainVisualizerWindow = this;
-
-            RenameAssetPopup.ShowWindow(
-                currentPath,
-                renameSuccessful =>
-                {
-                    if (renameSuccessful)
-                    {
-                        if (_selectedType != null)
-                        {
-                            LoadObjectTypes(_selectedType);
-                            BuildObjectsView();
-                            SelectObject(objectToRename);
-                        }
-                        else
-                        {
-                            BuildObjectsView();
-                        }
-                    }
-                    mainVisualizerWindow.Focus();
-                }
-            );
+            // TODO: DO REFLECTION / DATABRAIN CO-OP
         }
 
         private void CloneObject(ScriptableObject originalObject)
@@ -3164,7 +2981,6 @@
                 return;
             }
 
-            // Nullify asset guid references
             if (cloneInstance is BaseDataObject baseDataObject)
             {
                 baseDataObject._assetGuid = string.Empty;
@@ -3417,85 +3233,73 @@
             _selectedObjects.Clear();
             _objectVisualElementMap.Clear();
 
-            List<string> customGuidOrder = GetObjectOrderForType(type.FullName); // Use helper
-            HashSet<string> orderedGuidsSet = new HashSet<string>(customGuidOrder);
-
-            // 2. Find assets and map GUID to object
-            Dictionary<string, BaseDataObject> objectsByGuid =
-                new Dictionary<string, BaseDataObject>();
-            // FindAssets now works for any ScriptableObject type name
+            List<string> customGuidOrder = GetObjectOrderForType(type.FullName);
+            Dictionary<string, ScriptableObject> objectsByGuid = new();
             string[] assetGuids = AssetDatabase.FindAssets($"t:{type.Name}");
             foreach (string assetGuid in assetGuids)
             {
                 string assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
-                if (string.IsNullOrEmpty(assetPath))
-                    continue;
-                // Load as base class, but check type just in case FindAssets was too broad
-                ScriptableObject asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(assetPath);
-                // Make sure it's the correct type AND can be cast to BaseDataObject for list compatibility
-                // *** Correction: List should now be List<ScriptableObject> ***
-                // Let's change _selectedObjects to List<ScriptableObject>
-                if (asset != null && asset.GetType() == type) // Check exact type
+                if (string.IsNullOrWhiteSpace(assetPath))
                 {
-                    if (!string.IsNullOrEmpty(assetGuid))
-                    {
-                        // Cast to BaseDataObject might fail now, need to store as ScriptableObject
-                        // We'll handle BaseDataObject specific things elsewhere
-                        objectsByGuid[assetGuid] = asset as BaseDataObject; // Store as BDO for now, NEED TO CHANGE LIST TYPE
-                    }
+                    continue;
+                }
+
+                ScriptableObject asset =
+                    AssetDatabase.LoadMainAssetAtPath(assetPath) as ScriptableObject;
+                if (asset == null || asset.GetType() != type)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(assetGuid))
+                {
+                    objectsByGuid[assetGuid] = asset;
                 }
             }
 
-            List<ScriptableObject> sortedObjects = new List<ScriptableObject>();
+            List<ScriptableObject> sortedObjects = new();
 
-            // 3. Build sorted list based on custom GUID order
             foreach (string guid in customGuidOrder)
             {
-                // Need to load the asset by GUID to get the ScriptableObject reference
                 string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (!string.IsNullOrEmpty(path))
+                if (string.IsNullOrWhiteSpace(path))
                 {
-                    ScriptableObject dataObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
-                        path
-                    );
-                    if (dataObject != null && dataObject.GetType() == type)
-                    { // Check type again
-                        sortedObjects.Add(dataObject);
-                        // Remove from map to track remaining items (use path as key?) No, use GUID. Need to rebuild map.
-                        objectsByGuid.Remove(guid); // Assumes keys were GUIDs in the map populated above
-                    }
+                    continue;
                 }
+
+                ScriptableObject dataObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+                if (dataObject == null || dataObject.GetType() != type)
+                {
+                    continue;
+                }
+
+                sortedObjects.Add(dataObject);
+                objectsByGuid.Remove(guid);
             }
 
-            // 4. Add remaining objects (newly created, not in saved order)
-            //    Sort alphabetically by asset name
-            List<ScriptableObject> remainingObjects = objectsByGuid
-                .Values.Select(bdo => (ScriptableObject)bdo)
-                .ToList(); // Get remaining SOs
+            List<ScriptableObject> remainingObjects = objectsByGuid.Values.ToList();
             remainingObjects.Sort(
                 (a, b) => string.Compare(a.name, b.name, StringComparison.OrdinalIgnoreCase)
             );
             sortedObjects.AddRange(remainingObjects);
 
-            // 5. Assign to the main list (assuming _selectedObjects is List<ScriptableObject>)
-            _selectedObjects.Clear(); // Ensure clear before adding range
+            _selectedObjects.Clear();
             _selectedObjects.AddRange(sortedObjects);
-
-            // Reset selection and inspector
-            SelectObject(null); // Clear previous object selection
+            SelectObject(null);
         }
 
         private void LoadScriptableObjectTypes()
         {
             if (_settings == null)
+            {
                 _settings = LoadOrCreateSettings();
+            }
 
-            List<string> managedTypeFullNames = GetManagedTypeNames(); // Use helper
-            HashSet<string> managedTypeSet = new HashSet<string>(managedTypeFullNames); // Faster lookups
+            List<string> managedTypeFullNames = GetManagedTypeNames();
+            HashSet<string> managedTypeSet = new(managedTypeFullNames);
 
             List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
 
-            // Filter based on managed list OR if it inherits from BaseDataObject (default inclusion)
             List<Type> typesToDisplay = allObjectTypes
                 .Where(t =>
                     managedTypeSet.Contains(t.FullName)
@@ -3503,12 +3307,12 @@
                 )
                 .ToList();
 
-            var groups = typesToDisplay
-                .GroupBy(GetNamespaceKey) // Use existing namespace key logic
+            IEnumerable<(string key, List<Type> types)> groups = typesToDisplay
+                .GroupBy(GetNamespaceKey)
                 .Select(g => (key: g.Key, types: g.ToList()));
 
             _scriptableObjectTypes.Clear();
-            _scriptableObjectTypes.AddRange(groups); // Add the filtered and grouped types
+            _scriptableObjectTypes.AddRange(groups);
 
             List<string> customNamespaceOrder = GetNamespaceOrder();
             _scriptableObjectTypes.Sort(
@@ -3517,15 +3321,11 @@
 
             foreach ((string key, List<Type> types) in _scriptableObjectTypes)
             {
-                // Use GetTypeOrderForNamespace helper
                 List<string> customTypeNameOrder = GetTypeOrderForNamespace(key);
                 types.Sort(
                     (lhs, rhs) => CompareUsingCustomOrder(lhs.Name, rhs.Name, customTypeNameOrder)
                 );
             }
-            Debug.Log(
-                $"Loaded {_scriptableObjectTypes.Sum(g => g.types.Count)} managed types in {_scriptableObjectTypes.Count} namespaces."
-            );
         }
 
         private List<Type> LoadRelevantScriptableObjectTypes()
@@ -3589,6 +3389,18 @@
             _currentInspectorScriptableObject =
                 dataObject != null ? new SerializedObject(dataObject) : null;
             BuildInspectorView();
+
+            if (
+                dataObject != null
+                && _namespaceCache.TryGetValue(
+                    dataObject.GetType(),
+                    out VisualElement namespaceElement
+                )
+            )
+            {
+                namespaceElement?.EnableInClassList("selected", true);
+                namespaceElement?.parent?.EnableInClassList("selected", true);
+            }
         }
 
         private void OnObjectPointerDown(PointerDownEvent evt)
@@ -3949,14 +3761,18 @@
             _objectListContainer.Insert(targetIndex, _draggedElement);
 
             int oldDataIndex = _selectedObjects.IndexOf(draggedObject);
-            if (0 <= oldDataIndex)
+            if (0 > oldDataIndex)
             {
-                _selectedObjects.RemoveAt(oldDataIndex);
-                int dataInsertIndex = targetIndex;
-                dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _selectedObjects.Count);
-                _selectedObjects.Insert(dataInsertIndex, draggedObject);
-                if (_selectedType != null)
-                    UpdateAndSaveObjectOrderList(_selectedType, _selectedObjects);
+                return;
+            }
+
+            _selectedObjects.RemoveAt(oldDataIndex);
+            int dataInsertIndex = targetIndex;
+            dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _selectedObjects.Count);
+            _selectedObjects.Insert(dataInsertIndex, draggedObject);
+            if (_selectedType != null)
+            {
+                UpdateAndSaveObjectOrderList(_selectedType, _selectedObjects);
             }
         }
 
@@ -4163,9 +3979,6 @@
 
             if (targetIndex != _lastGhostInsertIndex || positioningParent != _lastGhostParent)
             {
-                Debug.Log(
-                    $"TargetIndex {targetIndex}, LastInsertionIndex {_lastGhostInsertIndex}."
-                );
                 if (_inPlaceGhost.parent != null && _inPlaceGhost.parent != positioningParent)
                 {
                     _inPlaceGhost.RemoveFromHierarchy();
@@ -4315,34 +4128,39 @@
             SaveUserStateToFile();
         }
 
-        private void UpdateAndSaveObjectOrderList(Type type, List<ScriptableObject> orderedObjects) // Takes List<ScriptableObject> now
+        private void UpdateAndSaveObjectOrderList(Type type, List<ScriptableObject> orderedObjects)
         {
             if (type == null || orderedObjects == null)
+            {
                 return;
+            }
 
-            List<string> orderedGuids = new List<string>();
+            List<string> orderedGuids = new();
             foreach (ScriptableObject obj in orderedObjects)
             {
                 if (obj == null)
+                {
                     continue;
+                }
+
                 string path = AssetDatabase.GetAssetPath(obj);
-                if (!string.IsNullOrEmpty(path))
+                if (!string.IsNullOrWhiteSpace(path))
                 {
                     string guid = AssetDatabase.AssetPathToGUID(path);
-                    if (!string.IsNullOrEmpty(guid))
+                    if (!string.IsNullOrWhiteSpace(guid))
+                    {
                         orderedGuids.Add(guid);
+                    }
                 }
                 else
                 {
-                    // Object might be newly created/not saved, can't include in saved order yet
                     Debug.LogWarning(
                         $"Cannot get path/GUID for object '{obj.name}' during order save."
                     );
                 }
             }
 
-            // Use the persistence helper to save the list
-            SetObjectOrderForType(type.FullName, orderedGuids); // Use FullName as key
+            SetObjectOrderForType(type.FullName, orderedGuids);
         }
 
         private void MigratePersistenceState(bool migrateToSettingsAsset)
@@ -4403,32 +4221,34 @@
         private List<string> GetManagedTypeNames()
         {
             if (_settings == null)
+            {
                 return new List<string>();
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                if (_settings.managedTypeNames == null)
-                    _settings.managedTypeNames = new List<string>();
-                return _settings.managedTypeNames;
+                return _settings.managedTypeNames
+                    ?? (_settings.managedTypeNames = new List<string>());
             }
-            else
+            if (_userState == null)
             {
-                if (_userState == null)
-                    LoadUserStateFromFile();
-                if (_userState.managedTypeNames == null)
-                    _userState.managedTypeNames = new List<string>();
-                return _userState.managedTypeNames;
+                LoadUserStateFromFile();
             }
-        }
 
-        // Add SetManagedTypeNames if needed, or just modify list directly and mark dirty/save
+            return _userState!.managedTypeNames
+                ?? (_userState.managedTypeNames = new List<string>());
+        }
 
         private List<string> GetObjectOrderForType(string typeFullName)
         {
-            if (_settings == null || string.IsNullOrEmpty(typeFullName))
+            if (_settings == null || string.IsNullOrWhiteSpace(typeFullName))
+            {
                 return new List<string>();
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                var entry = _settings.objectOrders?.Find(o =>
+                TypeObjectOrder entry = _settings.objectOrders?.Find(o =>
                     string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
                 );
                 return entry?.ObjectGuids ?? new List<string>();
@@ -4436,8 +4256,11 @@
             else
             {
                 if (_userState == null)
+                {
                     LoadUserStateFromFile();
-                var entry = _userState.objectOrders?.Find(o =>
+                }
+
+                TypeObjectOrder entry = _userState!.objectOrders?.Find(o =>
                     string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
                 );
                 return entry?.ObjectGuids ?? new List<string>();
@@ -4446,27 +4269,34 @@
 
         private void SetObjectOrderForType(string typeFullName, List<string> objectGuids)
         {
-            if (_settings == null || string.IsNullOrEmpty(typeFullName) || objectGuids == null)
+            if (_settings == null || string.IsNullOrWhiteSpace(typeFullName) || objectGuids == null)
+            {
                 return;
+            }
+
             if (_settings.persistStateInSettingsAsset)
             {
-                var entryList = _settings.GetOrCreateObjectOrderList(typeFullName); // Use helper
-                if (!entryList.SequenceEqual(objectGuids))
-                { // Check if different
-                    entryList.Clear();
-                    entryList.AddRange(objectGuids);
-                    MarkSettingsDirty();
+                List<string> entryList = _settings.GetOrCreateObjectOrderList(typeFullName);
+                if (entryList.SequenceEqual(objectGuids))
+                {
+                    return;
                 }
+
+                entryList.Clear();
+                entryList.AddRange(objectGuids);
+                MarkSettingsDirty();
             }
             else if (_userState != null)
             {
-                var entryList = _userState.GetOrCreateObjectOrderList(typeFullName); // Use helper
-                if (!entryList.SequenceEqual(objectGuids))
+                List<string> entryList = _userState.GetOrCreateObjectOrderList(typeFullName);
+                if (entryList.SequenceEqual(objectGuids))
                 {
-                    entryList.Clear();
-                    entryList.AddRange(objectGuids);
-                    MarkUserStateDirty(); // Triggers save
+                    return;
                 }
+
+                entryList.Clear();
+                entryList.AddRange(objectGuids);
+                MarkUserStateDirty();
             }
         }
 

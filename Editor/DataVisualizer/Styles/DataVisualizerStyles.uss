@@ -129,6 +129,27 @@
     background-color: rgba(100, 150, 255, 0.1);
 }
 
+.namespace-group-header {
+    flex-direction: row;
+    justify-content: space-between;
+    -unity-font-style: bold;
+    align-items: center;
+    padding: 3px;
+    flex-shrink: 0;
+    border-bottom-width: 1;
+    border-bottom-color: rgba(128, 128, 128, 0.5);
+}
+
+.namespace-group-header > .unity-label {
+    margin-left: 6px;
+}
+
+.namespace-group-header > .unity-button {
+    margin-right: 6px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
 .namespace-header {
     flex-direction: row;
     align-items: center;
@@ -168,7 +189,7 @@
     flex-shrink: 0;
 }
 
-.object-header{
+.object-header {
     flex-direction: row;
     justify-content: space-between;
     -unity-font-style: bold;
@@ -216,8 +237,8 @@
 }
 
 .selected .action-button {
-    -unity-font-style:  bold;
- 
+    -unity-font-style: bold;
+
 }
 
 .action-button:hover {
@@ -324,6 +345,7 @@
     padding: 4px 6px;
     margin: 0 2px;
 }
+
 .search-result-item:hover {
     background-color: rgba(255, 255, 255, 0.1);
     cursor: link;
