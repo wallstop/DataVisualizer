@@ -1413,9 +1413,11 @@
                         EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
                     );
                     // Append the highlighted match using <b> tags (escape content within tags)
+                    richText.Append("<color=yellow>");
                     richText.Append("<b>");
                     richText.Append(EscapeRichText(fullText.Substring(startIndex, length)));
                     richText.Append("</b>");
+                    richText.Append("</color>");
                     // Update the current position in the original string
                     currentIndex = startIndex + length;
                 }
@@ -2307,15 +2309,14 @@
                     if (typeMatchesSearch)
                     {
                         bool isManaged = managedSet.Contains(type.FullName);
-                        Label typeLabel = new($"  {type.Name}")
-                        {
-                            style =
-                            {
-                                paddingTop = 1,
-                                paddingBottom = 1,
-                                marginLeft = 10,
-                            },
-                        };
+                        var typeLabel = CreateHighlightedLabel(
+                            $"  {type.Name}",
+                            searchTerms,
+                            PopoverListItemClassName
+                        );
+                        typeLabel.style.paddingTop = 1;
+                        typeLabel.style.paddingBottom = 1;
+                        typeLabel.style.marginLeft = 10;
                         typeLabel.AddToClassList(PopoverListItemClassName);
 
                         if (isManaged)
@@ -2364,7 +2365,11 @@
                     indicator.AddToClassList(PopoverNamespaceIndicatorClassName);
                     indicator.AddToClassList("clickable");
 
-                    Label nsLabel = new(group.Key) { name = $"ns-name-{group.Key}" };
+                    var nsLabel = CreateHighlightedLabel(
+                        group.Key,
+                        searchTerms,
+                        PopoverListNamespaceClassName
+                    );
                     nsLabel.AddToClassList(PopoverListNamespaceClassName);
                     nsLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
                     nsLabel.style.flexGrow = 1;
