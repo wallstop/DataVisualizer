@@ -7,11 +7,13 @@
     using System.IO;
     using System.Linq;
     using System.Reflection;
+    using System.Text;
     using System.Text.RegularExpressions;
     using Components;
     using Data;
     using Extensions;
     using Helper;
+    using Search;
 #if ODIN_INSPECTOR
     using Sirenix.OdinInspector;
     using Sirenix.OdinInspector.Editor;
@@ -978,6 +980,8 @@
             }
 
             _lastSearchString = searchText;
+            // TODO REMOVE IF THIS IS BAD
+            _searchPopover.Clear();
 
             if (!_isSearchCachePopulated)
             {
@@ -1004,7 +1008,9 @@
                 return;
             }
 
-            List<ScriptableObject> results = new();
+            List<Tuple<ScriptableObject, SearchResultMatchInfo>> results =
+                new List<Tuple<ScriptableObject, SearchResultMatchInfo>>();
+
             foreach (ScriptableObject obj in _allManagedSOsCache)
             {
                 if (obj == null)
@@ -1012,112 +1018,229 @@
                     continue;
                 }
 
-                if (CheckMatch(obj, searchTerms))
+                SearchResultMatchInfo matchInfo = CheckMatch(obj, searchTerms); // Get detailed info
+                if (matchInfo.IsMatch) // Check overall match flag
                 {
-                    results.Add(obj);
+                    results.Add(Tuple.Create(obj, matchInfo));
                     if (results.Count >= MaxSearchResults)
-                    {
                         break;
-                    }
                 }
             }
 
-            Dictionary<ScriptableObject, VisualElement> currentElements =
-                _searchPopover.childCount > 0
-                    ? _searchPopover
-                        .ElementAt(0)
-                        .Children()
-                        .Where(child => child.userData is ScriptableObject)
-                        .ToDictionary(child => child.userData as ScriptableObject, child => child)
-                    : new Dictionary<ScriptableObject, VisualElement>();
-            HashSet<ScriptableObject> seen = new();
+            // Dictionary<ScriptableObject, VisualElement> currentElements =
+            //     _searchPopover.childCount > 0
+            //         ? _searchPopover
+            //             .ElementAt(0)
+            //             .Children()
+            //             .Where(child => child.userData is ScriptableObject)
+            //             .ToDictionary(child => child.userData as ScriptableObject, child => child)
+            //         : new Dictionary<ScriptableObject, VisualElement>();
+            // HashSet<ScriptableObject> seen = new();
 
             if (results.Count > 0)
             {
-                ScrollView scrollView;
-                if (_searchPopover.childCount == 0)
-                {
-                    scrollView = new ScrollView(ScrollViewMode.Vertical)
-                    {
-                        name = "search-scroll",
-                        style = { flexGrow = 1 },
-                    };
+                // ScrollView scrollView;
+                // if (_searchPopover.childCount == 0)
+                // {
+                //     scrollView = new ScrollView(ScrollViewMode.Vertical)
+                //     {
+                //         name = "search-scroll",
+                //         style = { flexGrow = 1 },
+                //     };
+                //     _searchPopover.Add(scrollView);
+                // }
+                // else
+                // {
+                //     scrollView = _searchPopover.ElementAt(0) as ScrollView;
+                // }
+
+                var scrollView =
+                    _searchPopover.Q<ScrollView>("search-scroll")
+                    ?? new ScrollView { style = { flexGrow = 1 } };
+                var listContainer =
+                    scrollView.Q<VisualElement>("search-list-content")
+                    ?? new VisualElement { name = "search-list-content" };
+                listContainer.Clear();
+                if (scrollView.parent != _searchPopover)
                     _searchPopover.Add(scrollView);
-                }
-                else
-                {
-                    scrollView = _searchPopover.ElementAt(0) as ScrollView;
-                }
+                if (listContainer.parent != scrollView)
+                    scrollView.Add(listContainer);
 
-                foreach (ScriptableObject resultObj in results)
+                foreach (var resultTuple in results)
                 {
-                    seen.Add(resultObj);
-                    if (currentElements.ContainsKey(resultObj))
+                    // seen.Add(resultObj);
+                    // if (currentElements.ContainsKey(resultObj))
+                    // {
+                    //     continue;
+                    // }
+
+                    ScriptableObject resultObj = resultTuple.Item1;
+                    SearchResultMatchInfo resultInfo = resultTuple.Item2;
+                    // Get terms that actually matched *this specific object* for highlighting
+                    var termsMatchingThisObject = resultInfo.AllMatchedTerms.ToList();
+
+                    // VisualElement resultItem = new() { name = "result-item", userData = resultObj };
+                    // resultItem.AddToClassList(SearchResultItemClass);
+                    // resultItem.style.flexDirection = FlexDirection.Row;
+                    // resultItem.style.justifyContent = Justify.SpaceBetween;
+                    // resultItem.style.paddingLeft = new StyleLength(new Length(4, LengthUnit.Pixel));
+                    // resultItem.style.paddingRight = new StyleLength(
+                    //     new Length(4, LengthUnit.Pixel)
+                    // );
+                    // resultItem.style.paddingBottom = new StyleLength(
+                    //     new Length(4, LengthUnit.Pixel)
+                    // );
+                    // resultItem.style.paddingTop = new StyleLength(new Length(4, LengthUnit.Pixel));
+
+                    var resultItem = new VisualElement
                     {
-                        continue;
-                    }
-
-                    VisualElement resultItem = new() { name = "result-item", userData = resultObj };
+                        name = "result-item",
+                        userData = resultObj,
+                    };
                     resultItem.AddToClassList(SearchResultItemClass);
-                    resultItem.style.flexDirection = FlexDirection.Row;
-                    resultItem.style.justifyContent = Justify.SpaceBetween;
+                    resultItem.style.flexDirection = FlexDirection.Column; // Stack main info + context
+                    resultItem.style.paddingBottom = new StyleLength(
+                        new Length(4, LengthUnit.Pixel)
+                    );
                     resultItem.style.paddingLeft = new StyleLength(new Length(4, LengthUnit.Pixel));
                     resultItem.style.paddingRight = new StyleLength(
                         new Length(4, LengthUnit.Pixel)
                     );
-                    resultItem.style.paddingBottom = new StyleLength(
-                        new Length(4, LengthUnit.Pixel)
-                    );
                     resultItem.style.paddingTop = new StyleLength(new Length(4, LengthUnit.Pixel));
-
+                    // Add click handler to navigate
                     resultItem.RegisterCallback<PointerDownEvent>(evt =>
                     {
-                        if (
-                            evt.button != 0
-                            || resultItem.userData is not ScriptableObject clickedObj
-                        )
+                        if (evt.button == 0 && resultItem.userData is ScriptableObject clickedObj)
                         {
-                            return;
+                            NavigateToObject(clickedObj);
+                            evt.StopPropagation();
                         }
-
-                        NavigateToObject(clickedObj);
-                        evt.StopPropagation();
                     });
-                    resultItem.RegisterCallback<MouseEnterEvent, VisualElement>(
-                        (_, context) => context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
-                        resultItem
+                    // Add hover effects
+                    resultItem.RegisterCallback<MouseEnterEvent>(evt =>
+                        resultItem.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
                     );
-                    resultItem.RegisterCallback<MouseLeaveEvent, VisualElement>(
-                        (_, context) => context.style.backgroundColor = Color.clear,
-                        resultItem
+                    resultItem.RegisterCallback<MouseLeaveEvent>(evt =>
+                        resultItem.style.backgroundColor = Color.clear
                     );
 
-                    Label nameLabel = new(resultObj.name)
-                    {
-                        style = { flexGrow = 1, unityTextAlign = TextAnchor.MiddleLeft },
-                    };
-                    Label typeLabel = new(resultObj.GetType().Name)
+                    // resultItem.RegisterCallback<PointerDownEvent>(evt =>
+                    // {
+                    //     if (
+                    //         evt.button != 0
+                    //         || resultItem.userData is not ScriptableObject clickedObj
+                    //     )
+                    //     {
+                    //         return;
+                    //     }
+                    //
+                    //     NavigateToObject(clickedObj);
+                    //     evt.StopPropagation();
+                    // });
+                    // resultItem.RegisterCallback<MouseEnterEvent, VisualElement>(
+                    //     (_, context) => context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
+                    //     resultItem
+                    // );
+                    // resultItem.RegisterCallback<MouseLeaveEvent, VisualElement>(
+                    //     (_, context) => context.style.backgroundColor = Color.clear,
+                    //     resultItem
+                    // );
+
+                    // Label nameLabel = new(resultObj.name)
+                    // {
+                    //     style = { flexGrow = 1, unityTextAlign = TextAnchor.MiddleLeft },
+                    // };
+                    // Label typeLabel = new(resultObj.GetType().Name)
+                    // {
+                    //     style =
+                    //     {
+                    //         color = Color.grey,
+                    //         fontSize = 10,
+                    //         unityTextAlign = TextAnchor.MiddleRight,
+                    //     },
+                    // };
+                    //
+                    // resultItem.Add(nameLabel);
+                    // resultItem.Add(typeLabel);
+                    // scrollView.Add(resultItem);
+
+                    var mainInfoRow = new VisualElement
                     {
                         style =
                         {
-                            color = Color.grey,
-                            fontSize = 10,
-                            unityTextAlign = TextAnchor.MiddleRight,
+                            flexDirection = FlexDirection.Row,
+                            justifyContent = Justify.SpaceBetween,
                         },
                     };
 
-                    resultItem.Add(nameLabel);
-                    resultItem.Add(typeLabel);
-                    scrollView.Add(resultItem);
+                    // Create highlighted labels using the helper
+                    var nameLabel = CreateHighlightedLabel(
+                        resultObj.name,
+                        termsMatchingThisObject,
+                        "result-name-label"
+                    );
+                    nameLabel.style.flexGrow = 1;
+                    nameLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+                    nameLabel.style.marginRight = 10;
+
+                    var typeLabel = CreateHighlightedLabel(
+                        resultObj.GetType().Name,
+                        termsMatchingThisObject,
+                        "result-type-label"
+                    );
+                    typeLabel.style.color = Color.grey;
+                    typeLabel.style.fontSize = 10;
+                    typeLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+                    typeLabel.style.flexShrink = 0;
+
+                    mainInfoRow.Add(nameLabel);
+                    mainInfoRow.Add(typeLabel);
+                    resultItem.Add(mainInfoRow);
+
+                    if (!resultInfo.MatchInPrimaryField)
+                    {
+                        var contextContainer = new VisualElement { style = { marginTop = 2 } };
+                        resultItem.Add(contextContainer);
+
+                        // Get details for reflected fields where matches occurred for this object
+                        var reflectedDetails = resultInfo
+                            .MatchedFields.Where(mf =>
+                                mf.FieldName != MatchSource.ObjectName
+                                && mf.FieldName != MatchSource.TypeName
+                                && mf.FieldName != MatchSource.GUID
+                            )
+                            .GroupBy(mf => mf.FieldName) // Group by property name
+                            .Take(2); // Limit context lines shown for brevity
+
+                        foreach (var fieldGroup in reflectedDetails)
+                        {
+                            string fieldName = fieldGroup.Key;
+                            // Use value from the first detail found for this field
+                            string fieldValue = fieldGroup.First().MatchedValue;
+                            // Highlight the value based on terms that matched *this specific object*
+                            var contextLabel = CreateHighlightedLabel(
+                                $"{fieldName}: {fieldValue}",
+                                termsMatchingThisObject,
+                                "result-context-label"
+                            );
+                            contextLabel.style.fontSize = 9;
+                            contextLabel.style.color = Color.gray;
+                            contextLabel.style.marginLeft = 5; // Indent context slightly
+                            contextContainer.Add(contextLabel);
+                        }
+                    }
+                    // --- End Context Row ---
+
+                    listContainer.Add(resultItem); // Add item to the list container
                 }
 
-                foreach (KeyValuePair<ScriptableObject, VisualElement> entry in currentElements)
-                {
-                    if (!seen.Contains(entry.Key))
-                    {
-                        entry.Value.RemoveFromHierarchy();
-                    }
-                }
+                // foreach (KeyValuePair<ScriptableObject, VisualElement> entry in currentElements)
+                // {
+                //     if (!seen.Contains(entry.Key))
+                //     {
+                //         entry.Value.RemoveFromHierarchy();
+                //     }
+                // }
 
                 if (_activePopover != _searchPopover)
                 {
@@ -1131,39 +1254,194 @@
             }
         }
 
-        private bool CheckMatch(ScriptableObject obj, string[] lowerSearchTerms)
+        private SearchResultMatchInfo CheckMatch(ScriptableObject obj, string[] lowerSearchTerms)
         {
+            var resultInfo = new SearchResultMatchInfo();
             if (obj == null || lowerSearchTerms == null || lowerSearchTerms.Length == 0)
             {
-                return false;
+                return resultInfo;
             }
 
-            string objNameLower = obj.name;
-            string typeNameLower = obj.GetType().Name;
+            string objectName = obj.name;
+            string typeName = obj.GetType().Name;
             string assetPath = AssetDatabase.GetAssetPath(obj);
             string guid = string.IsNullOrWhiteSpace(assetPath)
                 ? string.Empty
                 : AssetDatabase.AssetPathToGUID(assetPath);
 
+            HashSet<string> termsFound = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // Track which terms found a match
+
             foreach (string term in lowerSearchTerms)
             {
-                bool termFound =
-                    objNameLower.Contains(term, StringComparison.OrdinalIgnoreCase)
-                    || typeNameLower.Contains(term, StringComparison.OrdinalIgnoreCase)
-                    || !string.IsNullOrWhiteSpace(guid)
-                        && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
-                    || SearchStringProperties(obj, term, 0, 10, new HashSet<object>());
+                bool termMatchedThisLoop = false;
+                List<MatchDetail> detailsForThisTerm = new List<MatchDetail>();
 
-                if (!termFound)
+                if (objectName.Contains(term, StringComparison.OrdinalIgnoreCase))
                 {
-                    return false;
+                    detailsForThisTerm.Add(
+                        new MatchDetail
+                        {
+                            FieldName = MatchSource.ObjectName,
+                            MatchedValue = objectName,
+                            MatchedTerms = new List<string> { term },
+                        }
+                    );
+                    termMatchedThisLoop = true;
+                }
+                if (typeName.Contains(term, StringComparison.OrdinalIgnoreCase))
+                {
+                    detailsForThisTerm.Add(
+                        new MatchDetail
+                        {
+                            FieldName = MatchSource.TypeName,
+                            MatchedValue = typeName,
+                            MatchedTerms = new List<string> { term },
+                        }
+                    );
+                    termMatchedThisLoop = true;
+                }
+                if (
+                    !string.IsNullOrEmpty(guid)
+                    && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    detailsForThisTerm.Add(
+                        new MatchDetail
+                        {
+                            FieldName = MatchSource.GUID,
+                            MatchedValue = guid,
+                            MatchedTerms = new List<string> { term },
+                        }
+                    );
+                    termMatchedThisLoop = true;
+                }
+
+                // 2. If not found yet, check reflected properties
+                if (!termMatchedThisLoop)
+                {
+                    MatchDetail reflectedMatch = SearchStringProperties(
+                        obj,
+                        term,
+                        0,
+                        2,
+                        new HashSet<object>()
+                    );
+                    if (reflectedMatch != null)
+                    {
+                        reflectedMatch.MatchedTerms = new List<string> { term }; // Ensure term list is correct
+                        detailsForThisTerm.Add(reflectedMatch);
+                        termMatchedThisLoop = true;
+                    }
+                }
+
+                // If this term was found somewhere, record it and add details
+                if (termMatchedThisLoop)
+                {
+                    termsFound.Add(term);
+                    resultInfo.IsMatch = true;
+                    resultInfo.MatchedFields.AddRange(detailsForThisTerm);
                 }
             }
 
-            return true;
+            return resultInfo;
         }
 
-        private bool SearchStringProperties(
+        private Label CreateHighlightedLabel(
+            string fullText,
+            IEnumerable<string> termsToHighlight,
+            string baseStyleClass = null
+        )
+        {
+            var label = new Label();
+            if (!string.IsNullOrEmpty(baseStyleClass))
+                label.AddToClassList(baseStyleClass);
+            label.enableRichText = true; // Enable rich text processing
+
+            if (
+                string.IsNullOrEmpty(fullText)
+                || termsToHighlight == null
+                || !termsToHighlight.Any()
+            )
+            {
+                label.text = fullText; // No highlighting needed
+                return label;
+            }
+
+            // Use StringBuilder for efficient string construction
+            StringBuilder richText = new StringBuilder();
+            string lowerFullText = fullText.ToLowerInvariant();
+            int currentIndex = 0;
+
+            // Find all match positions for all terms, avoiding overlaps favouring earlier matches
+            var matches = termsToHighlight
+                .Where(term => !string.IsNullOrEmpty(term)) // Ignore empty terms
+                .SelectMany(term =>
+                {
+                    var termLower = term.ToLowerInvariant();
+                    var indices = new List<Tuple<int, int>>();
+                    int start = 0;
+                    while (
+                        (
+                            start = lowerFullText.IndexOf(
+                                termLower,
+                                start,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        ) != -1
+                    )
+                    {
+                        indices.Add(Tuple.Create(start, term.Length)); // Store original term length
+                        start += term.Length; // Move past this match to find next
+                    }
+                    return indices;
+                })
+                .Where(t => t != null)
+                .OrderBy(t => t.Item1) // Sort by start index
+                .ToList();
+
+            // Iterate through sorted matches and build the rich text string
+            foreach (var match in matches)
+            {
+                int startIndex = match.Item1;
+                int length = match.Item2;
+
+                // Check if this match overlaps with the text already processed
+                if (startIndex >= currentIndex)
+                {
+                    // Append text BEFORE the current match (escape it)
+                    richText.Append(
+                        EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
+                    );
+                    // Append the highlighted match using <b> tags (escape content within tags)
+                    richText.Append("<b>");
+                    richText.Append(EscapeRichText(fullText.Substring(startIndex, length)));
+                    richText.Append("</b>");
+                    // Update the current position in the original string
+                    currentIndex = startIndex + length;
+                }
+                // Else: This match starts before the previous one ended - skip to avoid bad tags
+            }
+
+            // Append any remaining text after the last match (escape it)
+            if (currentIndex < fullText.Length)
+            {
+                richText.Append(EscapeRichText(fullText.Substring(currentIndex)));
+            }
+
+            label.text = richText.ToString();
+            return label;
+        }
+
+        private string EscapeRichText(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return "";
+            // Basic escaping for characters used in UIElements rich text tags
+            return input.Replace("<", "&lt;").Replace(">", "&gt;");
+            // Add .Replace("&", "&amp;") if needed, but often not required for content
+        }
+
+        private MatchDetail SearchStringProperties(
             object obj,
             string lowerSearchTerm,
             int currentDepth,
@@ -1173,7 +1451,7 @@
         {
             if (obj == null || currentDepth > maxDepth)
             {
-                return false;
+                return null;
             }
 
             Type objType = obj.GetType();
@@ -1189,19 +1467,14 @@
                 || objType == typeof(Bounds)
             )
             {
-                return false;
-            }
-
-            if (obj is string stringObj)
-            {
-                return stringObj.Contains(lowerSearchTerm, StringComparison.OrdinalIgnoreCase);
+                return null;
             }
 
             if (!objType.IsValueType)
             {
                 if (!visited.Add(obj))
                 {
-                    return false;
+                    return null;
                 }
             }
 
@@ -1229,7 +1502,12 @@
                             )
                         )
                         {
-                            return true;
+                            return new MatchDetail
+                            {
+                                FieldName = field.Name, // The actual property name
+                                MatchedValue = stringValue, // The full string value
+                                MatchedTerms = new List<string> { lowerSearchTerm }, // Term found
+                            };
                         }
                     }
                     else if (
@@ -1239,17 +1517,16 @@
                         ) && !typeof(UnityEngine.Object).IsAssignableFrom(field.FieldType)
                     )
                     {
-                        if (
-                            SearchStringProperties(
-                                fieldValue,
-                                lowerSearchTerm,
-                                currentDepth + 1,
-                                maxDepth,
-                                visited
-                            )
-                        )
+                        MatchDetail nestedMatch = SearchStringProperties(
+                            fieldValue,
+                            lowerSearchTerm,
+                            currentDepth + 1,
+                            maxDepth,
+                            visited
+                        );
+                        if (nestedMatch != null)
                         {
-                            return true;
+                            return nestedMatch;
                         }
                     }
                 }
@@ -1259,7 +1536,7 @@
                 // Swallow
             }
 
-            return false;
+            return null;
         }
 
         private void NavigateToObject(ScriptableObject targetObject)

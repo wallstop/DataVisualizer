@@ -136,7 +136,7 @@
     align-items: center;
     padding: 3px;
     flex-shrink: 0;
-    border-bottom-width: 1;
+    border-bottom-width: 1px;
     border-bottom-color: rgba(128, 128, 128, 0.5);
 }
 
@@ -196,7 +196,7 @@
     align-items: center;
     padding: 3px;
     flex-shrink: 0;
-    border-bottom-width: 1;
+    border-bottom-width: 1px;
     border-bottom-color: rgba(128, 128, 128, 0.5);
 }
 
@@ -349,4 +349,29 @@
 .search-result-item:hover {
     background-color: rgba(255, 255, 255, 0.1);
     cursor: link;
+}
+
+.search-result-item Label b {
+    /* Make highlighted text bold and/or colored */
+    -unity-font-style: bold;
+    /* Use a color that stands out on your popover background */
+    color: #FFE485; /* Example: Light Yellow/Gold */
+    /* Optional background highlight: */
+    /* background-color: rgba(255, 230, 100, 0.15); */
+    /* border-radius: 2px; */
+}
+
+.result-context-label {
+    /* Style for context label */
+    font-size: 9px;
+    color: grey;
+    margin-left: 10px; /* Indent context */
+    /* Ensure overflow handled if context is long */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.result-context-label b { /* Apply highlight style to context too */
+    -unity-font-style: bold;
+    color: #FFE485; /* Match main highlight color */
 }
