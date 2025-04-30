@@ -101,6 +101,8 @@
         private VisualElement _confirmDeletePopover;
         private VisualElement _typeAddPopover;
         private VisualElement _activePopover;
+        private VisualElement _confirmNamespaceAddPopover;
+        private VisualElement _activeNestedPopover = null;
         private object _popoverContext;
 
         private TextField _searchField;
@@ -875,6 +877,13 @@
             typePopoverScrollView.Add(_typePopoverListContainer);
 
             root.Add(_typeAddPopover);
+
+            _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
+            _confirmNamespaceAddPopover.style.width = 300; // Adjust size
+            _confirmNamespaceAddPopover.style.minHeight = 80;
+            _confirmNamespaceAddPopover.style.maxHeight = 150;
+            root.Add(_confirmNamespaceAddPopover); // Add to root
+
             BuildNamespaceView();
             BuildObjectsView();
             BuildInspectorView();
@@ -1608,13 +1617,34 @@
             return popover;
         }
 
+        private void CloseNestedPopover()
+        {
+            if (_activeNestedPopover != null)
+            {
+                // Debug.Log($"Closing nested popover: {_activeNestedPopover.name}");
+                _activeNestedPopover.style.display = DisplayStyle.None;
+                _activeNestedPopover = null;
+                // NOTE: Do NOT unregister the main HandleClickOutsidePopover here.
+                // The main popover is still open.
+            }
+        }
+
         private void OpenPopover(
             VisualElement popover,
             VisualElement triggerElement,
-            object context = null
+            object context = null,
+            bool isNested = false
         )
         {
-            CloseActivePopover();
+            if (!isNested)
+            {
+                CloseActivePopover(); // This will handle closing nested first if it exists
+            }
+            else
+            {
+                // If opening a nested one, close any *existing* nested one first
+                CloseNestedPopover();
+            }
 
             if (popover == null || triggerElement == null)
             {
@@ -1622,15 +1652,23 @@
             }
 
             _popoverContext = context;
-            _activePopover = popover;
+            if (isNested)
+            {
+                _activeNestedPopover = popover;
+                // Debug.Log($"OpenPopover: Set _activeNestedPopover to '{_activeNestedPopover?.name}'");
+            }
+            else
+            {
+                _activePopover = popover; // Mark this one as the main active popover
+                // Debug.Log($"OpenPopover: Set _activePopover to '{_activePopover?.name}'");
+            }
 
             triggerElement
                 .schedule.Execute(() =>
                 {
-                    if (_activePopover != popover || popover.style.display == DisplayStyle.Flex)
-                    {
+                    var currentlyActive = isNested ? _activeNestedPopover : _activePopover;
+                    if (currentlyActive != popover)
                         return;
-                    }
 
                     Rect triggerBounds = triggerElement.worldBound;
                     Vector2 popoverSize = new(
@@ -1648,24 +1686,40 @@
                     popover.style.display = DisplayStyle.Flex;
                     _isTypePopoverOpen = (popover == _typeAddPopover);
 
-                    rootVisualElement
-                        .schedule.Execute(() =>
-                        {
-                            if (_activePopover == popover)
+                    if (!isNested)
+                    {
+                        rootVisualElement
+                            .schedule.Execute(() =>
                             {
-                                rootVisualElement.RegisterCallback<PointerDownEvent>(
-                                    HandleClickOutsidePopover,
-                                    TrickleDown.TrickleDown
-                                );
-                            }
-                        })
-                        .ExecuteLater(10);
+                                if (_activePopover == popover)
+                                { // Check main popover status
+                                    rootVisualElement.RegisterCallback<PointerDownEvent>(
+                                        HandleClickOutsidePopover,
+                                        TrickleDown.TrickleDown
+                                    );
+                                }
+                            })
+                            .ExecuteLater(10);
+                    }
+                    // rootVisualElement
+                    //     .schedule.Execute(() =>
+                    //     {
+                    //         if (_activePopover == popover)
+                    //         {
+                    //             rootVisualElement.RegisterCallback<PointerDownEvent>(
+                    //                 HandleClickOutsidePopover,
+                    //                 TrickleDown.TrickleDown
+                    //             );
+                    //         }
+                    //     })
+                    //     .ExecuteLater(10);
                 })
                 .ExecuteLater(1);
         }
 
         private void CloseActivePopover()
         {
+            CloseNestedPopover();
             CloseAddTypePopover();
 
             if (_activePopover == null)
@@ -1689,43 +1743,87 @@
 
         private void HandleClickOutsidePopover(PointerDownEvent evt)
         {
-            if (_activePopover == null || _activePopover.style.display == DisplayStyle.None)
+            VisualElement target = evt.target as VisualElement;
+            bool clickInsideNested = false;
+            bool clickInsideMain = false;
+
+            if (
+                _activeNestedPopover != null
+                && _activeNestedPopover.style.display == DisplayStyle.Flex
+            )
             {
+                VisualElement current = target;
+                while (current != null)
+                {
+                    if (current == _activeNestedPopover)
+                    {
+                        clickInsideNested = true;
+                        break;
+                    }
+                    current = current.parent;
+                }
+            }
+
+            // If click was inside nested, do nothing here (let its buttons handle it)
+            if (clickInsideNested)
+            {
+                // Debug.Log("Click inside NESTED popover.");
+                return;
+            }
+
+            if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
+            {
+                VisualElement current = target;
+                while (current != null)
+                {
+                    if (current == _activePopover)
+                    {
+                        clickInsideMain = true;
+                        break;
+                    }
+                    // Optional: Treat click on original trigger button as "inside"?
+                    // if (target == _settingsButton || target == _addTypeButton) { clickInsideMain = true; break; }
+                    current = current.parent;
+                }
+            }
+
+            if (
+                _activeNestedPopover != null
+                && _activeNestedPopover.style.display == DisplayStyle.Flex
+            )
+            {
+                // A nested popover is open
+                if (clickInsideMain)
+                {
+                    // Click was inside main popover BUT outside nested one. Close nested only.
+                    // Debug.Log("Clicked inside main popover, closing nested popover.");
+                    CloseNestedPopover();
+                }
+                else
+                {
+                    // Click was outside BOTH popovers. Close the main one (which closes nested).
+                    // Debug.Log("Clicked outside both popovers, closing main.");
+                    CloseActivePopover();
+                }
+            }
+            else if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
+            {
+                // Only a main popover is open
+                if (!clickInsideMain)
+                {
+                    // Click was outside the main popover. Close it.
+                    // Debug.Log("Clicked outside main popover, closing it.");
+                    CloseActivePopover();
+                }
+                // Else: Click was inside main popover, do nothing here.
+            }
+            else
+            {
+                // Safety cleanup: No popover seems active, remove handler just in case.
                 rootVisualElement.UnregisterCallback<PointerDownEvent>(
                     HandleClickOutsidePopover,
                     TrickleDown.TrickleDown
                 );
-                return;
-            }
-
-            VisualElement target = evt.target as VisualElement;
-            bool clickInside = false;
-
-            VisualElement trigger = null;
-
-            if (_activePopover == _searchPopover)
-            {
-                trigger = _searchField;
-            }
-            else if (_activePopover == _typeAddPopover)
-            {
-                trigger = _addTypeButton;
-            }
-
-            VisualElement current = target;
-            while (current != null)
-            {
-                if (current == _activePopover || current == trigger)
-                {
-                    clickInside = true;
-                    break;
-                }
-                current = current.parent;
-            }
-
-            if (!clickInside)
-            {
-                CloseActivePopover();
             }
         }
 
@@ -2143,6 +2241,10 @@
                 {
                     BuildSettingsPopoverContent();
                 }
+                else if (popover == _typeAddPopover)
+                {
+                    BuildTypeAddList();
+                }
 
                 OpenPopover(popover, triggerElement);
             }
@@ -2414,61 +2516,73 @@
                             // TODO: CONVERT THIS TO UI TOOLKIT
                             string message =
                                 $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '{clickedNamespace}' to Data Visualizer?";
-                            ConfirmActionPopup confirmPopup =
-                                ConfirmActionPopup.CreateAndConfigureInstance(
-                                    title: "Add Namespace Types",
-                                    message: message,
-                                    confirmButtonText: "<b><color=green>Add</color></b>",
-                                    cancelButtonText: "<b><color=red>Cancel</color></b>",
-                                    parentPosition: position,
-                                    onComplete: confirmed =>
-                                    {
-                                        if (!confirmed)
-                                        {
-                                            return;
-                                        }
 
-                                        bool stateChanged = false;
-                                        List<string> currentManagedList = GetManagedTypeNames();
-                                        foreach (Type typeToAdd in typesToAdd)
-                                        {
-                                            if (currentManagedList.Contains(typeToAdd.FullName))
-                                            {
-                                                continue;
-                                            }
+                            BuildConfirmNamespaceAddPopoverContent(clickedNamespace, typesToAdd);
 
-                                            currentManagedList.Add(typeToAdd.FullName);
-                                            stateChanged = true;
-                                        }
+                            // 2. Open it as a nested popover, positioned relative to the clicked label
+                            //    We use OpenPopover but it needs context to know it's nested.
+                            //    Let's modify OpenPopover slightly or add OpenNestedPopover.
+                            //    Let's modify OpenPopover for simplicity.
+                            OpenPopover(_confirmNamespaceAddPopover, nsLabel, isNested: true); // Pass clicked label as trigger, add nested flag
+                            // --- End Show Inline Confirmation ---
 
-                                        if (stateChanged)
-                                        {
-                                            if (_settings.persistStateInSettingsAsset)
-                                            {
-                                                MarkSettingsDirty();
-                                                AssetDatabase.SaveAssets();
-                                            }
-                                            else
-                                            {
-                                                MarkUserStateDirty();
-                                            }
+                            evt.StopPropagation(); // Stop this click from closing the main popover immediately
 
-                                            Debug.Log(
-                                                $"Added {countToAdd} types from namespace '{clickedNamespace}'."
-                                            );
-
-                                            CloseAddTypePopover();
-                                            ScheduleRefresh();
-                                        }
-                                        else
-                                        {
-                                            CloseAddTypePopover();
-                                        }
-                                    }
-                                );
-                            confirmPopup.ShowModal();
-
-                            evt.StopPropagation();
+                            // ConfirmActionPopup confirmPopup =
+                            //     ConfirmActionPopup.CreateAndConfigureInstance(
+                            //         title: "Add Namespace Types",
+                            //         message: message,
+                            //         confirmButtonText: "<b><color=green>Add</color></b>",
+                            //         cancelButtonText: "<b><color=red>Cancel</color></b>",
+                            //         parentPosition: position,
+                            //         onComplete: confirmed =>
+                            //         {
+                            //             if (!confirmed)
+                            //             {
+                            //                 return;
+                            //             }
+                            //
+                            //             bool stateChanged = false;
+                            //             List<string> currentManagedList = GetManagedTypeNames();
+                            //             foreach (Type typeToAdd in typesToAdd)
+                            //             {
+                            //                 if (currentManagedList.Contains(typeToAdd.FullName))
+                            //                 {
+                            //                     continue;
+                            //                 }
+                            //
+                            //                 currentManagedList.Add(typeToAdd.FullName);
+                            //                 stateChanged = true;
+                            //             }
+                            //
+                            //             if (stateChanged)
+                            //             {
+                            //                 if (_settings.persistStateInSettingsAsset)
+                            //                 {
+                            //                     MarkSettingsDirty();
+                            //                     AssetDatabase.SaveAssets();
+                            //                 }
+                            //                 else
+                            //                 {
+                            //                     MarkUserStateDirty();
+                            //                 }
+                            //
+                            //                 Debug.Log(
+                            //                     $"Added {countToAdd} types from namespace '{clickedNamespace}'."
+                            //                 );
+                            //
+                            //                 CloseAddTypePopover();
+                            //                 ScheduleRefresh();
+                            //             }
+                            //             else
+                            //             {
+                            //                 CloseAddTypePopover();
+                            //             }
+                            //         }
+                            //     );
+                            // confirmPopup.ShowModal();
+                            //
+                            // evt.StopPropagation();
                         });
                     }
                     else
@@ -2784,6 +2898,101 @@
             }
         }
 #endif
+
+        private void BuildConfirmNamespaceAddPopoverContent(
+            string namespaceKey,
+            List<Type> typesToAdd
+        )
+        {
+            if (_confirmNamespaceAddPopover == null)
+                return;
+            _confirmNamespaceAddPopover.Clear(); // Clear previous content
+
+            int countToAdd = typesToAdd.Count;
+            if (countToAdd == 0)
+                return; // Should not happen if called correctly
+
+            // Style the popover root slightly differently if desired
+            _confirmNamespaceAddPopover.style.paddingBottom = 10;
+            _confirmNamespaceAddPopover.style.paddingTop = 10;
+            _confirmNamespaceAddPopover.style.paddingLeft = 10;
+            _confirmNamespaceAddPopover.style.paddingRight = 10;
+
+            // Message
+            string message =
+                $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '{namespaceKey}' to Data Visualizer?";
+            var messageLabel = new Label(message)
+            {
+                style =
+                {
+                    whiteSpace = WhiteSpace.Normal,
+                    marginBottom = 15,
+                    fontSize = 12,
+                },
+            };
+            _confirmNamespaceAddPopover.Add(messageLabel);
+
+            // Button Container
+            var buttonContainer = new VisualElement
+            {
+                style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
+            };
+            _confirmNamespaceAddPopover.Add(buttonContainer);
+
+            // Cancel Button
+            var cancelButton = new Button(CloseNestedPopover)
+            {
+                text = "Cancel",
+                style = { marginRight = 5 },
+            };
+            buttonContainer.Add(cancelButton);
+
+            // Confirmation Button
+            var confirmButton = new Button(() =>
+            {
+                // --- Perform Add Logic ---
+                bool stateChanged = false;
+                List<string> currentManagedList = GetManagedTypeNames();
+                foreach (Type typeToAdd in typesToAdd)
+                {
+                    if (!currentManagedList.Contains(typeToAdd.FullName))
+                    {
+                        currentManagedList.Add(typeToAdd.FullName);
+                        stateChanged = true;
+                    }
+                }
+
+                if (stateChanged)
+                {
+                    if (_settings.persistStateInSettingsAsset)
+                    {
+                        MarkSettingsDirty();
+                        AssetDatabase.SaveAssets();
+                    }
+                    else
+                    {
+                        MarkUserStateDirty();
+                    } // Triggers file save
+                    Debug.Log($"Added {countToAdd} types from namespace '{namespaceKey}'.");
+                }
+                // --- End Add Logic ---
+
+                // Close BOTH popovers after action
+                CloseActivePopover(); // CloseActivePopover handles nested closing
+
+                // Refresh main UI if state changed
+                if (stateChanged)
+                {
+                    ScheduleRefresh();
+                }
+            })
+            {
+                text = "Add",
+            };
+            // Optional styling
+            // confirmButton.AddToClassList("button-primary");
+            buttonContainer.Add(confirmButton);
+        }
 
         private void BuildNamespaceView()
         {
