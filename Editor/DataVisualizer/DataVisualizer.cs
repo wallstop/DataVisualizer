@@ -32,10 +32,10 @@
         private const string SettingsDefaultPath = "Assets/DataVisualizerSettings.asset";
         private const string UserStateFileName = "DataVisualizerUserState.json";
 
-        private const string NamespaceItemClass = "object-item";
+        private const string NamespaceItemClass = "namespace-item";
         private const string NamespaceHeaderClass = "namespace-header";
         private const string NamespaceIndicatorClass = "namespace-indicator";
-        private const string NamespaceLabelClass = "object-item__label";
+        private const string NamespaceLabelClass = "namespace-item__label";
         private const string TypeItemClass = "type-item";
         private const string TypeLabelClass = "type-item__label";
         private const string ObjectItemClass = "object-item";
@@ -973,8 +973,8 @@
             ScrollView namespaceScrollView = new(ScrollViewMode.Vertical)
             {
                 name = "namespace-scrollview",
-                style = { flexGrow = 1 },
             };
+            namespaceScrollView.AddToClassList("namespace-scrollview");
             _namespaceListContainer = new VisualElement { name = "namespace-list" };
             namespaceScrollView.Add(_namespaceListContainer);
             namespaceColumn.Add(namespaceScrollView);
@@ -1429,37 +1429,10 @@
                 },
             };
 
-            VisualElement objectHeader = new()
-            {
-                name = "object-header",
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    justifyContent = Justify.SpaceBetween,
-                    alignItems = Align.Center,
-                    paddingBottom = 3,
-                    paddingTop = 3,
-                    paddingLeft = 3,
-                    paddingRight = 3,
-                    height = 24,
-                    flexShrink = 0,
-                    borderBottomWidth = 1,
-                    borderBottomColor = Color.gray,
-                },
-            };
+            VisualElement objectHeader = new() { name = "object-header" };
+            objectHeader.AddToClassList("object-header");
 
-            objectHeader.Add(
-                new Label("Objects")
-                {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        paddingBottom = 5,
-                        marginRight = 5,
-                        marginTop = 1,
-                    },
-                }
-            );
+            objectHeader.Add(new Label("Objects"));
             Button createButton = new(CreateNewObject)
             {
                 text = "+",
@@ -1474,8 +1447,8 @@
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
                 name = "object-scrollview",
-                style = { flexGrow = 1 },
             };
+            _objectScrollView.AddToClassList("object-scrollview");
             _objectListContainer = new VisualElement { name = "object-list" };
             _objectScrollView.Add(_objectListContainer);
             objectColumn.Add(_objectScrollView);
@@ -1761,10 +1734,12 @@
                             return;
                         }
 
+                        _selectedTypeElement?.parent?.parent?.RemoveFromClassList("selected");
                         _selectedTypeElement?.RemoveFromClassList("selected");
                         _selectedType = clickedType;
                         _selectedTypeElement = typeItem;
                         _selectedTypeElement.AddToClassList("selected");
+                        _selectedTypeElement.parent?.parent?.AddToClassList("selected");
                         SaveNamespaceAndTypeSelectionState(
                             GetNamespaceKey(_selectedType),
                             _selectedType.Name
