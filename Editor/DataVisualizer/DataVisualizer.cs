@@ -86,7 +86,13 @@
         private VisualElement _namespaceColumnElement;
         private VisualElement _objectColumnElement;
 
+        private VisualElement _settingsPopover;
+        private VisualElement _renamePopover;
+        private VisualElement _confirmDeletePopover;
         private VisualElement _typeAddPopover; // Changed from _typeAddPopup
+        private VisualElement _activePopover = null;
+        private object _popoverContext = null; // Store target object for rename/delete
+
         private Button _addTypeButton; // Need reference to the button for positioning
         private TextField _typeSearchField; // <-- ADD Search Field Reference
         private VisualElement _typePopoverListContainer; // <-- ADD Container reference
@@ -652,25 +658,35 @@
             };
             root.Add(headerRow);
 
-            Button settingsButton = new(() =>
-            {
-                if (_settings == null)
-                {
-                    _settings = LoadOrCreateSettings();
-                }
-
-                bool wasSettingsAssetMode = _settings.persistStateInSettingsAsset;
-                DataVisualizerSettingsPopup popupWindow =
-                    DataVisualizerSettingsPopup.CreateAndConfigureInstance(
-                        _settings,
-                        () => HandleSettingsPopupClosed(wasSettingsAssetMode)
-                    );
-                popupWindow.ShowModal();
-            })
+            Button settingsButton = null;
+            settingsButton = new Button(
+                () => TogglePopover(_settingsPopover, settingsButton)
+            // {
+            //     if (_settings == null)
+            //     {
+            //         _settings = LoadOrCreateSettings();
+            //     }
+            //
+            //     bool wasSettingsAssetMode = _settings.persistStateInSettingsAsset;
+            //     DataVisualizerSettingsPopup popupWindow =
+            //         DataVisualizerSettingsPopup.CreateAndConfigureInstance(
+            //             _settings,
+            //             () => HandleSettingsPopupClosed(wasSettingsAssetMode)
+            //         );
+            //     popupWindow.ShowModal();
+            // }
+            )
             {
                 text = "…",
                 name = "settings-button",
+                tooltip = "Open Settings",
             };
+
+            void TriggerSettings()
+            {
+                ;
+            }
+
             settingsButton.AddToClassList("icon-button");
             settingsButton.AddToClassList("clickable");
             headerRow.Add(settingsButton);
@@ -714,6 +730,18 @@
             _outerSplitView.Add(_namespaceColumnElement);
             _outerSplitView.Add(_innerSplitView);
             root.Add(_outerSplitView);
+
+            _settingsPopover = CreatePopoverBase("settings-popover");
+            BuildSettingsPopoverContent(); // Build static content once
+            root.Add(_settingsPopover);
+
+            _renamePopover = CreatePopoverBase("rename-popover");
+            // Content built dynamically when opened
+            root.Add(_renamePopover);
+
+            _confirmDeletePopover = CreatePopoverBase("confirm-delete-popover");
+            // Content built dynamically when opened
+            root.Add(_confirmDeletePopover);
 
             _typeAddPopover = new VisualElement
             {
@@ -761,37 +789,6 @@
             typePopoverScrollView.Add(_typePopoverListContainer);
 
             root.Add(_typeAddPopover);
-
-            // _settingsPopup = new VisualElement
-            // {
-            //     name = "settings-popup",
-            //     style =
-            //     {
-            //         position = Position.Absolute,
-            //         top = 30,
-            //         left = 10,
-            //         width = 350,
-            //         backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.95f),
-            //         borderLeftWidth = 1,
-            //         borderRightWidth = 1,
-            //         borderTopWidth = 1,
-            //         borderBottomWidth = 1,
-            //         borderBottomColor = Color.gray,
-            //         borderLeftColor = Color.gray,
-            //         borderRightColor = Color.gray,
-            //         borderTopColor = Color.gray,
-            //         borderBottomLeftRadius = 5,
-            //         borderBottomRightRadius = 5,
-            //         borderTopLeftRadius = 5,
-            //         borderTopRightRadius = 5,
-            //         paddingBottom = 10,
-            //         paddingLeft = 10,
-            //         paddingRight = 10,
-            //         paddingTop = 10,
-            //         display = DisplayStyle.None,
-            //     },
-            // };
-            // root.Add(_settingsPopup);
             BuildNamespaceView();
             BuildObjectsView();
             BuildInspectorView();
@@ -886,6 +883,622 @@
             }
 
             root.style.fontSize = 14;
+        }
+
+        private VisualElement CreatePopoverBase(
+            string name,
+            float width = 350,
+            float maxHeight = 250
+        )
+        {
+            var popover = new VisualElement
+            {
+                name = name,
+                style =
+                {
+                    position = Position.Absolute,
+                    width = width,
+                    minWidth = 200,
+                    maxWidth = 500, // Allow some flexibility maybe
+                    minHeight = 50,
+                    maxHeight = maxHeight,
+                    backgroundColor = new Color(0.22f, 0.22f, 0.22f, 0.98f),
+                    borderLeftWidth = 1,
+                    borderRightWidth = 1,
+                    borderTopWidth = 1,
+                    borderBottomWidth = 1,
+                    borderBottomColor = Color.black,
+                    borderLeftColor = Color.black,
+                    borderRightColor = Color.black,
+                    borderTopColor = Color.black,
+                    display = DisplayStyle.None, // Start hidden
+                    flexDirection = FlexDirection.Column,
+                    paddingBottom = 10,
+                    paddingLeft = 10,
+                    paddingRight = 10,
+                    paddingTop = 10,
+                },
+            };
+            popover.AddToClassList("popover"); // Add common class for potential USS
+            return popover;
+        }
+
+        // --- Generic Popover Management ---
+
+        // Call this when opening ANY popover
+        private void OpenPopover(
+            VisualElement popover,
+            VisualElement triggerElement,
+            object context = null
+        )
+        {
+            // Close any currently open popover first
+            CloseActivePopover();
+
+            if (popover == null || triggerElement == null)
+                return;
+
+            _popoverContext = context; // Store context (e.g., object to rename/delete)
+            _activePopover = popover; // Mark this one as active
+
+            // Schedule positioning based on the trigger element
+            triggerElement
+                .schedule.Execute(() =>
+                {
+                    if (_activePopover != popover || popover.style.display == DisplayStyle.Flex)
+                        return; // Don't reposition if already open or different popover active
+
+                    Rect triggerBounds = triggerElement.worldBound;
+                    Vector2 popoverSize = new Vector2( // Estimate size or measure content? Start with current style size
+                        !float.IsNaN(popover.resolvedStyle.width) ? popover.resolvedStyle.width : 300,
+                        !float.IsNaN(popover.resolvedStyle.height)
+                            ? popover.resolvedStyle.height
+                            : 150
+                    );
+                    // Simple positioning below trigger - refine as needed
+                    Vector2 localPos = rootVisualElement.WorldToLocal(triggerBounds.position);
+                    popover.style.left = localPos.x;
+                    popover.style.top = localPos.y + triggerBounds.height + 2;
+
+                    // TODO: Add off-screen clamping logic here if necessary
+
+                    popover.style.display = DisplayStyle.Flex; // Show it
+                    _isTypePopoverOpen = (popover == _typeAddPopover); // Update flag if it's the type popover
+
+                    // Debug.Log($"Opened popover: {popover.name}");
+
+                    // Delay registration slightly to prevent immediate closure
+                    rootVisualElement
+                        .schedule.Execute(() =>
+                        {
+                            // Only register if this popover is still the active one
+                            if (_activePopover == popover)
+                            {
+                                rootVisualElement.RegisterCallback<PointerDownEvent>(
+                                    HandleClickOutsidePopover,
+                                    TrickleDown.TrickleDown
+                                );
+                                // Debug.Log("Registered click outside handler.");
+                            }
+                        })
+                        .ExecuteLater(10);
+                })
+                .ExecuteLater(1); // Delay for layout
+        }
+
+        // Call this to close the currently active popover
+        private void CloseActivePopover()
+        {
+            CloseAddTypePopover();
+
+            if (_activePopover != null)
+            {
+                // Debug.Log($"Closing popover: {_activePopover.name}");
+                _activePopover.style.display = DisplayStyle.None;
+                rootVisualElement.UnregisterCallback<PointerDownEvent>(
+                    HandleClickOutsidePopover,
+                    TrickleDown.TrickleDown
+                );
+                if (_activePopover == _typeAddPopover)
+                    _isTypePopoverOpen = false;
+                _activePopover = null;
+                _popoverContext = null;
+                // Debug.Log("Unregistered click outside handler.");
+            }
+        }
+
+        // Generic handler for clicking outside the active popover
+        private void HandleClickOutsidePopover(PointerDownEvent evt)
+        {
+            if (_activePopover == null || _activePopover.style.display == DisplayStyle.None)
+            {
+                // If no popover active, remove handler just in case it lingers
+                rootVisualElement.UnregisterCallback<PointerDownEvent>(
+                    HandleClickOutsidePopover,
+                    TrickleDown.TrickleDown
+                );
+                return;
+            }
+
+            VisualElement target = evt.target as VisualElement;
+            // Also check against original trigger buttons if they shouldn't close it
+            bool clickInside = false;
+            VisualElement current = target;
+            while (current != null)
+            {
+                if (current == _activePopover)
+                { // Click was inside the active popover
+                    clickInside = true;
+                    break;
+                }
+                // Check if click was on the button that opened *this specific* popover? More complex.
+                // Let's assume clicking the trigger button *again* should close it via Toggle logic.
+                current = current.parent;
+            }
+
+            if (!clickInside)
+            {
+                // Debug.Log("Clicked outside active popover.");
+                // Need to distinguish between different popovers if their trigger buttons shouldn't close them.
+                // Simple approach: any click outside closes the active one.
+                CloseActivePopover();
+                // Don't stop propagation, allow the outside click to proceed
+                // evt.StopPropagation();
+            }
+            // If click is inside, let the popover's internal handlers work
+        }
+
+        // --- Specific Popover Triggers and Content Builders ---
+
+        private void BuildSettingsPopoverContent() // Was BuildSettingsPopup
+        {
+            _settingsPopover.Clear(); // Clear previous content if rebuilding dynamically
+
+            // Title (optional)
+            _settingsPopover.Add(
+                new Label("Settings")
+                {
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Bold,
+                        marginBottom = 10,
+                        alignSelf = Align.Center,
+                    },
+                }
+            );
+
+            // Toggle
+            var prefsToggle = new Toggle("Persist State in Settings Asset:")
+            {
+                value = _settings.persistStateInSettingsAsset,
+                tooltip = "...",
+            };
+            prefsToggle.RegisterValueChangedCallback(evt =>
+            {
+                if (_settings != null)
+                {
+                    bool newModeIsSettingsAsset = evt.newValue;
+                    bool previousModeWasSettingsAsset = _settings.persistStateInSettingsAsset;
+                    if (previousModeWasSettingsAsset != newModeIsSettingsAsset)
+                    {
+                        _settings.persistStateInSettingsAsset = newModeIsSettingsAsset;
+                        Debug.Log(
+                            $"Persistence mode changed to: {(newModeIsSettingsAsset ? "Settings Asset" : "User File")}"
+                        );
+                        MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset);
+                        MarkSettingsDirty(); // Mark settings SO dirty (flag changed + maybe data)
+                        AssetDatabase.SaveAssets(); // Save SO
+                        if (!newModeIsSettingsAsset)
+                            SaveUserStateToFile(); // Save user file if migrating TO it
+                    }
+                }
+            });
+            _settingsPopover.Add(prefsToggle);
+
+            // Data Folder Row
+            var dataFolderContainer = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    marginTop = 10,
+                },
+            };
+            dataFolderContainer.Add(
+                new Label("Data Folder:") { style = { width = 80, flexShrink = 0 } }
+            );
+            var dataFolderPathDisplay = new TextField
+            {
+                value = _settings.DataFolderPath,
+                isReadOnly = true,
+                name = "data-folder-display",
+                style =
+                {
+                    flexGrow = 1,
+                    marginLeft = 5,
+                    marginRight = 5,
+                },
+            };
+            dataFolderContainer.Add(dataFolderPathDisplay);
+            var selectFolderButton = new Button(
+                () => SelectDataFolderForPopover(dataFolderPathDisplay)
+            )
+            {
+                text = "Select...",
+                style = { flexShrink = 0 },
+            }; // Call specific handler
+            dataFolderContainer.Add(selectFolderButton);
+            _settingsPopover.Add(dataFolderContainer);
+
+            // Close Button (optional, click outside closes)
+            var buttonContainer = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    justifyContent = Justify.FlexEnd,
+                    marginTop = 15,
+                },
+            };
+            var closeButton = new Button(CloseActivePopover) { text = "Close" }; // Generic close
+            buttonContainer.Add(closeButton);
+            _settingsPopover.Add(buttonContainer);
+        }
+
+        // SelectDataFolder logic needs to be back in DataVisualizer or passed context
+        // Place this method within your DataVisualizer class
+
+        /// <summary>
+        /// Handles the logic when the 'Select...' button for the Data Folder is clicked
+        /// within the settings popover.
+        /// </summary>
+        /// <param name="displayField">The TextField element from the popover used to display the path.</param>
+        private void SelectDataFolderForPopover(TextField displayField)
+        {
+            if (_settings == null)
+            {
+                Debug.LogError("Cannot select data folder: Settings object not loaded.");
+                return;
+            }
+            if (displayField == null)
+            {
+                Debug.LogError("Cannot select data folder: Display field reference is null.");
+                return;
+            }
+
+            // --- Determine Starting Directory ---
+            // Try to start in the currently configured folder, otherwise default to Assets root.
+            string currentRelativePath = _settings.DataFolderPath;
+            string projectRoot = Path.GetFullPath(Directory.GetCurrentDirectory())
+                .Replace('\\', '/'); // Normalize project root
+            string currentFullPath = "";
+            string startDir = Application.dataPath; // Default to Assets folder path
+
+            if (!string.IsNullOrEmpty(currentRelativePath))
+            {
+                try
+                {
+                    currentFullPath = Path.GetFullPath(
+                            Path.Combine(projectRoot, currentRelativePath)
+                        )
+                        .Replace('\\', '/');
+                    if (Directory.Exists(currentFullPath))
+                    {
+                        startDir = currentFullPath; // Use current path if valid
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning(
+                        $"Could not resolve current DataFolderPath '{currentRelativePath}': {ex.Message}. Starting selection in Assets."
+                    );
+                }
+            }
+
+            // --- Open Folder Panel ---
+            // Note: This is a native OS panel and will be truly modal, blocking Unity.
+            string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
+                title: "Select Data Folder (Must be inside Assets)",
+                folder: startDir,
+                defaultName: ""
+            ); // No default name needed for folder selection
+
+            // --- Process Selection ---
+            // Check if the user selected a folder (didn't cancel)
+            if (!string.IsNullOrEmpty(selectedAbsolutePath))
+            {
+                // Normalize path separators to forward slashes for consistency
+                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).Replace('\\', '/');
+
+                // --- Validate: Must be inside Assets folder ---
+                string projectAssetsPath = Path.GetFullPath(Application.dataPath)
+                    .Replace('\\', '/');
+
+                // Check if the selected path starts with the Assets path (case-insensitive)
+                if (
+                    !selectedAbsolutePath.StartsWith(
+                        projectAssetsPath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    Debug.LogError("Selected folder must be inside the project's Assets folder.");
+                    EditorUtility.DisplayDialog(
+                        "Invalid Folder",
+                        "The selected folder must be inside the project's 'Assets' directory.",
+                        "OK"
+                    );
+                    return; // Exit if invalid selection
+                }
+
+                // --- Convert to relative path starting with "Assets/" ---
+                string relativePath;
+                if (
+                    selectedAbsolutePath.Equals(
+                        projectAssetsPath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    // User selected the Assets folder itself
+                    relativePath = "Assets";
+                }
+                else
+                {
+                    // Construct relative path by taking the part after Assets/
+                    // Ensure it starts with "Assets/"
+                    relativePath =
+                        "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+                    // Clean up potential double slashes if substring started with one
+                    relativePath = relativePath.Replace("//", "/");
+                }
+
+                // --- Update Settings if Path Changed ---
+                if (_settings.DataFolderPath != relativePath)
+                {
+                    Debug.Log(
+                        $"Updating Data Folder from '{_settings.DataFolderPath}' to '{relativePath}'"
+                    );
+                    _settings._dataFolderPath = relativePath;
+
+                    // Mark the ScriptableObject dirty
+                    MarkSettingsDirty(); // This helper calls EditorUtility.SetDirty(_settings);
+
+                    // Save the asset database to persist the change to the .asset file
+                    AssetDatabase.SaveAssets();
+
+                    // Update the display field passed in from the popover UI
+                    if (displayField != null)
+                    { // Double-check field isn't null
+                        displayField.value = _settings.DataFolderPath;
+                    }
+                }
+                // else: Path didn't change, do nothing.
+            }
+            // else: User cancelled the folder panel.
+        }
+
+        // Rename
+        private void OpenRenamePopover(ScriptableObject dataObject) // Renamed to BaseDataObject for now
+        {
+            if (dataObject == null)
+                return;
+            string currentPath = AssetDatabase.GetAssetPath(dataObject);
+            if (string.IsNullOrEmpty(currentPath))
+                return;
+
+            BuildRenamePopoverContent(currentPath, dataObject.name); // Pass current path and name
+            // Find the rename button VE that triggered this (difficult from here)
+            // Need to get the button reference somehow, maybe store it in userData?
+            // Or just position relative to the object item row?
+            VisualElement triggerRow = _objectVisualElementMap.TryGetValue(dataObject, out var row)
+                ? row
+                : null;
+            if (triggerRow != null)
+            {
+                OpenPopover(_renamePopover, triggerRow, currentPath); // Pass path as context
+            }
+        }
+
+        private void BuildRenamePopoverContent(string originalPath, string originalName)
+        {
+            _renamePopover.Clear();
+            _renamePopover.userData = originalPath; // Store original path for confirm logic
+
+            _renamePopover.Add(
+                new Label("Enter new name (without extension):") { style = { marginBottom = 5 } }
+            );
+            var nameTextField = new TextField
+            {
+                value = Path.GetFileNameWithoutExtension(originalName),
+                name = "rename-textfield",
+                style = { marginBottom = 5 },
+            };
+            nameTextField.schedule.Execute(() => nameTextField.SelectAll()).ExecuteLater(50);
+            _renamePopover.Add(nameTextField);
+            var errorLabel = new Label
+            {
+                name = "error-label",
+                style =
+                {
+                    color = Color.red,
+                    height = 18,
+                    display = DisplayStyle.None,
+                },
+            };
+            _renamePopover.Add(errorLabel);
+            var buttonContainer = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    justifyContent = Justify.FlexEnd,
+                    marginTop = 5,
+                },
+            };
+            var cancelButton = new Button(CloseActivePopover)
+            {
+                text = "Cancel",
+                style = { marginRight = 5 },
+            };
+            var renameButton = new Button(() => HandleRenameConfirmed(nameTextField, errorLabel))
+            {
+                text = "Rename",
+            };
+            buttonContainer.Add(cancelButton);
+            buttonContainer.Add(renameButton);
+            _renamePopover.Add(buttonContainer);
+        }
+
+        private void HandleRenameConfirmed(TextField nameField, Label errorLabel)
+        {
+            errorLabel.style.display = DisplayStyle.None;
+            string originalPath = _popoverContext as string; // Get path from context
+            string newName = nameField.value;
+
+            if (
+                string.IsNullOrEmpty(originalPath)
+                || string.IsNullOrWhiteSpace(newName)
+                || newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            )
+            {
+                errorLabel.text = "Invalid name.";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+            if (
+                newName.Equals(
+                    Path.GetFileNameWithoutExtension(originalPath),
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                errorLabel.text = "Name is unchanged.";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            string directory = Path.GetDirectoryName(originalPath);
+            string newPath = Path.Combine(directory, newName + Path.GetExtension(originalPath))
+                .Replace('\\', '/');
+            string validationError = AssetDatabase.ValidateMoveAsset(originalPath, newPath);
+
+            if (!string.IsNullOrEmpty(validationError))
+            {
+                errorLabel.text = $"Invalid: {validationError}";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            string error = AssetDatabase.RenameAsset(originalPath, newName);
+            if (string.IsNullOrEmpty(error))
+            {
+                Debug.Log($"Asset renamed successfully to: {newName}");
+                // AssetDatabase.SaveAssets(); // RenameAsset often triggers save implicitly? Maybe needed.
+                CloseActivePopover(); // Close on success
+                ScheduleRefresh(); // Refresh main view
+            }
+            else
+            {
+                Debug.LogError($"Asset rename failed: {error}");
+                errorLabel.text = $"Failed: {error}";
+                errorLabel.style.display = DisplayStyle.Flex;
+            }
+        }
+
+        // Confirm Delete
+        private void OpenConfirmDeletePopover(ScriptableObject dataObject) // Renamed to BaseDataObject
+        {
+            if (dataObject == null)
+                return;
+            BuildConfirmDeletePopoverContent(dataObject);
+            VisualElement triggerRow = _objectVisualElementMap.GetValueOrDefault(dataObject);
+            if (triggerRow != null)
+            {
+                OpenPopover(_confirmDeletePopover, triggerRow, dataObject); // Pass object as context
+            }
+        }
+
+        private void BuildConfirmDeletePopoverContent(ScriptableObject objectToDelete)
+        {
+            _confirmDeletePopover.Clear();
+            _confirmDeletePopover.userData = objectToDelete; // Store object ref
+
+            _confirmDeletePopover.Add(
+                new Label($"Delete '{objectToDelete.name}'?\nThis cannot be undone.")
+                {
+                    style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
+                }
+            );
+            var buttonContainer = new VisualElement
+            {
+                style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
+            };
+            var cancelButton = new Button(CloseActivePopover)
+            {
+                text = "Cancel",
+                style = { marginRight = 5 },
+            };
+            var deleteButton = new Button(HandleDeleteConfirmed) { text = "Delete" };
+            deleteButton.AddToClassList("delete-button"); // Make it red
+            buttonContainer.Add(cancelButton);
+            buttonContainer.Add(deleteButton);
+            _confirmDeletePopover.Add(buttonContainer);
+        }
+
+        private void HandleDeleteConfirmed()
+        {
+            BaseDataObject objectToDelete = _popoverContext as BaseDataObject;
+            CloseActivePopover(); // Close popup first
+
+            if (objectToDelete == null)
+            {
+                Debug.LogError("Delete failed: context object lost.");
+                return;
+            }
+
+            string path = AssetDatabase.GetAssetPath(objectToDelete);
+            if (string.IsNullOrEmpty(path))
+            {
+                Debug.LogError($"Delete failed: path not found for {objectToDelete.name}");
+                return;
+            }
+
+            Debug.Log($"User confirmed deletion. Attempting delete: {path}");
+            bool removed = _selectedObjects.Remove(objectToDelete); // Use ScriptableObject list now
+            _objectVisualElementMap.Remove(objectToDelete, out var visualElement);
+            bool deleted = AssetDatabase.DeleteAsset(path);
+            if (deleted)
+            {
+                Debug.Log($"Asset '{path}' deleted successfully.");
+                AssetDatabase.Refresh();
+                visualElement?.RemoveFromHierarchy();
+                if (_selectedObject == objectToDelete)
+                    SelectObject(null);
+            }
+            else
+            {
+                Debug.LogError($"Failed delete: {path}");
+                ScheduleRefresh();
+            }
+        }
+
+        // --- Generic Toggle Helper ---
+        private void TogglePopover(VisualElement popover, VisualElement triggerElement)
+        {
+            if (_activePopover == popover && popover.style.display == DisplayStyle.Flex)
+            {
+                CloseActivePopover();
+            }
+            else
+            {
+                // Build content specifically for settings just before opening
+                if (popover == _settingsPopover)
+                    BuildSettingsPopoverContent();
+                // Rename and Delete content built in their OpenX methods
+                OpenPopover(popover, triggerElement);
+            }
         }
 
         private void HandleSettingsPopupClosed(bool previousModeWasSettingsAsset)
@@ -1343,34 +1956,34 @@
         }
 
         // Handler attached to ROOT to close popover on outside click
-        private void HandleClickOutsidePopover(PointerDownEvent evt)
-        {
-            if (!_isTypePopoverOpen || _typeAddPopover == null)
-                return;
-
-            // Check if the click target is the popover itself or one of its children
-            VisualElement target = evt.target as VisualElement;
-            bool clickInside = false;
-            while (target != null)
-            {
-                if (target == _typeAddPopover || target == _addTypeButton)
-                { // Allow clicking button again to close
-                    clickInside = true;
-                    break;
-                }
-                target = target.parent;
-            }
-
-            // If the click was outside, close the popover
-            if (!clickInside)
-            {
-                // Debug.Log("Clicked outside popover.");
-                CloseAddTypePopover();
-                // Important: Stop propagation so the outside click doesn't trigger something else unintentionally
-                evt.StopPropagation();
-            }
-            // If click was inside, do nothing here, let the item click handler work.
-        }
+        // private void HandleClickOutsidePopover(PointerDownEvent evt)
+        // {
+        //     if (!_isTypePopoverOpen || _typeAddPopover == null)
+        //         return;
+        //
+        //     // Check if the click target is the popover itself or one of its children
+        //     VisualElement target = evt.target as VisualElement;
+        //     bool clickInside = false;
+        //     while (target != null)
+        //     {
+        //         if (target == _typeAddPopover || target == _addTypeButton)
+        //         { // Allow clicking button again to close
+        //             clickInside = true;
+        //             break;
+        //         }
+        //         target = target.parent;
+        //     }
+        //
+        //     // If the click was outside, close the popover
+        //     if (!clickInside)
+        //     {
+        //         // Debug.Log("Clicked outside popover.");
+        //         CloseAddTypePopover();
+        //         // Important: Stop propagation so the outside click doesn't trigger something else unintentionally
+        //         evt.StopPropagation();
+        //     }
+        //     // If click was inside, do nothing here, let the item click handler work.
+        // }
 
         private void HandleTypeSelectionFromPopover(PointerDownEvent evt, Type selectedType)
         {
@@ -1734,12 +2347,11 @@
                             return;
                         }
 
-                        _selectedTypeElement?.parent?.parent?.RemoveFromClassList("selected");
+                        _selectedTypeElement?.parent?.RemoveFromClassList("selected");
                         _selectedTypeElement?.RemoveFromClassList("selected");
                         _selectedType = clickedType;
                         _selectedTypeElement = typeItem;
                         _selectedTypeElement.AddToClassList("selected");
-                        _selectedTypeElement.parent?.parent?.AddToClassList("selected");
                         SaveNamespaceAndTypeSelectionState(
                             GetNamespaceKey(_selectedType),
                             _selectedType.Name
@@ -1839,13 +2451,16 @@
                 cloneButton.AddToClassList("clickable");
                 actionsArea.Add(cloneButton);
 
-                Button renameButton = new(() => OpenRenamePopup(dataObject)) { text = "✎" };
+                Button renameButton = new(() => OpenRenamePopover(dataObject)) { text = "✎" };
                 renameButton.AddToClassList(ActionButtonClass);
                 renameButton.AddToClassList("rename-button");
                 renameButton.AddToClassList("clickable");
                 actionsArea.Add(renameButton);
 
-                Button deleteButton = new(() => DeleteObject(dataObject)) { text = "X" };
+                Button deleteButton = new(() => OpenConfirmDeletePopover(dataObject))
+                {
+                    text = "X",
+                };
                 deleteButton.AddToClassList(ActionButtonClass);
                 deleteButton.AddToClassList("delete-button");
                 deleteButton.AddToClassList("clickable");
