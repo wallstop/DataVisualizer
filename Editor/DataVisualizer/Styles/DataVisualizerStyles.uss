@@ -1,5 +1,4 @@
 ﻿.object-item {
-
     padding: 4px 8px;
     margin: 2px 0;
     border-width: 1px;
@@ -9,20 +8,18 @@
 }
 
 .object-item__label {
-    /* Core properties */
-    flex-grow: 1; /* Allow label to take available space */
-    flex-shrink: 1; /* Allow label to shrink if needed */
-    min-width: 0; /* Crucial for flexbox to allow shrinking below content size */
-
-    /* Text Overflow Handling */
-    white-space: nowrap; /* Prevent text from wrapping to the next line */
-    overflow: hidden; /* Hide text that exceeds the element bounds */
-    text-overflow: ellipsis; /* Display '...' for hidden text */
-    margin-right: 5px; /* Add some space between label and action buttons */
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 5px;
+    height: 20px;
 }
 
 .clickable:hover {
-    cursor: link; /* Indicate clickable */
+    cursor: link;
 }
 
 .object-item:hover {
@@ -70,7 +67,7 @@
 }
 
 .type-item__label {
-    font-size: 11px;
+
 }
 
 .type-item.selected {
@@ -101,29 +98,30 @@
 .namespace-header {
     flex-direction: row;
     align-items: center;
+    padding-bottom: 4px;
+    /*padding-top: 4px;*/
+    padding-left: 2px;
+    padding-right: 2px;
 }
 
 .namespace-indicator {
     width: 16px;
-    margin-right: 3px;
     font-size: 10px;
+    margin-right: 4px;
     -unity-font-style: bold;
     flex-shrink: 0;
 }
 
-.object-item { /* The main row VE */
+.object-item {
     min-width: 0;
-    overflow: hidden; /* Hide overflow at the row level too */
+    overflow: hidden;
 }
 
-.object-item-content { /* The VE wrapping the label */
+.object-item-content {
     flex-grow: 1;
     flex-shrink: 1;
-    min-width: 0; /* Allow this container to shrink */
-    /* Add overflow hidden here too as a fallback */
+    min-width: 0;
     overflow: hidden;
-    /* Align label vertically if needed */
-    /* align-items: center; */
 }
 
 .object-item-actions {
@@ -133,23 +131,43 @@
 .action-button {
     padding: 0;
     min-width: 0;
-    font-size: 12px;
     background-color: transparent;
-    border-width: 0;
-}
-
-.action-button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.delete-button {
-    color: rgb(217, 83, 79) !important;
+    border-color: rgba(128, 128, 128, 128);
+    border-radius: 5px;
+    border-width: 1px;
     -unity-font-style: bold;
 }
 
-.delete-button:hover {
-    color: rgb(200, 60, 56) !important;
-    background-color: rgba(217, 83, 79, 0.1);
+.action-button:hover {
+    background-color: rgba(0, 0, 0, 0.6);
+    border-color: rgba(0, 0, 0, 0.6);
+}
+
+.create-button {
+    -unity-font-style: bold;
+    color: black;
+    background-color: rgb(0, 204, 0);
+    width: 20px;
+    height: 20px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-bottom: 2px;
+}
+
+.delete-button {
+    padding: 1px 4px;
+    color: rgb(230, 102, 102);
+}
+
+.clone-button {
+    color: rgb(102, 179, 102);
+    padding-bottom: 2px;
+}
+
+.rename-button {
+    padding: 2px;
+    padding-bottom: 3px;
+    color: rgb(51, 153, 230);
 }
 
 .namespace-group-item--empty {
@@ -161,18 +179,15 @@
     white-space: normal;
     margin-top: 20px;
     padding: 5px;
-    font-size: 11px;
 }
 
 .type-selection-list-item {
-    margin-left: 15px; /* Indent type under namespace */
+    margin-left: 15px;
     margin-top: 1px;
     margin-bottom: 1px;
-    /* Remove default button padding/border for list look */
     padding: 2px 5px;
     border-width: 0;
     background-color: transparent;
-    font-size: 12px;
 }
 
 .type-selection-list-item:hover {
@@ -184,37 +199,38 @@
 }
 
 .type-selection-list-namespace {
-    /* Style for namespace headers */
     margin-top: 8px;
     margin-left: 5px;
     margin-bottom: 2px;
-    font-size: 11px;
-    color: grey;
     -unity-font-style: bold;
 }
 
+.type-selection-list-namespace--not-empty {
+    color: white;
+    width: 12px;
+}
 
+.type-selection-list-namespace--empty {
+    color: grey;
+    width: 12px;
+}
 
 .unity-text-field__placeholder > .unity-base-text-field__input {
     color: #969696
 }
 
-.popover-namespace-header { /* Style for the clickable header */
+.popover-namespace-header {
     flex-direction: row;
     align-items: center;
     padding: 2px;
-    font-size: 11px;
-    color: grey;
     -unity-font-style: bold;
     background-color: transparent;
     border-width: 0;
 }
 
-.popover-namespace-indicator { /* Style for the arrow */
-    /*
-               indicator.style.width = 16;
-                    indicator.style.marginRight = 3;
-                    indicator.style.unityFontStyleAndWeight = FontStyle.Bold;
-     */
-    width: 12px;
+.popover-namespace-indicator {
+    padding-top: 6px;
+    font-size: 10px;
 }
+
+

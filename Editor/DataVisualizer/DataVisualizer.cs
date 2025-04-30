@@ -20,7 +20,6 @@
     using UnityEngine;
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer;
-    using Object = UnityEngine.Object;
 
     public sealed class DataVisualizer : EditorWindow
     {
@@ -798,9 +797,10 @@
             BuildInspectorView();
         }
 
-        private void TryLoadStyleSheet(VisualElement root)
+        private static void TryLoadStyleSheet(VisualElement root)
         {
             StyleSheet styleSheet = null;
+            Font font = null;
             string packageRoot = DirectoryHelper.FindPackageRootPath(
                 DirectoryHelper.GetCallerScriptDirectory()
             );
@@ -846,6 +846,16 @@
                         $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
                     );
                 }
+
+                string fontPath =
+                    $"{packageRoot}{pathSeparator}Editor{pathSeparator}Fonts{pathSeparator}IBMPlexMono-Regular.ttf";
+                string unityRelativeFontPath = DirectoryHelper.AbsoluteToUnityRelativePath(
+                    fontPath
+                );
+                if (!string.IsNullOrWhiteSpace(unityRelativeFontPath))
+                {
+                    font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
+                }
             }
             else
             {
@@ -863,6 +873,19 @@
                     $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
                 );
             }
+
+            if (font != null)
+            {
+                root.style.unityFontDefinition = new StyleFontDefinition(font);
+            }
+            else
+            {
+                Debug.LogError(
+                    $"Failed to find Data Visualizer font (package root: '{packageRoot}')."
+                );
+            }
+
+            root.style.fontSize = 14;
         }
 
         private void HandleSettingsPopupClosed(bool previousModeWasSettingsAsset)
@@ -940,14 +963,8 @@
             {
                 text = "+",
                 tooltip = "Manage Visible Types",
-                style =
-                {
-                    width = 20,
-                    height = 20,
-                    paddingLeft = 0,
-                    paddingRight = 0,
-                },
             };
+            _addTypeButton.AddToClassList("create-button");
             _addTypeButton.AddToClassList("icon-button");
             _addTypeButton.AddToClassList("clickable");
             nsHeader.Add(_addTypeButton);
@@ -1160,6 +1177,7 @@
 
                     if (typesToShowInGroup.Count > 1)
                     {
+                        nsLabel.AddToClassList("type-selection-list-namespace--not-empty"); // Apply base style
                         nsLabel.AddToClassList("clickable"); // Add a class for potential hover styles
                         nsLabel.RegisterCallback<MouseEnterEvent>(evt =>
                             nsLabel.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f)
@@ -1244,6 +1262,10 @@
                                 evt.StopPropagation(); // Stop this click from closing the popover immediately
                             }
                         }); // End Namespace Label Click Handler
+                    }
+                    else
+                    {
+                        nsLabel.AddToClassList("type-selection-list-namespace--empty"); // Apply base style
                     }
 
                     header.Add(indicator);
@@ -1443,18 +1465,8 @@
                 text = "+",
                 tooltip = "Create New Object",
                 name = "create-object-button",
-                style =
-                {
-                    unityFontStyleAndWeight = FontStyle.Bold,
-                    color = Color.black,
-                    backgroundColor = new Color(0f, 0.8f, 0f),
-                    width = 20,
-                    height = 20,
-                    paddingLeft = 0,
-                    paddingRight = 0,
-                    marginBottom = 2,
-                },
             };
+            createButton.AddToClassList("create-button");
             createButton.AddToClassList("icon-button");
             createButton.AddToClassList("clickable");
             objectHeader.Add(createButton);
@@ -1846,38 +1858,22 @@
                 {
                     text = "++",
                     tooltip = "Clone Object",
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        color = new Color(0.4f, 0.7f, 0.4f),
-                    },
                 };
                 cloneButton.AddToClassList(ActionButtonClass);
+                cloneButton.AddToClassList("clone-button");
+                cloneButton.AddToClassList("clickable");
                 actionsArea.Add(cloneButton);
 
-                Button renameButton = new(() => OpenRenamePopup(dataObject))
-                {
-                    text = "✎",
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        color = new Color(0.2f, 0.6f, 0.9f),
-                    },
-                };
+                Button renameButton = new(() => OpenRenamePopup(dataObject)) { text = "✎" };
                 renameButton.AddToClassList(ActionButtonClass);
+                renameButton.AddToClassList("rename-button");
+                renameButton.AddToClassList("clickable");
                 actionsArea.Add(renameButton);
 
-                Button deleteButton = new(() => DeleteObject(dataObject))
-                {
-                    text = "X",
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        color = new Color(0.9f, 0.4f, 0.4f),
-                    },
-                };
+                Button deleteButton = new(() => DeleteObject(dataObject)) { text = "X" };
                 deleteButton.AddToClassList(ActionButtonClass);
                 deleteButton.AddToClassList("delete-button");
+                deleteButton.AddToClassList("clickable");
                 actionsArea.Add(deleteButton);
 
                 _objectVisualElementMap[dataObject] = objectItemRow;
