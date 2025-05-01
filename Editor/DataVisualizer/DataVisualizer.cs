@@ -53,6 +53,7 @@
         private const string PopoverNamespaceIndicatorClassName = "popover-namespace-indicator";
         private const string SearchResultItemClass = "search-result-item";
         private const string SearchResultHighlightClass = "search-result-item--highlighted";
+        private const string PopoverHighlightClass = "popover-item--highlighted";
 
         private const string ArrowCollapsed = "►";
         private const string ArrowExpanded = "▼";
@@ -79,11 +80,14 @@
         private readonly List<ScriptableObject> _allManagedSOsCache = new();
         private readonly Dictionary<Type, VisualElement> _namespaceCache = new();
         private readonly List<VisualElement> _currentSearchResultItems = new();
+        private readonly List<VisualElement> _currentTypePopoverItems = new();
 
         private ScriptableObject _selectedObject;
         private VisualElement _selectedElement;
 
         private int _searchHighlightIndex = -1;
+        private int _typePopoverHighlightIndex = -1;
+        private string _lastTypeAddSearchTerm;
 
         private VisualElement _namespaceListContainer;
         private VisualElement _objectListContainer;
@@ -113,7 +117,6 @@
         private Button _addTypeButton;
         private TextField _typeSearchField;
         private VisualElement _typePopoverListContainer;
-        private bool _isTypePopoverOpen;
 
         private float _lastSavedOuterWidth = -1f;
         private float _lastSavedInnerWidth = -1f;
@@ -140,6 +143,8 @@
         private List<Type> _relevantScriptableObjectTypes;
 
         private DataVisualizerSettings _settings;
+
+        private float? _lastAddTypeClicked;
 
         private Label _dataFolderPathDisplay;
 #if ODIN_INSPECTOR
@@ -202,8 +207,10 @@
         private void Cleanup()
         {
             _allManagedSOsCache.Clear();
+            _currentSearchResultItems.Clear();
+            _currentTypePopoverItems.Clear();
             _isSearchCachePopulated = false;
-            CloseAddTypePopover();
+            CloseActivePopover();
             CancelDrag();
             _saveWidthsTask?.Pause();
             if (!_settings.persistStateInSettingsAsset && _userStateDirty)
@@ -868,6 +875,7 @@
             };
             _typeSearchField.SetPlaceholderText("Search...");
             _typeSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue));
+            _typeSearchField.RegisterCallback<KeyDownEvent>(HandleTypePopoverKeyDown);
             _typeAddPopover.Add(_typeSearchField);
 
             ScrollView typePopoverScrollView = new(ScrollViewMode.Vertical)
@@ -1655,7 +1663,6 @@
                     popover.style.left = localPos.x;
                     popover.style.top = localPos.y + triggerBounds.height + 2;
                     popover.style.display = DisplayStyle.Flex;
-                    _isTypePopoverOpen = popover == _typeAddPopover;
 
                     if (!isNested)
                     {
@@ -1684,9 +1691,14 @@
                 _searchHighlightIndex = -1;
                 _lastSearchString = null;
             }
+            else if (_activePopover == _typeAddPopover)
+            {
+                _currentTypePopoverItems.Clear();
+                _typePopoverHighlightIndex = -1;
+                _typeSearchField?.SetValueWithoutNotify("");
+            }
 
             CloseNestedPopover();
-            CloseAddTypePopover();
 
             if (_activePopover == null)
             {
@@ -1698,10 +1710,6 @@
                 HandleClickOutsidePopover,
                 TrickleDown.TrickleDown
             );
-            if (_activePopover == _typeAddPopover)
-            {
-                _isTypePopoverOpen = false;
-            }
 
             _activePopover = null;
             _popoverContext = null;
@@ -1710,6 +1718,11 @@
         private void HandleClickOutsidePopover(PointerDownEvent evt)
         {
             VisualElement target = evt.target as VisualElement;
+            if (target == _addTypeButton)
+            {
+                _lastAddTypeClicked = Time.realtimeSinceStartup;
+            }
+
             bool clickInsideNested = false;
             bool clickInsideMain = false;
 
@@ -2195,6 +2208,10 @@
                 }
                 else if (popover == _typeAddPopover)
                 {
+                    if (Time.realtimeSinceStartup <= _lastAddTypeClicked + 0.5f)
+                    {
+                        return;
+                    }
                     BuildTypeAddList();
                 }
 
@@ -2223,7 +2240,10 @@
                 }
             );
             nsHeader.AddToClassList(NamespaceGroupHeaderClass);
-            _addTypeButton = new Button(ToggleAddTypePopover)
+            _addTypeButton = new Button(() =>
+            {
+                TogglePopover(_typeAddPopover, _addTypeButton);
+            })
             {
                 text = "+",
                 tooltip = "Manage Visible Types",
@@ -2245,311 +2265,447 @@
             return namespaceColumn;
         }
 
-        private void ToggleAddTypePopover()
-        {
-            if (_isTypePopoverOpen)
-            {
-                CloseAddTypePopover();
-            }
-            else
-            {
-                OpenAddTypePopover();
-            }
-        }
-
-        private void OpenAddTypePopover()
-        {
-            if (
-                _isTypePopoverOpen
-                || _typeAddPopover == null
-                || _addTypeButton == null
-                || _settings == null
-            )
-            {
-                return;
-            }
-
-            BuildTypeAddList();
-
-            _addTypeButton
-                .schedule.Execute(() =>
-                {
-                    if (_addTypeButton == null || _typeAddPopover == null)
-                    {
-                        return;
-                    }
-
-                    Vector2 buttonPos = _addTypeButton.worldBound.position;
-                    Vector2 buttonSize = _addTypeButton.worldBound.size;
-                    Vector2 localPos = rootVisualElement.WorldToLocal(buttonPos);
-
-                    _typeAddPopover.style.left = localPos.x;
-                    _typeAddPopover.style.top = localPos.y + buttonSize.y + 2;
-
-                    float maxWidth = rootVisualElement.resolvedStyle.width - localPos.x - 10;
-                    _typeAddPopover.style.maxWidth = Mathf.Max(100, maxWidth);
-                    float maxHeight =
-                        rootVisualElement.resolvedStyle.height
-                        - (localPos.y + buttonSize.y + 2)
-                        - 10;
-                    _typeAddPopover.style.maxHeight = Mathf.Max(100, maxHeight);
-
-                    _typeAddPopover.style.display = DisplayStyle.Flex;
-                    _isTypePopoverOpen = true;
-
-                    rootVisualElement.RegisterCallback<PointerDownEvent>(
-                        HandleClickOutsidePopover,
-                        TrickleDown.TrickleDown
-                    );
-                })
-                .ExecuteLater(1);
-
-            _typeAddPopover.style.display = DisplayStyle.Flex;
-            _isTypePopoverOpen = true;
-            rootVisualElement.RegisterCallback<PointerDownEvent>(
-                HandleClickOutsidePopover,
-                TrickleDown.TrickleDown
-            );
-        }
-
         private void BuildTypeAddList(string filter = null)
         {
             if (string.Equals("Search...", filter, StringComparison.Ordinal))
             {
                 filter = null;
             }
-            if (_typePopoverListContainer == null)
+
+            if (_lastTypeAddSearchTerm == filter)
             {
                 return;
             }
 
-            _typePopoverListContainer.Clear();
-
-            List<string> searchTerms = string.IsNullOrWhiteSpace(filter)
-                ? new List<string>()
-                : filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-            bool isFiltering = searchTerms.Count > 0;
-
-            List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
-            List<string> managedTypeFullNames = GetManagedTypeNames();
-            HashSet<string> managedSet = new(managedTypeFullNames);
-
-            IOrderedEnumerable<IGrouping<string, Type>> groupedTypes = allObjectTypes
-                .GroupBy(GetNamespaceKey)
-                .OrderBy(grouping => grouping.Key);
-
-            bool foundMatches = false;
-            foreach (IGrouping<string, Type> group in groupedTypes)
+            try
             {
-                string namespaceKey = group.Key;
-                List<Type> addableTypes = new();
-                List<VisualElement> typesToShowInGroup = new();
+                _currentTypePopoverItems.Clear();
+                _typePopoverHighlightIndex = -1;
 
-                bool namespaceMatchesAll =
-                    isFiltering
-                    && searchTerms.All(term =>
-                        namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
-                    );
-
-                foreach (Type type in group.OrderBy(t => t.Name))
+                if (_typePopoverListContainer == null)
                 {
-                    string typeName = type.Name;
-                    bool typeMatchesSearch =
-                        !isFiltering
-                        || namespaceMatchesAll
-                        || searchTerms.All(term =>
-                            typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                            || namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
-                        );
-
-                    if (!typeMatchesSearch)
-                    {
-                        continue;
-                    }
-
-                    bool isManaged = managedSet.Contains(type.FullName);
-                    Label typeLabel = CreateHighlightedLabel(
-                        $"  {type.Name}",
-                        searchTerms,
-                        PopoverListItemClassName
-                    );
-                    typeLabel.style.paddingTop = 1;
-                    typeLabel.style.paddingBottom = 1;
-                    typeLabel.style.marginLeft = 10;
-                    typeLabel.AddToClassList(PopoverListItemClassName);
-
-                    if (isManaged)
-                    {
-                        typeLabel.SetEnabled(false);
-                        typeLabel.AddToClassList(PopoverListItemDisabledClassName);
-                    }
-                    else
-                    {
-                        typeLabel.RegisterCallback<PointerDownEvent, Type>(
-                            HandleTypeSelectionFromPopover,
-                            type
-                        );
-                        typeLabel.RegisterCallback<MouseEnterEvent, Label>(
-                            (_, context) =>
-                                context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
-                            typeLabel
-                        );
-                        typeLabel.RegisterCallback<MouseLeaveEvent, Label>(
-                            (_, context) => context.style.backgroundColor = Color.clear,
-                            typeLabel
-                        );
-                    }
-
-                    addableTypes.Add(type);
-                    typesToShowInGroup.Add(typeLabel);
+                    return;
                 }
 
-                if (typesToShowInGroup.Count > 0)
+                _typePopoverListContainer.Clear();
+
+                List<string> searchTerms = string.IsNullOrWhiteSpace(filter)
+                    ? new List<string>()
+                    : filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                bool isFiltering = searchTerms.Count > 0;
+
+                List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
+                List<string> managedTypeFullNames = GetManagedTypeNames();
+                HashSet<string> managedSet = new(managedTypeFullNames);
+
+                IOrderedEnumerable<IGrouping<string, Type>> groupedTypes = allObjectTypes
+                    .GroupBy(GetNamespaceKey)
+                    .OrderBy(grouping => grouping.Key);
+
+                bool foundMatches = false;
+                foreach (IGrouping<string, Type> group in groupedTypes)
                 {
-                    foundMatches = true;
+                    string namespaceKey = group.Key;
+                    List<Type> addableTypes = new();
+                    List<VisualElement> typesToShowInGroup = new();
 
-                    VisualElement namespaceGroupContainer = new()
-                    {
-                        name = $"ns-group-container-{group.Key}",
-                    };
-                    VisualElement header = new() { name = $"ns-header-{group.Key}" };
-                    header.AddToClassList(PopoverNamespaceHeaderClassName);
-
-                    bool startCollapsed = !isFiltering;
-                    Label indicator = new(startCollapsed ? ArrowCollapsed : ArrowExpanded)
-                    {
-                        name = $"ns-indicator-{group.Key}",
-                    };
-                    indicator.AddToClassList(PopoverNamespaceIndicatorClassName);
-                    indicator.AddToClassList("clickable");
-
-                    Label namespaceLabel = CreateHighlightedLabel(
-                        group.Key,
-                        searchTerms,
-                        PopoverListNamespaceClassName
-                    );
-                    namespaceLabel.AddToClassList(PopoverListNamespaceClassName);
-                    namespaceLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-                    namespaceLabel.style.flexGrow = 1;
-
-                    var clickContext = new
-                    {
-                        NamespaceKey = group.Key,
-                        AddableTypes = addableTypes,
-                    };
-
-                    if (typesToShowInGroup.Count > 1)
-                    {
-                        namespaceLabel.AddToClassList("type-selection-list-namespace--not-empty");
-                        namespaceLabel.AddToClassList("clickable");
-                        namespaceLabel.RegisterCallback<MouseEnterEvent, Label>(
-                            (_, context) =>
-                                context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
-                            namespaceLabel
+                    bool namespaceMatchesAll =
+                        isFiltering
+                        && searchTerms.All(term =>
+                            namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
                         );
-                        namespaceLabel.RegisterCallback<MouseLeaveEvent, Label>(
-                            (_, context) => context.style.backgroundColor = Color.clear,
-                            namespaceLabel
+
+                    foreach (Type type in group.OrderBy(t => t.Name))
+                    {
+                        string typeName = type.Name;
+                        bool typeMatchesSearch =
+                            !isFiltering
+                            || namespaceMatchesAll
+                            || searchTerms.All(term =>
+                                typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                                || namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
+                            );
+
+                        if (!typeMatchesSearch)
+                        {
+                            continue;
+                        }
+
+                        bool isManaged = managedSet.Contains(type.FullName);
+                        Label typeLabel = CreateHighlightedLabel(
+                            $"  {type.Name}",
+                            searchTerms,
+                            PopoverListItemClassName
                         );
+                        typeLabel.style.paddingTop = 1;
+                        typeLabel.style.paddingBottom = 1;
+                        typeLabel.style.marginLeft = 10;
+                        typeLabel.AddToClassList(PopoverListItemClassName);
+
+                        if (isManaged)
+                        {
+                            typeLabel.SetEnabled(false);
+                            typeLabel.AddToClassList(PopoverListItemDisabledClassName);
+                        }
+                        else
+                        {
+                            typeLabel.RegisterCallback<PointerDownEvent, Type>(
+                                HandleTypeSelectionFromPopover,
+                                type
+                            );
+                            typeLabel.RegisterCallback<MouseEnterEvent, Label>(
+                                (_, context) =>
+                                    context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
+                                typeLabel
+                            );
+                            typeLabel.RegisterCallback<MouseLeaveEvent, Label>(
+                                (_, context) => context.style.backgroundColor = Color.clear,
+                                typeLabel
+                            );
+                        }
+
+                        addableTypes.Add(type);
+                        typesToShowInGroup.Add(typeLabel);
+                    }
+
+                    if (typesToShowInGroup.Count > 0)
+                    {
+                        foundMatches = true;
+
+                        VisualElement namespaceGroupContainer = new()
+                        {
+                            name = $"ns-group-container-{group.Key}",
+                        };
+                        VisualElement header = new() { name = $"ns-header-{group.Key}" };
+                        header.AddToClassList(PopoverNamespaceHeaderClassName);
+
+                        bool startCollapsed = !isFiltering;
+                        Label indicator = new(startCollapsed ? ArrowCollapsed : ArrowExpanded)
+                        {
+                            name = $"ns-indicator-{group.Key}",
+                        };
+                        indicator.AddToClassList(PopoverNamespaceIndicatorClassName);
+                        indicator.AddToClassList("clickable");
+
+                        Label namespaceLabel = CreateHighlightedLabel(
+                            group.Key,
+                            searchTerms,
+                            PopoverListNamespaceClassName
+                        );
+                        namespaceLabel.AddToClassList(PopoverListNamespaceClassName);
+                        namespaceLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+                        namespaceLabel.style.flexGrow = 1;
+
+                        Dictionary<string, object> clickContext = new()
+                        {
+                            ["NamespaceKey"] = group.Key,
+                            ["AddableTypes"] = addableTypes,
+                            ["ExpandNamespace"] = (Action<PointerDownEvent>)ExpandNamespace,
+                        };
+                        header.userData = clickContext;
+
+                        if (typesToShowInGroup.Count > 1)
+                        {
+                            namespaceLabel.AddToClassList(
+                                "type-selection-list-namespace--not-empty"
+                            );
+                            namespaceLabel.AddToClassList("clickable");
+                            namespaceLabel.RegisterCallback<MouseEnterEvent, Label>(
+                                (_, context) =>
+                                    context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
+                                namespaceLabel
+                            );
+                            namespaceLabel.RegisterCallback<MouseLeaveEvent, Label>(
+                                (_, context) => context.style.backgroundColor = Color.clear,
+                                namespaceLabel
+                            );
+
+                            // ReSharper disable once HeapView.CanAvoidClosure
+                            namespaceLabel.RegisterCallback<PointerDownEvent>(evt =>
+                            {
+                                if (evt.button != 0)
+                                {
+                                    return;
+                                }
+
+                                string clickedNamespace = clickContext["NamespaceKey"] as string;
+                                List<Type> typesToAdd = clickContext["AddableTypes"] as List<Type>;
+                                ;
+                                int countToAdd = typesToAdd?.Count ?? 0;
+
+                                if (countToAdd == 0)
+                                {
+                                    return;
+                                }
+
+                                BuildConfirmNamespaceAddPopoverContent(
+                                    clickedNamespace,
+                                    typesToAdd
+                                );
+                                OpenPopover(
+                                    _confirmNamespaceAddPopover,
+                                    namespaceLabel,
+                                    isNested: true
+                                );
+                                evt.StopPropagation();
+                            });
+                        }
+                        else
+                        {
+                            namespaceLabel.AddToClassList("type-selection-list-namespace--empty");
+                        }
+
+                        header.Add(indicator);
+                        header.Add(namespaceLabel);
+
+                        VisualElement typesSubContainer = new()
+                        {
+                            name = $"types-subcontainer-{group.Key}",
+                            style =
+                            {
+                                marginLeft = 15,
+                                display = startCollapsed ? DisplayStyle.None : DisplayStyle.Flex,
+                            },
+                        };
+
+                        foreach (VisualElement typeVisualElement in typesToShowInGroup)
+                        {
+                            typesSubContainer.Add(typeVisualElement);
+                        }
+
+                        namespaceGroupContainer.Add(header);
+                        namespaceGroupContainer.Add(typesSubContainer);
 
                         // ReSharper disable once HeapView.CanAvoidClosure
-                        namespaceLabel.RegisterCallback<PointerDownEvent>(evt =>
+                        indicator.RegisterCallback<PointerDownEvent>(ExpandNamespace);
+
+                        void ExpandNamespace(PointerDownEvent evt)
                         {
-                            if (evt.button != 0)
+                            if (evt != null && evt.button != 0)
                             {
                                 return;
                             }
 
-                            string clickedNamespace = clickContext.NamespaceKey;
-                            List<Type> typesToAdd = clickContext.AddableTypes;
-                            int countToAdd = typesToAdd.Count;
-
-                            if (countToAdd == 0)
-                            {
-                                return;
-                            }
-
-                            BuildConfirmNamespaceAddPopoverContent(clickedNamespace, typesToAdd);
-                            OpenPopover(
-                                _confirmNamespaceAddPopover,
-                                namespaceLabel,
-                                isNested: true
+                            Label currentIndicator = header.Q<Label>(
+                                className: PopoverNamespaceIndicatorClassName
                             );
-                            evt.StopPropagation();
-                        });
-                    }
-                    else
-                    {
-                        namespaceLabel.AddToClassList("type-selection-list-namespace--empty");
-                    }
+                            VisualElement currentTypesContainer = header.parent.Q<VisualElement>(
+                                $"types-subcontainer-{group.Key}"
+                            );
+                            if (currentIndicator != null && currentTypesContainer != null)
+                            {
+                                bool nowCollapsed =
+                                    currentTypesContainer.style.display == DisplayStyle.None;
+                                currentTypesContainer.style.display = nowCollapsed
+                                    ? DisplayStyle.Flex
+                                    : DisplayStyle.None;
+                                currentIndicator.text = nowCollapsed
+                                    ? ArrowExpanded
+                                    : ArrowCollapsed;
+                            }
 
-                    header.Add(indicator);
-                    header.Add(namespaceLabel);
-
-                    VisualElement typesSubContainer = new()
-                    {
-                        name = $"types-subcontainer-{group.Key}",
-                        style =
-                        {
-                            marginLeft = 15,
-                            display = startCollapsed ? DisplayStyle.None : DisplayStyle.Flex,
-                        },
-                    };
-
-                    foreach (VisualElement typeVisualElement in typesToShowInGroup)
-                    {
-                        typesSubContainer.Add(typeVisualElement);
-                    }
-
-                    namespaceGroupContainer.Add(header);
-                    namespaceGroupContainer.Add(typesSubContainer);
-
-                    // ReSharper disable once HeapView.CanAvoidClosure
-                    indicator.RegisterCallback<PointerDownEvent>(evt =>
-                    {
-                        if (evt.button != 0)
-                        {
-                            return;
+                            evt?.StopPropagation();
                         }
 
-                        Label currentIndicator = header.Q<Label>(
-                            className: PopoverNamespaceIndicatorClassName
-                        );
-                        VisualElement currentTypesContainer = header.parent.Q<VisualElement>(
-                            $"types-subcontainer-{group.Key}"
-                        );
-                        if (currentIndicator != null && currentTypesContainer != null)
+                        _currentTypePopoverItems.Add(header);
+                        _typePopoverListContainer.Add(namespaceGroupContainer);
+                    }
+                }
+
+                if (isFiltering && !foundMatches)
+                {
+                    _typePopoverListContainer.Add(
+                        new Label("No matching types found.")
                         {
-                            bool nowCollapsed =
-                                currentTypesContainer.style.display == DisplayStyle.None;
-                            currentTypesContainer.style.display = nowCollapsed
-                                ? DisplayStyle.Flex
-                                : DisplayStyle.None;
-                            currentIndicator.text = nowCollapsed ? ArrowExpanded : ArrowCollapsed;
+                            style =
+                            {
+                                color = Color.grey,
+                                paddingBottom = 10,
+                                paddingTop = 10,
+                                paddingLeft = 10,
+                                paddingRight = 10,
+                                unityTextAlign = TextAnchor.MiddleCenter,
+                            },
                         }
+                    );
+                }
+            }
+            finally
+            {
+                _lastTypeAddSearchTerm = filter;
+            }
+        }
+
+        private void HandleTypePopoverKeyDown(KeyDownEvent evt)
+        {
+            if (
+                _activePopover != _typeAddPopover
+                || _typeAddPopover.style.display == DisplayStyle.None
+                || _currentTypePopoverItems.Count == 0
+            )
+            {
+                return;
+            }
+
+            bool highlightChanged = false;
+
+            switch (evt.keyCode)
+            {
+                case KeyCode.DownArrow:
+                {
+                    _typePopoverHighlightIndex++;
+                    if (_typePopoverHighlightIndex >= _currentTypePopoverItems.Count)
+                    {
+                        _typePopoverHighlightIndex = 0;
+                    }
+
+                    highlightChanged = true;
+                    break;
+                }
+                case KeyCode.UpArrow:
+                {
+                    _typePopoverHighlightIndex--;
+                    if (_typePopoverHighlightIndex < 0)
+                    {
+                        _typePopoverHighlightIndex = _currentTypePopoverItems.Count - 1;
+                    }
+
+                    highlightChanged = true;
+                    break;
+                }
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                {
+                    if (
+                        _typePopoverHighlightIndex >= 0
+                        && _typePopoverHighlightIndex < _currentTypePopoverItems.Count
+                    )
+                    {
+                        VisualElement selectedElement = _currentTypePopoverItems[
+                            _typePopoverHighlightIndex
+                        ];
+                        Debug.Log(
+                            $"SELECTING {selectedElement.name} {selectedElement.userData} {selectedElement}"
+                        );
+                        HandleEnterOnPopoverItem(selectedElement);
+                        evt.PreventDefault();
                         evt.StopPropagation();
-                    });
+                    }
 
-                    _typePopoverListContainer.Add(namespaceGroupContainer);
+                    break;
+                }
+                case KeyCode.Escape:
+                {
+                    CloseActivePopover();
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    break;
+                }
+                default:
+                {
+                    return;
                 }
             }
 
-            if (isFiltering && !foundMatches)
+            if (highlightChanged)
             {
-                _typePopoverListContainer.Add(
-                    new Label("No matching types found.")
+                UpdateTypePopoverHighlight();
+                evt.PreventDefault();
+                evt.StopPropagation();
+            }
+        }
+
+        private void HandleEnterOnPopoverItem(VisualElement element)
+        {
+            if (element == null)
+            {
+                return;
+            }
+
+            if (element.userData is Type selectedType)
+            {
+                HandleTypeSelectionFromPopover(null, selectedType);
+            }
+            else if (
+                element.ClassListContains(PopoverNamespaceHeaderClassName)
+                && element.userData != null
+            )
+            {
+                try
+                {
+                    Dictionary<string, object> context =
+                        element.userData as Dictionary<string, object>;
+                    string nsKey = context.GetValueOrDefault("NamespaceKey") as string;
+                    List<Type> addableTypes =
+                        context.GetValueOrDefault("AddableTypes") as List<Type>;
+                    int addableCount = addableTypes?.Count ?? 0;
+
+                    VisualElement parentGroup = element.parent;
+                    VisualElement typesSubContainer = parentGroup?.Q<VisualElement>(
+                        $"types-subcontainer-{nsKey}"
+                    );
+                    Label indicator = element.Q<Label>(
+                        className: PopoverNamespaceIndicatorClassName
+                    );
+
+                    if (typesSubContainer == null || indicator == null)
                     {
-                        style =
-                        {
-                            color = Color.grey,
-                            paddingBottom = 10,
-                            paddingTop = 10,
-                            paddingLeft = 10,
-                            paddingRight = 10,
-                            unityTextAlign = TextAnchor.MiddleCenter,
-                        },
+                        return;
                     }
-                );
+
+                    bool isCollapsed = typesSubContainer.style.display == DisplayStyle.None;
+
+                    if (isCollapsed)
+                    {
+                        Action<PointerDownEvent> explode =
+                            context.GetValueOrDefault("ExpandNamespace")
+                            as Action<PointerDownEvent>;
+                        explode?.Invoke(null);
+                    }
+                    else
+                    {
+                        if (addableCount > 0)
+                        {
+                            string confirmationMessage =
+                                $"Add {addableCount} type{(addableCount > 1 ? "s" : "")} from namespace '{nsKey}'?";
+
+                            BuildConfirmNamespaceAddPopoverContent(nsKey, addableTypes);
+                            OpenPopover(_confirmNamespaceAddPopover, element, isNested: true);
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Error processing Enter on namespace header: {e}");
+                }
+            }
+        }
+
+        private void UpdateTypePopoverHighlight()
+        {
+            if (_currentTypePopoverItems == null || _typeAddPopover == null)
+            {
+                return;
+            }
+
+            ScrollView scrollView = _typeAddPopover.Q<ScrollView>("search-scroll");
+            for (int i = 0; i < _currentTypePopoverItems.Count; i++)
+            {
+                VisualElement item = _currentTypePopoverItems[i];
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (i == _typePopoverHighlightIndex)
+                {
+                    item.AddToClassList(PopoverHighlightClass);
+                    scrollView?.ScrollTo(item);
+                }
+                else
+                {
+                    item.RemoveFromClassList(PopoverHighlightClass);
+                }
             }
         }
 
@@ -2575,24 +2731,8 @@
                     BuildNamespaceView();
                 }
             }
-            CloseAddTypePopover();
+            CloseActivePopover();
             evt.StopPropagation();
-        }
-
-        // TODO: UNIFY WITH POPOVER FRAMEWORK
-        private void CloseAddTypePopover()
-        {
-            if (!_isTypePopoverOpen || _typeAddPopover == null)
-            {
-                return;
-            }
-
-            _typeAddPopover.style.display = DisplayStyle.None;
-            _isTypePopoverOpen = false;
-            rootVisualElement.UnregisterCallback<PointerDownEvent>(
-                HandleClickOutsidePopover,
-                TrickleDown.TrickleDown
-            );
         }
 
         private VisualElement CreateObjectColumn()

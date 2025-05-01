@@ -390,3 +390,7 @@
 .search-result-item--highlighted .result-type-label { /* Keep type label distinct maybe? */
     /* color: lightgrey; */
 }
+
+.popover-item--highlighted {
+    background-color: #4A6A8A; /* Use selection color or another distinct highlight */
+}
