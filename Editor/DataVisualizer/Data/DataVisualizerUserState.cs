@@ -3,7 +3,6 @@
     using System;
     using System.Collections.Generic;
     using System.Linq;
-    using UnityEditor;
 
     [Serializable]
     public sealed class DataVisualizerUserState
@@ -44,10 +43,6 @@
                 settings.objectOrders?.Select(order => order.Clone()).ToList()
                 ?? new List<TypeObjectOrder>();
             managedTypeNames = settings.managedTypeNames?.ToList() ?? new List<string>();
-
-#if UNITY_EDITOR
-            EditorUtility.SetDirty(settings);
-#endif
         }
 
         public List<string> GetOrCreateObjectOrderList(string typeFullName)

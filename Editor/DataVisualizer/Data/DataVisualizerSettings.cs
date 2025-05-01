@@ -79,6 +79,13 @@
             }
         }
 
+        public void MarkDirty()
+        {
+#if UNITY_EDITOR
+            EditorUtility.SetDirty(this);
+#endif
+        }
+
         public void HydrateFrom(DataVisualizerUserState userState)
         {
             if (userState == null)
@@ -103,10 +110,7 @@
                 userState.objectOrders?.Select(order => order.Clone()).ToList()
                 ?? new List<TypeObjectOrder>();
             managedTypeNames = userState.managedTypeNames?.ToList() ?? new List<string>();
-
-#if UNITY_EDITOR
-            EditorUtility.SetDirty(this);
-#endif
+            MarkDirty();
         }
 
         internal List<string> GetOrCreateObjectOrderList(string typeFullName)

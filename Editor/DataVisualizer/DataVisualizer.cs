@@ -35,12 +35,8 @@
         private const string UserStateFileName = "DataVisualizerUserState.json";
 
         private const string NamespaceItemClass = "namespace-item";
-        private const string NamespaceHeaderClass = "namespace-header";
         private const string NamespaceGroupHeaderClass = "namespace-group-header";
         private const string NamespaceIndicatorClass = "namespace-indicator";
-        private const string NamespaceLabelClass = "namespace-item__label";
-        private const string TypeItemClass = "type-item";
-        private const string TypeLabelClass = "type-item__label";
         private const string ObjectItemClass = "object-item";
         private const string ObjectItemContentClass = "object-item-content";
         private const string ObjectItemActionsClass = "object-item-actions";
@@ -82,15 +78,44 @@
             SearchResultsPopover = 3,
         }
 
+        internal DataVisualizerUserState UserState
+        {
+            get
+            {
+#pragma warning disable CS0618 // Type or member is obsolete
+                if (_userState == null)
+                {
+                    LoadUserStateFromFile();
+                }
+                return _userState;
+#pragma warning restore CS0618 // Type or member is obsolete
+            }
+        }
+
+        internal DataVisualizerSettings Settings
+        {
+            get
+            {
+#pragma warning disable CS0618 // Type or member is obsolete
+                if (_settings == null)
+                {
+                    _settings = LoadOrCreateSettings();
+                }
+                return _settings;
+#pragma warning restore CS0618 // Type or member is obsolete
+            }
+        }
+
         private readonly List<(string key, List<Type> types)> _scriptableObjectTypes = new();
         private readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
             new();
         private readonly List<ScriptableObject> _selectedObjects = new();
         private readonly List<ScriptableObject> _allManagedSOsCache = new();
-        private readonly Dictionary<Type, VisualElement> _namespaceCache = new();
         private readonly List<VisualElement> _currentSearchResultItems = new();
         private readonly List<VisualElement> _currentTypePopoverItems = new();
         private readonly List<VisualElement> _currentNavigableTypeItems = new();
+
+        private readonly NamespaceManager _namespaceManager;
 
         private ScriptableObject _selectedObject;
         private VisualElement _selectedElement;
@@ -146,17 +171,20 @@
         private VisualElement _draggedElement;
         private VisualElement _dragGhost;
         private Vector2 _dragStartPosition;
-        private bool _isDragging;
+        internal bool _isDragging;
         private float _lastDragUpdateTime;
         private SerializedObject _currentInspectorScriptableObject;
 
         private string _userStateFilePath;
+
+        [Obsolete("Use UserState instead.")]
         private DataVisualizerUserState _userState;
         private bool _userStateDirty;
 
-        private List<Type> _relevantScriptableObjectTypes;
-
+        [Obsolete("User Settings instead.")]
         private DataVisualizerSettings _settings;
+
+        private List<Type> _relevantScriptableObjectTypes;
 
         private float? _lastAddTypeClicked;
         private float? _lastEnterPressed;
@@ -167,6 +195,11 @@
         private IMGUIContainer _odinInspectorContainer;
         private IVisualElementScheduledItem _odinRepaintSchedule;
 #endif
+
+        public DataVisualizer()
+        {
+            _namespaceManager = new NamespaceManager(_scriptableObjectTypes);
+        }
 
         [MenuItem("Tools/Data Visualizer")]
         public static void ShowWindow()
@@ -185,16 +218,7 @@
 #if ODIN_INSPECTOR
             _odinPropertyTree = null;
 #endif
-            _settings = LoadOrCreateSettings();
             _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
-            if (!_settings.persistStateInSettingsAsset)
-            {
-                LoadUserStateFromFile();
-            }
-            else
-            {
-                _userState = new DataVisualizerUserState();
-            }
 
             LoadScriptableObjectTypes();
             Undo.undoRedoPerformed += OnUndoRedoPerformed;
@@ -236,7 +260,7 @@
             CloseActivePopover();
             CancelDrag();
             _saveWidthsTask?.Pause();
-            if (!_settings.persistStateInSettingsAsset && _userStateDirty)
+            if (!Settings.persistStateInSettingsAsset && _userStateDirty)
             {
                 SaveUserStateToFile();
             }
@@ -264,11 +288,6 @@
 
         private void PopulateSearchCache()
         {
-            if (_settings == null)
-            {
-                _settings = LoadOrCreateSettings();
-            }
-
             _allManagedSOsCache.Clear();
             HashSet<Type> managedTypes = _scriptableObjectTypes
                 .SelectMany(tuple => tuple.types)
@@ -339,6 +358,26 @@
         private void ScheduleRefresh()
         {
             rootVisualElement.schedule.Execute(RefreshAllViews).ExecuteLater(50);
+        }
+
+        internal void PersistSettings(
+            Func<DataVisualizerSettings, bool> settingsApplier,
+            Func<DataVisualizerUserState, bool> userStateApplier
+        )
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                if (settingsApplier(settings))
+                {
+                    settings.MarkDirty();
+                    AssetDatabase.SaveAssets();
+                }
+            }
+            else if (userStateApplier(UserState))
+            {
+                MarkUserStateDirty();
+            }
         }
 
         private void RefreshAllViews()
@@ -1632,7 +1671,7 @@
             return popover;
         }
 
-        private void BuildAndOpenConfirmationPopover(
+        internal void BuildAndOpenConfirmationPopover(
             string message,
             string confirmText,
             Action onConfirm,
@@ -2112,28 +2151,24 @@
                 }
             );
 
+            DataVisualizerSettings settings = Settings;
             Toggle prefsToggle = new("Persist State in Settings Asset:")
             {
-                value = _settings.persistStateInSettingsAsset,
+                value = settings.persistStateInSettingsAsset,
                 tooltip = "...",
             };
             prefsToggle.RegisterValueChangedCallback(evt =>
             {
-                if (_settings == null)
-                {
-                    return;
-                }
-
                 bool newModeIsSettingsAsset = evt.newValue;
-                bool previousModeWasSettingsAsset = _settings.persistStateInSettingsAsset;
+                bool previousModeWasSettingsAsset = Settings.persistStateInSettingsAsset;
                 if (previousModeWasSettingsAsset == newModeIsSettingsAsset)
                 {
                     return;
                 }
 
-                _settings.persistStateInSettingsAsset = newModeIsSettingsAsset;
+                DataVisualizerSettings localSettings = Settings;
+                localSettings.persistStateInSettingsAsset = newModeIsSettingsAsset;
                 MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset);
-                MarkSettingsDirty();
                 AssetDatabase.SaveAssets();
                 if (!newModeIsSettingsAsset)
                 {
@@ -2156,7 +2191,7 @@
             );
             TextField dataFolderPathDisplay = new()
             {
-                value = _settings.DataFolderPath,
+                value = Settings.DataFolderPath,
                 isReadOnly = true,
                 name = "data-folder-display",
                 style =
@@ -2191,18 +2226,13 @@
 
         private void SelectDataFolderForPopover(TextField displayField)
         {
-            if (_settings == null)
-            {
-                Debug.LogError("Cannot select data folder: Settings object not loaded.");
-                return;
-            }
             if (displayField == null)
             {
                 Debug.LogError("Cannot select data folder: Display field reference is null.");
                 return;
             }
 
-            string currentRelativePath = _settings.DataFolderPath;
+            string currentRelativePath = Settings.DataFolderPath;
             string projectRoot = Path.GetFullPath(Directory.GetCurrentDirectory()).SanitizePath();
             string startDir = Application.dataPath;
 
@@ -2269,20 +2299,17 @@
                 relativePath = relativePath.Replace("//", "/");
             }
 
-            if (_settings.DataFolderPath == relativePath)
+            DataVisualizerSettings settings = Settings;
+            if (settings.DataFolderPath == relativePath)
             {
                 return;
             }
 
-            Debug.Log(
-                $"Updating Data Folder from '{_settings.DataFolderPath}' to '{relativePath}'"
-            );
-            _settings._dataFolderPath = relativePath;
-
-            MarkSettingsDirty();
-
+            Debug.Log($"Updating Data Folder from '{settings.DataFolderPath}' to '{relativePath}'");
+            settings._dataFolderPath = relativePath;
+            settings.MarkDirty();
             AssetDatabase.SaveAssets();
-            displayField.value = _settings.DataFolderPath;
+            displayField.value = settings.DataFolderPath;
         }
 
         private void OpenRenamePopover(ScriptableObject dataObject)
@@ -2738,9 +2765,7 @@
 
                                 string clickedNamespace = clickContext["NamespaceKey"] as string;
                                 List<Type> typesToAdd = clickContext["AddableTypes"] as List<Type>;
-                                ;
                                 int countToAdd = typesToAdd?.Count ?? 0;
-
                                 if (countToAdd == 0)
                                 {
                                     return;
@@ -3404,333 +3429,10 @@
 
         private void BuildNamespaceView()
         {
-            if (_namespaceListContainer == null)
-            {
-                return;
-            }
-
-            _namespaceListContainer.Clear();
-            _namespaceCache.Clear();
-            foreach ((string key, List<Type> types) in _scriptableObjectTypes)
-            {
-                string namespaceKey = key;
-                HashSet<string> managedFullNamesInGroup = GetManagedTypeNames()
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                // --- Filter for non-BaseDataObject types WITHIN the managed types of this group ---
-                List<Type> nonCoreManagedTypes = types
-                    .Where(t =>
-                        managedFullNamesInGroup.Contains(t.FullName)
-                        && !typeof(BaseDataObject).IsAssignableFrom(t)
-                    )
-                    .ToList();
-                int removableTypeCount = nonCoreManagedTypes.Count;
-                bool showNamespaceRemoveButton = removableTypeCount > 0; // Show if *any* removable types exist
-
-                VisualElement namespaceGroupItem = new()
-                {
-                    name = $"namespace-group-{key}",
-                    userData = key,
-                };
-
-                namespaceGroupItem.AddToClassList(NamespaceItemClass);
-                namespaceGroupItem.userData = key;
-                if (types.Count == 0)
-                {
-                    namespaceGroupItem.AddToClassList("namespace-group-item--empty");
-                }
-                _namespaceListContainer.Add(namespaceGroupItem);
-                namespaceGroupItem.RegisterCallback<PointerDownEvent>(OnNamespacePointerDown);
-
-                VisualElement header = new() { name = $"namespace-header-{key}" };
-                header.AddToClassList(NamespaceHeaderClass);
-                namespaceGroupItem.Add(header);
-
-                Label indicator = new(ArrowExpanded) { name = $"namespace-indicator-{key}" };
-                indicator.AddToClassList(NamespaceIndicatorClass);
-                indicator.AddToClassList("clickable");
-                header.Add(indicator);
-
-                Label namespaceLabel = new(key)
-                {
-                    name = $"namespace-name-{key}",
-                    style = { unityFontStyleAndWeight = FontStyle.Bold },
-                };
-                namespaceLabel.AddToClassList(NamespaceLabelClass);
-                header.Add(namespaceLabel);
-
-                var headerRight = new VisualElement { style = { flexShrink = 0 } };
-                header.Add(headerRight);
-                if (showNamespaceRemoveButton)
-                {
-                    var nsRemoveButton = new Button(() =>
-                    {
-                        // Pass context needed by the confirmation handler
-                        BuildAndOpenConfirmationPopover(
-                            $"Remove {removableTypeCount} non-core type{(removableTypeCount > 1 ? "s" : "")} from namespace '{namespaceKey}'?",
-                            "Remove",
-                            () =>
-                                HandleRemoveNamespaceTypesConfirmed(
-                                    namespaceKey,
-                                    nonCoreManagedTypes
-                                ), // Action
-                            header // Trigger element for positioning popover
-                        );
-                    })
-                    {
-                        text = "X",
-                        tooltip =
-                            $"Remove {removableTypeCount} non-BaseDataObject type{(removableTypeCount > 1 ? "s" : "")}",
-                    };
-                    nsRemoveButton.AddToClassList("action-button");
-                    nsRemoveButton.AddToClassList("delete-button");
-                    headerRight.Add(nsRemoveButton);
-                }
-
-                VisualElement typesContainer = new()
-                {
-                    name = $"types-container-{key}",
-                    style = { marginLeft = 10 },
-                    userData = key,
-                };
-                namespaceGroupItem.Add(typesContainer);
-
-                bool isCollapsed = GetIsNamespaceCollapsed(key);
-                ApplyNamespaceCollapsedState(indicator, typesContainer, isCollapsed, false);
-
-                // ReSharper disable once HeapView.CanAvoidClosure
-                indicator.RegisterCallback<PointerDownEvent>(evt =>
-                {
-                    if (evt.button != 0 || evt.propagationPhase == PropagationPhase.TrickleDown)
-                    {
-                        return;
-                    }
-
-                    VisualElement parentGroup = header.parent;
-                    Label associatedIndicator = parentGroup?.Q<Label>(
-                        className: NamespaceIndicatorClass
-                    );
-                    VisualElement associatedTypesContainer = parentGroup?.Q<VisualElement>(
-                        $"types-container-{key}"
-                    );
-                    string nsKey = parentGroup?.userData as string;
-
-                    if (
-                        associatedIndicator != null
-                        && associatedTypesContainer != null
-                        && !string.IsNullOrWhiteSpace(nsKey)
-                    )
-                    {
-                        bool currentlyCollapsed =
-                            associatedTypesContainer.style.display == DisplayStyle.None;
-                        bool newCollapsedState = !currentlyCollapsed;
-
-                        ApplyNamespaceCollapsedState(
-                            associatedIndicator,
-                            associatedTypesContainer,
-                            newCollapsedState,
-                            true
-                        );
-                    }
-
-                    evt.StopPropagation();
-                });
-
-                for (int i = 0; i < types.Count; i++)
-                {
-                    int index = i;
-                    Type type = types[i];
-
-                    bool isManaged = managedFullNamesInGroup.Contains(type.FullName);
-                    bool isRemovableType =
-                        isManaged && !typeof(BaseDataObject).IsAssignableFrom(type);
-
-                    VisualElement typeItem = new()
-                    {
-                        name = $"type-item-{type.Name}",
-                        userData = type,
-                        pickingMode = PickingMode.Position,
-                        focusable = true,
-                    };
-                    typeItem.style.flexDirection = FlexDirection.Row;
-                    typeItem.style.alignItems = Align.Center;
-                    typeItem.style.justifyContent = Justify.SpaceBetween;
-                    _namespaceCache[type] = typeItem;
-
-                    typeItem.AddToClassList(TypeItemClass);
-                    Label typeLabel = new(type.Name) { name = "type-item-label" };
-                    typeLabel.AddToClassList(TypeLabelClass);
-                    typeLabel.AddToClassList("clickable");
-                    typeItem.Add(typeLabel);
-                    // ReSharper disable once HeapView.CanAvoidClosure
-                    typeItem.RegisterCallback<PointerDownEvent>(evt =>
-                        OnTypePointerDown(namespaceGroupItem, evt)
-                    );
-                    // ReSharper disable once HeapView.CanAvoidClosure
-                    typeItem.RegisterCallback<PointerUpEvent>(evt =>
-                    {
-                        if (_isDragging || evt.button != 0)
-                        {
-                            return;
-                        }
-
-                        SelectTypeIndex(index, typeItem);
-                        evt.StopPropagation();
-                    });
-
-                    if (isRemovableType)
-                    {
-                        var typeRemoveButton = new Button(() =>
-                        {
-                            BuildAndOpenConfirmationPopover(
-                                $"Remove type '{type.Name}' from Data Visualizer?",
-                                "Remove",
-                                () => HandleRemoveTypeConfirmed(type), // Action
-                                typeItem // Trigger element
-                            );
-                        })
-                        {
-                            text = "X",
-                            tooltip = "Remove this type",
-                        };
-                        typeRemoveButton.AddToClassList("action-button");
-                        typeRemoveButton.AddToClassList("delete-button");
-                        typeRemoveButton.style.flexShrink = 0;
-                        typeItem.Add(typeRemoveButton); // Add directly to the typeItem row
-                    }
-
-                    typesContainer.Add(typeItem);
-                }
-            }
+            _namespaceManager.Build(this, ref _namespaceListContainer);
         }
 
-        private void HandleRemoveNamespaceTypesConfirmed(
-            string namespaceKey,
-            List<Type> typesToRemove
-        )
-        {
-            if (typesToRemove == null || typesToRemove.Count == 0)
-                return;
-            Debug.Log(
-                $"Confirmed removing {typesToRemove.Count} types from namespace {namespaceKey}"
-            );
-
-            List<string> currentManagedList = GetManagedTypeNames();
-            bool changed = false;
-            foreach (var type in typesToRemove)
-            {
-                // Ensure we only remove types that are actually non-core AND managed
-                if (
-                    !typeof(BaseDataObject).IsAssignableFrom(type)
-                    && currentManagedList.Remove(type.FullName)
-                )
-                {
-                    changed = true;
-                    // Clear related persisted data for the removed type
-                    SetLastSelectedObjectGuidForType(type.FullName, null); // Clear last selected obj for this type
-                    RemoveTypeOrderEntry(namespaceKey, type.Name); // Clear ordering info if stored per-type name
-                }
-            }
-            if (changed)
-            {
-                // Save the updated managed list
-                PersistManagedTypesList(currentManagedList); // Use helper to save based on mode
-
-                // Refresh UI fully
-                ScheduleRefresh();
-            }
-        }
-
-        private void HandleRemoveTypeConfirmed(Type typeToRemove)
-        {
-            if (typeToRemove == null || typeof(BaseDataObject).IsAssignableFrom(typeToRemove))
-            {
-                // Should not happen if button is only shown for non-core types
-                Debug.LogWarning(
-                    $"Attempted to remove BaseDataObject derivative '{typeToRemove?.Name}' or null type."
-                );
-                return;
-            }
-            Debug.Log($"Confirmed removing type {typeToRemove.FullName}");
-
-            List<string> currentManagedList = GetManagedTypeNames();
-            if (currentManagedList.Remove(typeToRemove.FullName))
-            { // If removal successful
-                // Clear related persisted data
-                SetLastSelectedObjectGuidForType(typeToRemove.FullName, null);
-                RemoveTypeOrderEntry(GetNamespaceKey(typeToRemove), typeToRemove.Name);
-
-                // Save the updated managed list
-                PersistManagedTypesList(currentManagedList); // Use helper
-
-                // Refresh UI fully
-                ScheduleRefresh();
-            }
-            else
-            {
-                Debug.LogWarning(
-                    $"Type '{typeToRemove.FullName}' was not found in managed list during removal."
-                );
-            }
-        }
-
-        private void PersistManagedTypesList(List<string> managedList)
-        {
-            if (_settings == null || managedList == null)
-                return;
-            if (_settings.persistStateInSettingsAsset)
-            {
-                // Check if different before assigning/marking dirty
-                if (
-                    _settings.managedTypeNames == null
-                    || !_settings.managedTypeNames.SequenceEqual(managedList)
-                )
-                {
-                    _settings.managedTypeNames = new List<string>(managedList);
-                    MarkSettingsDirty();
-                    AssetDatabase.SaveAssets(); // Save settings asset immediately after structure change
-                }
-            }
-            else if (_userState != null)
-            {
-                if (
-                    _userState.managedTypeNames == null
-                    || !_userState.managedTypeNames.SequenceEqual(managedList)
-                )
-                {
-                    _userState.managedTypeNames = new List<string>(managedList);
-                    MarkUserStateDirty(); // Triggers file save
-                }
-            }
-        }
-
-        private void RemoveTypeOrderEntry(string namespaceKey, string typeName)
-        {
-            if (
-                _settings == null
-                || string.IsNullOrEmpty(namespaceKey)
-                || string.IsNullOrEmpty(typeName)
-            )
-                return;
-            if (_settings.persistStateInSettingsAsset)
-            {
-                var orderEntry = _settings.typeOrder?.Find(o => o.namespaceKey == namespaceKey);
-                if (orderEntry != null && orderEntry.typeNames.Remove(typeName))
-                {
-                    MarkSettingsDirty(); // Mark dirty if removed
-                }
-            }
-            else if (_userState != null)
-            {
-                var orderEntry = _userState.typeOrders?.Find(o => o.namespaceKey == namespaceKey);
-                if (orderEntry != null && orderEntry.typeNames.Remove(typeName))
-                {
-                    MarkUserStateDirty(); // Mark dirty if removed
-                }
-            }
-        }
-
-        private void SelectTypeIndex(int index, VisualElement typeItem)
+        internal void SelectTypeIndex(int index, VisualElement typeItem)
         {
             _selectedNamespaceElement?.RemoveFromClassList("selected");
             _typeHighlightIndex = index;
@@ -3750,7 +3452,7 @@
             SelectObject(objectToSelect);
         }
 
-        private void BuildObjectsView()
+        internal void BuildObjectsView()
         {
             if (_objectListContainer == null)
             {
@@ -4250,7 +3952,7 @@
             }
         }
 
-        private ScriptableObject DetermineObjectToAutoSelect()
+        internal ScriptableObject DetermineObjectToAutoSelect()
         {
             if (_selectedType == null || _selectedObjects == null || _selectedObjects.Count == 0)
             {
@@ -4399,7 +4101,7 @@
             }
         }
 
-        private void LoadObjectTypes(Type type)
+        internal void LoadObjectTypes(Type type)
         {
             if (type == null)
             {
@@ -4512,8 +4214,13 @@
                 .ToList();
         }
 
-        private void SelectObject(ScriptableObject dataObject)
+        internal void SelectObject(ScriptableObject dataObject)
         {
+            if (_selectedObject == dataObject)
+            {
+                return;
+            }
+
             _selectedElement?.RemoveFromClassList("selected");
             _selectedObject = dataObject;
 
@@ -4567,23 +4274,25 @@
                 dataObject != null ? new SerializedObject(dataObject) : null;
             BuildInspectorView();
 
-            if (
-                dataObject != null
-                && _namespaceCache.TryGetValue(
-                    dataObject.GetType(),
-                    out VisualElement namespaceElement
-                )
-            )
+            if (dataObject != null)
             {
-                // TODO CONSOLIDATE
-                namespaceElement?.EnableInClassList("selected", true);
-                _selectedNamespaceElement = namespaceElement?.parent?.parent;
-                _selectedNamespaceElement?.EnableInClassList("selected", true);
-                VisualElement immediateParent = namespaceElement?.parent;
-                if (immediateParent != null)
-                {
-                    _typeHighlightIndex = immediateParent.IndexOf(namespaceElement);
-                }
+                _namespaceManager.SelectType(this, dataObject.GetType());
+
+                //     && _namespaceManager.TryGet(
+                //         dataObject.GetType(),
+                //         out VisualElement namespaceElement
+                //     )
+                // )
+                // {
+                //     // TODO CONSOLIDATE
+                //     namespaceElement?.EnableInClassList("selected", true);
+                //     _selectedNamespaceElement = namespaceElement?.parent?.parent;
+                //     _selectedNamespaceElement?.EnableInClassList("selected", true);
+                //     VisualElement immediateParent = namespaceElement?.parent;
+                //     if (immediateParent != null)
+                //     {
+                //         _typeHighlightIndex = immediateParent.IndexOf(namespaceElement);
+                //     }
             }
         }
 
@@ -4791,7 +4500,18 @@
             }
         }
 
-        private void OnNamespacePointerDown(PointerDownEvent evt)
+        private void UpdateAndSaveNamespaceOrder()
+        {
+            if (_settings == null)
+            {
+                return;
+            }
+
+            List<string> newNamespaceOrder = _scriptableObjectTypes.Select(kvp => kvp.key).ToList();
+            SetNamespaceOrder(newNamespaceOrder);
+        }
+
+        internal void OnNamespacePointerDown(PointerDownEvent evt)
         {
             if (
                 evt.currentTarget
@@ -4815,18 +4535,7 @@
             }
         }
 
-        private void UpdateAndSaveNamespaceOrder()
-        {
-            if (_settings == null)
-            {
-                return;
-            }
-
-            List<string> newNamespaceOrder = _scriptableObjectTypes.Select(kvp => kvp.key).ToList();
-            SetNamespaceOrder(newNamespaceOrder);
-        }
-
-        private void OnTypePointerDown(VisualElement namespaceHeader, PointerDownEvent evt)
+        internal void OnTypePointerDown(VisualElement namespaceHeader, PointerDownEvent evt)
         {
             // TODO IMPLEMENT NEW HANDLER
             if (evt.currentTarget is not VisualElement { userData: Type type } targetElement)
@@ -5246,6 +4955,7 @@
             _activeDragType = DragType.None;
         }
 
+        [Obsolete("Use settings.MarkDirty()")]
         private void MarkSettingsDirty()
         {
             if (_settings != null)
@@ -5254,6 +4964,7 @@
             }
         }
 
+        [Obsolete("Should not be used internally except by UserState")]
         private void LoadUserStateFromFile()
         {
             if (File.Exists(_userStateFilePath))
@@ -5304,9 +5015,10 @@
             }
         }
 
-        private void MarkUserStateDirty()
+        internal void MarkUserStateDirty()
         {
-            if (_settings.persistStateInSettingsAsset)
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
             {
                 return;
             }
@@ -5589,23 +5301,25 @@
             return _userState?.GetLastObjectForType(typeName);
         }
 
-        private void SetLastSelectedObjectGuidForType(string typeName, string objectGuid)
+        internal void SetLastSelectedObjectGuidForType(string typeName, string objectGuid)
         {
-            if (_settings == null || string.IsNullOrWhiteSpace(typeName))
+            if (string.IsNullOrWhiteSpace(typeName))
             {
                 return;
             }
 
-            if (_settings.persistStateInSettingsAsset)
-            {
-                _settings.SetLastObjectForType(typeName, objectGuid);
-                MarkSettingsDirty();
-            }
-            else if (_userState != null)
-            {
-                _userState.SetLastObjectForType(typeName, objectGuid);
-                MarkUserStateDirty();
-            }
+            PersistSettings(
+                settings =>
+                {
+                    settings.SetLastObjectForType(typeName, objectGuid);
+                    return true;
+                },
+                userState =>
+                {
+                    userState.SetLastObjectForType(typeName, objectGuid);
+                    return true;
+                }
+            );
         }
 
         private List<string> GetNamespaceOrder()
