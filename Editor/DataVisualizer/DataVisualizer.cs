@@ -110,6 +110,7 @@
         private VisualElement _settingsPopover;
         private VisualElement _renamePopover;
         private VisualElement _confirmDeletePopover;
+        private VisualElement _confirmActionPopover;
         private VisualElement _typeAddPopover;
         private VisualElement _activePopover;
         private VisualElement _confirmNamespaceAddPopover;
@@ -855,6 +856,9 @@
             root.Add(_renamePopover);
 
             _confirmDeletePopover = CreatePopoverBase("confirm-delete-popover");
+
+            _confirmActionPopover = CreatePopoverBase("confirm-action-popover");
+            root.Add(_confirmActionPopover);
 
             root.Add(_confirmDeletePopover);
 
@@ -1626,6 +1630,66 @@
             };
             popover.AddToClassList("popover");
             return popover;
+        }
+
+        private void BuildAndOpenConfirmationPopover(
+            string message,
+            string confirmText,
+            Action onConfirm,
+            VisualElement triggerElement
+        )
+        {
+            if (_confirmActionPopover == null || onConfirm == null)
+                return; // Need popover and action
+            _confirmActionPopover.Clear(); // Clear previous content
+
+            // Style the root - ensure padding for content
+            _confirmActionPopover.style.paddingBottom = 10;
+            _confirmActionPopover.style.paddingLeft = 10;
+            _confirmActionPopover.style.paddingRight = 10;
+            _confirmActionPopover.style.paddingTop = 10;
+
+            // Message Label
+            var messageLabel = new Label(message)
+            {
+                style =
+                {
+                    whiteSpace = WhiteSpace.Normal,
+                    marginBottom = 15,
+                    fontSize = 12,
+                },
+            };
+            _confirmActionPopover.Add(messageLabel);
+
+            // Button Container
+            var buttonContainer = new VisualElement
+            {
+                style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
+            };
+            _confirmActionPopover.Add(buttonContainer);
+
+            // Cancel Button - Simply closes the active (this) popover
+            var cancelButton = new Button(CloseActivePopover)
+            {
+                text = "Cancel",
+                style = { marginRight = 5 },
+            };
+            buttonContainer.Add(cancelButton);
+
+            // Confirmation Button - Executes action, then closes
+            var confirmButton = new Button(() =>
+            {
+                onConfirm(); // Execute the specific action passed in
+                CloseActivePopover(); // Close afterward
+            })
+            {
+                text = confirmText,
+            };
+            confirmButton.AddToClassList("button-danger"); // Use danger styling
+            buttonContainer.Add(confirmButton);
+
+            // Open the populated popover, positioned relative to the trigger
+            OpenPopover(_confirmActionPopover, triggerElement);
         }
 
         private void CloseNestedPopover()
@@ -3349,6 +3413,20 @@
             _namespaceCache.Clear();
             foreach ((string key, List<Type> types) in _scriptableObjectTypes)
             {
+                string namespaceKey = key;
+                HashSet<string> managedFullNamesInGroup = GetManagedTypeNames()
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                // --- Filter for non-BaseDataObject types WITHIN the managed types of this group ---
+                List<Type> nonCoreManagedTypes = types
+                    .Where(t =>
+                        managedFullNamesInGroup.Contains(t.FullName)
+                        && !typeof(BaseDataObject).IsAssignableFrom(t)
+                    )
+                    .ToList();
+                int removableTypeCount = nonCoreManagedTypes.Count;
+                bool showNamespaceRemoveButton = removableTypeCount > 0; // Show if *any* removable types exist
+
                 VisualElement namespaceGroupItem = new()
                 {
                     name = $"namespace-group-{key}",
@@ -3380,6 +3458,34 @@
                 };
                 namespaceLabel.AddToClassList(NamespaceLabelClass);
                 header.Add(namespaceLabel);
+
+                var headerRight = new VisualElement { style = { flexShrink = 0 } };
+                header.Add(headerRight);
+                if (showNamespaceRemoveButton)
+                {
+                    var nsRemoveButton = new Button(() =>
+                    {
+                        // Pass context needed by the confirmation handler
+                        BuildAndOpenConfirmationPopover(
+                            $"Remove {removableTypeCount} non-core type{(removableTypeCount > 1 ? "s" : "")} from namespace '{namespaceKey}'?",
+                            "Remove",
+                            () =>
+                                HandleRemoveNamespaceTypesConfirmed(
+                                    namespaceKey,
+                                    nonCoreManagedTypes
+                                ), // Action
+                            header // Trigger element for positioning popover
+                        );
+                    })
+                    {
+                        text = "X",
+                        tooltip =
+                            $"Remove {removableTypeCount} non-BaseDataObject type{(removableTypeCount > 1 ? "s" : "")}",
+                    };
+                    nsRemoveButton.AddToClassList("action-button");
+                    nsRemoveButton.AddToClassList("delete-button");
+                    headerRight.Add(nsRemoveButton);
+                }
 
                 VisualElement typesContainer = new()
                 {
@@ -3434,6 +3540,11 @@
                 {
                     int index = i;
                     Type type = types[i];
+
+                    bool isManaged = managedFullNamesInGroup.Contains(type.FullName);
+                    bool isRemovableType =
+                        isManaged && !typeof(BaseDataObject).IsAssignableFrom(type);
+
                     VisualElement typeItem = new()
                     {
                         name = $"type-item-{type.Name}",
@@ -3441,6 +3552,9 @@
                         pickingMode = PickingMode.Position,
                         focusable = true,
                     };
+                    typeItem.style.flexDirection = FlexDirection.Row;
+                    typeItem.style.alignItems = Align.Center;
+                    typeItem.style.justifyContent = Justify.SpaceBetween;
                     _namespaceCache[type] = typeItem;
 
                     typeItem.AddToClassList(TypeItemClass);
@@ -3463,7 +3577,155 @@
                         SelectTypeIndex(index, typeItem);
                         evt.StopPropagation();
                     });
+
+                    if (isRemovableType)
+                    {
+                        var typeRemoveButton = new Button(() =>
+                        {
+                            BuildAndOpenConfirmationPopover(
+                                $"Remove type '{type.Name}' from Data Visualizer?",
+                                "Remove",
+                                () => HandleRemoveTypeConfirmed(type), // Action
+                                typeItem // Trigger element
+                            );
+                        })
+                        {
+                            text = "X",
+                            tooltip = "Remove this type",
+                        };
+                        typeRemoveButton.AddToClassList("action-button");
+                        typeRemoveButton.AddToClassList("delete-button");
+                        typeRemoveButton.style.flexShrink = 0;
+                        typeItem.Add(typeRemoveButton); // Add directly to the typeItem row
+                    }
+
                     typesContainer.Add(typeItem);
+                }
+            }
+        }
+
+        private void HandleRemoveNamespaceTypesConfirmed(
+            string namespaceKey,
+            List<Type> typesToRemove
+        )
+        {
+            if (typesToRemove == null || typesToRemove.Count == 0)
+                return;
+            Debug.Log(
+                $"Confirmed removing {typesToRemove.Count} types from namespace {namespaceKey}"
+            );
+
+            List<string> currentManagedList = GetManagedTypeNames();
+            bool changed = false;
+            foreach (var type in typesToRemove)
+            {
+                // Ensure we only remove types that are actually non-core AND managed
+                if (
+                    !typeof(BaseDataObject).IsAssignableFrom(type)
+                    && currentManagedList.Remove(type.FullName)
+                )
+                {
+                    changed = true;
+                    // Clear related persisted data for the removed type
+                    SetLastSelectedObjectGuidForType(type.FullName, null); // Clear last selected obj for this type
+                    RemoveTypeOrderEntry(namespaceKey, type.Name); // Clear ordering info if stored per-type name
+                }
+            }
+            if (changed)
+            {
+                // Save the updated managed list
+                PersistManagedTypesList(currentManagedList); // Use helper to save based on mode
+
+                // Refresh UI fully
+                ScheduleRefresh();
+            }
+        }
+
+        private void HandleRemoveTypeConfirmed(Type typeToRemove)
+        {
+            if (typeToRemove == null || typeof(BaseDataObject).IsAssignableFrom(typeToRemove))
+            {
+                // Should not happen if button is only shown for non-core types
+                Debug.LogWarning(
+                    $"Attempted to remove BaseDataObject derivative '{typeToRemove?.Name}' or null type."
+                );
+                return;
+            }
+            Debug.Log($"Confirmed removing type {typeToRemove.FullName}");
+
+            List<string> currentManagedList = GetManagedTypeNames();
+            if (currentManagedList.Remove(typeToRemove.FullName))
+            { // If removal successful
+                // Clear related persisted data
+                SetLastSelectedObjectGuidForType(typeToRemove.FullName, null);
+                RemoveTypeOrderEntry(GetNamespaceKey(typeToRemove), typeToRemove.Name);
+
+                // Save the updated managed list
+                PersistManagedTypesList(currentManagedList); // Use helper
+
+                // Refresh UI fully
+                ScheduleRefresh();
+            }
+            else
+            {
+                Debug.LogWarning(
+                    $"Type '{typeToRemove.FullName}' was not found in managed list during removal."
+                );
+            }
+        }
+
+        private void PersistManagedTypesList(List<string> managedList)
+        {
+            if (_settings == null || managedList == null)
+                return;
+            if (_settings.persistStateInSettingsAsset)
+            {
+                // Check if different before assigning/marking dirty
+                if (
+                    _settings.managedTypeNames == null
+                    || !_settings.managedTypeNames.SequenceEqual(managedList)
+                )
+                {
+                    _settings.managedTypeNames = new List<string>(managedList);
+                    MarkSettingsDirty();
+                    AssetDatabase.SaveAssets(); // Save settings asset immediately after structure change
+                }
+            }
+            else if (_userState != null)
+            {
+                if (
+                    _userState.managedTypeNames == null
+                    || !_userState.managedTypeNames.SequenceEqual(managedList)
+                )
+                {
+                    _userState.managedTypeNames = new List<string>(managedList);
+                    MarkUserStateDirty(); // Triggers file save
+                }
+            }
+        }
+
+        private void RemoveTypeOrderEntry(string namespaceKey, string typeName)
+        {
+            if (
+                _settings == null
+                || string.IsNullOrEmpty(namespaceKey)
+                || string.IsNullOrEmpty(typeName)
+            )
+                return;
+            if (_settings.persistStateInSettingsAsset)
+            {
+                var orderEntry = _settings.typeOrder?.Find(o => o.namespaceKey == namespaceKey);
+                if (orderEntry != null && orderEntry.typeNames.Remove(typeName))
+                {
+                    MarkSettingsDirty(); // Mark dirty if removed
+                }
+            }
+            else if (_userState != null)
+            {
+                var orderEntry = _userState.typeOrders?.Find(o => o.namespaceKey == namespaceKey);
+                if (orderEntry != null && orderEntry.typeNames.Remove(typeName))
+                {
+                    MarkUserStateDirty(); // Mark dirty if removed
                 }
             }
         }
