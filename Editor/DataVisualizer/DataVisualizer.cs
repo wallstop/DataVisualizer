@@ -54,6 +54,7 @@
         private const string SearchResultItemClass = "search-result-item";
         private const string SearchResultHighlightClass = "search-result-item--highlighted";
         private const string PopoverHighlightClass = "popover-item--highlighted";
+        private const string NavHighlightClass = "selected";
 
         private const string ArrowCollapsed = "►";
         private const string ArrowExpanded = "▼";
@@ -73,6 +74,14 @@
             Type = 3,
         }
 
+        private enum FocusArea
+        {
+            None = 0,
+            TypeList = 1,
+            AddTypePopover = 2,
+            SearchResultsPopover = 3,
+        }
+
         private readonly List<(string key, List<Type> types)> _scriptableObjectTypes = new();
         private readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
             new();
@@ -81,13 +90,11 @@
         private readonly Dictionary<Type, VisualElement> _namespaceCache = new();
         private readonly List<VisualElement> _currentSearchResultItems = new();
         private readonly List<VisualElement> _currentTypePopoverItems = new();
+        private readonly List<VisualElement> _currentNavigableTypeItems = new();
 
         private ScriptableObject _selectedObject;
         private VisualElement _selectedElement;
-
-        private int _searchHighlightIndex = -1;
-        private int _typePopoverHighlightIndex = -1;
-        private string _lastTypeAddSearchTerm;
+        private VisualElement _selectedNamespaceElement;
 
         private VisualElement _namespaceListContainer;
         private VisualElement _objectListContainer;
@@ -122,6 +129,12 @@
         private float _lastSavedInnerWidth = -1f;
         private IVisualElementScheduledItem _saveWidthsTask;
 
+        private int _searchHighlightIndex = -1;
+        private int _typePopoverHighlightIndex = -1;
+        private int _typeHighlightIndex = -1;
+        private VisualElement _typeListParentNamespaceHeader;
+        private string _lastTypeAddSearchTerm;
+        private FocusArea _lastActiveFocusArea = FocusArea.None;
         private DragType _activeDragType = DragType.None;
         private object _draggedData;
         private Type _selectedType;
@@ -145,6 +158,7 @@
         private DataVisualizerSettings _settings;
 
         private float? _lastAddTypeClicked;
+        private float? _lastEnterPressed;
 
         private Label _dataFolderPathDisplay;
 #if ODIN_INSPECTOR
@@ -183,6 +197,10 @@
 
             LoadScriptableObjectTypes();
             Undo.undoRedoPerformed += OnUndoRedoPerformed;
+            rootVisualElement.RegisterCallback<KeyDownEvent>(
+                HandleGlobalKeyDown,
+                TrickleDown.TrickleDown
+            );
             rootVisualElement
                 .schedule.Execute(() =>
                 {
@@ -195,6 +213,10 @@
 
         private void OnDisable()
         {
+            rootVisualElement.UnregisterCallback<KeyDownEvent>(
+                HandleGlobalKeyDown,
+                TrickleDown.TrickleDown
+            );
             Undo.undoRedoPerformed -= OnUndoRedoPerformed;
             Cleanup();
         }
@@ -993,6 +1015,7 @@
 
         private void HandleSearchKeyDown(KeyDownEvent evt)
         {
+            Debug.Log("SEARCH KEY DOWN");
             if (
                 _activePopover != _searchPopover
                 || _searchPopover.style.display == DisplayStyle.None
@@ -1637,6 +1660,19 @@
                 return;
             }
 
+            if (popover == _searchPopover)
+            {
+                _lastActiveFocusArea = FocusArea.SearchResultsPopover;
+            }
+            else if (popover == _typeAddPopover)
+            {
+                _lastActiveFocusArea = FocusArea.AddTypePopover;
+            }
+            else
+            {
+                _lastActiveFocusArea = FocusArea.None;
+            }
+
             _popoverContext = context;
             if (isNested)
             {
@@ -1685,6 +1721,7 @@
 
         private void CloseActivePopover()
         {
+            _lastActiveFocusArea = FocusArea.None;
             if (_activePopover == _searchPopover)
             {
                 _currentSearchResultItems.Clear();
@@ -1713,6 +1750,209 @@
 
             _activePopover = null;
             _popoverContext = null;
+        }
+
+        private void HandleGlobalKeyDown(KeyDownEvent evt)
+        {
+            Debug.Log($"GlobalKeyDown: Key={evt.keyCode}, FocusArea={_lastActiveFocusArea}");
+
+            // First, check if an overlay popover wants to handle the key (e.g., Escape to close)
+            if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
+            {
+                switch (evt.keyCode)
+                {
+                    case KeyCode.Escape:
+                        // Debug.Log("Global Escape: Closing active popover.");
+                        CloseActivePopover();
+                        evt.PreventDefault();
+                        evt.StopPropagation();
+                        return; // Handled
+
+                    case KeyCode.DownArrow:
+                    case KeyCode.UpArrow:
+                    case KeyCode.Return:
+                    case KeyCode.KeypadEnter:
+                        // Route to specific popover handlers if they are active
+                        if (_lastActiveFocusArea == FocusArea.SearchResultsPopover)
+                        {
+                            _lastEnterPressed = Time.realtimeSinceStartup;
+                            HandleSearchKeyDown(evt); // Use existing handler logic
+                            return; // Handled by popover
+                        }
+                        else if (_lastActiveFocusArea == FocusArea.AddTypePopover)
+                        {
+                            _lastEnterPressed = Time.realtimeSinceStartup;
+                            HandleTypePopoverKeyDown(evt); // Use existing handler logic
+                            return; // Handled by popover
+                        }
+                        // Let Enter potentially fall through if popover doesn't handle it (e.g., settings)
+                        // Let Arrows fall through if popover doesn't handle it
+                        break; // Break switch, don't return yet for Enter maybe
+                }
+                // If Escape wasn't pressed, and it wasn't search/type popover nav,
+                // let the key potentially be handled by controls within other popovers (e.g., text field in Rename)
+                // OR stop propagation if we don't want main lists navigating while popover open. Let's stop it.
+                if (evt.keyCode == KeyCode.DownArrow || evt.keyCode == KeyCode.UpArrow)
+                {
+                    // Prevent arrows scrolling main lists when *any* popover is open
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    return;
+                }
+            }
+
+            // If no popover handled it, check focus area for main list navigation
+            switch (evt.keyCode)
+            {
+                case KeyCode.DownArrow:
+                case KeyCode.UpArrow:
+                    int direction = (evt.keyCode == KeyCode.DownArrow) ? 1 : -1;
+                    bool navigationHandled = false;
+
+                    switch (_lastActiveFocusArea)
+                    {
+                        case FocusArea.TypeList:
+                            navigationHandled = NavigateTypeList(direction);
+                            break;
+                    }
+
+                    if (navigationHandled)
+                    {
+                        evt.PreventDefault();
+                        evt.StopPropagation();
+                    }
+                    break;
+
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                    bool enterHandled = false;
+                    switch (_lastActiveFocusArea)
+                    {
+                        case FocusArea.TypeList:
+                            _lastEnterPressed = Time.realtimeSinceStartup;
+                            // Handle Enter on Type item (Select Type)
+                            enterHandled = HandleEnterOnTypeList();
+                            break;
+                    }
+                    if (enterHandled)
+                    {
+                        evt.PreventDefault();
+                        evt.StopPropagation();
+                    }
+                    break;
+
+                // Let other keys fall through
+            }
+        }
+
+        private bool HandleEnterOnTypeList()
+        {
+            if (_typeHighlightIndex < 0 || _typeHighlightIndex >= _currentNavigableTypeItems.Count)
+                return false;
+            VisualElement typeElement = _currentTypePopoverItems[_typeHighlightIndex];
+            if (typeElement?.userData is Type selectedType)
+            {
+                // Trigger the same action as clicking the type label
+                Debug.Log($"Enter on Type: {selectedType.Name}");
+                // --- Copied from type label click handler ---
+                if (_selectedTypeElement != null)
+                    _selectedTypeElement.RemoveFromClassList("selected");
+                _selectedType = selectedType;
+                _selectedTypeElement = typeElement; // This might be problematic if element is recreated
+                _selectedTypeElement.AddToClassList("selected");
+                SaveNamespaceAndTypeSelectionState(
+                    GetNamespaceKey(_selectedType),
+                    _selectedType.Name
+                );
+                LoadObjectTypes(selectedType);
+                ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
+                BuildObjectsView();
+                SelectObject(objectToSelect);
+                // --- End Copy ---
+                return true; // Handled Enter
+            }
+            return false;
+        }
+
+        private bool NavigateTypeList(int direction)
+        {
+            // Requires knowing which types are *currently visible* in the specific expanded namespace
+            // And mapping them back to System.Type for selection. This is complex.
+            // Need _currentNavigableTypeItems populated correctly when focus is set.
+
+            // --- Repopulate Navigable Type Items ---
+            // This needs to be done when focus *enters* this state, potentially triggered by click/expand
+            PopulateNavigableTypeItems(); // Create this helper
+
+            if (_currentNavigableTypeItems.Count == 0)
+                return false;
+
+            _typeHighlightIndex += direction;
+            // Wrap
+            if (_typeHighlightIndex >= _currentNavigableTypeItems.Count)
+                _typeHighlightIndex = 0;
+            else if (_typeHighlightIndex < 0)
+                _typeHighlightIndex = _currentNavigableTypeItems.Count - 1;
+
+            // Need the correct scrollview for types (likely the Namespace scrollview)
+            ScrollView nsScrollView = _namespaceColumnElement?.Q<ScrollView>();
+            VisualElement typeElement = _currentNavigableTypeItems[_typeHighlightIndex];
+            SelectTypeIndex(_typeHighlightIndex, typeElement);
+            nsScrollView?.ScrollTo(typeElement);
+            return true;
+        }
+
+        private void PopulateNavigableTypeItems()
+        {
+            _currentNavigableTypeItems.Clear();
+            if (_typeListParentNamespaceHeader == null)
+                return; // Need context
+
+            var typesContainer = _typeListParentNamespaceHeader
+                .IterateChildrenRecursively()
+                .FirstOrDefault(child =>
+                    child.name.Contains("types-container", StringComparison.OrdinalIgnoreCase)
+                );
+            if (typesContainer == null || typesContainer.style.display == DisplayStyle.None)
+                return; // Must be expanded
+
+            _currentNavigableTypeItems.AddRange(typesContainer.Children());
+        }
+
+        private static void UpdateListHighlight(
+            List<VisualElement> items,
+            int index,
+            ScrollView scrollView,
+            string highlightClass
+        )
+        {
+            if (items == null)
+                return;
+            VisualElement elementToScrollTo = null;
+            for (int i = 0; i < items.Count; ++i)
+            {
+                if (items[i] == null)
+                    continue;
+                bool shouldHighlight = (i == index);
+                items[i].EnableInClassList(highlightClass, shouldHighlight);
+                if (shouldHighlight)
+                {
+                    Debug.Log($"SELECTING {i} TYPE INDEX");
+                }
+                if (shouldHighlight)
+                    elementToScrollTo = items[i];
+            }
+            // Schedule scroll
+            if (elementToScrollTo != null && scrollView != null)
+            {
+                elementToScrollTo
+                    .schedule.Execute(() =>
+                    {
+                        if (elementToScrollTo.panel != null)
+                            scrollView.ScrollTo(elementToScrollTo);
+                    })
+                    .ExecuteLater(1);
+            }
         }
 
         private void HandleClickOutsidePopover(PointerDownEvent evt)
@@ -2242,6 +2482,10 @@
             nsHeader.AddToClassList(NamespaceGroupHeaderClass);
             _addTypeButton = new Button(() =>
             {
+                if (Time.realtimeSinceStartup < _lastEnterPressed + 0.5f)
+                {
+                    return;
+                }
                 TogglePopover(_typeAddPopover, _addTypeButton);
             })
             {
@@ -2272,7 +2516,7 @@
                 filter = null;
             }
 
-            if (_lastTypeAddSearchTerm == filter)
+            if (_lastTypeAddSearchTerm == filter && _currentTypePopoverItems.Any())
             {
                 return;
             }
@@ -2538,6 +2782,7 @@
 
         private void HandleTypePopoverKeyDown(KeyDownEvent evt)
         {
+            Debug.Log("TYPE POPOVER KEY DOWN");
             if (
                 _activePopover != _typeAddPopover
                 || _typeAddPopover.style.display == DisplayStyle.None
@@ -2584,9 +2829,6 @@
                         VisualElement selectedElement = _currentTypePopoverItems[
                             _typePopoverHighlightIndex
                         ];
-                        Debug.Log(
-                            $"SELECTING {selectedElement.name} {selectedElement.userData} {selectedElement}"
-                        );
                         HandleEnterOnPopoverItem(selectedElement);
                         evt.PreventDefault();
                         evt.StopPropagation();
@@ -2901,6 +3143,82 @@
             }
         }
 
+        private void HandleListKeyDown(KeyDownEvent evt)
+        {
+            Debug.Log("HANDLE LIST KEY DOWN");
+            // Ignore if a popover handled the event or should handle it
+            if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
+            {
+                // If search/type popover is active, let their specific handlers work
+                if (
+                    _lastActiveFocusArea == FocusArea.SearchResultsPopover
+                    || _lastActiveFocusArea == FocusArea.AddTypePopover
+                )
+                {
+                    // We could call their specific handlers here, but they are already registered on the search field.
+                    // Let's just prevent list navigation if these are open.
+                    return;
+                }
+                // Allow Escape in other popovers maybe?
+                if (evt.keyCode == KeyCode.Escape)
+                {
+                    CloseActivePopover();
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    return;
+                }
+                // Otherwise, block list navigation while other popovers (Rename, Confirm) are open
+                // return; // Or maybe just for up/down?
+                if (evt.keyCode == KeyCode.UpArrow || evt.keyCode == KeyCode.DownArrow)
+                    return;
+            }
+
+            // Determine target list based on last known focus
+            bool navigationHandled = false;
+            bool enterHandled = false;
+
+            switch (evt.keyCode)
+            {
+                case KeyCode.DownArrow:
+                case KeyCode.UpArrow:
+                    int direction = (evt.keyCode == KeyCode.DownArrow) ? 1 : -1;
+                    switch (_lastActiveFocusArea)
+                    {
+                        case FocusArea.TypeList:
+                            navigationHandled = NavigateTypeList(direction);
+                            break;
+                    }
+                    if (navigationHandled)
+                    {
+                        evt.PreventDefault(); // Stop default scroll
+                        evt.StopPropagation(); // Stop event bubbling further
+                    }
+                    break;
+
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                    switch (_lastActiveFocusArea)
+                    {
+                        case FocusArea.TypeList:
+                            enterHandled = HandleEnterOnTypeList();
+                            break;
+                        // No action on Enter for Object list currently
+                    }
+                    if (enterHandled)
+                    {
+                        evt.PreventDefault();
+                        evt.StopPropagation();
+                    }
+                    break;
+
+                case KeyCode.Escape:
+                    // Maybe clear highlight/selection? Or unfocus area?
+                    // ClearKeyboardHighlight(); // Implement this if needed
+                    _lastActiveFocusArea = FocusArea.None; // Reset focus area?
+                    break;
+            }
+        }
+
 #if ODIN_INSPECTOR
         private void HandleOdinPropertyValueChanged(InspectorProperty property, int selectionIndex)
         {
@@ -3112,8 +3430,10 @@
                     evt.StopPropagation();
                 });
 
-                foreach (Type type in types)
+                for (int i = 0; i < types.Count; i++)
                 {
+                    int index = i;
+                    Type type = types[i];
                     VisualElement typeItem = new()
                     {
                         name = $"type-item-{type.Name}",
@@ -3128,8 +3448,10 @@
                     typeLabel.AddToClassList(TypeLabelClass);
                     typeLabel.AddToClassList("clickable");
                     typeItem.Add(typeLabel);
-
-                    typeItem.RegisterCallback<PointerDownEvent>(OnTypePointerDown);
+                    // ReSharper disable once HeapView.CanAvoidClosure
+                    typeItem.RegisterCallback<PointerDownEvent>(evt =>
+                        OnTypePointerDown(namespaceGroupItem, evt)
+                    );
                     // ReSharper disable once HeapView.CanAvoidClosure
                     typeItem.RegisterCallback<PointerUpEvent>(evt =>
                     {
@@ -3138,30 +3460,32 @@
                             return;
                         }
 
-                        if (typeItem.userData is not Type clickedType)
-                        {
-                            return;
-                        }
-
-                        _selectedTypeElement?.parent?.RemoveFromClassList("selected");
-                        _selectedTypeElement?.RemoveFromClassList("selected");
-                        _selectedType = clickedType;
-                        _selectedTypeElement = typeItem;
-                        _selectedTypeElement.AddToClassList("selected");
-                        SaveNamespaceAndTypeSelectionState(
-                            GetNamespaceKey(_selectedType),
-                            _selectedType.Name
-                        );
-
-                        LoadObjectTypes(clickedType);
-                        ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
-                        BuildObjectsView();
-                        SelectObject(objectToSelect);
+                        SelectTypeIndex(index, typeItem);
                         evt.StopPropagation();
                     });
                     typesContainer.Add(typeItem);
                 }
             }
+        }
+
+        private void SelectTypeIndex(int index, VisualElement typeItem)
+        {
+            _selectedNamespaceElement?.RemoveFromClassList("selected");
+            _typeHighlightIndex = index;
+            Type clickedType = typeItem.userData as Type;
+            _selectedTypeElement?.parent?.RemoveFromClassList("selected");
+            _selectedTypeElement?.RemoveFromClassList("selected");
+            _selectedType = clickedType;
+            _selectedTypeElement = typeItem;
+            _selectedTypeElement.AddToClassList("selected");
+            SaveNamespaceAndTypeSelectionState(GetNamespaceKey(_selectedType), _selectedType?.Name);
+            _selectedNamespaceElement = typeItem?.parent?.parent;
+            _selectedNamespaceElement?.EnableInClassList("selected", true);
+
+            LoadObjectTypes(clickedType);
+            ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
+            BuildObjectsView();
+            SelectObject(objectToSelect);
         }
 
         private void BuildObjectsView()
@@ -3930,6 +4254,7 @@
         {
             _selectedElement?.RemoveFromClassList("selected");
             _selectedObject = dataObject;
+
             _selectedElement = null;
 
             if (
@@ -3988,8 +4313,15 @@
                 )
             )
             {
+                // TODO CONSOLIDATE
                 namespaceElement?.EnableInClassList("selected", true);
-                namespaceElement?.parent?.EnableInClassList("selected", true);
+                _selectedNamespaceElement = namespaceElement?.parent?.parent;
+                _selectedNamespaceElement?.EnableInClassList("selected", true);
+                VisualElement immediateParent = namespaceElement?.parent;
+                if (immediateParent != null)
+                {
+                    _typeHighlightIndex = immediateParent.IndexOf(namespaceElement);
+                }
             }
         }
 
@@ -4232,8 +4564,9 @@
             SetNamespaceOrder(newNamespaceOrder);
         }
 
-        private void OnTypePointerDown(PointerDownEvent evt)
+        private void OnTypePointerDown(VisualElement namespaceHeader, PointerDownEvent evt)
         {
+            // TODO IMPLEMENT NEW HANDLER
             if (evt.currentTarget is not VisualElement { userData: Type type } targetElement)
             {
                 return;
@@ -4241,6 +4574,8 @@
 
             if (evt.button == 0)
             {
+                _lastActiveFocusArea = FocusArea.TypeList;
+                _typeListParentNamespaceHeader = namespaceHeader;
                 _draggedElement = targetElement;
                 _draggedData = type;
                 _activeDragType = DragType.Type;

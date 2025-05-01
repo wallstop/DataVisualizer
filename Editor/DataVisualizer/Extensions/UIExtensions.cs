@@ -1,5 +1,6 @@
 ﻿namespace WallstopStudios.Editor.DataVisualizer.Extensions
 {
+    using System.Collections.Generic;
     using UnityEngine.UIElements;
 
     public static class UIExtensions
@@ -34,6 +35,20 @@
 
                 textField.SetValueWithoutNotify(placeholder);
                 textField.AddToClassList(placeholderClass);
+            }
+        }
+
+        public static IEnumerable<VisualElement> IterateChildrenRecursively(
+            this VisualElement element
+        )
+        {
+            foreach (VisualElement child in element.Children())
+            {
+                yield return child;
+                foreach (VisualElement grandChild in IterateChildrenRecursively(child))
+                {
+                    yield return grandChild;
+                }
             }
         }
     }
