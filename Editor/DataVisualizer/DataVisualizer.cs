@@ -44,8 +44,10 @@
         private const string ObjectItemContentClass = "object-item-content";
         private const string ObjectItemActionsClass = "object-item-actions";
         private const string PopoverListItemClassName = "type-selection-list-item";
+
         private const string PopoverListItemDisabledClassName =
             "type-selection-list-item--disabled";
+
         private const string PopoverListNamespaceClassName = "type-selection-list-namespace";
         private const string PopoverNamespaceHeaderClassName = "popover-namespace-header";
         private const string PopoverNamespaceIndicatorClassName = "popover-namespace-indicator";
@@ -87,6 +89,7 @@
                 {
                     LoadUserStateFromFile();
                 }
+
                 return _userState;
 #pragma warning restore CS0618 // Type or member is obsolete
             }
@@ -101,6 +104,7 @@
                 {
                     _settings = LoadOrCreateSettings();
                 }
+
                 return _settings;
 #pragma warning restore CS0618 // Type or member is obsolete
             }
@@ -109,9 +113,12 @@
         private readonly Dictionary<string, List<Type>> _scriptableObjectTypes = new(
             StringComparer.Ordinal
         );
+
         private readonly Dictionary<string, int> _namespaceOrder = new(StringComparer.Ordinal);
+
         private readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
             new();
+
         private readonly List<ScriptableObject> _selectedObjects = new();
         private readonly List<ScriptableObject> _allManagedSOsCache = new();
         private readonly List<VisualElement> _currentSearchResultItems = new();
@@ -164,7 +171,6 @@
         private FocusArea _lastActiveFocusArea = FocusArea.None;
         private DragType _activeDragType = DragType.None;
         private object _draggedData;
-        private VisualElement _selectedTypeElement;
         private VisualElement _inPlaceGhost;
         private int _lastGhostInsertIndex = -1;
         private VisualElement _lastGhostParent;
@@ -179,6 +185,7 @@
 
         [Obsolete("Use UserState instead.")]
         private DataVisualizerUserState _userState;
+
         private bool _userStateDirty;
 
         [Obsolete("User Settings instead.")]
@@ -273,6 +280,8 @@
 
         private void Cleanup()
         {
+            _selectedElement = null;
+            _selectedObject = null;
             _namespaceController.SelectType(this, null);
             _scriptableObjectTypes.Clear();
             _namespaceOrder.Clear();
@@ -304,6 +313,7 @@
                 _odinPropertyTree.Dispose();
                 _odinPropertyTree = null;
             }
+
             _odinInspectorContainer?.RemoveFromHierarchy();
             _odinInspectorContainer?.Dispose();
             _odinInspectorContainer = null;
@@ -332,6 +342,7 @@
                     {
                         continue;
                     }
+
                     string path = AssetDatabase.GUIDToAssetPath(guid);
                     if (!string.IsNullOrWhiteSpace(path))
                     {
@@ -354,6 +365,7 @@
                     {
                         return comparison;
                     }
+
                     return string.Compare(
                         a.GetType().FullName,
                         b.GetType().FullName,
@@ -439,6 +451,8 @@
         private void RefreshAllViews()
         {
             Type selectedType = _namespaceController.SelectedType;
+            Debug.Log($"Currently selected type {selectedType?.FullName}.");
+
             string previousNamespaceKey =
                 selectedType != null
                     ? NamespaceController.GetNamespaceKey(selectedType)
@@ -456,15 +470,12 @@
 
             LoadScriptableObjectTypes();
 
-            _selectedObject = null;
-            _selectedElement = null;
-            _selectedTypeElement = null;
-
             int namespaceIndex = -1;
             if (!string.IsNullOrWhiteSpace(previousNamespaceKey))
             {
                 namespaceIndex = _namespaceOrder.GetValueOrDefault(previousNamespaceKey, -1);
             }
+
             if (namespaceIndex < 0 && 0 < _scriptableObjectTypes.Count)
             {
                 namespaceIndex = 0;
@@ -487,6 +498,12 @@
 
                     selectedType ??= typesInNamespace[0];
                 }
+                else
+                {
+                    Debug.LogWarning(
+                        $"Failed to find any types for namespace {previousNamespaceKey}."
+                    );
+                }
             }
 
             if (selectedType != null)
@@ -498,13 +515,14 @@
                 _selectedObjects.Clear();
             }
 
+            ScriptableObject selectedObject = _selectedObject;
             if (
                 selectedType != null
                 && !string.IsNullOrWhiteSpace(previousObjectGuid)
                 && 0 < _selectedObjects.Count
             )
             {
-                _selectedObject = _selectedObjects.Find(obj =>
+                selectedObject = _selectedObjects.Find(obj =>
                 {
                     if (obj == null)
                     {
@@ -512,6 +530,7 @@
                     }
 
                     string path = AssetDatabase.GetAssetPath(obj);
+
                     return !string.IsNullOrWhiteSpace(path)
                         && string.Equals(
                             AssetDatabase.AssetPathToGUID(path),
@@ -527,16 +546,14 @@
             VisualElement typeElementToSelect = FindTypeElement(selectedType);
             if (typeElementToSelect != null)
             {
-                _selectedTypeElement = typeElementToSelect;
-                _selectedTypeElement.AddToClassList(StyleConstants.SelectedClass);
-                VisualElement ancestorGroup = FindAncestorNamespaceGroup(_selectedTypeElement);
+                VisualElement ancestorGroup = FindAncestorNamespaceGroup(typeElementToSelect);
                 if (ancestorGroup != null)
                 {
                     ExpandNamespaceGroupIfNeeded(ancestorGroup, false);
                 }
             }
 
-            SelectObject(_selectedObject);
+            SelectObject(selectedObject);
             PopulateSearchCache();
             _namespaceController.SelectType(this, selectedType);
         }
@@ -555,8 +572,10 @@
                 {
                     return currentElement;
                 }
+
                 currentElement = currentElement.parent;
             }
+
             return null;
         }
 
@@ -605,6 +624,7 @@
                     {
                         continue;
                     }
+
                     settings = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(path);
                     if (settings != null)
                     {
@@ -725,6 +745,7 @@
                         bestNamespace = entry.Key;
                     }
                 }
+
                 typesInNamespace = _scriptableObjectTypes.GetValueOrDefault(bestNamespace, null);
             }
             else
@@ -755,12 +776,8 @@
             VisualElement typeElementToSelect = FindTypeElement(selectedType);
             if (typeElementToSelect != null)
             {
-                _selectedTypeElement?.RemoveFromClassList(StyleConstants.SelectedClass);
-                _selectedTypeElement = typeElementToSelect;
-                _selectedTypeElement.AddToClassList(StyleConstants.SelectedClass);
-
                 VisualElement ancestorGroup = null;
-                VisualElement currentElement = _selectedTypeElement;
+                VisualElement currentElement = typeElementToSelect;
                 while (currentElement != null && currentElement != _namespaceListContainer)
                 {
                     if (currentElement.ClassListContains(NamespaceItemClass))
@@ -768,6 +785,7 @@
                         ancestorGroup = currentElement;
                         break;
                     }
+
                     currentElement = currentElement.parent;
                 }
 
@@ -794,6 +812,7 @@
             {
                 savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.Name);
             }
+
             ScriptableObject objectToSelect = null;
 
             if (!string.IsNullOrWhiteSpace(savedObjectGuid) && 0 < _selectedObjects.Count)
@@ -841,6 +860,7 @@
                     return item;
                 }
             }
+
             return null;
         }
 
@@ -1088,6 +1108,7 @@
                     $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
                 );
             }
+
             if (styleSheet != null)
             {
                 root.styleSheets.Add(styleSheet);
@@ -1442,6 +1463,7 @@
                     );
                     termMatchedThisLoop = true;
                 }
+
                 if (typeName.Contains(term, StringComparison.OrdinalIgnoreCase))
                 {
                     detailsForThisTerm.Add(
@@ -1453,6 +1475,7 @@
                     );
                     termMatchedThisLoop = true;
                 }
+
                 if (
                     !string.IsNullOrWhiteSpace(guid)
                     && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
@@ -1532,6 +1555,7 @@
                         indices.Add(Tuple.Create(start, term.Length));
                         start += term.Length;
                     }
+
                     return indices;
                 })
                 .Where(t => t != null)
@@ -1695,31 +1719,7 @@
 
         private static VisualElement CreatePopoverBase(string name)
         {
-            VisualElement popover = new()
-            {
-                name = name,
-                style =
-                {
-                    position = Position.Absolute,
-                    minWidth = 200,
-                    minHeight = 50,
-                    backgroundColor = new Color(0.22f, 0.22f, 0.22f, 0.98f),
-                    borderLeftWidth = 1,
-                    borderRightWidth = 1,
-                    borderTopWidth = 1,
-                    borderBottomWidth = 1,
-                    borderBottomColor = Color.black,
-                    borderLeftColor = Color.black,
-                    borderRightColor = Color.black,
-                    borderTopColor = Color.black,
-                    display = DisplayStyle.None,
-                    flexDirection = FlexDirection.Column,
-                    paddingBottom = 10,
-                    paddingLeft = 10,
-                    paddingRight = 10,
-                    paddingTop = 10,
-                },
-            };
+            VisualElement popover = new() { name = name };
             popover.AddToClassList("popover");
             return popover;
         }
@@ -1738,21 +1738,10 @@
 
             _confirmActionPopover.Clear(); // Clear previous content
 
-            // Style the root - ensure padding for content
-            _confirmActionPopover.style.paddingBottom = 10;
-            _confirmActionPopover.style.paddingLeft = 10;
-            _confirmActionPopover.style.paddingRight = 10;
-            _confirmActionPopover.style.paddingTop = 10;
-
             // Message Label
             var messageLabel = new Label(message)
             {
-                style =
-                {
-                    whiteSpace = WhiteSpace.Normal,
-                    marginBottom = 15,
-                    fontSize = 12,
-                },
+                style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
             };
             _confirmActionPopover.Add(messageLabel);
 
@@ -1764,11 +1753,10 @@
             _confirmActionPopover.Add(buttonContainer);
 
             // Cancel Button - Simply closes the active (this) popover
-            var cancelButton = new Button(CloseActivePopover)
-            {
-                text = "Cancel",
-                style = { marginRight = 5 },
-            };
+            var cancelButton = new Button(CloseActivePopover) { text = "Cancel" };
+            cancelButton.AddToClassList("popover-button");
+            cancelButton.AddToClassList("popover-cancel-button");
+            cancelButton.AddToClassList("clickable");
             buttonContainer.Add(cancelButton);
 
             // Confirmation Button - Executes action, then closes
@@ -1780,7 +1768,9 @@
             {
                 text = confirmText,
             };
-            confirmButton.AddToClassList("button-danger"); // Use danger styling
+            confirmButton.AddToClassList("popover-button");
+            confirmButton.AddToClassList("popover-delete-button");
+            confirmButton.AddToClassList("clickable");
             buttonContainer.Add(confirmButton);
 
             // Open the populated popover, positioned relative to the trigger
@@ -1944,10 +1934,12 @@
                             HandleTypePopoverKeyDown(evt); // Use existing handler logic
                             return; // Handled by popover
                         }
+
                         // Let Enter potentially fall through if popover doesn't handle it (e.g., settings)
                         // Let Arrows fall through if popover doesn't handle it
                         break; // Break switch, don't return yet for Enter maybe
                 }
+
                 // If Escape wasn't pressed, and it wasn't search/type popover nav,
                 // let the key potentially be handled by controls within other popovers (e.g., text field in Rename)
                 // OR stop propagation if we don't want main lists navigating while popover open. Let's stop it.
@@ -2035,6 +2027,7 @@
                         clickInsideNested = true;
                         break;
                     }
+
                     current = current.parent;
                 }
             }
@@ -2054,6 +2047,7 @@
                         clickInsideMain = true;
                         break;
                     }
+
                     current = current.parent;
                 }
             }
@@ -2294,8 +2288,8 @@
             {
                 value = Path.GetFileNameWithoutExtension(originalName),
                 name = "rename-textfield",
-                style = { marginBottom = 5 },
             };
+            nameTextField.AddToClassList("rename-text-field");
             nameTextField.schedule.Execute(() => nameTextField.SelectAll()).ExecuteLater(50);
             _renamePopover.Add(nameTextField);
             Label errorLabel = new()
@@ -2318,15 +2312,17 @@
                     marginTop = 5,
                 },
             };
-            Button cancelButton = new(CloseActivePopover)
-            {
-                text = "Cancel",
-                style = { marginRight = 5 },
-            };
+            Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
+            cancelButton.AddToClassList("popover-button");
+            cancelButton.AddToClassList("popover-cancel-button");
+            cancelButton.AddToClassList("clickable");
             Button renameButton = new(() => HandleRenameConfirmed(nameTextField, errorLabel))
             {
                 text = "Rename",
             };
+            renameButton.AddToClassList("popover-button");
+            renameButton.AddToClassList("popover-rename-button");
+            renameButton.AddToClassList("clickable");
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(renameButton);
             _renamePopover.Add(buttonContainer);
@@ -2348,6 +2344,7 @@
                 errorLabel.style.display = DisplayStyle.Flex;
                 return;
             }
+
             if (
                 newName.Equals(
                     Path.GetFileNameWithoutExtension(originalPath),
@@ -2368,6 +2365,7 @@
                 errorLabel.style.display = DisplayStyle.Flex;
                 return;
             }
+
             string newPath = Path.Combine(directory, newName + Path.GetExtension(originalPath))
                 .SanitizePath();
             string validationError = AssetDatabase.ValidateMoveAsset(originalPath, newPath);
@@ -2411,22 +2409,27 @@
             _confirmDeletePopover.userData = objectToDelete;
 
             _confirmDeletePopover.Add(
-                new Label($"Delete '{objectToDelete.name}'?\nThis cannot be undone.")
+                new Label(
+                    $"Delete '<color=yellow><i>{objectToDelete.name}</i></color>'?\nThis cannot be undone."
+                )
                 {
+                    // TODO: CLEAN UP STYLE
                     style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
                 }
             );
             VisualElement buttonContainer = new()
             {
+                // TODO: CLEAN UP STYLE
                 style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
             };
-            Button cancelButton = new(CloseActivePopover)
-            {
-                text = "Cancel",
-                style = { marginRight = 5 },
-            };
+            Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
+            cancelButton.AddToClassList("popover-cancel-button");
+            cancelButton.AddToClassList("popover-button");
+            cancelButton.AddToClassList("clickable");
             Button deleteButton = new(HandleDeleteConfirmed) { text = "Delete" };
-            deleteButton.AddToClassList("delete-button");
+            deleteButton.AddToClassList("popover-button");
+            deleteButton.AddToClassList("popover-delete-button");
+            deleteButton.AddToClassList("clickable");
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(deleteButton);
             _confirmDeletePopover.Add(buttonContainer);
@@ -2484,6 +2487,7 @@
                     {
                         return;
                     }
+
                     BuildSettingsPopoverContent();
                 }
                 else if (popover == _typeAddPopover)
@@ -2492,6 +2496,7 @@
                     {
                         return;
                     }
+
                     BuildTypeAddList();
                 }
 
@@ -2526,6 +2531,7 @@
                 {
                     return;
                 }
+
                 TogglePopover(_typeAddPopover, _addTypeButton);
             })
             {
@@ -2543,7 +2549,7 @@
                 name = "namespace-scrollview",
             };
             namespaceScrollView.AddToClassList("namespace-scrollview");
-            _namespaceListContainer = new VisualElement { name = "namespace-list" };
+            _namespaceListContainer ??= new VisualElement { name = "namespace-list" };
             namespaceScrollView.Add(_namespaceListContainer);
             namespaceColumn.Add(namespaceScrollView);
             return namespaceColumn;
@@ -3019,12 +3025,14 @@
                         _namespaceOrder[NamespaceController.GetNamespaceKey(selectedType)] =
                             _namespaceOrder.Count;
                     }
+
                     types.Add(selectedType);
                     SyncNamespaceAndTypeOrders();
                     LoadScriptableObjectTypes();
                     BuildNamespaceView();
                 }
             }
+
             CloseActivePopover();
             evt.StopPropagation();
         }
@@ -3305,6 +3313,7 @@
                 {
                     SyncNamespaceAndTypeOrders();
                 }
+
                 CloseActivePopover();
                 if (stateChanged)
                 {
@@ -3378,6 +3387,7 @@
                 {
                     dataObjectName = dataObject.name;
                 }
+
                 Label titleLabel = new(dataObjectName) { name = "object-item-label" };
                 titleLabel.AddToClassList("object-item__label");
                 titleLabel.AddToClassList("clickable");
@@ -3461,9 +3471,53 @@
                     _odinPropertyTree.Dispose();
                     _odinPropertyTree = null;
                 }
+
                 _odinInspectorContainer?.MarkDirtyRepaint();
 #endif
                 return;
+            }
+
+            if (_selectedElement != null)
+            {
+                try
+                {
+                    // Use a TextField for familiar look and copy-paste support
+                    var assetNameField = new TextField("Asset Name:") // Label for the field
+                    {
+                        value = _selectedObject.name, // The object's name (usually filename without extension)
+                        isReadOnly = true, // Make it non-editable
+                        name = "inspector-asset-name-field", // For USS styling
+                    };
+
+                    // Explicitly disable the actual text input part for visual clarity
+                    // This selector targets the underlying input element within the TextField's structure.
+                    assetNameField
+                        .Q<TextInputBaseField<string>>(TextField.textInputUssName)
+                        ?.SetEnabled(false);
+
+                    // Optional: Add USS class for specific read-only styling
+                    assetNameField.AddToClassList("readonly-display-field");
+
+                    _inspectorContainer.Add(assetNameField); // Add to the container FIRST
+
+                    // Optional: Add a small visual separator after the name field
+                    var separator = new VisualElement
+                    {
+                        style =
+                        {
+                            height = 1,
+                            backgroundColor = new Color(0.3f, 0.3f, 0.3f),
+                            marginTop = 3,
+                            marginBottom = 8,
+                            flexShrink = 0,
+                        },
+                    };
+                    _inspectorContainer.Add(separator);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Error creating asset name display field: {ex}");
+                }
             }
 
             // ReSharper disable once RedundantAssignment
@@ -3552,6 +3606,7 @@
                 {
                     _odinInspectorContainer.RemoveFromHierarchy();
                 }
+
                 _odinPropertyTree?.Dispose();
                 _odinPropertyTree = null;
 #endif
@@ -3660,6 +3715,7 @@
             {
                 visualMethod = availableMethods.FirstOrDefault();
             }
+
             if (visualMethod == null)
             {
                 return null;
@@ -3774,8 +3830,10 @@
                         break;
                     }
                 }
+
                 originalName = originalName.Substring(0, lastIndex + 1);
             }
+
             string extension = Path.GetExtension(originalPath);
             string proposedPath;
             string uniquePath;
@@ -3909,6 +3967,7 @@
                 {
                     return;
                 }
+
                 SetIsNamespaceCollapsed(namespaceKey, collapsed);
             }
         }
@@ -3922,6 +3981,7 @@
             {
                 return;
             }
+
             UpdateObjectTitleRepresentation(dataObject, visualElement);
         }
 
@@ -3951,6 +4011,7 @@
             {
                 currentTitle = dataObject.name;
             }
+
             if (titleLabel.text != currentTitle)
             {
                 titleLabel.text = currentTitle;
@@ -4042,6 +4103,7 @@
                         .ToHashSet(StringComparer.OrdinalIgnoreCase)
                     ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             }
+
             List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
 
             List<Type> typesToDisplay = allObjectTypes
@@ -4131,6 +4193,7 @@
                         {
                             objectGuid = AssetDatabase.AssetPathToGUID(assetPath);
                         }
+
                         SetLastSelectedNamespaceKey(namespaceKey);
                         SetLastSelectedTypeName(typeName);
                         SetLastSelectedObjectGuidForType(typeName, objectGuid);
@@ -4153,12 +4216,13 @@
             _currentInspectorScriptableObject?.Dispose();
             _currentInspectorScriptableObject =
                 dataObject != null ? new SerializedObject(dataObject) : null;
-            BuildInspectorView();
 
             if (dataObject != null)
             {
                 _namespaceController.SelectType(this, dataObject.GetType());
             }
+
+            BuildInspectorView();
         }
 
         private void OnObjectPointerDown(PointerDownEvent evt)
@@ -4221,6 +4285,7 @@
             {
                 return;
             }
+
             _lastDragUpdateTime = currentTime;
 
             if (!_isDragging)
@@ -4608,6 +4673,7 @@
                     {
                         _inPlaceGhost.AddToClassList(className);
                     }
+
                     _inPlaceGhost.AddToClassList("in-place-ghost");
 
                     Label originalLabel =
@@ -4622,6 +4688,7 @@
                         {
                             ghostLabel.AddToClassList(className);
                         }
+
                         ghostLabel.pickingMode = PickingMode.Ignore;
                         _inPlaceGhost.Add(ghostLabel);
                     }
@@ -4811,6 +4878,7 @@
                 _inPlaceGhost.RemoveFromHierarchy();
                 _inPlaceGhost = null;
             }
+
             _lastGhostInsertIndex = -1;
             _lastGhostParent = null;
 
@@ -4860,6 +4928,7 @@
             {
                 _userState = new DataVisualizerUserState();
             }
+
             _userStateDirty = false;
         }
 
@@ -5145,6 +5214,7 @@
             {
                 return settings.namespaceOrder?.ToList() ?? new List<string>();
             }
+
             return UserState.namespaceOrder?.ToList() ?? new List<string>();
         }
 
@@ -5224,6 +5294,7 @@
                     {
                         return false;
                     }
+
                     entryList.Clear();
                     entryList.AddRange(typeNames);
                     return true;

@@ -39,11 +39,76 @@
 }
 
 .icon-button {
-    
+
+}
+
+.popover {
+    margin-top: 2px;
+    position: absolute;
+    min-width: 200px;
+    min-height: 50px;
+    background-color: rgba(0, 0, 0, 0.75);
+    border-radius: 10px;
+    border-width: 0;
+    display: none;
+    flex-direction: column;
+    padding: 10px;
+    color: white;
 }
 
 .rename-object-label {
     margin-bottom: 5px;
+}
+
+.rename-text-field > #unity-text-input {
+    margin-bottom: 5px;
+    border-radius: 5px;
+    padding: 2px 6px;
+    background-color: rgba(0, 0, 0, 1);
+    --unity-selection-color: rgba(51, 153, 230, 0.4);
+    border-color: rgb(51, 153, 230);
+    color: rgba(255, 255, 255, 0.7);
+    border-width: 2px;
+}
+
+.popover-button {
+    color: white;
+    padding: 2px 6px;
+    font-size: 16px;
+    border-width: 2px;
+    border-radius: 10px;
+    margin-bottom: 2px;
+}
+
+.popover-delete-button {
+    border-color: rgb(230, 102, 102);
+}
+
+.popover-delete-button:hover {
+    background-color: rgb(230, 102, 102);
+    border-color: rgb(230, 102, 102);
+    color: white;
+}
+
+.popover-rename-button {
+    border-color: rgb(51, 153, 230);
+}
+
+.popover-rename-button:hover {
+    background-color: rgb(51, 153, 230);
+    border-color: rgb(51, 153, 230);
+    color: white;
+}
+
+.popover-cancel-button {
+    border-color: darkkhaki;
+    margin-right: 10px;
+}
+
+.popover-cancel-button:hover {
+    border-color: darkkhaki;
+    background-color: darkkhaki;
+    color: crimson;
 }
 
 .types-container {
@@ -466,4 +531,16 @@
 
 .popover-item--highlighted {
     background-color: #4A6A8A; /* Use selection color or another distinct highlight */
+}
+
+.readonly-display-field > .unity-base-text-field__input {
+    /* Make text slightly dimmer */
+    color: grey;
+    /* Optional: Remove background tint/border that implies editability */
+    background-color: transparent;
+    border-width: 0;
+}
+/* Prevent the label part from changing on disable */
+.readonly-display-field .unity-label {
+    opacity: 1 !important;
 }

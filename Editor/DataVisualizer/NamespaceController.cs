@@ -34,7 +34,7 @@
 
         public void Clear()
         {
-            _namespaceCache.Clear();
+            _selectedType = null;
         }
 
         public void DecrementTypeSelection(DataVisualizer dataVisualizer)
@@ -125,6 +125,9 @@
             _selectedType = null;
             if (!TryGet(type, out VisualElement element))
             {
+                Debug.LogWarning(
+                    $"Could not find type {type?.FullName}. Namespace cache: [{string.Join(",", _namespaceCache.Keys.Select(nsType => nsType.FullName).OrderBy(x => x))}]."
+                );
                 return;
             }
 
@@ -145,11 +148,8 @@
 
         public void Build(DataVisualizer dataVisualizer, ref VisualElement namespaceListContainer)
         {
-            if (namespaceListContainer == null)
-            {
-                return;
-            }
-
+            _selectedType = null;
+            namespaceListContainer ??= new VisualElement { name = "namespace-list" };
             namespaceListContainer.Clear();
             _namespaceCache.Clear();
             foreach (
@@ -205,18 +205,19 @@
                 header.Add(headerRight);
                 if (showNamespaceRemoveButton)
                 {
-                    Button namespaceRemoveButton = new(() =>
+                    Button namespaceRemoveButton = null;
+                    namespaceRemoveButton = new Button(() =>
                     {
                         dataVisualizer.BuildAndOpenConfirmationPopover(
                             $"Remove {removableTypeCount} non-core type{(removableTypeCount > 1 ? "s" : "")} from namespace '{namespaceKey}'?",
-                            "<b><color=red>Remove</color></b>",
+                            "Remove",
                             () =>
                                 HandleRemoveNamespaceTypesConfirmed(
                                     dataVisualizer,
                                     namespaceKey,
                                     nonCoreManagedTypes
                                 ),
-                            header
+                            namespaceRemoveButton
                         );
                     })
                     {
@@ -325,13 +326,14 @@
 
                     if (isRemovableType)
                     {
-                        Button typeRemoveButton = new(() =>
+                        Button typeRemoveButton = null;
+                        typeRemoveButton = new Button(() =>
                         {
                             dataVisualizer.BuildAndOpenConfirmationPopover(
-                                $"Remove type '{type.Name}' from Data Visualizer?",
-                                "<b><color=red>Remove</color></b>",
+                                $"Remove type '<color=yellow><i>{type.Name}</i></color>' from Data Visualizer?",
+                                "Remove",
                                 () => HandleRemoveTypeConfirmed(dataVisualizer, type),
-                                typeItem
+                                typeRemoveButton
                             );
                         })
                         {
