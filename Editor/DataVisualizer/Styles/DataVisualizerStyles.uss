@@ -2,6 +2,10 @@
     font-size: 16px;
 }
 
+* {
+    transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
 .object-item {
     padding: 4px 8px;
     margin: 2px 0;
@@ -265,7 +269,7 @@
     padding: 0;
     min-width: 0;
     background-color: transparent;
-    border-color: rgba(128, 128, 128, 128);
+    /*border-color: rgba(128, 128, 128, 128);*/
     border-radius: 50%;
     border-width: 2px;
     -unity-font-style: bold;
@@ -277,12 +281,10 @@
 
 .selected.action-button {
     -unity-font-style: bold;
-
 }
 
 .action-button:hover {
-    background-color: rgba(0, 0, 0, 0.6);
-    border-color: rgba(0, 0, 0, 0.6);
+    background-color: rgba(255, 255, 255, 0.9);
 }
 
 .selected.action-button:hover {
@@ -291,7 +293,6 @@
 }
 
 .create-button {
-    transition: background-color 1s ease, color 1s ease;
     -unity-font-style: bold;
     color: white;
     background-color: darkgreen;
@@ -307,17 +308,18 @@
 }
 
 .create-button:hover {
-    transition: background-color 1s ease, color 1s ease;
     background-color: white;
     color: darkgreen;
 }
 
 .delete-button {
+    border-color: rgb(230, 102, 102);
     padding: 1px 6px;
     color: rgb(230, 102, 102);
 }
 
 .clone-button {
+    border-color: rgb(102, 179, 102);
     color: rgb(102, 179, 102);
     padding-left: 2px;
     padding-right: 2px;
@@ -327,6 +329,7 @@
 .rename-button {
     padding: 4px;
     padding-bottom: 3px;
+    border-color: rgb(51, 153, 230);
     color: rgb(51, 153, 230);
 }
 
