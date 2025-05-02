@@ -5,6 +5,7 @@
     using System.Linq;
     using Helper;
     using UnityEngine;
+    using UnityEngine.Serialization;
 #if UNITY_EDITOR
     using UnityEditor;
 #endif
@@ -50,9 +51,10 @@
         [HideInInspector]
         internal List<string> namespaceOrder = new();
 
+        [FormerlySerializedAs("typeOrder")]
         [SerializeField]
         [HideInInspector]
-        internal List<NamespaceTypeOrder> typeOrder = new();
+        internal List<NamespaceTypeOrder> typeOrders = new();
 
         [SerializeField]
         [HideInInspector]
@@ -96,7 +98,7 @@
             lastSelectedNamespaceKey = userState.lastSelectedNamespaceKey;
             lastSelectedTypeName = userState.lastSelectedTypeName;
             namespaceOrder = userState.namespaceOrder?.ToList() ?? new List<string>();
-            typeOrder =
+            typeOrders =
                 userState.typeOrders?.Select(order => order.Clone()).ToList()
                 ?? new List<NamespaceTypeOrder>();
             lastObjectSelections =
@@ -162,7 +164,7 @@
 
         internal List<string> GetOrCreateTypeOrderList(string namespaceKey)
         {
-            NamespaceTypeOrder entry = typeOrder.Find(o =>
+            NamespaceTypeOrder entry = typeOrders.Find(o =>
                 string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
             );
             if (entry != null)
@@ -171,7 +173,7 @@
             }
 
             entry = new NamespaceTypeOrder() { namespaceKey = namespaceKey };
-            typeOrder.Add(entry);
+            typeOrders.Add(entry);
             return entry.typeNames;
         }
 

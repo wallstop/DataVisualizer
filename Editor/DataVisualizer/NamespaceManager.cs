@@ -5,106 +5,98 @@
     using System.Linq;
     using Data;
     using Helper;
+    using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer;
 
     public sealed class NamespaceManager
     {
-        private const string NamespaceItemClass = "namespace-item";
-        private const string NamespaceHeaderClass = "namespace-header";
-        private const string NamespaceGroupHeaderClass = "namespace-group-header";
-        private const string NamespaceIndicatorClass = "namespace-indicator";
-        private const string NamespaceLabelClass = "namespace-item__label";
-        private const string TypeItemClass = "type-item";
-        private const string TypeLabelClass = "type-item__label";
-
-        private const string ArrowCollapsed = "►";
-        private const string ArrowExpanded = "▼";
-
         public Type SelectedType => _selectedType;
 
-        private readonly List<(string key, List<Type> types)> _managedTypes;
+        private readonly Dictionary<string, List<Type>> _managedTypes;
+        private readonly Dictionary<string, int> _namespaceOrder;
         private readonly Dictionary<Type, VisualElement> _namespaceCache = new();
 
         private Type _selectedType;
 
-        public NamespaceManager(List<(string key, List<Type> types)> managedTypes)
+        public NamespaceManager(
+            Dictionary<string, List<Type>> managedTypes,
+            Dictionary<string, int> namespaceOrder
+        )
         {
             _managedTypes = managedTypes ?? throw new ArgumentNullException(nameof(managedTypes));
+            _namespaceOrder =
+                namespaceOrder ?? throw new ArgumentNullException(nameof(namespaceOrder));
         }
 
-        public bool TryGet(Type type, out VisualElement element)
+        public void DecrementTypeSelection(DataVisualizer dataVisualizer)
         {
-            return _namespaceCache.TryGetValue(type, out element);
-        }
-
-        public void DecrementTypeSelection()
-        {
-            if (_selectedType == null)
+            if (!InternalDeselectAndGetCurrentIndex(out VisualElement parent, out int currentIndex))
             {
                 return;
             }
 
-            if (!TryGet(_selectedType, out VisualElement element))
-            {
-                return;
-            }
-
-            element.RemoveFromClassList("selected");
-            VisualElement parent = element.parent;
-            if (parent == null)
-            {
-                return;
-            }
-
-            int currentIndex = parent.IndexOf(element);
             currentIndex--;
             if (currentIndex < 0)
             {
                 currentIndex = parent.childCount - 1;
             }
 
-            if (0 <= currentIndex && currentIndex < parent.childCount)
-            {
-                element = parent.ElementAt(currentIndex);
-                element.AddToClassList("selected");
-                _selectedType = element.userData as Type;
-            }
+            Type type = InternalSelected(parent, currentIndex);
+            SelectType(dataVisualizer, type);
         }
 
-        public void IncrementTypeSelection()
+        public void IncrementTypeSelection(DataVisualizer dataVisualizer)
         {
-            if (_selectedType == null)
+            if (!InternalDeselectAndGetCurrentIndex(out VisualElement parent, out int currentIndex))
             {
                 return;
             }
 
-            if (!TryGet(_selectedType, out VisualElement element))
-            {
-                return;
-            }
-
-            element.RemoveFromClassList("selected");
-            VisualElement parent = element.parent;
-            if (parent == null)
-            {
-                return;
-            }
-
-            int currentIndex = parent.IndexOf(element);
             currentIndex++;
             if (parent.childCount <= currentIndex)
             {
                 currentIndex = 0;
             }
+            Type type = InternalSelected(parent, currentIndex);
+            SelectType(dataVisualizer, type);
+        }
 
-            if (0 <= currentIndex && currentIndex < parent.childCount)
+        private bool InternalDeselectAndGetCurrentIndex(
+            out VisualElement parent,
+            out int currentIndex
+        )
+        {
+            if (!TryGet(_selectedType, out VisualElement element))
             {
-                element = parent.ElementAt(currentIndex);
-                element.AddToClassList("selected");
-                _selectedType = element.userData as Type;
+                parent = default;
+                currentIndex = default;
+                return false;
             }
+
+            element.RemoveFromClassList(StyleConstants.SelectedClass);
+            parent = element.parent;
+            if (parent == null)
+            {
+                currentIndex = default;
+                return false;
+            }
+
+            currentIndex = parent.IndexOf(element);
+            return true;
+        }
+
+        private static Type InternalSelected(VisualElement parent, int index)
+        {
+            if (0 > index || index >= parent.childCount)
+            {
+                return null;
+            }
+
+            VisualElement element = parent.ElementAt(index);
+            element.AddToClassList(StyleConstants.SelectedClass);
+            return element.userData as Type;
         }
 
         public void SelectType(DataVisualizer dataVisualizer, Type type)
@@ -114,12 +106,12 @@
                 return;
             }
 
-            if (_selectedType != null && TryGet(_selectedType, out VisualElement currentSelection))
+            if (TryGet(_selectedType, out VisualElement currentSelection))
             {
-                currentSelection.RemoveFromClassList("selected");
+                currentSelection.RemoveFromClassList(StyleConstants.SelectedClass);
                 if (TryGetNamespace(currentSelection, out VisualElement currentNamespaceElement))
                 {
-                    currentNamespaceElement.RemoveFromClassList("selected");
+                    currentNamespaceElement.RemoveFromClassList(StyleConstants.SelectedClass);
                 }
             }
 
@@ -130,10 +122,10 @@
                 return;
             }
 
-            element.AddToClassList("selected");
+            element.AddToClassList(StyleConstants.SelectedClass);
             if (TryGetNamespace(element, out VisualElement newlySelectedNamespace))
             {
-                newlySelectedNamespace.AddToClassList("selected");
+                newlySelectedNamespace.AddToClassList(StyleConstants.SelectedClass);
             }
 
             SaveNamespaceAndTypeSelectionState(
@@ -157,7 +149,11 @@
 
             namespaceListContainer.Clear();
             _namespaceCache.Clear();
-            foreach ((string key, List<Type> types) in _managedTypes)
+            foreach (
+                (string key, List<Type> types) in _managedTypes.OrderBy(kvp =>
+                    _namespaceOrder.GetValueOrDefault(kvp.Key, _namespaceOrder.Count)
+                )
+            )
             {
                 string namespaceKey = key;
                 HashSet<string> managedFullNamesInGroup = types
@@ -165,13 +161,10 @@
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 List<Type> nonCoreManagedTypes = types
-                    .Where(t =>
-                        managedFullNamesInGroup.Contains(t.FullName)
-                        && !typeof(BaseDataObject).IsAssignableFrom(t)
-                    )
+                    .Where(t => !typeof(BaseDataObject).IsAssignableFrom(t))
                     .ToList();
                 int removableTypeCount = nonCoreManagedTypes.Count;
-                bool showNamespaceRemoveButton = removableTypeCount > 0; // Show if *any* removable types exist
+                bool showNamespaceRemoveButton = removableTypeCount > 0;
 
                 VisualElement namespaceGroupItem = new()
                 {
@@ -179,11 +172,11 @@
                     userData = key,
                 };
 
-                namespaceGroupItem.AddToClassList(NamespaceItemClass);
+                namespaceGroupItem.AddToClassList(StyleConstants.NamespaceItemClass);
                 namespaceGroupItem.userData = key;
                 if (types.Count == 0)
                 {
-                    namespaceGroupItem.AddToClassList("namespace-group-item--empty");
+                    namespaceGroupItem.AddToClassList(StyleConstants.NamespaceGroupItemEmptyClass);
                 }
 
                 namespaceListContainer.Add(namespaceGroupItem);
@@ -192,31 +185,32 @@
                 );
 
                 VisualElement header = new() { name = $"namespace-header-{key}" };
-                header.AddToClassList(NamespaceHeaderClass);
+                header.AddToClassList(StyleConstants.NamespaceHeaderClass);
                 namespaceGroupItem.Add(header);
 
-                Label indicator = new(ArrowExpanded) { name = $"namespace-indicator-{key}" };
-                indicator.AddToClassList(NamespaceIndicatorClass);
-                indicator.AddToClassList("clickable");
+                Label indicator = new(StyleConstants.ArrowExpanded)
+                {
+                    name = $"namespace-indicator-{key}",
+                };
+                indicator.AddToClassList(StyleConstants.NamespaceIndicatorClass);
+                indicator.AddToClassList(StyleConstants.ClickableClass);
                 header.Add(indicator);
 
-                Label namespaceLabel = new(key)
-                {
-                    name = $"namespace-name-{key}",
-                    style = { unityFontStyleAndWeight = FontStyle.Bold },
-                };
-                namespaceLabel.AddToClassList(NamespaceLabelClass);
+                Label namespaceLabel = new(key) { name = $"namespace-name-{key}" };
+                namespaceLabel.AddToClassList(StyleConstants.BoldClass);
+                namespaceLabel.AddToClassList(StyleConstants.NamespaceLabelClass);
                 header.Add(namespaceLabel);
 
-                VisualElement headerRight = new() { style = { flexShrink = 0 } };
+                VisualElement headerRight = new();
+                headerRight.AddToClassList(StyleConstants.NamespaceHeaderRightClass);
                 header.Add(headerRight);
                 if (showNamespaceRemoveButton)
                 {
-                    Button nsRemoveButton = new(() =>
+                    Button namespaceRemoveButton = new(() =>
                     {
                         dataVisualizer.BuildAndOpenConfirmationPopover(
                             $"Remove {removableTypeCount} non-core type{(removableTypeCount > 1 ? "s" : "")} from namespace '{namespaceKey}'?",
-                            "Remove",
+                            "<b><color=red>Remove</color></b>",
                             () =>
                                 HandleRemoveNamespaceTypesConfirmed(
                                     dataVisualizer,
@@ -231,17 +225,18 @@
                         tooltip =
                             $"Remove {removableTypeCount} non-BaseDataObject type{(removableTypeCount > 1 ? "s" : "")}",
                     };
-                    nsRemoveButton.AddToClassList("action-button");
-                    nsRemoveButton.AddToClassList("delete-button");
-                    headerRight.Add(nsRemoveButton);
+                    namespaceRemoveButton.AddToClassList(StyleConstants.ActionButtonClass);
+                    namespaceRemoveButton.AddToClassList(StyleConstants.DeleteButtonClass);
+                    namespaceRemoveButton.AddToClassList(StyleConstants.NamespaceDeleteButton);
+                    headerRight.Add(namespaceRemoveButton);
                 }
 
                 VisualElement typesContainer = new()
                 {
                     name = $"types-container-{key}",
-                    style = { marginLeft = 10 },
                     userData = key,
                 };
+                typesContainer.AddToClassList(StyleConstants.TypesContainerClass);
                 namespaceGroupItem.Add(typesContainer);
 
                 bool isCollapsed = GetIsNamespaceCollapsed(dataVisualizer, key);
@@ -263,7 +258,7 @@
 
                     VisualElement parentGroup = header.parent;
                     Label associatedIndicator = parentGroup?.Q<Label>(
-                        className: NamespaceIndicatorClass
+                        className: StyleConstants.NamespaceIndicatorClass
                     );
                     VisualElement associatedTypesContainer = parentGroup?.Q<VisualElement>(
                         $"types-container-{key}"
@@ -296,10 +291,7 @@
                 for (int i = 0; i < types.Count; i++)
                 {
                     Type type = types[i];
-
-                    bool isManaged = managedFullNamesInGroup.Contains(type.FullName);
-                    bool isRemovableType =
-                        isManaged && !typeof(BaseDataObject).IsAssignableFrom(type);
+                    bool isRemovableType = !typeof(BaseDataObject).IsAssignableFrom(type);
 
                     VisualElement typeItem = new()
                     {
@@ -307,20 +299,15 @@
                         userData = type,
                         pickingMode = PickingMode.Position,
                         focusable = true,
-                        style =
-                        {
-                            flexDirection = FlexDirection.Row,
-                            alignItems = Align.Center,
-                            justifyContent = Justify.SpaceBetween,
-                        },
                     };
+                    typeItem.AddToClassList(StyleConstants.TypeItemClass);
                     _namespaceCache[type] = typeItem;
 
-                    typeItem.AddToClassList(TypeItemClass);
                     Label typeLabel = new(type.Name) { name = "type-item-label" };
-                    typeLabel.AddToClassList(TypeLabelClass);
-                    typeLabel.AddToClassList("clickable");
+                    typeLabel.AddToClassList(StyleConstants.TypeLabelClass);
+                    typeLabel.AddToClassList(StyleConstants.ClickableClass);
                     typeItem.Add(typeLabel);
+
                     // ReSharper disable once HeapView.CanAvoidClosure
                     typeItem.RegisterCallback<PointerDownEvent>(evt =>
                         dataVisualizer.OnTypePointerDown(namespaceGroupItem, evt)
@@ -343,24 +330,34 @@
                         {
                             dataVisualizer.BuildAndOpenConfirmationPopover(
                                 $"Remove type '{type.Name}' from Data Visualizer?",
-                                "Remove",
+                                "<b><color=red>Remove</color></b>",
                                 () => HandleRemoveTypeConfirmed(dataVisualizer, type),
                                 typeItem
                             );
                         })
                         {
                             text = "X",
-                            tooltip = "Remove this type",
+                            tooltip = $"Remove {type.FullName}",
                         };
-                        typeRemoveButton.AddToClassList("action-button");
-                        typeRemoveButton.AddToClassList("delete-button");
-                        typeRemoveButton.style.flexShrink = 0;
+                        typeRemoveButton.AddToClassList(StyleConstants.ActionButtonClass);
+                        typeRemoveButton.AddToClassList(StyleConstants.DeleteButtonClass);
                         typeItem.Add(typeRemoveButton);
                     }
 
                     typesContainer.Add(typeItem);
                 }
             }
+        }
+
+        private bool TryGet(Type type, out VisualElement element)
+        {
+            if (type != null)
+            {
+                return _namespaceCache.TryGetValue(type, out element);
+            }
+
+            element = default;
+            return false;
         }
 
         private static void SaveNamespaceAndTypeSelectionState(
@@ -382,10 +379,7 @@
                     return;
                 }
 
-                if (!string.IsNullOrWhiteSpace(typeName))
-                {
-                    SetLastSelectedTypeName(dataVisualizer, typeName);
-                }
+                SetLastSelectedTypeName(dataVisualizer, typeName);
             }
             catch (Exception e)
             {
@@ -395,67 +389,74 @@
 
         private static void SetLastSelectedTypeName(DataVisualizer dataVisualizer, string value)
         {
-            DataVisualizerSettings settings = dataVisualizer.Settings;
-
-            if (settings.persistStateInSettingsAsset)
-            {
-                if (string.Equals(settings.lastSelectedTypeName, value, StringComparison.Ordinal))
+            dataVisualizer.PersistSettings(
+                settings =>
                 {
-                    return;
-                }
-
-                settings.lastSelectedTypeName = value;
-                settings.MarkDirty();
-            }
-            else
-            {
-                DataVisualizerUserState userState = dataVisualizer.UserState;
-                if (string.Equals(userState.lastSelectedTypeName, value, StringComparison.Ordinal))
+                    if (
+                        string.Equals(
+                            settings.lastSelectedTypeName,
+                            value,
+                            StringComparison.Ordinal
+                        )
+                    )
+                    {
+                        return false;
+                    }
+                    settings.lastSelectedTypeName = value;
+                    return true;
+                },
+                userState =>
                 {
-                    return;
+                    if (
+                        string.Equals(
+                            userState.lastSelectedTypeName,
+                            value,
+                            StringComparison.Ordinal
+                        )
+                    )
+                    {
+                        return false;
+                    }
+                    userState.lastSelectedTypeName = value;
+                    return true;
                 }
-
-                userState.lastSelectedTypeName = value;
-                dataVisualizer.MarkUserStateDirty();
-            }
+            );
         }
 
         private static void SetLastSelectedNamespaceKey(DataVisualizer dataVisualizer, string value)
         {
-            DataVisualizerSettings settings = dataVisualizer.Settings;
-            if (settings.persistStateInSettingsAsset)
-            {
-                if (
-                    string.Equals(
-                        settings.lastSelectedNamespaceKey,
-                        value,
-                        StringComparison.Ordinal
-                    )
-                )
+            dataVisualizer.PersistSettings(
+                settings =>
                 {
-                    return;
-                }
-
-                settings.lastSelectedNamespaceKey = value;
-                settings.MarkDirty();
-            }
-            else
-            {
-                DataVisualizerUserState userState = dataVisualizer.UserState;
-                if (
-                    string.Equals(
-                        userState.lastSelectedNamespaceKey,
-                        value,
-                        StringComparison.Ordinal
+                    if (
+                        string.Equals(
+                            settings.lastSelectedNamespaceKey,
+                            value,
+                            StringComparison.Ordinal
+                        )
                     )
-                )
+                    {
+                        return false;
+                    }
+                    settings.lastSelectedNamespaceKey = value;
+                    return true;
+                },
+                userState =>
                 {
-                    return;
+                    if (
+                        string.Equals(
+                            userState.lastSelectedNamespaceKey,
+                            value,
+                            StringComparison.Ordinal
+                        )
+                    )
+                    {
+                        return false;
+                    }
+                    userState.lastSelectedNamespaceKey = value;
+                    return true;
                 }
-
-                userState.lastSelectedNamespaceKey = value;
-                dataVisualizer.MarkUserStateDirty();
-            }
+            );
         }
 
         private static bool TryGetNamespace(
@@ -480,18 +481,22 @@
                 return;
             }
 
-            indicator.text = collapsed ? ArrowCollapsed : ArrowExpanded;
+            indicator.text = collapsed
+                ? StyleConstants.ArrowCollapsed
+                : StyleConstants.ArrowExpanded;
             typesContainer.style.display = collapsed ? DisplayStyle.None : DisplayStyle.Flex;
 
-            if (saveState)
+            if (!saveState)
             {
-                string namespaceKey = typesContainer.parent?.userData as string;
-                if (string.IsNullOrWhiteSpace(namespaceKey))
-                {
-                    return;
-                }
-                SetIsNamespaceCollapsed(dataVisualizer, namespaceKey, collapsed);
+                return;
             }
+
+            string namespaceKey = typesContainer.parent?.userData as string;
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return;
+            }
+            SetIsNamespaceCollapsed(dataVisualizer, namespaceKey, collapsed);
         }
 
         private static void SetIsNamespaceCollapsed(
@@ -586,6 +591,7 @@
                 dataVisualizer.SetLastSelectedObjectGuidForType(type.FullName, null);
                 RemoveTypeOrderEntry(dataVisualizer, namespaceKey, type.Name);
             }
+
             if (changed)
             {
                 PersistManagedTypesList(dataVisualizer, currentManagedList);
@@ -658,7 +664,7 @@
             );
         }
 
-        internal static void RemoveTypeOrderEntry(
+        private static void RemoveTypeOrderEntry(
             DataVisualizer dataVisualizer,
             string namespaceKey,
             string typeName
@@ -672,7 +678,7 @@
             dataVisualizer.PersistSettings(
                 settings =>
                 {
-                    NamespaceTypeOrder orderEntry = settings.typeOrder?.Find(o =>
+                    NamespaceTypeOrder orderEntry = settings.typeOrders?.Find(o =>
                         string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                     );
                     return orderEntry != null && orderEntry.typeNames.Remove(typeName);
@@ -687,20 +693,21 @@
             );
         }
 
-        private List<string> GetManagedTypeNames(string namespaceKey)
+        internal List<string> GetManagedTypeNames(string namespaceKey = null)
         {
-            foreach ((string key, List<Type> types) in _managedTypes)
+            if (string.IsNullOrWhiteSpace(namespaceKey))
             {
-                if (string.Equals(key, namespaceKey, StringComparison.OrdinalIgnoreCase))
-                {
-                    return types.Select(type => type.FullName).ToList();
-                }
+                return _managedTypes
+                    .SelectMany(kvp => kvp.Value.Select(type => type.FullName))
+                    .ToList();
             }
-
-            return new List<string>(0);
+            return _managedTypes
+                .GetValueOrDefault(namespaceKey, new List<Type>())
+                .Select(type => type.FullName)
+                .ToList();
         }
 
-        private static string GetNamespaceKey(Type type)
+        internal static string GetNamespaceKey(Type type)
         {
             if (
                 type.IsAttributeDefined(out CustomDataVisualization attribute)

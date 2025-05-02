@@ -31,7 +31,7 @@
             lastSelectedTypeName = settings.lastSelectedTypeName;
             namespaceOrder = settings.namespaceOrder?.ToList() ?? new List<string>();
             typeOrders =
-                settings.typeOrder?.Select(order => order.Clone()).ToList()
+                settings.typeOrders?.Select(order => order.Clone()).ToList()
                 ?? new List<NamespaceTypeOrder>();
             lastObjectSelections =
                 settings.lastObjectSelections?.Select(selection => selection.Clone()).ToList()
