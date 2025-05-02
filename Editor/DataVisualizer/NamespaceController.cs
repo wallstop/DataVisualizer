@@ -25,10 +25,16 @@
             Dictionary<string, int> namespaceOrder
         )
         {
+            // Need to store references, not copy, for double data binding
             _managedTypes = managedTypes ?? throw new ArgumentNullException(nameof(managedTypes));
             _namespaceOrder =
                 namespaceOrder ?? throw new ArgumentNullException(nameof(namespaceOrder));
             _selectedType = null;
+        }
+
+        public void Clear()
+        {
+            _namespaceCache.Clear();
         }
 
         public void DecrementTypeSelection(DataVisualizer dataVisualizer)
@@ -116,18 +122,13 @@
                 }
             }
 
-            _selectedType = type;
-            if (type == null)
-            {
-                return;
-            }
-
+            _selectedType = null;
             if (!TryGet(type, out VisualElement element))
             {
-                Debug.LogWarning($"Failed to find namespace for type '{type.FullName}'");
                 return;
             }
 
+            _selectedType = type;
             element.AddToClassList(StyleConstants.SelectedClass);
             if (TryGetNamespace(element, out VisualElement newlySelectedNamespace))
             {
@@ -601,7 +602,12 @@
                 PersistManagedTypesList(dataVisualizer, currentManagedList);
                 DataVisualizer.SignalRefresh();
             }
-            else { }
+            else
+            {
+                Debug.LogWarning(
+                    $"No change detected for namespace '{namespaceKey}' removal (tried to remove [{string.Join(",", typesToRemove.Select(type => type.Name))}])"
+                );
+            }
         }
 
         private void HandleRemoveTypeConfirmed(DataVisualizer dataVisualizer, Type typeToRemove)
@@ -665,15 +671,23 @@
             dataVisualizer.PersistSettings(
                 settings =>
                 {
-                    NamespaceTypeOrder orderEntry = settings.typeOrders?.Find(o =>
-                        string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
+                    NamespaceTypeOrder orderEntry = settings.typeOrders?.Find(typeOrder =>
+                        string.Equals(
+                            typeOrder.namespaceKey,
+                            namespaceKey,
+                            StringComparison.Ordinal
+                        )
                     );
                     return orderEntry != null && orderEntry.typeNames.Remove(typeName);
                 },
                 userState =>
                 {
-                    NamespaceTypeOrder orderEntry = userState.typeOrders?.Find(o =>
-                        string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
+                    NamespaceTypeOrder orderEntry = userState.typeOrders?.Find(typeOrder =>
+                        string.Equals(
+                            typeOrder.namespaceKey,
+                            namespaceKey,
+                            StringComparison.Ordinal
+                        )
                     );
                     return orderEntry != null && orderEntry.typeNames.Remove(typeName);
                 }

@@ -38,6 +38,14 @@
     -unity-font-style: bold;
 }
 
+.icon-button {
+    
+}
+
+.rename-object-label {
+    margin-bottom: 5px;
+}
+
 .types-container {
     margin-left: 10px;
 }

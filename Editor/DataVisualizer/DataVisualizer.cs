@@ -43,7 +43,6 @@
         private const string ObjectItemClass = "object-item";
         private const string ObjectItemContentClass = "object-item-content";
         private const string ObjectItemActionsClass = "object-item-actions";
-        private const string ActionButtonClass = "action-button";
         private const string PopoverListItemClassName = "type-selection-list-item";
         private const string PopoverListItemDisabledClassName =
             "type-selection-list-item--disabled";
@@ -275,6 +274,9 @@
         private void Cleanup()
         {
             _namespaceController.SelectType(this, null);
+            _scriptableObjectTypes.Clear();
+            _namespaceOrder.Clear();
+            _namespaceController.Clear();
             _allManagedSOsCache.Clear();
             _currentSearchResultItems.Clear();
             _currentTypePopoverItems.Clear();
@@ -874,7 +876,7 @@
             };
 
             _settingsButton.AddToClassList("icon-button");
-            _settingsButton.AddToClassList("clickable");
+            _settingsButton.AddToClassList(StyleConstants.ClickableClass);
             headerRow.Add(_settingsButton);
 
             _searchField = new TextField
@@ -2263,7 +2265,7 @@
             displayField.value = settings.DataFolderPath;
         }
 
-        private void OpenRenamePopover(ScriptableObject dataObject)
+        private void OpenRenamePopover(VisualElement source, ScriptableObject dataObject)
         {
             if (dataObject == null)
             {
@@ -2277,11 +2279,7 @@
             }
 
             BuildRenamePopoverContent(currentPath, dataObject.name);
-            VisualElement triggerRow = _objectVisualElementMap.GetValueOrDefault(dataObject);
-            if (triggerRow != null)
-            {
-                OpenPopover(_renamePopover, triggerRow, currentPath);
-            }
+            OpenPopover(_renamePopover, source, currentPath);
         }
 
         private void BuildRenamePopoverContent(string originalPath, string originalName)
@@ -2289,9 +2287,9 @@
             _renamePopover.Clear();
             _renamePopover.userData = originalPath;
 
-            _renamePopover.Add(
-                new Label("Enter new name (without extension):") { style = { marginBottom = 5 } }
-            );
+            Label renameLabel = new("Enter new name (without extension)");
+            renameLabel.AddToClassList("rename-object-label");
+            _renamePopover.Add(renameLabel);
             TextField nameTextField = new()
             {
                 value = Path.GetFileNameWithoutExtension(originalName),
@@ -2396,7 +2394,7 @@
             }
         }
 
-        private void OpenConfirmDeletePopover(ScriptableObject dataObject)
+        private void OpenConfirmDeletePopover(VisualElement source, ScriptableObject dataObject)
         {
             if (dataObject == null)
             {
@@ -2404,11 +2402,7 @@
             }
 
             BuildConfirmDeletePopoverContent(dataObject);
-            VisualElement triggerRow = _objectVisualElementMap.GetValueOrDefault(dataObject);
-            if (triggerRow != null)
-            {
-                OpenPopover(_confirmDeletePopover, triggerRow, dataObject);
-            }
+            OpenPopover(_confirmDeletePopover, source, dataObject);
         }
 
         private void BuildConfirmDeletePopoverContent(ScriptableObject objectToDelete)
@@ -3407,24 +3401,28 @@
                     text = "++",
                     tooltip = "Clone Object",
                 };
-                cloneButton.AddToClassList(ActionButtonClass);
+                cloneButton.AddToClassList(StyleConstants.ActionButtonClass);
                 cloneButton.AddToClassList("clone-button");
-                cloneButton.AddToClassList("clickable");
                 actionsArea.Add(cloneButton);
 
-                Button renameButton = new(() => OpenRenamePopover(dataObject)) { text = "✎" };
-                renameButton.AddToClassList(ActionButtonClass);
+                Button renameButton = null;
+                renameButton = new Button(() => OpenRenamePopover(renameButton, dataObject))
+                {
+                    text = "✎",
+                    tooltip = "Rename Object",
+                };
+                renameButton.AddToClassList(StyleConstants.ActionButtonClass);
                 renameButton.AddToClassList("rename-button");
-                renameButton.AddToClassList("clickable");
                 actionsArea.Add(renameButton);
 
-                Button deleteButton = new(() => OpenConfirmDeletePopover(dataObject))
+                Button deleteButton = null;
+                deleteButton = new Button(() => OpenConfirmDeletePopover(deleteButton, dataObject))
                 {
                     text = "X",
+                    tooltip = "Delete Object",
                 };
-                deleteButton.AddToClassList(ActionButtonClass);
+                deleteButton.AddToClassList(StyleConstants.ActionButtonClass);
                 deleteButton.AddToClassList("delete-button");
-                deleteButton.AddToClassList("clickable");
                 actionsArea.Add(deleteButton);
 
                 _objectVisualElementMap[dataObject] = objectItemRow;
@@ -4115,7 +4113,12 @@
                 _selectedElement = newSelectedElement;
                 _selectedElement.AddToClassList(StyleConstants.SelectedClass);
                 Selection.activeObject = _selectedObject;
-                _objectScrollView.ScrollTo(_selectedElement);
+                _objectScrollView
+                    .schedule.Execute(() =>
+                    {
+                        _objectScrollView?.ScrollTo(_selectedElement);
+                    })
+                    .ExecuteLater(1);
                 try
                 {
                     if (selectedType != null)
