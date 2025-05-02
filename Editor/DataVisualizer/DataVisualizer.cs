@@ -13,6 +13,7 @@
     using Extensions;
     using Helper;
     using Search;
+    using Styles;
 #if ODIN_INSPECTOR
     using Sirenix.OdinInspector;
     using Sirenix.OdinInspector.Editor;
@@ -149,6 +150,7 @@
         private string _lastSearchString;
 
         private Button _addTypeButton;
+        private Button _settingsButton;
         private TextField _typeSearchField;
         private VisualElement _typePopoverListContainer;
 
@@ -185,6 +187,7 @@
         private List<Type> _relevantScriptableObjectTypes;
 
         private float? _lastAddTypeClicked;
+        private float? _lastSettingsClicked;
         private float? _lastEnterPressed;
 
         private Label _dataFolderPathDisplay;
@@ -500,7 +503,7 @@
             if (typeElementToSelect != null)
             {
                 _selectedTypeElement = typeElementToSelect;
-                _selectedTypeElement.AddToClassList("selected");
+                _selectedTypeElement.AddToClassList(StyleConstants.SelectedClass);
                 VisualElement ancestorGroup = FindAncestorNamespaceGroup(_selectedTypeElement);
                 if (ancestorGroup != null)
                 {
@@ -738,9 +741,9 @@
             VisualElement typeElementToSelect = FindTypeElement(selectedType);
             if (typeElementToSelect != null)
             {
-                _selectedTypeElement?.RemoveFromClassList("selected");
+                _selectedTypeElement?.RemoveFromClassList(StyleConstants.SelectedClass);
                 _selectedTypeElement = typeElementToSelect;
-                _selectedTypeElement.AddToClassList("selected");
+                _selectedTypeElement.AddToClassList(StyleConstants.SelectedClass);
 
                 VisualElement ancestorGroup = null;
                 VisualElement currentElement = _selectedTypeElement;
@@ -850,18 +853,17 @@
             };
             root.Add(headerRow);
 
-            Button settingsButton = null;
             // ReSharper disable once AccessToModifiedClosure
-            settingsButton = new Button(() => TogglePopover(_settingsPopover, settingsButton))
+            _settingsButton = new Button(() => TogglePopover(_settingsPopover, _settingsButton))
             {
                 text = "…",
                 name = "settings-button",
                 tooltip = "Open Settings",
             };
 
-            settingsButton.AddToClassList("icon-button");
-            settingsButton.AddToClassList("clickable");
-            headerRow.Add(settingsButton);
+            _settingsButton.AddToClassList("icon-button");
+            _settingsButton.AddToClassList("clickable");
+            headerRow.Add(_settingsButton);
 
             _searchField = new TextField
             {
@@ -2000,6 +2002,10 @@
             {
                 _lastAddTypeClicked = Time.realtimeSinceStartup;
             }
+            else if (target == _settingsButton)
+            {
+                _lastSettingsClicked = Time.realtimeSinceStartup;
+            }
 
             bool clickInsideNested = false;
             bool clickInsideMain = false;
@@ -2470,6 +2476,10 @@
             {
                 if (popover == _settingsPopover)
                 {
+                    if (Time.realtimeSinceStartup <= _lastSettingsClicked + 0.5f)
+                    {
+                        return;
+                    }
                     BuildSettingsPopoverContent();
                 }
                 else if (popover == _typeAddPopover)
@@ -3397,7 +3407,7 @@
 
                 if (_selectedObject == dataObject)
                 {
-                    objectItemRow.AddToClassList("selected");
+                    objectItemRow.AddToClassList(StyleConstants.SelectedClass);
                     _selectedElement = objectItemRow;
                 }
             }
@@ -4051,7 +4061,7 @@
                 return;
             }
 
-            _selectedElement?.RemoveFromClassList("selected");
+            _selectedElement?.RemoveFromClassList(StyleConstants.SelectedClass);
             _selectedObject = dataObject;
 
             _selectedElement = null;
@@ -4066,7 +4076,7 @@
             )
             {
                 _selectedElement = newSelectedElement;
-                _selectedElement.AddToClassList("selected");
+                _selectedElement.AddToClassList(StyleConstants.SelectedClass);
                 Selection.activeObject = _selectedObject;
                 _objectScrollView.ScrollTo(_selectedElement);
                 try
