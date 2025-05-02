@@ -1844,9 +1844,81 @@
                     }
 
                     Rect triggerBounds = triggerElement.worldBound;
-                    Vector2 localPos = rootVisualElement.WorldToLocal(triggerBounds.position);
-                    popover.style.left = localPos.x;
-                    popover.style.top = localPos.y + triggerBounds.height + 2;
+                    Vector2 triggerPosInRoot = rootVisualElement.WorldToLocal(
+                        triggerBounds.position
+                    );
+
+                    float popoverWidth = popover.resolvedStyle.width;
+                    float popoverHeight = popover.resolvedStyle.height;
+                    if (float.IsNaN(popoverWidth) || popoverWidth <= 0)
+                    {
+                        popoverWidth =
+                            popover.style.width.keyword == StyleKeyword.Auto
+                            || popover.style.width.value.value == 0
+                                ? 300f
+                                : popover.style.width.value.value;
+                    }
+                    if (float.IsNaN(popoverHeight) || popoverHeight <= 0)
+                    {
+                        popoverHeight =
+                            popover.style.height.keyword == StyleKeyword.Auto
+                            || popover.style.height.value.value == 0
+                                ? 150f
+                                : popover.style.height.value.value;
+                    }
+
+                    popoverWidth = Mathf.Min(
+                        popoverWidth,
+                        popover.resolvedStyle.maxWidth.value > 0
+                            ? popover.resolvedStyle.maxWidth.value
+                            : float.MaxValue
+                    );
+                    popoverHeight = Mathf.Min(
+                        popoverHeight,
+                        popover.resolvedStyle.maxHeight.value > 0
+                            ? popover.resolvedStyle.maxHeight.value
+                            : float.MaxValue
+                    );
+                    popoverWidth = Mathf.Max(
+                        popoverWidth,
+                        popover.resolvedStyle.minWidth.value > 0
+                            ? popover.resolvedStyle.minWidth.value
+                            : 50f
+                    );
+                    popoverHeight = Mathf.Max(
+                        popoverHeight,
+                        popover.resolvedStyle.minHeight.value > 0
+                            ? popover.resolvedStyle.minHeight.value
+                            : 30f
+                    );
+
+                    float targetX = triggerPosInRoot.x;
+                    float targetY = triggerPosInRoot.y + triggerBounds.height + 2;
+                    float windowWidth = rootVisualElement.resolvedStyle.width;
+                    float windowHeight = rootVisualElement.resolvedStyle.height;
+
+                    if (
+                        float.IsNaN(windowWidth)
+                        || float.IsNaN(windowHeight)
+                        || windowWidth <= 0
+                        || windowHeight <= 0
+                    )
+                    {
+                        popover.style.left = targetX;
+                        popover.style.top = targetY;
+                    }
+                    else
+                    {
+                        float clampedX = Mathf.Max(0, targetX);
+                        clampedX = Mathf.Min(clampedX, windowWidth - popoverWidth);
+                        clampedX = Mathf.Max(0, clampedX);
+                        float clampedY = Mathf.Max(0, targetY);
+                        clampedY = Mathf.Min(clampedY, windowHeight - popoverHeight);
+                        clampedY = Mathf.Max(0, clampedY);
+
+                        popover.style.left = clampedX;
+                        popover.style.top = clampedY;
+                    }
                     popover.style.display = DisplayStyle.Flex;
 
                     if (!isNested)
