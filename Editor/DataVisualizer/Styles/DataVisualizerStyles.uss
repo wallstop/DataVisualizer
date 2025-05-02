@@ -301,7 +301,8 @@
     -unity-font-style: bold;
     color: white;
     background-color: darkgreen;
-    border-color: transparent;
+    border-color: white;
+    border-width: 2px;
     font-size: 26px;
     padding-bottom: 4px;
     border-radius: 50%;
@@ -315,6 +316,7 @@
 .create-button:hover {
     background-color: white;
     color: darkgreen;
+    border-color: darkgreen;
 }
 
 .delete-button {

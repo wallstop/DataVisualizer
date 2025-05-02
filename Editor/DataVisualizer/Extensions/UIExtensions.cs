@@ -4,11 +4,18 @@
     using Styles;
     using UnityEngine.UIElements;
 
-    public static class UIExtensions
+    internal static class UIExtensions
     {
         private static readonly string PlaceholderTextFieldClass =
             TextField.ussClassName + "__placeholder";
 
+        /// <summary>
+        /// Sets up placeholder text to show when the TextField's text is empty.
+        /// WARNING: Should only be called once.
+        /// </summary>
+        /// <param name="textField">Target TextField.</param>
+        /// <param name="placeholder">Text to use as a placeholder.</param>
+        /// <param name="clearExistingText">If true, will set the text in the TextField to the empty string.</param>
         public static void SetPlaceholderText(
             this TextField textField,
             string placeholder,
@@ -24,6 +31,13 @@
             OnFocusOut();
             textField.RegisterCallback<FocusInEvent>(_ => OnFocusIn());
             textField.RegisterCallback<FocusOutEvent>(_ => OnFocusOut());
+            textField.RegisterValueChangedCallback(evt =>
+            {
+                if (string.IsNullOrWhiteSpace(evt.newValue))
+                {
+                    OnFocusOut();
+                }
+            });
             return;
 
             void OnFocusIn()

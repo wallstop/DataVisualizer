@@ -274,6 +274,7 @@
 
         private void Cleanup()
         {
+            _namespaceController.SelectType(this, null);
             _allManagedSOsCache.Clear();
             _currentSearchResultItems.Clear();
             _currentTypePopoverItems.Clear();
@@ -437,7 +438,9 @@
         {
             Type selectedType = _namespaceController.SelectedType;
             string previousNamespaceKey =
-                selectedType != null ? NamespaceController.GetNamespaceKey(selectedType) : null;
+                selectedType != null
+                    ? NamespaceController.GetNamespaceKey(selectedType)
+                    : string.Empty;
             string previousTypeName = selectedType?.Name;
             string previousObjectGuid = null;
             if (_selectedObject != null)
@@ -627,28 +630,19 @@
                     AssetDatabase.CreateAsset(settings, SettingsDefaultPath);
                     AssetDatabase.SaveAssets();
                     AssetDatabase.Refresh();
-                    settings = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(
-                        SettingsDefaultPath
-                    );
+                    DataVisualizerSettings newSettings =
+                        AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(SettingsDefaultPath);
+                    if (newSettings != null)
+                    {
+                        settings = newSettings;
+                    }
                 }
                 catch (Exception e)
                 {
                     Debug.LogError($"Failed to create DataVisualizerSettings asset. {e}");
-                    settings = CreateInstance<DataVisualizerSettings>();
-                    settings._dataFolderPath = DataVisualizerSettings.DefaultDataFolderPath;
                 }
             }
 
-            if (settings != null)
-            {
-                return settings;
-            }
-
-            Debug.LogError(
-                "Failed to load or create DataVisualizerSettings. Using temporary instance."
-            );
-            settings = CreateInstance<DataVisualizerSettings>();
-            settings._dataFolderPath = DataVisualizerSettings.DefaultDataFolderPath;
             return settings;
         }
 
@@ -747,13 +741,11 @@
             if (!string.IsNullOrWhiteSpace(savedTypeName))
             {
                 selectedType = typesInNamespace.Find(t =>
-                    string.Equals(t.Name, savedTypeName, StringComparison.Ordinal)
+                    string.Equals(t.FullName, savedTypeName, StringComparison.Ordinal)
                 );
             }
 
             selectedType ??= typesInNamespace[0];
-            _namespaceController.SelectType(this, selectedType);
-
             LoadObjectTypes(selectedType);
             BuildNamespaceView();
             BuildObjectsView();
@@ -1168,7 +1160,7 @@
                         )
                         {
                             NavigateToObject(selectedObject);
-                            _searchField.SetPlaceholderText(SearchPlaceholder);
+                            _searchField.value = string.Empty;
                         }
 
                         evt.PreventDefault();
@@ -1324,7 +1316,7 @@
                         }
 
                         NavigateToObject(clickedObj);
-                        _searchField.SetPlaceholderText(SearchPlaceholder);
+                        _searchField.value = string.Empty;
                         evt.StopPropagation();
                     });
                     resultItem.RegisterCallback<MouseEnterEvent, VisualElement>(
@@ -1680,15 +1672,12 @@
             }
 
             Type targetType = targetObject.GetType();
-
             bool typeChanged = _namespaceController.SelectedType != targetType;
-
             _namespaceController.SelectType(this, targetType);
 
             if (typeChanged)
             {
                 LoadObjectTypes(targetType);
-                BuildNamespaceView();
             }
 
             BuildObjectsView();
@@ -2597,7 +2586,7 @@
 
                 List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
                 HashSet<string> managedTypeFullNames = _namespaceController
-                    .GetManagedTypeNames()
+                    .GetAllManagedTypeNames()
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 IOrderedEnumerable<IGrouping<string, Type>> groupedTypes = allObjectTypes
@@ -3649,7 +3638,7 @@
             }
 
             // TODO: CACHE
-            MethodInfo visualMethod = objectType
+            MethodInfo[] availableMethods = objectType
                 .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                 .Where(method => method.ReturnType.IsAssignableFrom(typeof(VisualElement)))
                 .OrderBy(method => method.GetParameters().Length)
@@ -3661,9 +3650,18 @@
                         return true;
                     }
 
+                    // TODO: EXPAND TO TAKE IN MY CUSTOM TYPE
                     return parameters[0].ParameterType == typeof(SerializedObject);
                 })
-                .FirstOrDefault();
+                .OrderBy(method => method.Name)
+                .ToArray();
+            MethodInfo visualMethod = availableMethods.FirstOrDefault(
+                ReflectionHelpers.IsAttributeDefined<CustomVisualProviderAttribute>
+            );
+            if (visualMethod == null)
+            {
+                visualMethod = availableMethods.FirstOrDefault();
+            }
             if (visualMethod == null)
             {
                 return null;
@@ -4088,6 +4086,7 @@
         {
             return _relevantScriptableObjectTypes ??= TypeCache
                 .GetTypesDerivedFrom<ScriptableObject>()
+                .Where(t => !typeof(Editor).IsAssignableFrom(t))
                 .Where(t => !t.IsAbstract && !t.IsGenericType)
                 .ToList();
         }

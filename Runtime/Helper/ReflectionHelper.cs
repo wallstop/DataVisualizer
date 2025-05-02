@@ -40,9 +40,15 @@
             return false;
         }
 
+        public static bool IsAttributeDefined<T>(this ICustomAttributeProvider provider)
+            where T : Attribute
+        {
+            return IsAttributeDefined<T>(provider, inherit: true);
+        }
+
         public static bool IsAttributeDefined<T>(
             this ICustomAttributeProvider provider,
-            bool inherit = true
+            bool inherit
         )
             where T : Attribute
         {

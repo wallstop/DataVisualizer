@@ -14,10 +14,10 @@
     {
         public Type SelectedType => _selectedType;
 
-        private readonly Dictionary<string, List<Type>> _managedTypes;
-        private readonly Dictionary<string, int> _namespaceOrder;
         private readonly Dictionary<Type, VisualElement> _namespaceCache = new();
 
+        private readonly Dictionary<string, List<Type>> _managedTypes;
+        private readonly Dictionary<string, int> _namespaceOrder;
         private Type _selectedType;
 
         public NamespaceController(
@@ -28,6 +28,7 @@
             _managedTypes = managedTypes ?? throw new ArgumentNullException(nameof(managedTypes));
             _namespaceOrder =
                 namespaceOrder ?? throw new ArgumentNullException(nameof(namespaceOrder));
+            _selectedType = null;
         }
 
         public void DecrementTypeSelection(DataVisualizer dataVisualizer)
@@ -116,6 +117,11 @@
             }
 
             _selectedType = type;
+            if (type == null)
+            {
+                return;
+            }
+
             if (!TryGet(type, out VisualElement element))
             {
                 Debug.LogWarning($"Failed to find namespace for type '{type.FullName}'");
@@ -128,12 +134,8 @@
                 newlySelectedNamespace.AddToClassList(StyleConstants.SelectedClass);
             }
 
-            SaveNamespaceAndTypeSelectionState(
-                dataVisualizer,
-                GetNamespaceKey(_selectedType),
-                _selectedType.Name
-            );
-
+            string namespaceKey = GetNamespaceKey(_selectedType);
+            SaveNamespaceAndTypeSelectionState(dataVisualizer, namespaceKey, _selectedType);
             dataVisualizer.LoadObjectTypes(_selectedType);
             ScriptableObject objectToSelect = dataVisualizer.DetermineObjectToAutoSelect();
             dataVisualizer.BuildObjectsView();
@@ -359,7 +361,7 @@
         private static void SaveNamespaceAndTypeSelectionState(
             DataVisualizer dataVisualizer,
             string namespaceKey,
-            string typeName
+            Type type
         )
         {
             try
@@ -370,12 +372,13 @@
                 }
 
                 SetLastSelectedNamespaceKey(dataVisualizer, namespaceKey);
-                if (string.IsNullOrWhiteSpace(typeName))
+                string typeFullName = type?.FullName;
+                if (string.IsNullOrWhiteSpace(typeFullName))
                 {
                     return;
                 }
 
-                SetLastSelectedTypeName(dataVisualizer, typeName);
+                SetLastSelectedTypeName(dataVisualizer, typeFullName);
             }
             catch (Exception e)
             {
@@ -383,7 +386,10 @@
             }
         }
 
-        private static void SetLastSelectedTypeName(DataVisualizer dataVisualizer, string value)
+        private static void SetLastSelectedTypeName(
+            DataVisualizer dataVisualizer,
+            string typeFullName
+        )
         {
             dataVisualizer.PersistSettings(
                 settings =>
@@ -391,14 +397,14 @@
                     if (
                         string.Equals(
                             settings.lastSelectedTypeName,
-                            value,
+                            typeFullName,
                             StringComparison.Ordinal
                         )
                     )
                     {
                         return false;
                     }
-                    settings.lastSelectedTypeName = value;
+                    settings.lastSelectedTypeName = typeFullName;
                     return true;
                 },
                 userState =>
@@ -406,14 +412,14 @@
                     if (
                         string.Equals(
                             userState.lastSelectedTypeName,
-                            value,
+                            typeFullName,
                             StringComparison.Ordinal
                         )
                     )
                     {
                         return false;
                     }
-                    userState.lastSelectedTypeName = value;
+                    userState.lastSelectedTypeName = typeFullName;
                     return true;
                 }
             );
@@ -576,17 +582,18 @@
             bool changed = false;
             foreach (Type type in typesToRemove)
             {
+                string typeName = type.FullName;
                 if (
                     typeof(BaseDataObject).IsAssignableFrom(type)
-                    || !currentManagedList.Remove(type.FullName)
+                    || !currentManagedList.Remove(typeName)
                 )
                 {
                     continue;
                 }
 
                 changed = true;
-                dataVisualizer.SetLastSelectedObjectGuidForType(type.FullName, null);
-                RemoveTypeOrderEntry(dataVisualizer, namespaceKey, type.Name);
+                dataVisualizer.SetLastSelectedObjectGuidForType(typeName, null);
+                RemoveTypeOrderEntry(dataVisualizer, namespaceKey, typeName);
             }
 
             if (changed)
@@ -594,6 +601,7 @@
                 PersistManagedTypesList(dataVisualizer, currentManagedList);
                 DataVisualizer.SignalRefresh();
             }
+            else { }
         }
 
         private void HandleRemoveTypeConfirmed(DataVisualizer dataVisualizer, Type typeToRemove)
@@ -601,28 +609,25 @@
             if (typeToRemove == null || typeof(BaseDataObject).IsAssignableFrom(typeToRemove))
             {
                 Debug.LogWarning(
-                    $"Attempted to remove BaseDataObject derivative '{typeToRemove?.Name}' or null type."
+                    $"Attempted to remove BaseDataObject derivative '{typeToRemove?.FullName}' or null type."
                 );
                 return;
             }
 
-            List<string> currentManagedList = GetManagedTypeNames(typeToRemove.Namespace);
-            if (currentManagedList.Remove(typeToRemove.FullName))
+            string namespaceKey = GetNamespaceKey(typeToRemove);
+            List<string> currentManagedList = GetManagedTypeNames(namespaceKey);
+            string typeName = typeToRemove.FullName;
+            if (currentManagedList.Remove(typeName))
             {
-                dataVisualizer.SetLastSelectedObjectGuidForType(typeToRemove.FullName, null);
-                RemoveTypeOrderEntry(
-                    dataVisualizer,
-                    GetNamespaceKey(typeToRemove),
-                    typeToRemove.Name
-                );
-
+                dataVisualizer.SetLastSelectedObjectGuidForType(typeName, null);
+                RemoveTypeOrderEntry(dataVisualizer, namespaceKey, typeName);
                 PersistManagedTypesList(dataVisualizer, currentManagedList);
                 DataVisualizer.SignalRefresh();
             }
             else
             {
                 Debug.LogWarning(
-                    $"Type '{typeToRemove.FullName}' was not found in managed list during removal."
+                    $"Type '{typeName}' was not found in managed list during removal. Current list: [{string.Join(",", currentManagedList)}]."
                 );
             }
         }
@@ -635,26 +640,11 @@
             dataVisualizer.PersistSettings(
                 settings =>
                 {
-                    if (
-                        settings.managedTypeNames != null
-                        && settings.managedTypeNames.SequenceEqual(managedList)
-                    )
-                    {
-                        return false;
-                    }
                     settings.managedTypeNames = new List<string>(managedList);
                     return true;
                 },
                 userState =>
                 {
-                    if (
-                        userState.managedTypeNames != null
-                        && userState.managedTypeNames.SequenceEqual(managedList)
-                    )
-                    {
-                        return false;
-                    }
-
                     userState.managedTypeNames = new List<string>(managedList);
                     return true;
                 }
@@ -690,17 +680,18 @@
             );
         }
 
-        internal List<string> GetManagedTypeNames(string namespaceKey = null)
+        internal List<string> GetManagedTypeNames(string namespaceKey)
         {
-            if (string.IsNullOrWhiteSpace(namespaceKey))
-            {
-                return _managedTypes
-                    .SelectMany(kvp => kvp.Value.Select(type => type.FullName))
-                    .ToList();
-            }
             return _managedTypes
                 .GetValueOrDefault(namespaceKey, new List<Type>())
                 .Select(type => type.FullName)
+                .ToList();
+        }
+
+        internal List<string> GetAllManagedTypeNames()
+        {
+            return _managedTypes
+                .Values.SelectMany(types => types.Select(type => type.FullName))
                 .ToList();
         }
 
