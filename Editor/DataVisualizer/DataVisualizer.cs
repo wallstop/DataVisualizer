@@ -1093,8 +1093,6 @@
                     $"Failed to find Data Visualizer font (package root: '{packageRoot}')."
                 );
             }
-
-            root.style.fontSize = 14;
         }
 
         private void HandleSearchKeyDown(KeyDownEvent evt)

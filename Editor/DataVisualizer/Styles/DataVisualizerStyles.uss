@@ -1,4 +1,8 @@
-﻿.object-item {
+﻿:root {
+    font-size: 16px;
+}
+
+.object-item {
     padding: 4px 8px;
     margin: 2px 0;
     border-color: rgba(128, 128, 128, 0.5);
@@ -123,6 +127,14 @@
 }
 
 .type-item__label {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 5px;
+    height: 20px;
 }
 
 .type-item.selected {
@@ -160,11 +172,11 @@
     border-bottom-color: rgba(128, 128, 128, 0.5);
 }
 
-.namespace-group-header >.unity-label {
+.namespace-group-header > .unity-label {
     margin-left: 6px;
 }
 
-.namespace-group-header >.unity-button {
+.namespace-group-header > .unity-button {
     margin-right: 6px;
     margin-top: 4px;
     margin-bottom: 4px;
@@ -221,11 +233,11 @@
     border-bottom-color: rgba(128, 128, 128, 0.5);
 }
 
-.object-header >.unity-label {
+.object-header > .unity-label {
     margin-left: 6px;
 }
 
-.object-header >.unity-button {
+.object-header > .unity-button {
     margin-right: 6px;
     margin-top: 4px;
     margin-bottom: 4px;
@@ -235,7 +247,7 @@
     flex-grow: 1;
 }
 
-.object-scrollview >.unity-scroll-view__content-and-vertical-scroll-container {
+.object-scrollview > .unity-scroll-view__content-and-vertical-scroll-container {
     background-color: rgba(0, 0, 0, 0.4);
 }
 
@@ -243,18 +255,19 @@
     flex-grow: 1;
 }
 
-.namespace-scrollview >.unity-scroll-view__content-and-vertical-scroll-container {
+.namespace-scrollview > .unity-scroll-view__content-and-vertical-scroll-container {
     background-color: rgba(0, 0, 0, 0.4);
 }
 
 .action-button {
     flex-shrink: 0;
+    font-size: 14px;
     padding: 0;
     min-width: 0;
     background-color: transparent;
     border-color: rgba(128, 128, 128, 128);
-    border-radius: 5px;
-    border-width: 1px;
+    border-radius: 50%;
+    border-width: 2px;
     -unity-font-style: bold;
 }
 
@@ -278,28 +291,41 @@
 }
 
 .create-button {
+    transition: background-color 1s ease, color 1s ease;
     -unity-font-style: bold;
-    color: black;
-    background-color: rgb(0, 204, 0);
-    width: 20px;
-    height: 20px;
+    color: white;
+    background-color: darkgreen;
+    border-color: transparent;
+    font-size: 26px;
+    padding-bottom: 4px;
+    border-radius: 50%;
+    width: 27px;
+    height: 27px;
     padding-left: 0;
     padding-right: 0;
     margin-bottom: 2px;
 }
 
+.create-button:hover {
+    transition: background-color 1s ease, color 1s ease;
+    background-color: white;
+    color: darkgreen;
+}
+
 .delete-button {
-    padding: 1px 4px;
+    padding: 1px 6px;
     color: rgb(230, 102, 102);
 }
 
 .clone-button {
     color: rgb(102, 179, 102);
+    padding-left: 2px;
+    padding-right: 2px;
     padding-bottom: 2px;
 }
 
 .rename-button {
-    padding: 2px;
+    padding: 4px;
     padding-bottom: 3px;
     color: rgb(51, 153, 230);
 }
@@ -349,7 +375,7 @@
     width: 12px;
 }
 
-.unity-text-field__placeholder >.unity-base-text-field__input {
+.unity-text-field__placeholder > .unity-base-text-field__input {
     color: #969696
 }
 
