@@ -10,7 +10,7 @@
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer;
 
-    public sealed class NamespaceManager
+    public sealed class NamespaceController
     {
         public Type SelectedType => _selectedType;
 
@@ -20,7 +20,7 @@
 
         private Type _selectedType;
 
-        public NamespaceManager(
+        public NamespaceController(
             Dictionary<string, List<Type>> managedTypes,
             Dictionary<string, int> namespaceOrder
         )
@@ -156,15 +156,11 @@
             )
             {
                 string namespaceKey = key;
-                HashSet<string> managedFullNamesInGroup = types
-                    .Select(t => t.FullName)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
                 List<Type> nonCoreManagedTypes = types
                     .Where(t => !typeof(BaseDataObject).IsAssignableFrom(t))
                     .ToList();
                 int removableTypeCount = nonCoreManagedTypes.Count;
-                bool showNamespaceRemoveButton = removableTypeCount > 0;
+                bool showNamespaceRemoveButton = removableTypeCount > 1;
 
                 VisualElement namespaceGroupItem = new()
                 {
@@ -513,25 +509,26 @@
             dataVisualizer.PersistSettings(
                 settings =>
                 {
+                    bool dirty = !settings.HasCollapseState(namespaceKey);
                     NamespaceCollapseState entry = settings.GetOrCreateCollapseState(namespaceKey);
                     if (entry.isCollapsed == isCollapsed)
                     {
-                        return false;
+                        dirty = true;
                     }
 
                     entry.isCollapsed = isCollapsed;
-                    return true;
+                    return dirty;
                 },
                 userState =>
                 {
+                    bool dirty = !userState.HasCollapseState(namespaceKey);
                     NamespaceCollapseState entry = userState.GetOrCreateCollapseState(namespaceKey);
-                    if (entry.isCollapsed == isCollapsed)
+                    if (entry.isCollapsed != isCollapsed)
                     {
-                        return false;
+                        dirty = true;
                     }
-
                     entry.isCollapsed = isCollapsed;
-                    return true;
+                    return dirty;
                 }
             );
         }
@@ -709,6 +706,12 @@
 
         internal static string GetNamespaceKey(Type type)
         {
+            const string emptyNamespace = "No Namespace";
+            if (type == null)
+            {
+                return emptyNamespace;
+            }
+
             if (
                 type.IsAttributeDefined(out CustomDataVisualization attribute)
                 && !string.IsNullOrWhiteSpace(attribute.Namespace)
@@ -716,7 +719,7 @@
             {
                 return attribute.Namespace;
             }
-            return type.Namespace?.Split('.').LastOrDefault() ?? "No Namespace";
+            return type.Namespace?.Split('.').LastOrDefault() ?? emptyNamespace;
         }
     }
 }

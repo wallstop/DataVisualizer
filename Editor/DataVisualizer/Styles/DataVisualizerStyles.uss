@@ -6,6 +6,14 @@
     transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
 }
 
+.transparent-cursor {
+    --unity-cursor-color: transparent;
+}
+
+.styled-cursor {
+    --unity-cursor-color: white;
+}
+
 .object-item {
     padding: 4px 8px;
     margin: 2px 0;

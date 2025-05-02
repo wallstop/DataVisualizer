@@ -14,6 +14,9 @@
         public const string TypeLabelClass = "type-item__label";
         public const string TypesContainerClass = "types-container";
 
+        public const string TransparentCursorClass = "transparent-cursor";
+        public const string StyledCursorClass = "styled-cursor";
+
         public const string ActionButtonClass = "action-button";
         public const string DeleteButtonClass = "delete-button";
 
@@ -22,5 +25,7 @@
 
         public const string ArrowCollapsed = "►";
         public const string ArrowExpanded = "▼";
+
+        public const int CursorBlinkRateMilliseconds = 666;
     }
 }

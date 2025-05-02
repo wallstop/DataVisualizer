@@ -177,6 +177,14 @@
             return entry.typeNames;
         }
 
+        internal bool HasCollapseState(string namespaceKey)
+        {
+            NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
+                string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
+            );
+            return entry != null;
+        }
+
         internal NamespaceCollapseState GetOrCreateCollapseState(string namespaceKey)
         {
             NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>

@@ -117,7 +117,7 @@
         private readonly List<VisualElement> _currentSearchResultItems = new();
         private readonly List<VisualElement> _currentTypePopoverItems = new();
 
-        private readonly NamespaceManager _namespaceManager;
+        private readonly NamespaceController _namespaceController;
 
         private ScriptableObject _selectedObject;
         private VisualElement _selectedElement;
@@ -199,7 +199,7 @@
 
         public DataVisualizer()
         {
-            _namespaceManager = new NamespaceManager(_scriptableObjectTypes, _namespaceOrder);
+            _namespaceController = new NamespaceController(_scriptableObjectTypes, _namespaceOrder);
         }
 
         [MenuItem("Tools/Data Visualizer")]
@@ -415,9 +415,9 @@
 
         private void RefreshAllViews()
         {
-            Type selectedType = _namespaceManager.SelectedType;
+            Type selectedType = _namespaceController.SelectedType;
             string previousNamespaceKey =
-                selectedType != null ? NamespaceManager.GetNamespaceKey(selectedType) : null;
+                selectedType != null ? NamespaceController.GetNamespaceKey(selectedType) : null;
             string previousTypeName = selectedType?.Name;
             string previousObjectGuid = null;
             if (_selectedObject != null)
@@ -513,7 +513,7 @@
 
             SelectObject(_selectedObject);
             PopulateSearchCache();
-            _namespaceManager.SelectType(this, selectedType);
+            _namespaceController.SelectType(this, selectedType);
         }
 
         private VisualElement FindAncestorNamespaceGroup(VisualElement startingElement)
@@ -732,7 +732,7 @@
             }
 
             selectedType ??= typesInNamespace[0];
-            _namespaceManager.SelectType(this, selectedType);
+            _namespaceController.SelectType(this, selectedType);
 
             LoadObjectTypes(selectedType);
             BuildNamespaceView();
@@ -1099,7 +1099,6 @@
 
         private void HandleSearchKeyDown(KeyDownEvent evt)
         {
-            Debug.Log("SEARCH KEY DOWN");
             if (
                 _activePopover != _searchPopover
                 || _searchPopover.style.display == DisplayStyle.None
@@ -1149,6 +1148,7 @@
                         )
                         {
                             NavigateToObject(selectedObject);
+                            _searchField.SetPlaceholderText("Search...");
                         }
 
                         evt.PreventDefault();
@@ -1304,6 +1304,7 @@
                         }
 
                         NavigateToObject(clickedObj);
+                        _searchField.SetPlaceholderText("Search...");
                         evt.StopPropagation();
                     });
                     resultItem.RegisterCallback<MouseEnterEvent, VisualElement>(
@@ -1660,9 +1661,9 @@
 
             Type targetType = targetObject.GetType();
 
-            bool typeChanged = _namespaceManager.SelectedType != targetType;
+            bool typeChanged = _namespaceController.SelectedType != targetType;
 
-            _namespaceManager.SelectType(this, targetType);
+            _namespaceController.SelectType(this, targetType);
 
             if (typeChanged)
             {
@@ -1958,7 +1959,7 @@
                         case FocusArea.TypeList:
                         {
                             navigationHandled = true;
-                            _namespaceManager.IncrementTypeSelection(this);
+                            _namespaceController.IncrementTypeSelection(this);
                             break;
                         }
                     }
@@ -1979,7 +1980,7 @@
                         case FocusArea.TypeList:
                         {
                             navigationHandled = true;
-                            _namespaceManager.DecrementTypeSelection(this);
+                            _namespaceController.DecrementTypeSelection(this);
                             break;
                         }
                     }
@@ -2575,12 +2576,12 @@
                 bool isFiltering = searchTerms.Count > 0;
 
                 List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
-                HashSet<string> managedTypeFullNames = _namespaceManager
+                HashSet<string> managedTypeFullNames = _namespaceController
                     .GetManagedTypeNames()
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 IOrderedEnumerable<IGrouping<string, Type>> groupedTypes = allObjectTypes
-                    .GroupBy(NamespaceManager.GetNamespaceKey)
+                    .GroupBy(NamespaceController.GetNamespaceKey)
                     .OrderBy(grouping => grouping.Key);
 
                 bool foundMatches = false;
@@ -2902,7 +2903,11 @@
 
             if (element.userData is Type selectedType)
             {
-                HandleTypeSelectionFromPopover(null, selectedType, selectedType.Namespace);
+                HandleTypeSelectionFromPopover(
+                    null,
+                    selectedType,
+                    NamespaceController.GetNamespaceKey(selectedType)
+                );
             }
             else if (
                 element.ClassListContains(PopoverNamespaceHeaderClassName)
@@ -2995,12 +3000,19 @@
         {
             if (selectedType != null)
             {
-                List<string> currentManagedList = _namespaceManager.GetManagedTypeNames(
+                List<string> currentManagedList = _namespaceController.GetManagedTypeNames(
                     namespaceKey
                 );
                 if (!currentManagedList.Contains(selectedType.FullName))
                 {
-                    _scriptableObjectTypes[namespaceKey].Add(selectedType);
+                    if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
+                    {
+                        types = new List<Type>();
+                        _scriptableObjectTypes[namespaceKey] = types;
+                        _namespaceOrder[NamespaceController.GetNamespaceKey(selectedType)] =
+                            _namespaceOrder.Count;
+                    }
+                    types.Add(selectedType);
                     SyncNamespaceAndTypeOrders();
                     LoadScriptableObjectTypes();
                     BuildNamespaceView();
@@ -3071,7 +3083,7 @@
 
         private void CreateNewObject()
         {
-            Type selectedType = _namespaceManager.SelectedType;
+            Type selectedType = _namespaceController.SelectedType;
             if (selectedType == null)
             {
                 EditorUtility.DisplayDialog(
@@ -3261,7 +3273,7 @@
             Button confirmButton = new(() =>
             {
                 bool stateChanged = false;
-                HashSet<string> currentManagedList = _namespaceManager
+                HashSet<string> currentManagedList = _namespaceController
                     .GetManagedTypeNames(namespaceKey)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 foreach (Type typeToAdd in typesToAdd)
@@ -3300,7 +3312,7 @@
 
         private void BuildNamespaceView()
         {
-            _namespaceManager.Build(this, ref _namespaceListContainer);
+            _namespaceController.Build(this, ref _namespaceListContainer);
         }
 
         internal void BuildObjectsView()
@@ -3314,7 +3326,7 @@
             _objectVisualElementMap.Clear();
             _objectScrollView.scrollOffset = Vector2.zero;
 
-            Type selectedType = _namespaceManager.SelectedType;
+            Type selectedType = _namespaceController.SelectedType;
             if (selectedType != null && _selectedObjects.Count == 0)
             {
                 Label emptyLabel = new(
@@ -3806,7 +3818,7 @@
 
         internal ScriptableObject DetermineObjectToAutoSelect()
         {
-            Type selectedType = _namespaceManager.SelectedType;
+            Type selectedType = _namespaceController.SelectedType;
             if (selectedType == null || _selectedObjects == null || _selectedObjects.Count == 0)
             {
                 return null;
@@ -4018,7 +4030,7 @@
                 .ToList();
 
             IEnumerable<(string key, List<Type> types)> groups = typesToDisplay
-                .GroupBy(NamespaceManager.GetNamespaceKey)
+                .GroupBy(NamespaceController.GetNamespaceKey)
                 .Select(g => (key: g.Key, types: g.ToList()));
 
             List<(string key, List<Type> types)> orderedTypes = groups.ToList();
@@ -4066,7 +4078,7 @@
 
             _selectedElement = null;
 
-            Type selectedType = _namespaceManager.SelectedType;
+            Type selectedType = _namespaceController.SelectedType;
             if (
                 _selectedObject != null
                 && _objectVisualElementMap.TryGetValue(
@@ -4083,7 +4095,7 @@
                 {
                     if (selectedType != null)
                     {
-                        string namespaceKey = NamespaceManager.GetNamespaceKey(selectedType);
+                        string namespaceKey = NamespaceController.GetNamespaceKey(selectedType);
                         string typeName = selectedType.Name;
                         string assetPath = AssetDatabase.GetAssetPath(_selectedObject);
                         string objectGuid = null;
@@ -4117,7 +4129,7 @@
 
             if (dataObject != null)
             {
-                _namespaceManager.SelectType(this, dataObject.GetType());
+                _namespaceController.SelectType(this, dataObject.GetType());
             }
         }
 
@@ -4501,7 +4513,7 @@
             int dataInsertIndex = targetIndex;
             dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _selectedObjects.Count);
             _selectedObjects.Insert(dataInsertIndex, draggedObject);
-            Type selectedType = _namespaceManager.SelectedType;
+            Type selectedType = _namespaceController.SelectedType;
             if (selectedType != null)
             {
                 UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);

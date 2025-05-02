@@ -7,7 +7,6 @@
     [Serializable]
     public sealed class DataVisualizerUserState
     {
-        public int version = 1;
         public string lastSelectedNamespaceKey = string.Empty;
         public string lastSelectedTypeName = string.Empty;
 
@@ -105,6 +104,14 @@
             entry = new NamespaceTypeOrder { namespaceKey = namespaceKey };
             typeOrders.Add(entry);
             return entry.typeNames;
+        }
+
+        public bool HasCollapseState(string namespaceKey)
+        {
+            NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
+                string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
+            );
+            return entry != null;
         }
 
         public NamespaceCollapseState GetOrCreateCollapseState(string namespaceKey)
