@@ -22,15 +22,17 @@
     using UnityEditor.UIElements;
     using UnityEngine;
     using UnityEngine.UIElements;
+    using Utilities;
     using WallstopStudios.DataVisualizer;
 
     public sealed class DataVisualizer : EditorWindow
     {
         private const string PackageId = "com.wallstop-studios.data-visualizer";
-        private const string PrefsPrefix = "WallstopStudios.DataVisualizer.";
+        private const string PrefsPrefix = "WallstopStudios.Editor.DataVisualizer.";
 
         private const string PrefsSplitterOuterKey = PrefsPrefix + "SplitterOuterFixedPaneWidth";
         private const string PrefsSplitterInnerKey = PrefsPrefix + "SplitterInnerFixedPaneWidth";
+        private const string PrefsInitialSizeAppliedKey = PrefsPrefix + "InitialSizeApplied";
 
         private const string SettingsDefaultPath = "Assets/DataVisualizerSettings.asset";
         private const string UserStateFileName = "DataVisualizerUserState.json";
@@ -52,8 +54,7 @@
         private const string SearchResultHighlightClass = "search-result-item--highlighted";
         private const string PopoverHighlightClass = "popover-item--highlighted";
 
-        private const string ArrowCollapsed = "►";
-        private const string ArrowExpanded = "▼";
+        private const string SearchPlaceholder = "Search...";
 
         private const int MaxSearchResults = 25;
 
@@ -207,6 +208,25 @@
         {
             DataVisualizer window = GetWindow<DataVisualizer>("Data Visualizer");
             window.titleContent = new GUIContent("Data Visualizer");
+
+            bool initialSizeApplied = EditorPrefs.GetBool(PrefsInitialSizeAppliedKey, false);
+            if (initialSizeApplied)
+            {
+                return;
+            }
+
+            float width = Mathf.Max(800, window.position.width);
+            float height = Mathf.Max(400, window.position.height);
+            Rect monitorArea = MonitorUtility.GetPrimaryMonitorRect();
+
+            float centerX = (monitorArea.width - width) / 2f;
+            float centerY = (monitorArea.height - height) / 2f;
+
+            float x = Mathf.Max(0, centerX);
+            float y = Mathf.Max(0, centerY);
+
+            window.position = new Rect(x, y, width, height);
+            EditorPrefs.SetBool(PrefsInitialSizeAppliedKey, true);
         }
 
         private void OnEnable()
@@ -870,7 +890,7 @@
                 name = "global-search-field",
                 style = { flexGrow = 1, marginRight = 10 },
             };
-            _searchField.SetPlaceholderText("Search...");
+            _searchField.SetPlaceholderText(SearchPlaceholder);
             _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue));
             _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
                 (_, context) =>
@@ -981,7 +1001,7 @@
                     marginBottom = 2,
                 },
             };
-            _typeSearchField.SetPlaceholderText("Search...");
+            _typeSearchField.SetPlaceholderText(SearchPlaceholder);
             _typeSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue));
             _typeSearchField.RegisterCallback<KeyDownEvent>(HandleTypePopoverKeyDown);
             _typeAddPopover.Add(_typeSearchField);
@@ -1148,7 +1168,7 @@
                         )
                         {
                             NavigateToObject(selectedObject);
-                            _searchField.SetPlaceholderText("Search...");
+                            _searchField.SetPlaceholderText(SearchPlaceholder);
                         }
 
                         evt.PreventDefault();
@@ -1304,7 +1324,7 @@
                         }
 
                         NavigateToObject(clickedObj);
-                        _searchField.SetPlaceholderText("Search...");
+                        _searchField.SetPlaceholderText(SearchPlaceholder);
                         evt.StopPropagation();
                     });
                     resultItem.RegisterCallback<MouseEnterEvent, VisualElement>(
@@ -2548,7 +2568,7 @@
 
         private void BuildTypeAddList(string filter = null)
         {
-            if (string.Equals("Search...", filter, StringComparison.Ordinal))
+            if (string.Equals(SearchPlaceholder, filter, StringComparison.Ordinal))
             {
                 filter = null;
             }
@@ -2663,7 +2683,11 @@
                         header.AddToClassList(PopoverNamespaceHeaderClassName);
 
                         bool startCollapsed = !isFiltering;
-                        Label indicator = new(startCollapsed ? ArrowCollapsed : ArrowExpanded)
+                        Label indicator = new(
+                            startCollapsed
+                                ? StyleConstants.ArrowCollapsed
+                                : StyleConstants.ArrowExpanded
+                        )
                         {
                             name = $"ns-indicator-{group.Key}",
                         };
@@ -2781,8 +2805,8 @@
                                     ? DisplayStyle.Flex
                                     : DisplayStyle.None;
                                 currentIndicator.text = nowCollapsed
-                                    ? ArrowExpanded
-                                    : ArrowCollapsed;
+                                    ? StyleConstants.ArrowExpanded
+                                    : StyleConstants.ArrowCollapsed;
                             }
 
                             evt?.StopPropagation();
@@ -3877,7 +3901,9 @@
                 return;
             }
 
-            indicator.text = collapsed ? ArrowCollapsed : ArrowExpanded;
+            indicator.text = collapsed
+                ? StyleConstants.ArrowCollapsed
+                : StyleConstants.ArrowExpanded;
             typesContainer.style.display = collapsed ? DisplayStyle.None : DisplayStyle.Flex;
 
             if (saveState)
@@ -4945,14 +4971,14 @@
                 TypeObjectOrder entry = settings.objectOrders?.Find(o =>
                     string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
                 );
-                return entry?.ObjectGuids ?? new List<string>();
+                return entry?.ObjectGuids?.ToList() ?? new List<string>();
             }
             else
             {
                 TypeObjectOrder entry = UserState.objectOrders?.Find(o =>
                     string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
                 );
-                return entry?.ObjectGuids ?? new List<string>();
+                return entry?.ObjectGuids?.ToList() ?? new List<string>();
             }
         }
 
@@ -5115,9 +5141,9 @@
             DataVisualizerSettings settings = Settings;
             if (settings.persistStateInSettingsAsset)
             {
-                return settings.namespaceOrder ?? (settings.namespaceOrder = new List<string>());
+                return settings.namespaceOrder?.ToList() ?? new List<string>();
             }
-            return UserState.namespaceOrder ??= new List<string>();
+            return UserState.namespaceOrder?.ToList() ?? new List<string>();
         }
 
         private void SetNamespaceOrder(List<string> value)
@@ -5165,20 +5191,19 @@
             }
 
             DataVisualizerSettings settings = Settings;
-
             if (settings.persistStateInSettingsAsset)
             {
                 NamespaceTypeOrder entry = settings.typeOrders?.Find(o =>
                     string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
-                return entry?.typeNames ?? new List<string>();
+                return entry?.typeNames?.ToList() ?? new List<string>();
             }
             else
             {
                 NamespaceTypeOrder entry = UserState.typeOrders?.Find(o =>
                     string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
-                return entry?.typeNames ?? new List<string>();
+                return entry?.typeNames?.ToList() ?? new List<string>();
             }
         }
 
