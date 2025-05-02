@@ -540,7 +540,84 @@
     background-color: transparent;
     border-width: 0;
 }
+
 /* Prevent the label part from changing on disable */
 .readonly-display-field .unity-label {
     opacity: 1 !important;
+}
+
+.settings-button {
+    font-size: 26px;
+    padding: 2px 6px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    padding-bottom: 18px;
+    color: white;
+    background-color: chocolate;
+    border-color: white;
+    border-width: 2px;
+}
+
+.settings-button:hover {
+    color: chocolate;
+    background-color: white;
+    border-color: chocolate;
+}
+
+.settings-data-folder-path-display {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.settings-data-folder-path-display > #unity-text-input {
+    color: rgba(255, 255, 255, 0.8);
+    -unity-font-style: italic;
+    background-color: transparent;
+}
+
+.settings-data-folder-label {
+    /*
+     { style = { width = 80, flexShrink = 0 } }
+     */
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+
+.settings-data-folder-button {
+    /*
+      style = { flexShrink = 0 },
+     */
+    font-size: 16px;
+    border-radius: 6px;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+
+
+.settings-prefs-toggle > .unity-text-element {
+    color: white;
+    font-size: 16px;
+}
+
+.settings-prefs-toggle > .unity-toggle__input {
+    /*width: 200px;*/
+    /*height: 20px;*/
+}
+
+.settings-prefs-toggle > .unity-toggle__input > #unity-checkmark {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: white;
+    border-color: black;
+    color: white;
+    border-width: 2px;
+    background-image: none;
+}
+
+.settings-prefs-toggle:checked > .unity-toggle__input > #unity-checkmark {
+    background-color: black;
+    border-color: white;
+    color: black;
 }

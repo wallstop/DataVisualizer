@@ -4,6 +4,7 @@
     using System.Linq;
     using Data;
     using UnityEditor;
+    using UnityEngine;
     using WallstopStudios.DataVisualizer;
 
     public sealed class DataVisualizerModificationProcessor : AssetModificationProcessor
@@ -23,23 +24,12 @@
                     continue;
                 }
 
-                bool isSettingsAsset = typeof(DataVisualizerSettings).IsAssignableFrom(assetType);
-                bool isBaseDatObject = typeof(BaseDataObject).IsAssignableFrom(assetType);
+                bool isScriptableObject = typeof(ScriptableObject).IsAssignableFrom(assetType);
 
-                if (isBaseDatObject)
-                {
-                    needsRefresh = true;
-                    break;
-                }
-
-                if (!isSettingsAsset)
-                {
-                    continue;
-                }
-
-                DataVisualizerSettings settingsInstance =
-                    AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(path);
-                if (settingsInstance == null || settingsInstance.persistStateInSettingsAsset)
+                if (
+                    !isScriptableObject
+                    || typeof(DataVisualizerSettings).IsAssignableFrom(assetType)
+                )
                 {
                     continue;
                 }

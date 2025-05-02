@@ -248,7 +248,6 @@
             _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
 
             LoadScriptableObjectTypes();
-            Undo.undoRedoPerformed += OnUndoRedoPerformed;
             rootVisualElement.RegisterCallback<KeyDownEvent>(
                 HandleGlobalKeyDown,
                 TrickleDown.TrickleDown
@@ -269,7 +268,6 @@
                 HandleGlobalKeyDown,
                 TrickleDown.TrickleDown
             );
-            Undo.undoRedoPerformed -= OnUndoRedoPerformed;
             Cleanup();
         }
 
@@ -393,6 +391,7 @@
 
         private void ScheduleRefresh()
         {
+            Debug.Log("Scheduling refresh...");
             rootVisualElement.schedule.Execute(RefreshAllViews).ExecuteLater(50);
         }
 
@@ -451,7 +450,6 @@
         private void RefreshAllViews()
         {
             Type selectedType = _namespaceController.SelectedType;
-            Debug.Log($"Currently selected type {selectedType?.FullName}.");
 
             string previousNamespaceKey =
                 selectedType != null
@@ -706,11 +704,6 @@
             }
         }
 
-        private void OnUndoRedoPerformed()
-        {
-            ScheduleRefresh();
-        }
-
         private void RestorePreviousSelection()
         {
             if (_scriptableObjectTypes.Count == 0)
@@ -895,7 +888,7 @@
                 tooltip = "Open Settings",
             };
 
-            _settingsButton.AddToClassList("icon-button");
+            _settingsButton.AddToClassList("settings-button");
             _settingsButton.AddToClassList(StyleConstants.ClickableClass);
             headerRow.Add(_settingsButton);
 
@@ -2174,8 +2167,8 @@
             Toggle prefsToggle = new("Persist State in Settings Asset:")
             {
                 value = settings.persistStateInSettingsAsset,
-                tooltip = "...",
             };
+            prefsToggle.AddToClassList("settings-prefs-toggle");
             prefsToggle.RegisterValueChangedCallback(evt =>
             {
                 bool newModeIsSettingsAsset = evt.newValue;
@@ -2205,27 +2198,23 @@
                     marginTop = 10,
                 },
             };
-            dataFolderContainer.Add(
-                new Label("Data Folder:") { style = { width = 80, flexShrink = 0 } }
-            );
+            Label dataFolderLabel = new("Data Folder:");
+            dataFolderLabel.AddToClassList("settings-data-folder-label");
+            dataFolderContainer.Add(dataFolderLabel);
             TextField dataFolderPathDisplay = new()
             {
                 value = Settings.DataFolderPath,
                 isReadOnly = true,
                 name = "data-folder-display",
-                style =
-                {
-                    flexGrow = 1,
-                    marginLeft = 5,
-                    marginRight = 5,
-                },
             };
+            dataFolderPathDisplay.AddToClassList("settings-data-folder-path-display");
             dataFolderContainer.Add(dataFolderPathDisplay);
             Button selectFolderButton = new(() => SelectDataFolderForPopover(dataFolderPathDisplay))
             {
                 text = "Select...",
-                style = { flexShrink = 0 },
             };
+            selectFolderButton.AddToClassList("settings-data-folder-button");
+            selectFolderButton.AddToClassList("clickable");
             dataFolderContainer.Add(selectFolderButton);
             _settingsPopover.Add(dataFolderContainer);
 
@@ -4293,6 +4282,12 @@
             {
                 _namespaceController.SelectType(this, dataObject.GetType());
             }
+            // Backup trigger, we have some delay issues
+            rootVisualElement
+                .schedule.Execute(
+                    () => _namespaceController.SelectType(this, _selectedObject?.GetType())
+                )
+                .ExecuteLater(1);
 
             BuildInspectorView();
         }

@@ -22,7 +22,8 @@
                 needsRefresh = importedAssets
                     .Where(IsAsset)
                     .Select(AssetDatabase.LoadAssetAtPath<ScriptableObject>)
-                    .Any(asset => asset is BaseDataObject or DataVisualizerSettings);
+                    .Where(so => so != null)
+                    .Any(asset => asset is not DataVisualizerSettings);
             }
 
             if (!needsRefresh)
