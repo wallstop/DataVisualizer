@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer
+﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
 {
 #if UNITY_EDITOR
     using System;
@@ -11,19 +11,18 @@
     using System.Text.RegularExpressions;
     using Data;
     using Extensions;
-    using Helper;
     using Search;
-    using Styles;
-#if ODIN_INSPECTOR
     using Sirenix.OdinInspector;
     using Sirenix.OdinInspector.Editor;
-#endif
+    using Styles;
+    using UI;
     using UnityEditor;
     using UnityEditor.UIElements;
     using UnityEngine;
     using UnityEngine.UIElements;
     using Utilities;
-    using WallstopStudios.DataVisualizer;
+    using WallstopStudios.DataVisualizer.DataVisualizer;
+    using WallstopStudios.DataVisualizer.Helper;
 
     public sealed class DataVisualizer : EditorWindow
     {
@@ -976,26 +975,8 @@
             _searchPopover.style.height = 500;
             root.Add(_searchPopover);
 
-            _typeAddPopover = new VisualElement
-            {
-                name = "type-add-popover",
-                style =
-                {
-                    position = Position.Absolute,
-                    width = 250,
-                    maxHeight = 400,
-                    backgroundColor = new Color(0.22f, 0.22f, 0.22f, 1f),
-                    borderLeftWidth = 1,
-                    borderRightWidth = 1,
-                    borderTopWidth = 1,
-                    borderBottomWidth = 1,
-                    borderBottomColor = Color.black,
-                    borderLeftColor = Color.black,
-                    borderRightColor = Color.black,
-                    borderTopColor = Color.black,
-                    display = DisplayStyle.None,
-                },
-            };
+            _typeAddPopover = new VisualElement { name = "type-add-popover" };
+            _typeAddPopover.AddToClassList("type-add-popover");
 
             _typeSearchField = new TextField
             {
@@ -1013,13 +994,12 @@
             _typeSearchField.RegisterCallback<KeyDownEvent>(HandleTypePopoverKeyDown);
             _typeAddPopover.Add(_typeSearchField);
 
-            ScrollView typePopoverScrollView = new(ScrollViewMode.Vertical)
-            {
-                style = { flexGrow = 1 },
-            };
+            ScrollView typePopoverScrollView = new(ScrollViewMode.Vertical);
+            typePopoverScrollView.AddToClassList("type-add-popover-scrollview");
             _typeAddPopover.Add(typePopoverScrollView);
 
             _typePopoverListContainer = new VisualElement { name = "type-add-list-content" };
+            _typePopoverListContainer.AddToClassList("type-add-list-container");
             typePopoverScrollView.Add(_typePopoverListContainer);
 
             root.Add(_typeAddPopover);
@@ -2164,7 +2144,21 @@
             );
 
             DataVisualizerSettings settings = Settings;
-            Toggle prefsToggle = new("Persist State in Settings Asset:")
+            ActionButtonToggle prefsToggle = null;
+            prefsToggle = new ActionButtonToggle(
+                settings.persistStateInSettingsAsset
+                    ? "Persist State in UserState:"
+                    : "Persist State in Settings Asset:",
+                value =>
+                {
+                    if (prefsToggle != null)
+                    {
+                        prefsToggle.Label = value
+                            ? "Persist State in UserState:"
+                            : "Persist State in Settings Asset:";
+                    }
+                }
+            )
             {
                 value = settings.persistStateInSettingsAsset,
             };
@@ -2201,38 +2195,24 @@
             Label dataFolderLabel = new("Data Folder:");
             dataFolderLabel.AddToClassList("settings-data-folder-label");
             dataFolderContainer.Add(dataFolderLabel);
-            TextField dataFolderPathDisplay = new()
+            Label dataFolderPathDisplay = new()
             {
-                value = Settings.DataFolderPath,
-                isReadOnly = true,
+                text = Settings.DataFolderPath,
                 name = "data-folder-display",
             };
             dataFolderPathDisplay.AddToClassList("settings-data-folder-path-display");
             dataFolderContainer.Add(dataFolderPathDisplay);
             Button selectFolderButton = new(() => SelectDataFolderForPopover(dataFolderPathDisplay))
             {
-                text = "Select...",
+                text = "Select",
             };
             selectFolderButton.AddToClassList("settings-data-folder-button");
             selectFolderButton.AddToClassList("clickable");
             dataFolderContainer.Add(selectFolderButton);
             _settingsPopover.Add(dataFolderContainer);
-
-            VisualElement buttonContainer = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    justifyContent = Justify.FlexEnd,
-                    marginTop = 15,
-                },
-            };
-            Button closeButton = new(CloseActivePopover) { text = "Close" };
-            buttonContainer.Add(closeButton);
-            _settingsPopover.Add(buttonContainer);
         }
 
-        private void SelectDataFolderForPopover(TextField displayField)
+        private void SelectDataFolderForPopover(Label displayField)
         {
             if (displayField == null)
             {
@@ -2317,7 +2297,7 @@
             settings._dataFolderPath = relativePath;
             settings.MarkDirty();
             AssetDatabase.SaveAssets();
-            displayField.value = settings.DataFolderPath;
+            displayField.text = settings.DataFolderPath;
         }
 
         private void OpenRenamePopover(VisualElement source, ScriptableObject dataObject)
@@ -2706,15 +2686,6 @@
                                     HandleTypeSelectionFromPopover(evt, type, namespaceKey),
                                 type
                             );
-                            typeLabel.RegisterCallback<MouseEnterEvent, Label>(
-                                (_, context) =>
-                                    context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
-                                typeLabel
-                            );
-                            typeLabel.RegisterCallback<MouseLeaveEvent, Label>(
-                                (_, context) => context.style.backgroundColor = Color.clear,
-                                typeLabel
-                            );
                         }
 
                         addableTypes.Add(type);
@@ -2750,8 +2721,6 @@
                             PopoverListNamespaceClassName
                         );
                         namespaceLabel.AddToClassList(PopoverListNamespaceClassName);
-                        namespaceLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-                        namespaceLabel.style.flexGrow = 1;
 
                         Dictionary<string, object> clickContext = new()
                         {

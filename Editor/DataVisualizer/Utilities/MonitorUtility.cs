@@ -1,11 +1,14 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Utilities
+﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Utilities
 {
 #if UNITY_EDITOR
 
-    using UnityEditor;
+    using System;
+    using System.Runtime.InteropServices;
     using UnityEngine;
-    using System; // For IntPtr, Exception
-    using System.Runtime.InteropServices; // For DllImport, Marshal, StructLayout etc.
+
+    // For IntPtr, Exception
+
+    // For DllImport, Marshal, StructLayout etc.
 
     public static class MonitorUtility
     {

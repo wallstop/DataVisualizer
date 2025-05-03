@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Data
+﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Data
 {
     using System;
 

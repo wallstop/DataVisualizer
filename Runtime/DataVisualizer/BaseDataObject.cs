@@ -2,13 +2,15 @@
 
 [assembly: InternalsVisibleTo(assemblyName: "WallstopStudios.DataVisualizer.Editor")]
 
-namespace WallstopStudios.DataVisualizer
+namespace WallstopStudios.DataVisualizer.DataVisualizer
 {
-    using Sirenix.OdinInspector;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.Serialization;
     using UnityEngine.UIElements;
+#if ODIN_INSPECTOR
+    using Sirenix.OdinInspector;
+#endif
 
     public abstract class BaseDataObject :
 #if ODIN_INSPECTOR

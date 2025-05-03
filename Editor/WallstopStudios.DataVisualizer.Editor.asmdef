@@ -1,6 +1,6 @@
 {
     "name": "WallstopStudios.DataVisualizer.Editor",
-    "rootNamespace": "WallstopStudios",
+    "rootNamespace": "WallstopStudios.DataVisualizer.Editor",
     "references": [
         "WallstopStudios.DataVisualizer"
     ],

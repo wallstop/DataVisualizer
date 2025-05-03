@@ -1,14 +1,12 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Data
+﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Data
 {
     using System;
     using System.Collections.Generic;
     using System.Linq;
-    using Helper;
+    using UnityEditor;
     using UnityEngine;
     using UnityEngine.Serialization;
-#if UNITY_EDITOR
-    using UnityEditor;
-#endif
+    using WallstopStudios.DataVisualizer.Helper;
 
     [CreateAssetMenu(
         fileName = "DataVisualizerSettings",

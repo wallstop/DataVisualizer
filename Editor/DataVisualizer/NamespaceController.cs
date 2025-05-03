@@ -1,14 +1,14 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer
+﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
 {
     using System;
     using System.Collections.Generic;
     using System.Linq;
     using Data;
-    using Helper;
     using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
-    using WallstopStudios.DataVisualizer;
+    using WallstopStudios.DataVisualizer.DataVisualizer;
+    using WallstopStudios.DataVisualizer.Helper;
 
     public sealed class NamespaceController
     {
@@ -125,9 +125,13 @@
             _selectedType = null;
             if (!TryGet(type, out VisualElement element))
             {
-                Debug.LogWarning(
-                    $"Could not find type {type?.FullName}. Namespace cache: [{string.Join(",", _namespaceCache.Keys.Select(nsType => nsType.FullName).OrderBy(x => x))}]."
-                );
+                if (type != null)
+                {
+                    Debug.LogWarning(
+                        $"Could not find type {type?.FullName}. Namespace cache: [{string.Join(",", _namespaceCache.Keys.Select(nsType => nsType.Name).OrderBy(x => x))}]."
+                    );
+                }
+
                 return;
             }
 

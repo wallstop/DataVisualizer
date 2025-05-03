@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.Helper
+﻿namespace WallstopStudios.DataVisualizer.Helper
 {
     internal static class PathHelper
     {

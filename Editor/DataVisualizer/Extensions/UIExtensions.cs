@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Extensions
+﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Extensions
 {
     using System.Collections.Generic;
     using Styles;

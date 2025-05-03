@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Styles
+﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Styles
 {
     public static class StyleConstants
     {

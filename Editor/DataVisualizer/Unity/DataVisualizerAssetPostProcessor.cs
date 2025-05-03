@@ -1,11 +1,10 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Unity
+﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Unity
 {
 #if UNITY_EDITOR
     using System.Linq;
     using Data;
     using UnityEditor;
     using UnityEngine;
-    using WallstopStudios.DataVisualizer;
 
     public sealed class DataVisualizerAssetProcessor : AssetPostprocessor
     {
