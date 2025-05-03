@@ -2665,14 +2665,12 @@
 
                         bool isManaged = managedTypeFullNames.Contains(type.FullName);
                         Label typeLabel = CreateHighlightedLabel(
-                            $"  {type.Name}",
+                            $"{type.Name}",
                             searchTerms,
                             PopoverListItemClassName
                         );
-                        typeLabel.style.paddingTop = 1;
-                        typeLabel.style.paddingBottom = 1;
-                        typeLabel.style.marginLeft = 10;
                         typeLabel.AddToClassList(PopoverListItemClassName);
+                        typeLabel.AddToClassList(StyleConstants.ClickableClass);
 
                         if (isManaged)
                         {
@@ -2826,6 +2824,7 @@
                                 currentIndicator.text = nowCollapsed
                                     ? StyleConstants.ArrowExpanded
                                     : StyleConstants.ArrowCollapsed;
+                                // TODO: SET SPECIAL EXPANDED / NOT EXPANDED IN HEADER CLASS
                             }
 
                             evt?.StopPropagation();
