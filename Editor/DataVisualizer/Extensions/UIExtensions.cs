@@ -1,10 +1,7 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Extensions
+﻿namespace WallstopStudios.DataVisualizer.Editor.Extensions
 {
-    using System;
     using System.Collections.Generic;
     using Styles;
-    using UnityEditor;
-    using UnityEngine;
     using UnityEngine.UIElements;
 
     internal static class UIExtensions
@@ -34,19 +31,6 @@
             OnFocusOut();
             textField.RegisterCallback<FocusInEvent>(_ => OnFocusIn());
             textField.RegisterCallback<FocusOutEvent>(_ => OnFocusOut());
-            textField.RegisterValueChangedCallback(evt =>
-            {
-                if (string.IsNullOrEmpty(evt.newValue))
-                {
-                    OnFocusOut();
-                }
-                else if (string.Equals(placeholder, evt.previousValue, StringComparison.Ordinal))
-                {
-                    textField.SetValueWithoutNotify(
-                        evt.newValue.Replace(placeholder, string.Empty, StringComparison.Ordinal)
-                    );
-                }
-            });
 
             return;
 
@@ -61,7 +45,6 @@
                 textField.RemoveFromClassList(PlaceholderTextFieldClass);
 
                 blinkSchedule?.Pause();
-                blinkSchedule = null;
 
                 bool shouldRenderCursor = true;
                 blinkSchedule = textField

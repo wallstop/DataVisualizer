@@ -1,9 +1,9 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Search
+﻿namespace WallstopStudios.DataVisualizer.Editor.Search
 {
     public static class MatchSource
     {
         public const string ObjectName = "ObjectName";
         public const string TypeName = "TypeName";
-        public const string GUID = "GUID";
+        public const string Guid = "GUID";
     }
 }

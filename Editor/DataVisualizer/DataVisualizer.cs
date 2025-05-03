@@ -1,6 +1,6 @@
 ﻿// ReSharper disable AccessToModifiedClosure
 // ReSharper disable AccessToDisposedClosure
-namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
+namespace WallstopStudios.DataVisualizer.Editor
 {
 #if UNITY_EDITOR
     using System;
@@ -23,7 +23,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
     using UnityEngine;
     using UnityEngine.UIElements;
     using Utilities;
-    using WallstopStudios.DataVisualizer.DataVisualizer;
     using Helper;
 
     public sealed class DataVisualizer : EditorWindow
@@ -1257,26 +1256,26 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
                     break;
                 }
             }
+            ScrollView scrollView =
+                _searchPopover.Q<ScrollView>("search-scroll")
+                ?? new ScrollView { name = "search-scroll", style = { flexGrow = 1 } };
+            VisualElement listContainer =
+                scrollView.Q<VisualElement>("search-list-content")
+                ?? new VisualElement { name = "search-list-content" };
+            listContainer.Clear();
 
+            if (scrollView.parent != _searchPopover)
+            {
+                _searchPopover.Add(scrollView);
+            }
+
+            if (listContainer.parent != scrollView)
+            {
+                scrollView.Add(listContainer);
+            }
             if (results.Count > 0)
             {
-                ScrollView scrollView =
-                    _searchPopover.Q<ScrollView>("search-scroll")
-                    ?? new ScrollView { name = "search-scroll", style = { flexGrow = 1 } };
-                VisualElement listContainer =
-                    scrollView.Q<VisualElement>("search-list-content")
-                    ?? new VisualElement { name = "search-list-content" };
-                listContainer.Clear();
-                if (scrollView.parent != _searchPopover)
-                {
-                    _searchPopover.Add(scrollView);
-                }
-
-                if (listContainer.parent != scrollView)
-                {
-                    scrollView.Add(listContainer);
-                }
-
+                _searchPopover.style.maxHeight = StyleKeyword.Null;
                 foreach ((ScriptableObject resultObj, SearchResultMatchInfo resultInfo) in results)
                 {
                     List<string> termsMatchingThisObject = resultInfo.AllMatchedTerms.ToList();
@@ -1354,7 +1353,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
                             .matchedFields.Where(mf =>
                                 mf.fieldName != MatchSource.ObjectName
                                 && mf.fieldName != MatchSource.TypeName
-                                && mf.fieldName != MatchSource.GUID
+                                && mf.fieldName != MatchSource.Guid
                             )
                             .GroupBy(mf => mf.fieldName)
                             .Take(2);
@@ -1386,8 +1385,21 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
             }
             else
             {
-                _searchPopover.Clear();
-                CloseActivePopover();
+                listContainer.Add(
+                    new Label("No matching objects found.")
+                    {
+                        style =
+                        {
+                            color = Color.grey,
+                            paddingBottom = 10,
+                            paddingTop = 10,
+                            paddingLeft = 10,
+                            paddingRight = 10,
+                            unityTextAlign = TextAnchor.MiddleCenter,
+                        },
+                    }
+                );
+                _searchPopover.style.maxHeight = StyleKeyword.None;
             }
         }
 
@@ -1441,7 +1453,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
                 )
                 {
                     detailsForThisTerm.Add(
-                        new MatchDetail(term) { fieldName = MatchSource.GUID, matchedValue = guid }
+                        new MatchDetail(term) { fieldName = MatchSource.Guid, matchedValue = guid }
                     );
                     termMatchedThisLoop = true;
                 }
@@ -1743,10 +1755,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
             };
             _confirmActionPopover.Add(messageLabel);
 
-            VisualElement buttonContainer = new()
-            {
-                style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
-            };
+            VisualElement buttonContainer = new();
+            buttonContainer.AddToClassList("popover-button-container");
             _confirmActionPopover.Add(buttonContainer);
 
             Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
@@ -2058,7 +2068,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
 
         private void HandleClickOutsidePopover(PointerDownEvent evt)
         {
-            _searchField.value = string.Empty;
             VisualElement target = evt.target as VisualElement;
             if (target == _addTypeButton)
             {
@@ -2069,6 +2078,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
                 _lastSettingsClicked = Time.realtimeSinceStartup;
             }
 
+            _searchField.value = SearchPlaceholder;
             bool clickInsideNested = false;
             bool clickInsideMain = false;
 
@@ -2357,15 +2367,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
                 },
             };
             _renamePopover.Add(errorLabel);
-            VisualElement buttonContainer = new()
-            {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    justifyContent = Justify.FlexEnd,
-                    marginTop = 5,
-                },
-            };
+            VisualElement buttonContainer = new();
+            buttonContainer.AddToClassList("popover-button-container");
             Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
             cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
             cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
@@ -2471,11 +2474,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
                     style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
                 }
             );
-            VisualElement buttonContainer = new()
-            {
-                // TODO: CLEAN UP STYLE
-                style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
-            };
+            VisualElement buttonContainer = new();
+            buttonContainer.AddToClassList("popover-button-container");
             Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
             cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
             cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
@@ -3032,9 +3032,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
                     {
                         if (addableCount > 0)
                         {
-                            string confirmationMessage =
-                                $"Add {addableCount} type{(addableCount > 1 ? "s" : "")} from namespace '{nsKey}'?";
-
                             BuildConfirmNamespaceAddPopoverContent(nsKey, addableTypes);
                             OpenPopover(_confirmNamespaceAddPopover, element, isNested: true);
                         }
@@ -3337,10 +3334,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
             };
             _confirmNamespaceAddPopover.Add(messageLabel);
 
-            VisualElement buttonContainer = new()
-            {
-                style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
-            };
+            VisualElement buttonContainer = new();
+            buttonContainer.AddToClassList("popover-button-container");
             _confirmNamespaceAddPopover.Add(buttonContainer);
 
             Button cancelButton = new(CloseNestedPopover)

@@ -1,12 +1,12 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Data
+﻿namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Helper;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.Serialization;
-    using WallstopStudios.DataVisualizer.Helper;
 
     [CreateAssetMenu(
         fileName = "DataVisualizerSettings",
@@ -26,7 +26,7 @@
         internal string _dataFolderPath = DefaultDataFolderPath;
 
         [Tooltip(
-            "If true, window state (selection, order, collapse) is saved globally in EditorPrefs. If false, state is saved within this settings asset file."
+            "If true, window state (selection, order, collapse) is saved in a special ScriptableObject. If false, state is saved within this settings asset file."
         )]
         public bool persistStateInSettingsAsset;
 

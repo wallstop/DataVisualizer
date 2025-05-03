@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Search
+﻿namespace WallstopStudios.DataVisualizer.Editor.Search
 {
     using System;
     using System.Collections.Generic;
@@ -26,7 +26,7 @@
                     )
                     || string.Equals(
                         f.fieldName,
-                        MatchSource.GUID,
+                        MatchSource.Guid,
                         StringComparison.OrdinalIgnoreCase
                     )
                 );

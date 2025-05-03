@@ -1,7 +1,6 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer.Utilities
+﻿namespace WallstopStudios.DataVisualizer.Editor.Utilities
 {
 #if UNITY_EDITOR
-
     using System;
     using System.Runtime.InteropServices;
     using UnityEngine;

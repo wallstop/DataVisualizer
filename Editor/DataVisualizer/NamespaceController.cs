@@ -1,14 +1,13 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
+﻿namespace WallstopStudios.DataVisualizer.Editor
 {
     using System;
     using System.Collections.Generic;
     using System.Linq;
     using Data;
-    using Helper;
     using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
-    using WallstopStudios.DataVisualizer.DataVisualizer;
+    using WallstopStudios.DataVisualizer.Helper;
 
     public sealed class NamespaceController
     {
