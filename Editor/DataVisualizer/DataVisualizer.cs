@@ -2102,7 +2102,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _lastSettingsClicked = Time.realtimeSinceStartup;
             }
 
-            _searchField.value = SearchPlaceholder;
             bool clickInsideNested = false;
             bool clickInsideMain = false;
 

@@ -3,6 +3,7 @@
     using System;
     using System.Collections.Generic;
     using Styles;
+    using UnityEngine;
     using UnityEngine.UIElements;
 
     internal static class UIExtensions
@@ -65,11 +66,6 @@
 
             void OnFocusOut()
             {
-                if (!string.IsNullOrEmpty(textField.text))
-                {
-                    return;
-                }
-
                 textField.SetValueWithoutNotify(placeholder);
                 textField.AddToClassList(PlaceholderTextFieldClass);
                 blinkSchedule?.Pause();

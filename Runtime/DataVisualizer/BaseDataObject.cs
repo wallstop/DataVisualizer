@@ -85,7 +85,7 @@ namespace WallstopStudios.DataVisualizer
                 return 0;
             }
 
-            if (other is null)
+            if (other == null)
             {
                 return 1;
             }
@@ -108,7 +108,7 @@ namespace WallstopStudios.DataVisualizer
                 return idComparison;
             }
 
-            return string.Compare(_description, other._description, StringComparison.Ordinal);
+            return string.Compare(Description, other.Description, StringComparison.Ordinal);
         }
     }
 }
