@@ -1365,11 +1365,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                             Label contextLabel = CreateHighlightedLabel(
                                 $"{fieldName}: {fieldValue}",
                                 termsMatchingThisObject,
-                                "result-context-label"
+                                "search-result-context-label",
+                                bindToContextHovers: true,
+                                resultItem,
+                                mainInfoRow
                             );
-                            contextLabel.style.fontSize = 9;
-                            contextLabel.style.color = Color.gray;
-                            contextLabel.style.marginLeft = 5;
                             contextContainer.Add(contextLabel);
                         }
                     }

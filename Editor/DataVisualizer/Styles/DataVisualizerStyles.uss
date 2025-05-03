@@ -128,7 +128,6 @@
     flex-grow: 1;
     flex-shrink: 1;
     width: auto;
-    /*height: auto;*/
     max-height: 500px;
     background-color: rgba(0, 0, 0, 0.9);
     border-width: 2px;
@@ -298,7 +297,6 @@
     flex-direction: row;
     align-items: center;
     padding-bottom: 4px;
-    /*padding-top: 4px;*/
     padding-left: 2px;
     padding-right: 2px;
 }
@@ -374,7 +372,6 @@
     padding: 0;
     min-width: 0;
     background-color: transparent;
-    /*border-color: rgba(128, 128, 128, 128);*/
     border-radius: 50%;
     border-width: 2px;
     -unity-font-style: bold;
@@ -534,6 +531,15 @@
     flex-shrink: 0;
 }
 
+.search-result-context-label {
+    font-size: 14px;
+    color: grey;
+    margin-left: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .popover-button-container {
     flex-direction: row;
     justify-content: flex-end;
@@ -556,55 +562,12 @@
 }
 
 .type-search-field > #unity-text-input > .unity-text-element {
-
     padding: 0 4px;
 }
 
-.search-result-item Label b {
-    /* Make highlighted text bold and/or colored */
-    -unity-font-style: bold;
-    /* Use a color that stands out on your popover background */
-    color: #FFE485; /* Example: Light Yellow/Gold */
-    /* Optional background highlight: */
-    /* background-color: rgba(255, 230, 100, 0.15); */
-    /* border-radius: 2px; */
-}
-
-.result-context-label {
-    /* Style for context label */
-    font-size: 9px;
-    color: grey;
-    margin-left: 10px; /* Indent context */
-    /* Ensure overflow handled if context is long */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.result-context-label b { /* Apply highlight style to context too */
-    -unity-font-style: bold;
-    color: #FFE485; /* Match main highlight color */
-}
-
-.search-result-item--highlighted {
-    /* Example: Use a distinct background color */
-    background-color: #4A6A8A; /* Similar to selection color or different */
-    /* Example: Or add/change a border */
-    /* border-left-width: 3px; */
-    /* border-left-color: cornflowerblue; */
-}
-
-/* Ensure highlighted text is still readable */
-.search-result-item--highlighted Label {
-    /* color: white; */ /* Adjust if needed */
-}
-
-.search-result-item--highlighted.result-type-label { /* Keep type label distinct maybe? */
-    /* color: lightgrey; */
-}
 
 .popover-item--highlighted {
-    /*background-color: rgba(144, 238, 144, 0.5);*/
+
     background-color: lightgreen;
     color: black;
 }
@@ -615,14 +578,11 @@
 }
 
 .readonly-display-field > .unity-base-text-field__input {
-    /* Make text slightly dimmer */
     color: grey;
-    /* Optional: Remove background tint/border that implies editability */
     background-color: transparent;
     border-width: 0;
 }
 
-/* Prevent the label part from changing on disable */
 .readonly-display-field .unity-label {
     opacity: 1 !important;
 }
@@ -675,7 +635,6 @@
     flex-grow: 1;
     flex-shrink: 1;
     width: auto;
-    /*height: auto;*/
     max-height: 500px;
     background-color: rgba(0, 0, 0, 0.9);
     border-width: 2px;

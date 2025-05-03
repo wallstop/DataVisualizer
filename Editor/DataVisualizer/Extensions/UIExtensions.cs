@@ -1,5 +1,6 @@
 ﻿namespace WallstopStudios.DataVisualizer.Editor.Extensions
 {
+    using System;
     using System.Collections.Generic;
     using Styles;
     using UnityEngine.UIElements;
@@ -36,12 +37,11 @@
 
             void OnFocusIn()
             {
-                if (!textField.ClassListContains(PlaceholderTextFieldClass))
+                if (string.Equals(textField.value, placeholder, StringComparison.Ordinal))
                 {
-                    return;
+                    textField.SetValueWithoutNotify(string.Empty);
                 }
 
-                textField.SetValueWithoutNotify(string.Empty);
                 textField.RemoveFromClassList(PlaceholderTextFieldClass);
 
                 blinkSchedule?.Pause();
