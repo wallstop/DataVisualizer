@@ -393,7 +393,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void ScheduleRefresh()
         {
-            Debug.Log("Scheduling refresh...");
             rootVisualElement.schedule.Execute(RefreshAllViews).ExecuteLater(50);
         }
 
@@ -2003,8 +2002,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleGlobalKeyDown(KeyDownEvent evt)
         {
-            Debug.Log($"GlobalKeyDown: Key={evt.keyCode}, FocusArea={_lastActiveFocusArea}");
-
             if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
             {
                 switch (evt.keyCode)

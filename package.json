@@ -1,6 +1,6 @@
 {
   "name": "com.wallstop-studios.data-visualizer",
-  "version": "0.0.33",
+  "version": "0.0.34",
   "displayName": "Data Visualizer",
   "description": "Data Management UI for Unity's Scriptable Objects",
   "dependencies": {},
