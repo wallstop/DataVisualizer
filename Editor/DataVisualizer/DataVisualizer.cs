@@ -1075,6 +1075,17 @@ namespace WallstopStudios.DataVisualizer.Editor
                 string unityRelativeFontPath = DirectoryHelper.AbsoluteToUnityRelativePath(
                     fontPath
                 );
+                packageCacheIndex = unityRelativeFontPath.IndexOf(
+                    packageCache,
+                    StringComparison.OrdinalIgnoreCase
+                );
+                if (0 <= packageCacheIndex)
+                {
+                    unityRelativeFontPath = unityRelativeFontPath[
+                        (packageCacheIndex + packageCache.Length)..
+                    ];
+                    unityRelativeFontPath = "Packages" + unityRelativeFontPath;
+                }
                 if (!string.IsNullOrWhiteSpace(unityRelativeFontPath))
                 {
                     font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
