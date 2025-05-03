@@ -4,14 +4,16 @@
     using System.Collections.Generic;
     using System.Linq;
     using Data;
+    using Helper;
     using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.DataVisualizer;
-    using WallstopStudios.DataVisualizer.Helper;
 
     public sealed class NamespaceController
     {
+        private const string TypeItemLabelName = "type-item-label";
+
         public Type SelectedType => _selectedType;
 
         private readonly Dictionary<Type, VisualElement> _namespaceCache = new();
@@ -116,6 +118,9 @@
             if (TryGet(_selectedType, out VisualElement currentSelection))
             {
                 currentSelection.RemoveFromClassList(StyleConstants.SelectedClass);
+                currentSelection
+                    .Q<Label>(TypeItemLabelName)
+                    ?.AddToClassList(StyleConstants.ClickableClass);
                 if (TryGetNamespace(currentSelection, out VisualElement currentNamespaceElement))
                 {
                     currentNamespaceElement.RemoveFromClassList(StyleConstants.SelectedClass);
@@ -137,6 +142,7 @@
 
             _selectedType = type;
             element.AddToClassList(StyleConstants.SelectedClass);
+            element.Q<Label>(TypeItemLabelName)?.RemoveFromClassList(StyleConstants.ClickableClass);
             if (TryGetNamespace(element, out VisualElement newlySelectedNamespace))
             {
                 newlySelectedNamespace.AddToClassList(StyleConstants.SelectedClass);
@@ -307,7 +313,7 @@
                     typeItem.AddToClassList(StyleConstants.TypeItemClass);
                     _namespaceCache[type] = typeItem;
 
-                    Label typeLabel = new(type.Name) { name = "type-item-label" };
+                    Label typeLabel = new(type.Name) { name = TypeItemLabelName };
                     typeLabel.AddToClassList(StyleConstants.TypeLabelClass);
                     typeLabel.AddToClassList(StyleConstants.ClickableClass);
                     typeItem.Add(typeLabel);

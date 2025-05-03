@@ -1,4 +1,6 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
+﻿// ReSharper disable AccessToModifiedClosure
+// ReSharper disable AccessToDisposedClosure
+namespace WallstopStudios.DataVisualizer.Editor.Editor.DataVisualizer
 {
 #if UNITY_EDITOR
     using System;
@@ -22,7 +24,7 @@
     using UnityEngine.UIElements;
     using Utilities;
     using WallstopStudios.DataVisualizer.DataVisualizer;
-    using WallstopStudios.DataVisualizer.Helper;
+    using Helper;
 
     public sealed class DataVisualizer : EditorWindow
     {
@@ -78,6 +80,8 @@
             AddTypePopover = 2,
             SearchResultsPopover = 3,
         }
+
+        private static readonly StringBuilder CachedStringBuilder = new();
 
         internal DataVisualizerUserState UserState
         {
@@ -879,7 +883,6 @@
             };
             root.Add(headerRow);
 
-            // ReSharper disable once AccessToModifiedClosure
             _settingsButton = new Button(() => TogglePopover(_settingsPopover, _settingsButton))
             {
                 text = "…",
@@ -970,25 +973,15 @@
 
             root.Add(_confirmDeletePopover);
 
-            _searchPopover = CreatePopoverBase("search-popover");
-            _searchPopover.style.flexGrow = 1;
-            _searchPopover.style.height = 500;
+            _searchPopover = new VisualElement { name = "search-popover" };
+            _searchPopover.AddToClassList("search-popover");
             root.Add(_searchPopover);
 
             _typeAddPopover = new VisualElement { name = "type-add-popover" };
             _typeAddPopover.AddToClassList("type-add-popover");
 
-            _typeSearchField = new TextField
-            {
-                name = "type-search-field",
-                style =
-                {
-                    marginLeft = 4,
-                    marginRight = 4,
-                    marginTop = 4,
-                    marginBottom = 2,
-                },
-            };
+            _typeSearchField = new TextField { name = "type-search-field" };
+            _typeSearchField.AddToClassList("type-search-field");
             _typeSearchField.SetPlaceholderText(SearchPlaceholder);
             _typeSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue));
             _typeSearchField.RegisterCallback<KeyDownEvent>(HandleTypePopoverKeyDown);
@@ -1289,7 +1282,7 @@
                     List<string> termsMatchingThisObject = resultInfo.AllMatchedTerms.ToList();
                     VisualElement resultItem = new() { name = "result-item", userData = resultObj };
                     resultItem.AddToClassList(SearchResultItemClass);
-                    resultItem.AddToClassList("clickable");
+                    resultItem.AddToClassList(StyleConstants.ClickableClass);
                     resultItem.style.flexDirection = FlexDirection.Column;
                     resultItem.style.paddingBottom = new StyleLength(
                         new Length(4, LengthUnit.Pixel)
@@ -1315,14 +1308,6 @@
                         _searchField.value = string.Empty;
                         evt.StopPropagation();
                     });
-                    resultItem.RegisterCallback<MouseEnterEvent, VisualElement>(
-                        (_, context) => context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
-                        resultItem
-                    );
-                    resultItem.RegisterCallback<MouseLeaveEvent, VisualElement>(
-                        (_, context) => context.style.backgroundColor = Color.clear,
-                        resultItem
-                    );
 
                     VisualElement mainInfoRow = new()
                     {
@@ -1332,28 +1317,29 @@
                             justifyContent = Justify.SpaceBetween,
                         },
                     };
-                    mainInfoRow.AddToClassList("clickable");
+                    mainInfoRow.AddToClassList(StyleConstants.ClickableClass);
 
                     Label nameLabel = CreateHighlightedLabel(
                         resultObj.name,
                         termsMatchingThisObject,
-                        "result-name-label"
+                        "result-name-label",
+                        bindToContextHovers: true,
+                        resultItem,
+                        mainInfoRow
                     );
-                    nameLabel.style.flexGrow = 1;
-                    nameLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
-                    nameLabel.style.marginRight = 10;
-                    nameLabel.AddToClassList("clickable");
+                    nameLabel.AddToClassList("search-result-name-label");
+                    nameLabel.AddToClassList(StyleConstants.ClickableClass);
 
                     Label typeLabel = CreateHighlightedLabel(
                         resultObj.GetType().Name,
                         termsMatchingThisObject,
-                        "result-type-label"
+                        "result-type-label",
+                        bindToContextHovers: true,
+                        resultItem,
+                        mainInfoRow
                     );
-                    typeLabel.style.color = Color.grey;
-                    typeLabel.style.fontSize = 10;
-                    typeLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-                    typeLabel.style.flexShrink = 0;
-                    typeLabel.AddToClassList("clickable");
+                    typeLabel.AddToClassList("search-result-type-label");
+                    typeLabel.AddToClassList(StyleConstants.ClickableClass);
 
                     mainInfoRow.Add(nameLabel);
                     mainInfoRow.Add(typeLabel);
@@ -1490,7 +1476,9 @@
         private Label CreateHighlightedLabel(
             string fullText,
             IReadOnlyList<string> termsToHighlight,
-            string baseStyleClass = null
+            string baseStyleClass,
+            bool bindToContextHovers = false,
+            params VisualElement[] contexts
         )
         {
             Label label = new();
@@ -1510,9 +1498,6 @@
                 label.text = fullText;
                 return label;
             }
-
-            StringBuilder richText = new();
-            int currentIndex = 0;
 
             List<Tuple<int, int>> matches = termsToHighlight
                 .Where(term => !string.IsNullOrWhiteSpace(term))
@@ -1535,31 +1520,72 @@
                 .OrderBy(t => t.Item1)
                 .ToList();
 
-            foreach ((int startIndex, int length) in matches)
+            label.text = GenerateContents(false);
+            label.RegisterCallback<MouseOverEvent>(_ =>
             {
-                if (startIndex < currentIndex)
+                label.text = GenerateContents(true);
+            });
+            label.RegisterCallback<MouseOutEvent>(_ =>
+            {
+                label.text = GenerateContents(false);
+            });
+            if (bindToContextHovers)
+            {
+                foreach (VisualElement context in contexts)
                 {
-                    continue;
+                    context.RegisterCallback<MouseOverEvent>(_ =>
+                    {
+                        label.text = GenerateContents(true);
+                    });
+                    context.RegisterCallback<MouseOutEvent>(_ =>
+                    {
+                        label.text = GenerateContents(false);
+                    });
+                }
+            }
+
+            return label;
+
+            string GenerateContents(bool hovering)
+            {
+                CachedStringBuilder.Clear();
+                int currentIndex = 0;
+                bool colorify = !hovering;
+                foreach ((int startIndex, int length) in matches)
+                {
+                    if (startIndex < currentIndex)
+                    {
+                        continue;
+                    }
+
+                    CachedStringBuilder.Append(
+                        EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
+                    );
+                    if (colorify)
+                    {
+                        CachedStringBuilder.Append("<color=yellow>");
+                    }
+
+                    CachedStringBuilder.Append("<b>");
+                    CachedStringBuilder.Append(
+                        EscapeRichText(fullText.Substring(startIndex, length))
+                    );
+                    CachedStringBuilder.Append("</b>");
+                    if (colorify)
+                    {
+                        CachedStringBuilder.Append("</color>");
+                    }
+
+                    currentIndex = startIndex + length;
                 }
 
-                richText.Append(
-                    EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
-                );
-                richText.Append("<color=yellow>");
-                richText.Append("<b>");
-                richText.Append(EscapeRichText(fullText.Substring(startIndex, length)));
-                richText.Append("</b>");
-                richText.Append("</color>");
-                currentIndex = startIndex + length;
-            }
+                if (currentIndex < fullText.Length)
+                {
+                    CachedStringBuilder.Append(EscapeRichText(fullText.Substring(currentIndex)));
+                }
 
-            if (currentIndex < fullText.Length)
-            {
-                richText.Append(EscapeRichText(fullText.Substring(currentIndex)));
+                return CachedStringBuilder.ToString();
             }
-
-            label.text = richText.ToString();
-            return label;
         }
 
         private string EscapeRichText(string input)
@@ -1706,47 +1732,42 @@
         {
             if (_confirmActionPopover == null || onConfirm == null)
             {
-                return; // Need popover and action
+                return;
             }
 
-            _confirmActionPopover.Clear(); // Clear previous content
+            _confirmActionPopover.Clear();
 
-            // Message Label
-            var messageLabel = new Label(message)
+            Label messageLabel = new(message)
             {
                 style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
             };
             _confirmActionPopover.Add(messageLabel);
 
-            // Button Container
-            var buttonContainer = new VisualElement
+            VisualElement buttonContainer = new()
             {
                 style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
             };
             _confirmActionPopover.Add(buttonContainer);
 
-            // Cancel Button - Simply closes the active (this) popover
-            var cancelButton = new Button(CloseActivePopover) { text = "Cancel" };
-            cancelButton.AddToClassList("popover-button");
-            cancelButton.AddToClassList("popover-cancel-button");
-            cancelButton.AddToClassList("clickable");
+            Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
+            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
+            cancelButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(cancelButton);
 
-            // Confirmation Button - Executes action, then closes
-            var confirmButton = new Button(() =>
+            Button confirmButton = new(() =>
             {
-                onConfirm(); // Execute the specific action passed in
-                CloseActivePopover(); // Close afterward
+                onConfirm();
+                CloseActivePopover();
             })
             {
                 text = confirmText,
             };
-            confirmButton.AddToClassList("popover-button");
+            confirmButton.AddToClassList(StyleConstants.PopoverButtonClass);
             confirmButton.AddToClassList("popover-delete-button");
-            confirmButton.AddToClassList("clickable");
+            confirmButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(confirmButton);
 
-            // Open the populated popover, positioned relative to the trigger
             OpenPopover(_confirmActionPopover, triggerElement);
         }
 
@@ -1950,47 +1971,38 @@
         {
             Debug.Log($"GlobalKeyDown: Key={evt.keyCode}, FocusArea={_lastActiveFocusArea}");
 
-            // First, check if an overlay popover wants to handle the key (e.g., Escape to close)
             if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
             {
                 switch (evt.keyCode)
                 {
                     case KeyCode.Escape:
-                        // Debug.Log("Global Escape: Closing active popover.");
                         CloseActivePopover();
                         evt.PreventDefault();
                         evt.StopPropagation();
-                        return; // Handled
+                        return;
 
                     case KeyCode.DownArrow:
                     case KeyCode.UpArrow:
                     case KeyCode.Return:
                     case KeyCode.KeypadEnter:
-                        // Route to specific popover handlers if they are active
                         if (_lastActiveFocusArea == FocusArea.SearchResultsPopover)
                         {
                             _lastEnterPressed = Time.realtimeSinceStartup;
-                            HandleSearchKeyDown(evt); // Use existing handler logic
-                            return; // Handled by popover
+                            HandleSearchKeyDown(evt);
+                            return;
                         }
-                        else if (_lastActiveFocusArea == FocusArea.AddTypePopover)
+                        if (_lastActiveFocusArea == FocusArea.AddTypePopover)
                         {
                             _lastEnterPressed = Time.realtimeSinceStartup;
-                            HandleTypePopoverKeyDown(evt); // Use existing handler logic
-                            return; // Handled by popover
+                            HandleTypePopoverKeyDown(evt);
+                            return;
                         }
 
-                        // Let Enter potentially fall through if popover doesn't handle it (e.g., settings)
-                        // Let Arrows fall through if popover doesn't handle it
-                        break; // Break switch, don't return yet for Enter maybe
+                        break;
                 }
 
-                // If Escape wasn't pressed, and it wasn't search/type popover nav,
-                // let the key potentially be handled by controls within other popovers (e.g., text field in Rename)
-                // OR stop propagation if we don't want main lists navigating while popover open. Let's stop it.
                 if (evt.keyCode == KeyCode.DownArrow || evt.keyCode == KeyCode.UpArrow)
                 {
-                    // Prevent arrows scrolling main lists when *any* popover is open
                     evt.PreventDefault();
                     evt.StopPropagation();
                     return;
@@ -2046,6 +2058,7 @@
 
         private void HandleClickOutsidePopover(PointerDownEvent evt)
         {
+            _searchField.value = string.Empty;
             VisualElement target = evt.target as VisualElement;
             if (target == _addTypeButton)
             {
@@ -2207,7 +2220,7 @@
                 text = "Select",
             };
             selectFolderButton.AddToClassList("settings-data-folder-button");
-            selectFolderButton.AddToClassList("clickable");
+            selectFolderButton.AddToClassList(StyleConstants.ClickableClass);
             dataFolderContainer.Add(selectFolderButton);
             _settingsPopover.Add(dataFolderContainer);
         }
@@ -2354,16 +2367,16 @@
                 },
             };
             Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
-            cancelButton.AddToClassList("popover-button");
-            cancelButton.AddToClassList("popover-cancel-button");
-            cancelButton.AddToClassList("clickable");
+            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
+            cancelButton.AddToClassList(StyleConstants.ClickableClass);
             Button renameButton = new(() => HandleRenameConfirmed(nameTextField, errorLabel))
             {
                 text = "Rename",
             };
-            renameButton.AddToClassList("popover-button");
+            renameButton.AddToClassList(StyleConstants.PopoverButtonClass);
             renameButton.AddToClassList("popover-rename-button");
-            renameButton.AddToClassList("clickable");
+            renameButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(renameButton);
             _renamePopover.Add(buttonContainer);
@@ -2464,13 +2477,13 @@
                 style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
             };
             Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
-            cancelButton.AddToClassList("popover-cancel-button");
-            cancelButton.AddToClassList("popover-button");
-            cancelButton.AddToClassList("clickable");
+            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            cancelButton.AddToClassList(StyleConstants.ClickableClass);
             Button deleteButton = new(HandleDeleteConfirmed) { text = "Delete" };
-            deleteButton.AddToClassList("popover-button");
+            deleteButton.AddToClassList(StyleConstants.PopoverButtonClass);
             deleteButton.AddToClassList("popover-delete-button");
-            deleteButton.AddToClassList("clickable");
+            deleteButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(deleteButton);
             _confirmDeletePopover.Add(buttonContainer);
@@ -2581,7 +2594,7 @@
             };
             _addTypeButton.AddToClassList("create-button");
             _addTypeButton.AddToClassList("icon-button");
-            _addTypeButton.AddToClassList("clickable");
+            _addTypeButton.AddToClassList(StyleConstants.ClickableClass);
             nsHeader.Add(_addTypeButton);
             namespaceColumn.Add(nsHeader);
 
@@ -2663,34 +2676,10 @@
                             continue;
                         }
 
-                        bool isManaged = managedTypeFullNames.Contains(type.FullName);
-                        Label typeLabel = CreateHighlightedLabel(
-                            $"{type.Name}",
-                            searchTerms,
-                            PopoverListItemClassName
-                        );
-                        typeLabel.AddToClassList(PopoverListItemClassName);
-                        typeLabel.AddToClassList(StyleConstants.ClickableClass);
-
-                        if (isManaged)
-                        {
-                            typeLabel.SetEnabled(false);
-                            typeLabel.AddToClassList(PopoverListItemDisabledClassName);
-                        }
-                        else
-                        {
-                            typeLabel.RegisterCallback<PointerDownEvent, Type>(
-                                (evt, type) =>
-                                    HandleTypeSelectionFromPopover(evt, type, namespaceKey),
-                                type
-                            );
-                        }
-
                         addableTypes.Add(type);
-                        typesToShowInGroup.Add(typeLabel);
                     }
 
-                    if (typesToShowInGroup.Count > 0)
+                    if (addableTypes.Count > 0)
                     {
                         foundMatches = true;
 
@@ -2702,6 +2691,62 @@
                         header.AddToClassList(PopoverNamespaceHeaderClassName);
 
                         bool startCollapsed = !isFiltering;
+                        if (!startCollapsed)
+                        {
+                            header.AddToClassList(StyleConstants.ExpandedClass);
+                        }
+
+                        foreach (Type type in group.OrderBy(t => t.Name))
+                        {
+                            string typeName = type.Name;
+                            bool typeMatchesSearch =
+                                !isFiltering
+                                || namespaceMatchesAll
+                                || searchTerms.All(term =>
+                                    typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                                    || namespaceKey.Contains(
+                                        term,
+                                        StringComparison.OrdinalIgnoreCase
+                                    )
+                                );
+
+                            if (!typeMatchesSearch)
+                            {
+                                continue;
+                            }
+
+                            bool isManaged = managedTypeFullNames.Contains(type.FullName);
+                            Label typeLabel = CreateHighlightedLabel(
+                                $"{type.Name}",
+                                searchTerms,
+                                PopoverListItemClassName,
+                                bindToContextHovers: false,
+                                header
+                            );
+                            typeLabel.AddToClassList(PopoverListItemClassName);
+                            typeLabel.AddToClassList(StyleConstants.ClickableClass);
+
+                            if (isManaged)
+                            {
+                                typeLabel.SetEnabled(false);
+                                typeLabel.AddToClassList(PopoverListItemDisabledClassName);
+                            }
+                            else
+                            {
+                                typeLabel.RegisterCallback<PointerDownEvent, Type>(
+                                    (evt, typeContext) =>
+                                        HandleTypeSelectionFromPopover(
+                                            evt,
+                                            typeContext,
+                                            namespaceKey
+                                        ),
+                                    type
+                                );
+                            }
+
+                            typesToShowInGroup.Add(typeLabel);
+                        }
+
                         Label indicator = new(
                             startCollapsed
                                 ? StyleConstants.ArrowCollapsed
@@ -2711,7 +2756,7 @@
                             name = $"ns-indicator-{group.Key}",
                         };
                         indicator.AddToClassList(PopoverNamespaceIndicatorClassName);
-                        indicator.AddToClassList("clickable");
+                        indicator.AddToClassList(StyleConstants.ClickableClass);
 
                         Label namespaceLabel = CreateHighlightedLabel(
                             group.Key,
@@ -2733,16 +2778,7 @@
                             namespaceLabel.AddToClassList(
                                 "type-selection-list-namespace--not-empty"
                             );
-                            namespaceLabel.AddToClassList("clickable");
-                            namespaceLabel.RegisterCallback<MouseEnterEvent, Label>(
-                                (_, context) =>
-                                    context.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f),
-                                namespaceLabel
-                            );
-                            namespaceLabel.RegisterCallback<MouseLeaveEvent, Label>(
-                                (_, context) => context.style.backgroundColor = Color.clear,
-                                namespaceLabel
-                            );
+                            namespaceLabel.AddToClassList(StyleConstants.ClickableClass);
 
                             // ReSharper disable once HeapView.CanAvoidClosure
                             namespaceLabel.RegisterCallback<PointerDownEvent>(evt =>
@@ -2797,8 +2833,6 @@
 
                         namespaceGroupContainer.Add(header);
                         namespaceGroupContainer.Add(typesSubContainer);
-
-                        // ReSharper disable once HeapView.CanAvoidClosure
                         indicator.RegisterCallback<PointerDownEvent>(ExpandNamespace);
 
                         void ExpandNamespace(PointerDownEvent evt)
@@ -2824,7 +2858,10 @@
                                 currentIndicator.text = nowCollapsed
                                     ? StyleConstants.ArrowExpanded
                                     : StyleConstants.ArrowCollapsed;
-                                // TODO: SET SPECIAL EXPANDED / NOT EXPANDED IN HEADER CLASS
+                                header.EnableInClassList(
+                                    StyleConstants.ExpandedClass,
+                                    !nowCollapsed
+                                );
                             }
 
                             evt?.StopPropagation();
@@ -2851,6 +2888,11 @@
                             },
                         }
                     );
+                    _typeAddPopover.style.maxHeight = StyleKeyword.None;
+                }
+                else
+                {
+                    _typeAddPopover.style.maxHeight = StyleKeyword.Null;
                 }
             }
             finally
@@ -2861,7 +2903,6 @@
 
         private void HandleTypePopoverKeyDown(KeyDownEvent evt)
         {
-            Debug.Log("TYPE POPOVER KEY DOWN");
             if (
                 _activePopover != _typeAddPopover
                 || _typeAddPopover.style.display == DisplayStyle.None
@@ -3093,7 +3134,7 @@
             };
             createButton.AddToClassList("create-button");
             createButton.AddToClassList("icon-button");
-            createButton.AddToClassList("clickable");
+            createButton.AddToClassList(StyleConstants.ClickableClass);
             objectHeader.Add(createButton);
             objectColumn.Add(objectHeader);
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
@@ -3289,15 +3330,10 @@
             _confirmNamespaceAddPopover.style.paddingRight = 10;
 
             string message =
-                $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '{namespaceKey}' to Data Visualizer?";
+                $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '<color=yellow><i>{namespaceKey}</i></color>' to Data Visualizer?";
             Label messageLabel = new(message)
             {
-                style =
-                {
-                    whiteSpace = WhiteSpace.Normal,
-                    marginBottom = 15,
-                    fontSize = 12,
-                },
+                style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
             };
             _confirmNamespaceAddPopover.Add(messageLabel);
 
@@ -3309,9 +3345,12 @@
 
             Button cancelButton = new(CloseNestedPopover)
             {
-                text = "<b><color=red>Cancel</color></b>",
+                text = "Cancel",
                 style = { marginRight = 5 },
             };
+            cancelButton.AddToClassList(StyleConstants.ClickableClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
             buttonContainer.Add(cancelButton);
 
             Button confirmButton = new(() =>
@@ -3350,8 +3389,11 @@
                 }
             })
             {
-                text = "<b><color=green>Add</color></b>",
+                text = "Add",
             };
+            confirmButton.AddToClassList(StyleConstants.ClickableClass);
+            confirmButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            confirmButton.AddToClassList("popover-confirm-button");
             buttonContainer.Add(confirmButton);
         }
 
@@ -3396,7 +3438,7 @@
                     name = $"object-item-row-{dataObject.GetInstanceID()}",
                 };
                 objectItemRow.AddToClassList(ObjectItemClass);
-                objectItemRow.AddToClassList("clickable");
+                objectItemRow.AddToClassList(StyleConstants.ClickableClass);
                 objectItemRow.style.flexDirection = FlexDirection.Row;
                 objectItemRow.style.alignItems = Align.Center;
                 objectItemRow.userData = dataObject;
@@ -3404,7 +3446,7 @@
 
                 VisualElement contentArea = new() { name = "content" };
                 contentArea.AddToClassList(ObjectItemContentClass);
-                contentArea.AddToClassList("clickable");
+                contentArea.AddToClassList(StyleConstants.ClickableClass);
                 objectItemRow.Add(contentArea);
 
                 string dataObjectName;
@@ -3419,7 +3461,7 @@
 
                 Label titleLabel = new(dataObjectName) { name = "object-item-label" };
                 titleLabel.AddToClassList("object-item__label");
-                titleLabel.AddToClassList("clickable");
+                titleLabel.AddToClassList(StyleConstants.ClickableClass);
                 contentArea.Add(titleLabel);
 
                 VisualElement actionsArea = new()
@@ -3510,27 +3552,21 @@
             {
                 try
                 {
-                    // Use a TextField for familiar look and copy-paste support
-                    var assetNameField = new TextField("Asset Name:") // Label for the field
+                    TextField assetNameField = new("Asset Name:")
                     {
-                        value = _selectedObject.name, // The object's name (usually filename without extension)
-                        isReadOnly = true, // Make it non-editable
-                        name = "inspector-asset-name-field", // For USS styling
+                        value = _selectedObject.name,
+                        isReadOnly = true,
+                        name = "inspector-asset-name-field",
                     };
 
-                    // Explicitly disable the actual text input part for visual clarity
-                    // This selector targets the underlying input element within the TextField's structure.
                     assetNameField
                         .Q<TextInputBaseField<string>>(TextField.textInputUssName)
                         ?.SetEnabled(false);
 
-                    // Optional: Add USS class for specific read-only styling
                     assetNameField.AddToClassList("readonly-display-field");
+                    _inspectorContainer.Add(assetNameField);
 
-                    _inspectorContainer.Add(assetNameField); // Add to the container FIRST
-
-                    // Optional: Add a small visual separator after the name field
-                    var separator = new VisualElement
+                    VisualElement separator = new()
                     {
                         style =
                         {
@@ -3553,7 +3589,6 @@
             bool useOdinInspector = false;
             Type objectType = _selectedObject.GetType();
 #if ODIN_INSPECTOR
-
             if (objectType.IsAttributeDefined(out CustomDataVisualization customVisualization))
             {
                 useOdinInspector = customVisualization.UseOdinInspector;
@@ -3596,7 +3631,6 @@
                     if (_odinInspectorContainer == null)
                     {
                         _odinInspectorContainer = new IMGUIContainer(
-                            // ReSharper disable once AccessToDisposedClosure
                             () => _odinPropertyTree?.Draw()
                         )
                         {
@@ -3606,7 +3640,6 @@
                     }
                     else
                     {
-                        // ReSharper disable once AccessToDisposedClosure
                         _odinInspectorContainer.onGUIHandler = () => _odinPropertyTree?.Draw();
                     }
 
@@ -3769,7 +3802,7 @@
                     {
                         try
                         {
-                            var parameterInstance = Activator.CreateInstance(
+                            object parameterInstance = Activator.CreateInstance(
                                 parameter.ParameterType
                             );
                             arguments.Add(parameterInstance);
@@ -4188,6 +4221,13 @@
             }
 
             _selectedElement?.RemoveFromClassList(StyleConstants.SelectedClass);
+            foreach (
+                VisualElement child in _selectedElement?.IterateChildrenRecursively()
+                    ?? Enumerable.Empty<VisualElement>()
+            )
+            {
+                child.EnableInClassList(StyleConstants.ClickableClass, true);
+            }
             _selectedObject = dataObject;
 
             _selectedElement = null;
@@ -4203,6 +4243,10 @@
             {
                 _selectedElement = newSelectedElement;
                 _selectedElement.AddToClassList(StyleConstants.SelectedClass);
+                foreach (VisualElement child in _selectedElement.IterateChildrenRecursively())
+                {
+                    child.EnableInClassList(StyleConstants.ClickableClass, false);
+                }
                 Selection.activeObject = _selectedObject;
                 _objectScrollView
                     .schedule.Execute(() =>

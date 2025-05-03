@@ -105,10 +105,36 @@
     margin-right: 10px;
 }
 
+.popover-confirm-button {
+    border-color: green;
+    margin-right: 10px;
+}
+
+.popover-confirm-button:hover {
+    border-color: green;
+    background-color: green;
+    color: white;
+}
+
 .popover-cancel-button:hover {
     border-color: darkkhaki;
     background-color: darkkhaki;
     color: crimson;
+}
+
+.search-popover {
+    position: absolute;
+    flex-grow: 1;
+    flex-shrink: 1;
+    width: auto;
+    /*height: auto;*/
+    max-height: 500px;
+    background-color: rgba(0, 0, 0, 0.9);
+    border-width: 2px;
+    border-radius: 8px;
+    margin-top: 2px;
+    border-color: rgba(0, 0, 0, 0.9);
+    display: none;
 }
 
 .types-container {
@@ -457,7 +483,7 @@
 }
 
 .type-selection-list-namespace--not-empty {
-    border-color: black;
+    border-color: white;
     color: white;
 }
 
@@ -490,13 +516,37 @@
 }
 
 .search-result-item {
-    padding: 4px 6px;
-    margin: 0 2px;
+    border-radius: 6px;
+    border-width: 0;
+    padding: 0;
+    margin: 0;
 }
 
 .search-result-item:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    cursor: link;
+    background-color: lightgreen;
+    color: black;
+}
+
+.search-result-type-label {
+    -unity-text-align: middle-right;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.search-result-name-label {
+    flex-grow: 1;
+    -unity-text-align: middle-left;
+    margin-right: 10px;
+}
+
+.type-search-field {
+    margin: 4px;
+    margin-bottom: 2px;
+    border-radius: 8px;
+}
+
+.type-search-field > #unity-text-input > .unity-text-element {
+    padding: 0 4px;
 }
 
 .search-result-item Label b {
@@ -549,7 +599,7 @@
 }
 
 .popover-item--highlighted > .type-selection-list-namespace--not-empty {
-    color:black;
+    color: black;
     border-color: transparent;
 }
 
@@ -614,12 +664,13 @@
     flex-grow: 1;
     flex-shrink: 1;
     width: auto;
+    /*height: auto;*/
     max-height: 500px;
-    background-color: rgba(60, 60, 60, 1);
+    background-color: rgba(0, 0, 0, 0.9);
     border-width: 2px;
     border-radius: 8px;
     margin-top: 2px;
-    border-color: black;
+    border-color: rgba(0, 0, 0, 0.9);
     display: none;
 }
 
