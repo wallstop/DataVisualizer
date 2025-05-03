@@ -1,8 +1,8 @@
 {
     "name": "WallstopStudios.DataVisualizer.Editor",
-    "rootNamespace": "WallstopStudios",
+    "rootNamespace": "WallstopStudios.DataVisualizer.Editor",
     "references": [
-        "GUID:3dd3f55ccb9d57e46b9b2a6fe2010039"
+        "WallstopStudios.DataVisualizer"
     ],
     "includePlatforms": [
         "Editor"

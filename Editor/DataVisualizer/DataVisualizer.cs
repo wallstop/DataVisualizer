@@ -1,48 +1,63 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer
+﻿// ReSharper disable AccessToModifiedClosure
+// ReSharper disable AccessToDisposedClosure
+namespace WallstopStudios.DataVisualizer.Editor
 {
 #if UNITY_EDITOR
-#if ODIN_INSPECTOR
-#endif
     using System;
     using System.Collections.Generic;
     using System.ComponentModel;
     using System.IO;
     using System.Linq;
-    using Components;
-    using Components.UnityHelpers.Editor;
+    using System.Reflection;
+    using System.Text;
+    using System.Text.RegularExpressions;
     using Data;
-    using Helper;
+    using Extensions;
+    using Search;
+    using Sirenix.OdinInspector;
     using Sirenix.OdinInspector.Editor;
+    using Styles;
+    using UI;
     using UnityEditor;
     using UnityEditor.UIElements;
     using UnityEngine;
     using UnityEngine.UIElements;
-    using WallstopStudios.DataVisualizer;
-    using Object = UnityEngine.Object;
+    using Utilities;
+    using Helper;
 
     public sealed class DataVisualizer : EditorWindow
     {
-        private const string PrefsPrefix = "WallstopStudios.DataVisualizer.";
+        private const string PackageId = "com.wallstop-studios.data-visualizer";
+        private const string PrefsPrefix = "WallstopStudios.Editor.DataVisualizer.";
 
         private const string PrefsSplitterOuterKey = PrefsPrefix + "SplitterOuterFixedPaneWidth";
         private const string PrefsSplitterInnerKey = PrefsPrefix + "SplitterInnerFixedPaneWidth";
+        private const string PrefsInitialSizeAppliedKey = PrefsPrefix + "InitialSizeApplied";
 
         private const string SettingsDefaultPath = "Assets/DataVisualizerSettings.asset";
         private const string UserStateFileName = "DataVisualizerUserState.json";
 
-        private const string NamespaceItemClass = "object-item";
-        private const string NamespaceHeaderClass = "namespace-header";
+        private const string NamespaceItemClass = "namespace-item";
+        private const string NamespaceGroupHeaderClass = "namespace-group-header";
         private const string NamespaceIndicatorClass = "namespace-indicator";
-        private const string NamespaceLabelClass = "object-item__label";
-        private const string TypeItemClass = "type-item";
-        private const string TypeLabelClass = "type-item__label";
         private const string ObjectItemClass = "object-item";
         private const string ObjectItemContentClass = "object-item-content";
         private const string ObjectItemActionsClass = "object-item-actions";
-        private const string ActionButtonClass = "action-button";
+        private const string PopoverListItemClassName = "type-selection-list-item";
 
-        private const string ArrowCollapsed = "►";
-        private const string ArrowExpanded = "▼";
+        private const string PopoverListItemDisabledClassName =
+            "type-selection-list-item--disabled";
+
+        private const string PopoverListNamespaceClassName = "type-selection-list-namespace";
+        private const string PopoverNamespaceHeaderClassName = "popover-namespace-header";
+        private const string PopoverNamespaceIndicatorClassName = "popover-namespace-indicator";
+        private const string SearchResultItemClass = "search-result-item";
+        private const string SearchResultHighlightClass = "search-result-item--highlighted";
+        private const string PopoverHighlightClass = "popover-item--highlighted";
+
+        private const string SearchPlaceholder = "Search...";
+
+        private const int MaxSearchResults = 25;
 
         private const float DragDistanceThreshold = 5f;
         private const float DragUpdateThrottleTime = 0.05f;
@@ -57,11 +72,65 @@
             Type = 3,
         }
 
-        private readonly List<(string key, List<Type> types)> _scriptableObjectTypes = new();
-        private readonly Dictionary<BaseDataObject, VisualElement> _objectVisualElementMap = new();
-        private readonly List<BaseDataObject> _selectedObjects = new();
-        private BaseDataObject _selectedObject;
+        private enum FocusArea
+        {
+            None = 0,
+            TypeList = 1,
+            AddTypePopover = 2,
+            SearchResultsPopover = 3,
+        }
+
+        private static readonly StringBuilder CachedStringBuilder = new();
+
+        internal DataVisualizerUserState UserState
+        {
+            get
+            {
+#pragma warning disable CS0618 // Type or member is obsolete
+                if (_userState == null)
+                {
+                    LoadUserStateFromFile();
+                }
+
+                return _userState;
+#pragma warning restore CS0618 // Type or member is obsolete
+            }
+        }
+
+        internal DataVisualizerSettings Settings
+        {
+            get
+            {
+#pragma warning disable CS0618 // Type or member is obsolete
+                if (_settings == null)
+                {
+                    _settings = LoadOrCreateSettings();
+                }
+
+                return _settings;
+#pragma warning restore CS0618 // Type or member is obsolete
+            }
+        }
+
+        private readonly Dictionary<string, List<Type>> _scriptableObjectTypes = new(
+            StringComparer.Ordinal
+        );
+
+        private readonly Dictionary<string, int> _namespaceOrder = new(StringComparer.Ordinal);
+
+        private readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
+            new();
+
+        private readonly List<ScriptableObject> _selectedObjects = new();
+        private readonly List<ScriptableObject> _allManagedSOsCache = new();
+        private readonly List<VisualElement> _currentSearchResultItems = new();
+        private readonly List<VisualElement> _currentTypePopoverItems = new();
+
+        private readonly NamespaceController _namespaceController;
+
+        private ScriptableObject _selectedObject;
         private VisualElement _selectedElement;
+        private VisualElement _selectedNamespaceElement;
 
         private VisualElement _namespaceListContainer;
         private VisualElement _objectListContainer;
@@ -74,30 +143,62 @@
         private VisualElement _namespaceColumnElement;
         private VisualElement _objectColumnElement;
 
+        private VisualElement _settingsPopover;
+        private VisualElement _renamePopover;
+        private VisualElement _confirmDeletePopover;
+        private VisualElement _confirmActionPopover;
+        private VisualElement _typeAddPopover;
+        private VisualElement _activePopover;
+        private VisualElement _confirmNamespaceAddPopover;
+        private VisualElement _activeNestedPopover;
+        private object _popoverContext;
+
+        private TextField _searchField;
+        private VisualElement _searchPopover;
+        private bool _isSearchCachePopulated;
+        private string _lastSearchString;
+
+        private Button _addTypeButton;
+        private Button _settingsButton;
+        private TextField _typeSearchField;
+        private VisualElement _typePopoverListContainer;
+
         private float _lastSavedOuterWidth = -1f;
         private float _lastSavedInnerWidth = -1f;
         private IVisualElementScheduledItem _saveWidthsTask;
 
+        private int _searchHighlightIndex = -1;
+        private int _typePopoverHighlightIndex = -1;
+        private string _lastTypeAddSearchTerm;
+        private FocusArea _lastActiveFocusArea = FocusArea.None;
         private DragType _activeDragType = DragType.None;
         private object _draggedData;
-        private Type _selectedType;
-        private VisualElement _selectedTypeElement;
         private VisualElement _inPlaceGhost;
         private int _lastGhostInsertIndex = -1;
         private VisualElement _lastGhostParent;
         private VisualElement _draggedElement;
         private VisualElement _dragGhost;
         private Vector2 _dragStartPosition;
-        private bool _isDragging;
+        internal bool _isDragging;
         private float _lastDragUpdateTime;
         private SerializedObject _currentInspectorScriptableObject;
 
-        private string _userStateFilePath; // Full path, determined in OnEnable
-        private DataVisualizerUserState _userState; // Holds state when using file persistence
-        private bool _userStateDirty = false; // Track if file needs saving
+        private string _userStateFilePath;
 
+        [Obsolete("Use UserState instead.")]
+        private DataVisualizerUserState _userState;
+
+        private bool _userStateDirty;
+
+        [Obsolete("User Settings instead.")]
         private DataVisualizerSettings _settings;
-        private VisualElement _settingsPopup;
+
+        private List<Type> _relevantScriptableObjectTypes;
+
+        private float? _lastAddTypeClicked;
+        private float? _lastSettingsClicked;
+        private float? _lastEnterPressed;
+
         private Label _dataFolderPathDisplay;
 #if ODIN_INSPECTOR
         private PropertyTree _odinPropertyTree;
@@ -105,15 +206,40 @@
         private IVisualElementScheduledItem _odinRepaintSchedule;
 #endif
 
+        public DataVisualizer()
+        {
+            _namespaceController = new NamespaceController(_scriptableObjectTypes, _namespaceOrder);
+        }
+
         [MenuItem("Tools/Data Visualizer")]
         public static void ShowWindow()
         {
             DataVisualizer window = GetWindow<DataVisualizer>("Data Visualizer");
             window.titleContent = new GUIContent("Data Visualizer");
+
+            bool initialSizeApplied = EditorPrefs.GetBool(PrefsInitialSizeAppliedKey, false);
+            if (initialSizeApplied)
+            {
+                return;
+            }
+
+            float width = Mathf.Max(800, window.position.width);
+            float height = Mathf.Max(400, window.position.height);
+            Rect monitorArea = MonitorUtility.GetPrimaryMonitorRect();
+
+            float centerX = (monitorArea.width - width) / 2f;
+            float centerY = (monitorArea.height - height) / 2f;
+
+            float x = Mathf.Max(0, centerX);
+            float y = Mathf.Max(0, centerY);
+
+            window.position = new Rect(x, y, width, height);
+            EditorPrefs.SetBool(PrefsInitialSizeAppliedKey, true);
         }
 
         private void OnEnable()
         {
+            _isSearchCachePopulated = false;
             _objectVisualElementMap.Clear();
             _selectedObject = null;
             _selectedElement = null;
@@ -121,22 +247,17 @@
 #if ODIN_INSPECTOR
             _odinPropertyTree = null;
 #endif
-            _settings = LoadOrCreateSettings();
             _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
-            if (!_settings.persistStateInSettingsAsset)
-            {
-                LoadUserStateFromFile();
-            }
-            else
-            {
-                _userState = new DataVisualizerUserState(); // Have an empty object if using settings asset
-            }
 
             LoadScriptableObjectTypes();
-            Undo.undoRedoPerformed += OnUndoRedoPerformed;
+            rootVisualElement.RegisterCallback<KeyDownEvent>(
+                HandleGlobalKeyDown,
+                TrickleDown.TrickleDown
+            );
             rootVisualElement
                 .schedule.Execute(() =>
                 {
+                    PopulateSearchCache();
                     RestorePreviousSelection();
                     StartPeriodicWidthSave();
                 })
@@ -145,7 +266,10 @@
 
         private void OnDisable()
         {
-            Undo.undoRedoPerformed -= OnUndoRedoPerformed;
+            rootVisualElement.UnregisterCallback<KeyDownEvent>(
+                HandleGlobalKeyDown,
+                TrickleDown.TrickleDown
+            );
             Cleanup();
         }
 
@@ -156,9 +280,20 @@
 
         private void Cleanup()
         {
+            _selectedElement = null;
+            _selectedObject = null;
+            _namespaceController.SelectType(this, null);
+            _scriptableObjectTypes.Clear();
+            _namespaceOrder.Clear();
+            _namespaceController.Clear();
+            _allManagedSOsCache.Clear();
+            _currentSearchResultItems.Clear();
+            _currentTypePopoverItems.Clear();
+            _isSearchCachePopulated = false;
+            CloseActivePopover();
             CancelDrag();
             _saveWidthsTask?.Pause();
-            if (!_settings.persistStateInSettingsAsset && _userStateDirty)
+            if (!Settings.persistStateInSettingsAsset && _userStateDirty)
             {
                 SaveUserStateToFile();
             }
@@ -178,14 +313,77 @@
                 _odinPropertyTree.Dispose();
                 _odinPropertyTree = null;
             }
+
             _odinInspectorContainer?.RemoveFromHierarchy();
             _odinInspectorContainer?.Dispose();
             _odinInspectorContainer = null;
 #endif
         }
 
+        private void PopulateSearchCache()
+        {
+            _allManagedSOsCache.Clear();
+            HashSet<Type> managedTypes = _scriptableObjectTypes
+                .SelectMany(tuple => tuple.Value)
+                .ToHashSet();
+            HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
+
+            foreach (
+                Type type in AppDomain
+                    .CurrentDomain.GetAssemblies()
+                    .SelectMany(assembly => assembly.GetTypes())
+                    .Where(managedTypes.Contains)
+            )
+            {
+                string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
+                foreach (string guid in guids)
+                {
+                    if (!uniqueGuids.Add(guid))
+                    {
+                        continue;
+                    }
+
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    if (!string.IsNullOrWhiteSpace(path))
+                    {
+                        ScriptableObject obj =
+                            AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+
+                        if (obj != null && obj.GetType() == type)
+                        {
+                            _allManagedSOsCache.Add(obj);
+                        }
+                    }
+                }
+            }
+
+            _allManagedSOsCache.Sort(
+                (a, b) =>
+                {
+                    int comparison = string.Compare(a.name, b.name, StringComparison.Ordinal);
+                    if (comparison != 0)
+                    {
+                        return comparison;
+                    }
+
+                    return string.Compare(
+                        a.GetType().FullName,
+                        b.GetType().FullName,
+                        StringComparison.Ordinal
+                    );
+                }
+            );
+
+            _isSearchCachePopulated = true;
+        }
+
         public static void SignalRefresh()
         {
+            if (!HasOpenInstances<DataVisualizer>())
+            {
+                return;
+            }
+
             DataVisualizer window = GetWindow<DataVisualizer>(false, null, false);
             if (window != null)
             {
@@ -195,16 +393,71 @@
 
         private void ScheduleRefresh()
         {
+            Debug.Log("Scheduling refresh...");
             rootVisualElement.schedule.Execute(RefreshAllViews).ExecuteLater(50);
+        }
+
+        private void SyncNamespaceAndTypeOrders()
+        {
+            List<string> namespaceOrder = _namespaceOrder
+                .OrderBy(kvp => kvp.Value)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            List<NamespaceTypeOrder> typeOrder = _namespaceOrder
+                .OrderBy(kvp => kvp.Value)
+                .Select(kvp => new NamespaceTypeOrder()
+                {
+                    namespaceKey = kvp.Key,
+                    typeNames = _scriptableObjectTypes[kvp.Key]
+                        .Select(type => type.FullName)
+                        .ToList(),
+                })
+                .ToList();
+            PersistSettings(
+                settings =>
+                {
+                    settings.namespaceOrder = namespaceOrder;
+                    settings.typeOrders = typeOrder;
+                    return true;
+                },
+                userState =>
+                {
+                    userState.namespaceOrder = namespaceOrder;
+                    userState.typeOrders = typeOrder;
+                    return true;
+                }
+            );
+        }
+
+        internal void PersistSettings(
+            Func<DataVisualizerSettings, bool> settingsApplier,
+            Func<DataVisualizerUserState, bool> userStateApplier
+        )
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                if (settingsApplier(settings))
+                {
+                    settings.MarkDirty();
+                    AssetDatabase.SaveAssets();
+                }
+            }
+            else if (userStateApplier(UserState))
+            {
+                MarkUserStateDirty();
+            }
         }
 
         private void RefreshAllViews()
         {
-            if (_settings == null) { }
+            Type selectedType = _namespaceController.SelectedType;
 
             string previousNamespaceKey =
-                _selectedType != null ? GetNamespaceKey(_selectedType) : null;
-            string previousTypeName = _selectedType?.Name;
+                selectedType != null
+                    ? NamespaceController.GetNamespaceKey(selectedType)
+                    : string.Empty;
+            string previousTypeName = selectedType?.Name;
             string previousObjectGuid = null;
             if (_selectedObject != null)
             {
@@ -217,18 +470,12 @@
 
             LoadScriptableObjectTypes();
 
-            _selectedType = null;
-            _selectedObject = null;
-            _selectedElement = null;
-            _selectedTypeElement = null;
-
             int namespaceIndex = -1;
             if (!string.IsNullOrWhiteSpace(previousNamespaceKey))
             {
-                namespaceIndex = _scriptableObjectTypes.FindIndex(kvp =>
-                    string.Equals(kvp.key, previousNamespaceKey, StringComparison.Ordinal)
-                );
+                namespaceIndex = _namespaceOrder.GetValueOrDefault(previousNamespaceKey, -1);
             }
+
             if (namespaceIndex < 0 && 0 < _scriptableObjectTypes.Count)
             {
                 namespaceIndex = 0;
@@ -236,36 +483,46 @@
 
             if (0 <= namespaceIndex)
             {
-                List<Type> typesInNamespace = _scriptableObjectTypes[namespaceIndex].types;
-                if (0 < typesInNamespace.Count)
+                List<Type> typesInNamespace = _scriptableObjectTypes.GetValueOrDefault(
+                    previousNamespaceKey,
+                    null
+                );
+                if (0 < typesInNamespace?.Count)
                 {
                     if (!string.IsNullOrWhiteSpace(previousTypeName))
                     {
-                        _selectedType = typesInNamespace.FirstOrDefault(t =>
+                        selectedType = typesInNamespace.FirstOrDefault(t =>
                             string.Equals(t.Name, previousTypeName, StringComparison.Ordinal)
                         );
                     }
 
-                    _selectedType ??= typesInNamespace[0];
+                    selectedType ??= typesInNamespace[0];
+                }
+                else
+                {
+                    Debug.LogWarning(
+                        $"Failed to find any types for namespace {previousNamespaceKey}."
+                    );
                 }
             }
 
-            if (_selectedType != null)
+            if (selectedType != null)
             {
-                LoadObjectTypes(_selectedType);
+                LoadObjectTypes(selectedType);
             }
             else
             {
                 _selectedObjects.Clear();
             }
 
+            ScriptableObject selectedObject = _selectedObject;
             if (
-                _selectedType != null
+                selectedType != null
                 && !string.IsNullOrWhiteSpace(previousObjectGuid)
                 && 0 < _selectedObjects.Count
             )
             {
-                _selectedObject = _selectedObjects.Find(obj =>
+                selectedObject = _selectedObjects.Find(obj =>
                 {
                     if (obj == null)
                     {
@@ -273,6 +530,7 @@
                     }
 
                     string path = AssetDatabase.GetAssetPath(obj);
+
                     return !string.IsNullOrWhiteSpace(path)
                         && string.Equals(
                             AssetDatabase.AssetPathToGUID(path),
@@ -285,19 +543,19 @@
             BuildNamespaceView();
             BuildObjectsView();
 
-            VisualElement typeElementToSelect = FindTypeElement(_selectedType);
+            VisualElement typeElementToSelect = FindTypeElement(selectedType);
             if (typeElementToSelect != null)
             {
-                _selectedTypeElement = typeElementToSelect;
-                _selectedTypeElement.AddToClassList("selected");
-                VisualElement ancestorGroup = FindAncestorNamespaceGroup(_selectedTypeElement);
+                VisualElement ancestorGroup = FindAncestorNamespaceGroup(typeElementToSelect);
                 if (ancestorGroup != null)
                 {
                     ExpandNamespaceGroupIfNeeded(ancestorGroup, false);
                 }
             }
 
-            SelectObject(_selectedObject);
+            SelectObject(selectedObject);
+            PopulateSearchCache();
+            _namespaceController.SelectType(this, selectedType);
         }
 
         private VisualElement FindAncestorNamespaceGroup(VisualElement startingElement)
@@ -314,8 +572,10 @@
                 {
                     return currentElement;
                 }
+
                 currentElement = currentElement.parent;
             }
+
             return null;
         }
 
@@ -364,6 +624,7 @@
                     {
                         continue;
                     }
+
                     settings = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(path);
                     if (settings != null)
                     {
@@ -391,28 +652,19 @@
                     AssetDatabase.CreateAsset(settings, SettingsDefaultPath);
                     AssetDatabase.SaveAssets();
                     AssetDatabase.Refresh();
-                    settings = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(
-                        SettingsDefaultPath
-                    );
+                    DataVisualizerSettings newSettings =
+                        AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(SettingsDefaultPath);
+                    if (newSettings != null)
+                    {
+                        settings = newSettings;
+                    }
                 }
                 catch (Exception e)
                 {
                     Debug.LogError($"Failed to create DataVisualizerSettings asset. {e}");
-                    settings = CreateInstance<DataVisualizerSettings>();
-                    settings._dataFolderPath = DataVisualizerSettings.DefaultDataFolderPath;
                 }
             }
 
-            if (settings != null)
-            {
-                return settings;
-            }
-
-            Debug.LogError(
-                $"Failed to load or create DataVisualizerSettings. Using temporary instance."
-            );
-            settings = CreateInstance<DataVisualizerSettings>();
-            settings._dataFolderPath = DataVisualizerSettings.DefaultDataFolderPath;
             return settings;
         }
 
@@ -454,11 +706,6 @@
             }
         }
 
-        private void OnUndoRedoPerformed()
-        {
-            ScheduleRefresh();
-        }
-
         private void RestorePreviousSelection()
         {
             if (_scriptableObjectTypes.Count == 0)
@@ -472,19 +719,29 @@
 
             if (!string.IsNullOrWhiteSpace(savedNamespaceKey))
             {
-                namespaceIndex = _scriptableObjectTypes.FindIndex(kvp =>
-                    string.Equals(kvp.key, savedNamespaceKey, StringComparison.Ordinal)
-                );
+                namespaceIndex = _namespaceOrder.GetValueOrDefault(savedNamespaceKey, -1);
             }
 
             if (0 <= namespaceIndex)
             {
-                typesInNamespace = _scriptableObjectTypes[namespaceIndex].types;
+                typesInNamespace = _scriptableObjectTypes.GetValueOrDefault(
+                    savedNamespaceKey,
+                    null
+                );
             }
-            else if (0 < _scriptableObjectTypes.Count)
+            else if (0 < _namespaceOrder.Count)
             {
-                (string key, List<Type> types) types = _scriptableObjectTypes[0];
-                typesInNamespace = types.types;
+                int bestIndex = _scriptableObjectTypes.Count;
+                string bestNamespace = null;
+                foreach (KeyValuePair<string, int> entry in _namespaceOrder)
+                {
+                    if (entry.Value < bestIndex)
+                    {
+                        bestNamespace = entry.Key;
+                    }
+                }
+
+                typesInNamespace = _scriptableObjectTypes.GetValueOrDefault(bestNamespace, null);
             }
             else
             {
@@ -502,26 +759,20 @@
             if (!string.IsNullOrWhiteSpace(savedTypeName))
             {
                 selectedType = typesInNamespace.Find(t =>
-                    string.Equals(t.Name, savedTypeName, StringComparison.Ordinal)
+                    string.Equals(t.FullName, savedTypeName, StringComparison.Ordinal)
                 );
             }
 
             selectedType ??= typesInNamespace[0];
-            _selectedType = selectedType;
-
-            LoadObjectTypes(_selectedType);
+            LoadObjectTypes(selectedType);
             BuildNamespaceView();
             BuildObjectsView();
 
-            VisualElement typeElementToSelect = FindTypeElement(_selectedType);
+            VisualElement typeElementToSelect = FindTypeElement(selectedType);
             if (typeElementToSelect != null)
             {
-                _selectedTypeElement?.RemoveFromClassList("selected");
-                _selectedTypeElement = typeElementToSelect;
-                _selectedTypeElement.AddToClassList("selected");
-
                 VisualElement ancestorGroup = null;
-                VisualElement currentElement = _selectedTypeElement;
+                VisualElement currentElement = typeElementToSelect;
                 while (currentElement != null && currentElement != _namespaceListContainer)
                 {
                     if (currentElement.ClassListContains(NamespaceItemClass))
@@ -529,6 +780,7 @@
                         ancestorGroup = currentElement;
                         break;
                     }
+
                     currentElement = currentElement.parent;
                 }
 
@@ -551,11 +803,12 @@
             }
 
             string savedObjectGuid = null;
-            if (_selectedType != null)
+            if (selectedType != null)
             {
-                savedObjectGuid = GetLastSelectedObjectGuidForType(_selectedType.Name); // Use helper
+                savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.Name);
             }
-            BaseDataObject objectToSelect = null;
+
+            ScriptableObject objectToSelect = null;
 
             if (!string.IsNullOrWhiteSpace(savedObjectGuid) && 0 < _selectedObjects.Count)
             {
@@ -602,6 +855,7 @@
                     return item;
                 }
             }
+
             return null;
         }
 
@@ -609,34 +863,7 @@
         {
             VisualElement root = rootVisualElement;
             root.Clear();
-
-            StyleSheet styleSheet = null;
-            string packageRoot = DirectoryHelper.FindPackageRootPath(
-                DirectoryHelper.GetCallerScriptDirectory()
-            );
-            if (!string.IsNullOrWhiteSpace(packageRoot))
-            {
-                char pathSeparator = Path.DirectorySeparatorChar;
-                string styleSheetPath =
-                    $"{packageRoot}{pathSeparator}Editor{pathSeparator}DataVisualizer{pathSeparator}Styles{pathSeparator}DataVisualizerStyles.uss";
-                string unityRelativeStyleSheetPath = DirectoryHelper.AbsoluteToUnityRelativePath(
-                    styleSheetPath
-                );
-                if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
-                {
-                    styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                        unityRelativeStyleSheetPath
-                    );
-                }
-            }
-            if (styleSheet != null)
-            {
-                root.styleSheets.Add(styleSheet);
-            }
-            else
-            {
-                Debug.LogError($"Failed to find Data Visualizer style sheet.");
-            }
+            TryLoadStyleSheet(root);
 
             VisualElement headerRow = new()
             {
@@ -655,27 +882,40 @@
             };
             root.Add(headerRow);
 
-            Button settingsButton = new(() =>
-            {
-                if (_settings == null)
-                {
-                    _settings = LoadOrCreateSettings();
-                }
-
-                bool wasSettingsAssetMode = _settings.persistStateInSettingsAsset;
-                // Show the modal window, passing settings and the callback with the original mode
-                var popupWindow = DataVisualizerSettingsPopup.CreateAndConfigureInstance(
-                    _settings,
-                    () => HandleSettingsPopupClosed(wasSettingsAssetMode) // Pass callback referencing original mode
-                );
-                popupWindow.ShowModal();
-            })
+            _settingsButton = new Button(() => TogglePopover(_settingsPopover, _settingsButton))
             {
                 text = "…",
                 name = "settings-button",
+                tooltip = "Open Settings",
             };
-            settingsButton.AddToClassList("icon-button");
-            headerRow.Add(settingsButton);
+
+            _settingsButton.AddToClassList("settings-button");
+            _settingsButton.AddToClassList(StyleConstants.ClickableClass);
+            headerRow.Add(_settingsButton);
+
+            _searchField = new TextField
+            {
+                name = "global-search-field",
+                style = { flexGrow = 1, marginRight = 10 },
+            };
+            _searchField.SetPlaceholderText(SearchPlaceholder);
+            _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue));
+            _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
+                (_, context) =>
+                {
+                    if (
+                        !string.IsNullOrWhiteSpace(context._searchField.value)
+                        && context._searchPopover.childCount > 0
+                        && context._activePopover != context._searchPopover
+                    )
+                    {
+                        context.OpenPopover(context._searchPopover, context._searchField);
+                    }
+                },
+                this
+            );
+            _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
+            headerRow.Add(_searchField);
 
             float initialOuterWidth = EditorPrefs.GetFloat(
                 PrefsSplitterOuterKey,
@@ -717,88 +957,1605 @@
             _outerSplitView.Add(_innerSplitView);
             root.Add(_outerSplitView);
 
-            _settingsPopup = new VisualElement
-            {
-                name = "settings-popup",
-                style =
-                {
-                    position = Position.Absolute,
-                    top = 30,
-                    left = 10,
-                    width = 350,
-                    backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.95f),
-                    borderLeftWidth = 1,
-                    borderRightWidth = 1,
-                    borderTopWidth = 1,
-                    borderBottomWidth = 1,
-                    borderBottomColor = Color.gray,
-                    borderLeftColor = Color.gray,
-                    borderRightColor = Color.gray,
-                    borderTopColor = Color.gray,
-                    borderBottomLeftRadius = 5,
-                    borderBottomRightRadius = 5,
-                    borderTopLeftRadius = 5,
-                    borderTopRightRadius = 5,
-                    paddingBottom = 10,
-                    paddingLeft = 10,
-                    paddingRight = 10,
-                    paddingTop = 10,
-                    display = DisplayStyle.None,
-                },
-            };
-            root.Add(_settingsPopup);
+            _settingsPopover = CreatePopoverBase("settings-popover");
+            BuildSettingsPopoverContent();
+            root.Add(_settingsPopover);
+
+            _renamePopover = CreatePopoverBase("rename-popover");
+
+            root.Add(_renamePopover);
+
+            _confirmDeletePopover = CreatePopoverBase("confirm-delete-popover");
+
+            _confirmActionPopover = CreatePopoverBase("confirm-action-popover");
+            root.Add(_confirmActionPopover);
+
+            root.Add(_confirmDeletePopover);
+
+            _searchPopover = new VisualElement { name = "search-popover" };
+            _searchPopover.AddToClassList("search-popover");
+            root.Add(_searchPopover);
+
+            _typeAddPopover = new VisualElement { name = "type-add-popover" };
+            _typeAddPopover.AddToClassList("type-add-popover");
+
+            _typeSearchField = new TextField { name = "type-search-field" };
+            _typeSearchField.AddToClassList("type-search-field");
+            _typeSearchField.SetPlaceholderText(SearchPlaceholder);
+            _typeSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue));
+            _typeSearchField.RegisterCallback<KeyDownEvent>(HandleTypePopoverKeyDown);
+            _typeAddPopover.Add(_typeSearchField);
+
+            ScrollView typePopoverScrollView = new(ScrollViewMode.Vertical);
+            typePopoverScrollView.AddToClassList("type-add-popover-scrollview");
+            _typeAddPopover.Add(typePopoverScrollView);
+
+            _typePopoverListContainer = new VisualElement { name = "type-add-list-content" };
+            _typePopoverListContainer.AddToClassList("type-add-list-container");
+            typePopoverScrollView.Add(_typePopoverListContainer);
+
+            root.Add(_typeAddPopover);
+
+            _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
+            _confirmNamespaceAddPopover.style.width = 300;
+            _confirmNamespaceAddPopover.style.minHeight = 80;
+            _confirmNamespaceAddPopover.style.maxHeight = 150;
+            root.Add(_confirmNamespaceAddPopover);
+
             BuildNamespaceView();
             BuildObjectsView();
             BuildInspectorView();
         }
 
-        private void HandleSettingsPopupClosed(bool previousModeWasSettingsAsset)
+        private static void TryLoadStyleSheet(VisualElement root)
         {
-            if (_settings == null)
+            StyleSheet styleSheet = null;
+            Font font = null;
+            string packageRoot = DirectoryHelper.FindPackageRootPath(
+                DirectoryHelper.GetCallerScriptDirectory()
+            );
+            if (!string.IsNullOrWhiteSpace(packageRoot))
             {
-                _settings = LoadOrCreateSettings();
-            }
-
-            if (_settings != null && EditorUtility.IsDirty(_settings))
-            {
-                AssetDatabase.SaveAssets();
-            }
-
-            bool currentModeIsSettingsAsset = _settings.persistStateInSettingsAsset;
-            bool migrationNeeded = (previousModeWasSettingsAsset != currentModeIsSettingsAsset);
-
-            // 4. Perform Migration if needed
-            if (migrationNeeded)
-            {
-                Debug.Log(
-                    $"Persistence mode changed from {(previousModeWasSettingsAsset ? "SettingsAsset" : "UserFile")} to {(currentModeIsSettingsAsset ? "SettingsAsset" : "UserFile")}. Migrating state..."
-                );
-                MigratePersistenceState(migrateToSettingsAsset: currentModeIsSettingsAsset); // Pass the NEW mode as target
-
-                // 5. Persist Migrated Data
-                if (currentModeIsSettingsAsset)
+                if (
+                    packageRoot.StartsWith("Packages", StringComparison.OrdinalIgnoreCase)
+                    && !packageRoot.Contains(PackageId, StringComparison.OrdinalIgnoreCase)
+                )
                 {
-                    // Data was migrated TO settings asset, MarkSettingsDirty was called inside Migrate...
-                    // Save the settings asset again to persist migrated list data etc.
-                    if (EditorUtility.IsDirty(_settings))
-                    { // Check if migration actually changed anything
-                        Debug.Log("Saving settings asset again after migration.");
-                        AssetDatabase.SaveAssets();
+                    int dataVisualizerIndex = packageRoot.LastIndexOf(
+                        "DataVisualizer",
+                        StringComparison.Ordinal
+                    );
+                    if (0 <= dataVisualizerIndex)
+                    {
+                        packageRoot = packageRoot[..dataVisualizerIndex];
+                        packageRoot += PackageId;
+                    }
+                }
+
+                char pathSeparator = Path.DirectorySeparatorChar;
+                string styleSheetPath =
+                    $"{packageRoot}{pathSeparator}Editor{pathSeparator}DataVisualizer{pathSeparator}Styles{pathSeparator}DataVisualizerStyles.uss";
+                string unityRelativeStyleSheetPath = DirectoryHelper.AbsoluteToUnityRelativePath(
+                    styleSheetPath
+                );
+                if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
+                {
+                    styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                        unityRelativeStyleSheetPath
+                    );
+                    if (styleSheet == null)
+                    {
+                        Debug.LogError(
+                            $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
+                        );
                     }
                 }
                 else
                 {
-                    // Data was migrated TO user state object (_userState)
-                    // Save the user state file
-                    Debug.Log("Saving user state file after migration.");
-                    SaveUserStateToFile(); // Save the migrated state to the JSON file
+                    Debug.LogError(
+                        $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
+                    );
+                }
+
+                string fontPath =
+                    $"{packageRoot}{pathSeparator}Editor{pathSeparator}Fonts{pathSeparator}IBMPlexMono-Regular.ttf";
+                string unityRelativeFontPath = DirectoryHelper.AbsoluteToUnityRelativePath(
+                    fontPath
+                );
+                if (!string.IsNullOrWhiteSpace(unityRelativeFontPath))
+                {
+                    font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
+                }
+            }
+            else
+            {
+                Debug.LogError(
+                    $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
+                );
+            }
+
+            if (styleSheet != null)
+            {
+                root.styleSheets.Add(styleSheet);
+            }
+            else
+            {
+                Debug.LogError(
+                    $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
+                );
+            }
+
+            if (font != null)
+            {
+                root.style.unityFontDefinition = new StyleFontDefinition(font);
+            }
+            else
+            {
+                Debug.LogError(
+                    $"Failed to find Data Visualizer font (package root: '{packageRoot}')."
+                );
+            }
+        }
+
+        private void HandleSearchKeyDown(KeyDownEvent evt)
+        {
+            if (
+                _activePopover != _searchPopover
+                || _searchPopover.style.display == DisplayStyle.None
+                || _currentSearchResultItems.Count == 0
+            )
+            {
+                return;
+            }
+
+            bool highlightChanged = false;
+
+            switch (evt.keyCode)
+            {
+                case KeyCode.DownArrow:
+                {
+                    _searchHighlightIndex++;
+                    if (_searchHighlightIndex >= _currentSearchResultItems.Count)
+                    {
+                        _searchHighlightIndex = 0;
+                    }
+
+                    highlightChanged = true;
+                    break;
+                }
+                case KeyCode.UpArrow:
+                {
+                    _searchHighlightIndex--;
+                    if (_searchHighlightIndex < 0)
+                    {
+                        _searchHighlightIndex = _currentSearchResultItems.Count - 1;
+                    }
+
+                    highlightChanged = true;
+                    break;
+                }
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                {
+                    if (
+                        _searchHighlightIndex >= 0
+                        && _searchHighlightIndex < _currentSearchResultItems.Count
+                    )
+                    {
+                        if (
+                            _currentSearchResultItems[_searchHighlightIndex].userData
+                            is ScriptableObject selectedObject
+                        )
+                        {
+                            NavigateToObject(selectedObject);
+                            _searchField.value = string.Empty;
+                        }
+
+                        evt.PreventDefault();
+                        evt.StopPropagation();
+                    }
+
+                    break;
+                }
+                case KeyCode.Escape:
+                {
+                    CloseActivePopover();
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    break;
+                }
+                default:
+                {
+                    return;
                 }
             }
 
-            // 6. Optional: Force a full refresh of the main window UI
-            //    This might be good practice after changing persistence method or settings.
-            Debug.Log("Scheduling full refresh after settings close.");
-            ScheduleRefresh();
+            if (highlightChanged)
+            {
+                UpdateSearchResultHighlight();
+                evt.PreventDefault();
+                evt.StopPropagation();
+            }
+        }
+
+        private void UpdateSearchResultHighlight()
+        {
+            if (_currentSearchResultItems == null || _searchPopover == null)
+            {
+                return;
+            }
+
+            ScrollView scrollView = _searchPopover.Q<ScrollView>("search-scroll");
+
+            for (int i = 0; i < _currentSearchResultItems.Count; i++)
+            {
+                VisualElement item = _currentSearchResultItems[i];
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (i == _searchHighlightIndex)
+                {
+                    item.AddToClassList(SearchResultHighlightClass);
+                    scrollView?.ScrollTo(item);
+                }
+                else
+                {
+                    item.RemoveFromClassList(SearchResultHighlightClass);
+                }
+            }
+        }
+
+        private void PerformSearch(string searchText)
+        {
+            searchText = searchText?.Trim();
+            if (string.Equals(searchText, _lastSearchString, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _lastSearchString = searchText;
+            _searchPopover.Clear();
+            _currentSearchResultItems.Clear();
+            _searchHighlightIndex = -1;
+
+            if (!_isSearchCachePopulated || string.IsNullOrWhiteSpace(searchText))
+            {
+                CloseActivePopover();
+                return;
+            }
+
+            string[] searchTerms = searchText.Split(
+                new[] { ' ' },
+                StringSplitOptions.RemoveEmptyEntries
+            );
+            if (searchTerms.Length == 0)
+            {
+                CloseActivePopover();
+                return;
+            }
+
+            List<(ScriptableObject refernce, SearchResultMatchInfo match)> results = new();
+            foreach (ScriptableObject obj in _allManagedSOsCache)
+            {
+                if (obj == null)
+                {
+                    continue;
+                }
+
+                SearchResultMatchInfo matchInfo = CheckMatch(obj, searchTerms);
+                if (!matchInfo.isMatch)
+                {
+                    continue;
+                }
+
+                results.Add((obj, matchInfo));
+                if (results.Count >= MaxSearchResults)
+                {
+                    break;
+                }
+            }
+            ScrollView scrollView =
+                _searchPopover.Q<ScrollView>("search-scroll")
+                ?? new ScrollView { name = "search-scroll", style = { flexGrow = 1 } };
+            VisualElement listContainer =
+                scrollView.Q<VisualElement>("search-list-content")
+                ?? new VisualElement { name = "search-list-content" };
+            listContainer.Clear();
+
+            if (scrollView.parent != _searchPopover)
+            {
+                _searchPopover.Add(scrollView);
+            }
+
+            if (listContainer.parent != scrollView)
+            {
+                scrollView.Add(listContainer);
+            }
+            if (results.Count > 0)
+            {
+                _searchPopover.style.maxHeight = StyleKeyword.Null;
+                foreach ((ScriptableObject resultObj, SearchResultMatchInfo resultInfo) in results)
+                {
+                    List<string> termsMatchingThisObject = resultInfo.AllMatchedTerms.ToList();
+                    VisualElement resultItem = new() { name = "result-item", userData = resultObj };
+                    resultItem.AddToClassList(SearchResultItemClass);
+                    resultItem.AddToClassList(StyleConstants.ClickableClass);
+                    resultItem.style.flexDirection = FlexDirection.Column;
+                    resultItem.style.paddingBottom = new StyleLength(
+                        new Length(4, LengthUnit.Pixel)
+                    );
+                    resultItem.style.paddingLeft = new StyleLength(new Length(4, LengthUnit.Pixel));
+                    resultItem.style.paddingRight = new StyleLength(
+                        new Length(4, LengthUnit.Pixel)
+                    );
+                    resultItem.style.paddingTop = new StyleLength(new Length(4, LengthUnit.Pixel));
+
+                    // ReSharper disable once HeapView.CanAvoidClosure
+                    resultItem.RegisterCallback<PointerDownEvent>(evt =>
+                    {
+                        if (
+                            evt.button != 0
+                            || resultItem.userData is not ScriptableObject clickedObj
+                        )
+                        {
+                            return;
+                        }
+
+                        NavigateToObject(clickedObj);
+                        _searchField.value = string.Empty;
+                        evt.StopPropagation();
+                    });
+
+                    VisualElement mainInfoRow = new()
+                    {
+                        style =
+                        {
+                            flexDirection = FlexDirection.Row,
+                            justifyContent = Justify.SpaceBetween,
+                        },
+                    };
+                    mainInfoRow.AddToClassList(StyleConstants.ClickableClass);
+
+                    Label nameLabel = CreateHighlightedLabel(
+                        resultObj.name,
+                        termsMatchingThisObject,
+                        "result-name-label",
+                        bindToContextHovers: true,
+                        resultItem,
+                        mainInfoRow
+                    );
+                    nameLabel.AddToClassList("search-result-name-label");
+                    nameLabel.AddToClassList(StyleConstants.ClickableClass);
+
+                    Label typeLabel = CreateHighlightedLabel(
+                        resultObj.GetType().Name,
+                        termsMatchingThisObject,
+                        "result-type-label",
+                        bindToContextHovers: true,
+                        resultItem,
+                        mainInfoRow
+                    );
+                    typeLabel.AddToClassList("search-result-type-label");
+                    typeLabel.AddToClassList(StyleConstants.ClickableClass);
+
+                    mainInfoRow.Add(nameLabel);
+                    mainInfoRow.Add(typeLabel);
+                    resultItem.Add(mainInfoRow);
+
+                    if (!resultInfo.MatchInPrimaryField)
+                    {
+                        VisualElement contextContainer = new() { style = { marginTop = 2 } };
+                        resultItem.Add(contextContainer);
+
+                        IEnumerable<IGrouping<string, MatchDetail>> reflectedDetails = resultInfo
+                            .matchedFields.Where(mf =>
+                                mf.fieldName != MatchSource.ObjectName
+                                && mf.fieldName != MatchSource.TypeName
+                                && mf.fieldName != MatchSource.Guid
+                            )
+                            .GroupBy(mf => mf.fieldName)
+                            .Take(2);
+
+                        foreach (IGrouping<string, MatchDetail> fieldGroup in reflectedDetails)
+                        {
+                            string fieldName = fieldGroup.Key;
+                            string fieldValue = fieldGroup.First().matchedValue;
+                            Label contextLabel = CreateHighlightedLabel(
+                                $"{fieldName}: {fieldValue}",
+                                termsMatchingThisObject,
+                                "search-result-context-label",
+                                bindToContextHovers: true,
+                                resultItem,
+                                mainInfoRow
+                            );
+                            contextContainer.Add(contextLabel);
+                        }
+                    }
+
+                    listContainer.Add(resultItem);
+                    _currentSearchResultItems.Add(resultItem);
+                }
+
+                if (_activePopover != _searchPopover)
+                {
+                    OpenPopover(_searchPopover, _searchField);
+                }
+            }
+            else
+            {
+                listContainer.Add(
+                    new Label("No matching objects found.")
+                    {
+                        style =
+                        {
+                            color = Color.grey,
+                            paddingBottom = 10,
+                            paddingTop = 10,
+                            paddingLeft = 10,
+                            paddingRight = 10,
+                            unityTextAlign = TextAnchor.MiddleCenter,
+                        },
+                    }
+                );
+                _searchPopover.style.maxHeight = StyleKeyword.None;
+            }
+        }
+
+        private SearchResultMatchInfo CheckMatch(ScriptableObject obj, string[] lowerSearchTerms)
+        {
+            SearchResultMatchInfo resultInfo = new();
+            if (obj == null || lowerSearchTerms == null || lowerSearchTerms.Length == 0)
+            {
+                return resultInfo;
+            }
+
+            string objectName = obj.name;
+            string typeName = obj.GetType().Name;
+            string assetPath = AssetDatabase.GetAssetPath(obj);
+            string guid = string.IsNullOrWhiteSpace(assetPath)
+                ? string.Empty
+                : AssetDatabase.AssetPathToGUID(assetPath);
+
+            foreach (string term in lowerSearchTerms)
+            {
+                bool termMatchedThisLoop = false;
+                List<MatchDetail> detailsForThisTerm = new();
+
+                if (objectName.Contains(term, StringComparison.OrdinalIgnoreCase))
+                {
+                    detailsForThisTerm.Add(
+                        new MatchDetail(term)
+                        {
+                            fieldName = MatchSource.ObjectName,
+                            matchedValue = objectName,
+                        }
+                    );
+                    termMatchedThisLoop = true;
+                }
+
+                if (typeName.Contains(term, StringComparison.OrdinalIgnoreCase))
+                {
+                    detailsForThisTerm.Add(
+                        new MatchDetail(term)
+                        {
+                            fieldName = MatchSource.TypeName,
+                            matchedValue = typeName,
+                        }
+                    );
+                    termMatchedThisLoop = true;
+                }
+
+                if (
+                    !string.IsNullOrWhiteSpace(guid)
+                    && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    detailsForThisTerm.Add(
+                        new MatchDetail(term) { fieldName = MatchSource.Guid, matchedValue = guid }
+                    );
+                    termMatchedThisLoop = true;
+                }
+
+                if (!termMatchedThisLoop)
+                {
+                    MatchDetail reflectedMatch = SearchStringProperties(
+                        obj,
+                        term,
+                        0,
+                        2,
+                        new HashSet<object>()
+                    );
+                    if (reflectedMatch != null)
+                    {
+                        reflectedMatch.matchedTerms.Add(term);
+                        detailsForThisTerm.Add(reflectedMatch);
+                        termMatchedThisLoop = true;
+                    }
+                }
+
+                if (termMatchedThisLoop)
+                {
+                    resultInfo.isMatch = true;
+                    resultInfo.matchedFields.AddRange(detailsForThisTerm);
+                }
+            }
+
+            return resultInfo;
+        }
+
+        private Label CreateHighlightedLabel(
+            string fullText,
+            IReadOnlyList<string> termsToHighlight,
+            string baseStyleClass,
+            bool bindToContextHovers = false,
+            params VisualElement[] contexts
+        )
+        {
+            Label label = new();
+            if (!string.IsNullOrWhiteSpace(baseStyleClass))
+            {
+                label.AddToClassList(baseStyleClass);
+            }
+
+            label.enableRichText = true;
+
+            if (
+                string.IsNullOrWhiteSpace(fullText)
+                || termsToHighlight == null
+                || !termsToHighlight.Any()
+            )
+            {
+                label.text = fullText;
+                return label;
+            }
+
+            List<Tuple<int, int>> matches = termsToHighlight
+                .Where(term => !string.IsNullOrWhiteSpace(term))
+                .SelectMany(term =>
+                {
+                    List<Tuple<int, int>> indices = new();
+                    int start = 0;
+                    while (
+                        (start = fullText.IndexOf(term, start, StringComparison.OrdinalIgnoreCase))
+                        >= 0
+                    )
+                    {
+                        indices.Add(Tuple.Create(start, term.Length));
+                        start += term.Length;
+                    }
+
+                    return indices;
+                })
+                .Where(t => t != null)
+                .OrderBy(t => t.Item1)
+                .ToList();
+
+            label.text = GenerateContents(false);
+            label.RegisterCallback<MouseOverEvent>(_ =>
+            {
+                label.text = GenerateContents(true);
+            });
+            label.RegisterCallback<MouseOutEvent>(_ =>
+            {
+                label.text = GenerateContents(false);
+            });
+            if (bindToContextHovers)
+            {
+                foreach (VisualElement context in contexts)
+                {
+                    context.RegisterCallback<MouseOverEvent>(_ =>
+                    {
+                        label.text = GenerateContents(true);
+                    });
+                    context.RegisterCallback<MouseOutEvent>(_ =>
+                    {
+                        label.text = GenerateContents(false);
+                    });
+                }
+            }
+
+            return label;
+
+            string GenerateContents(bool hovering)
+            {
+                CachedStringBuilder.Clear();
+                int currentIndex = 0;
+                bool colorify = !hovering;
+                foreach ((int startIndex, int length) in matches)
+                {
+                    if (startIndex < currentIndex)
+                    {
+                        continue;
+                    }
+
+                    CachedStringBuilder.Append(
+                        EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
+                    );
+                    if (colorify)
+                    {
+                        CachedStringBuilder.Append("<color=yellow>");
+                    }
+
+                    CachedStringBuilder.Append("<b>");
+                    CachedStringBuilder.Append(
+                        EscapeRichText(fullText.Substring(startIndex, length))
+                    );
+                    CachedStringBuilder.Append("</b>");
+                    if (colorify)
+                    {
+                        CachedStringBuilder.Append("</color>");
+                    }
+
+                    currentIndex = startIndex + length;
+                }
+
+                if (currentIndex < fullText.Length)
+                {
+                    CachedStringBuilder.Append(EscapeRichText(fullText.Substring(currentIndex)));
+                }
+
+                return CachedStringBuilder.ToString();
+            }
+        }
+
+        private string EscapeRichText(string input)
+        {
+            return string.IsNullOrWhiteSpace(input)
+                ? ""
+                : input.Replace("<", "&lt;").Replace(">", "&gt;");
+        }
+
+        private static MatchDetail SearchStringProperties(
+            object obj,
+            string searchTerm,
+            int currentDepth,
+            int maxDepth,
+            HashSet<object> visited
+        )
+        {
+            if (obj == null || currentDepth > maxDepth)
+            {
+                return null;
+            }
+
+            Type objType = obj.GetType();
+
+            if (
+                objType.IsPrimitive
+                || objType == typeof(Vector2)
+                || objType == typeof(Vector3)
+                || objType == typeof(Vector4)
+                || objType == typeof(Quaternion)
+                || objType == typeof(Color)
+                || objType == typeof(Rect)
+                || objType == typeof(Bounds)
+            )
+            {
+                return null;
+            }
+
+            if (!objType.IsValueType)
+            {
+                if (!visited.Add(obj))
+                {
+                    return null;
+                }
+            }
+
+            try
+            {
+                FieldInfo[] fields = objType.GetFields(
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic
+                );
+                foreach (FieldInfo field in fields)
+                {
+                    object fieldValue = field.GetValue(obj);
+                    if (fieldValue == null)
+                    {
+                        continue;
+                    }
+
+                    if (field.FieldType == typeof(string))
+                    {
+                        string stringValue = fieldValue as string;
+                        if (
+                            !string.IsNullOrWhiteSpace(stringValue)
+                            && stringValue.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        )
+                        {
+                            return new MatchDetail(searchTerm)
+                            {
+                                fieldName = field.Name,
+                                matchedValue = stringValue,
+                            };
+                        }
+                    }
+                    else if (
+                        (
+                            field.FieldType.IsClass
+                            || field.FieldType is { IsValueType: true, IsPrimitive: false }
+                        ) && !typeof(UnityEngine.Object).IsAssignableFrom(field.FieldType)
+                    )
+                    {
+                        MatchDetail nestedMatch = SearchStringProperties(
+                            fieldValue,
+                            searchTerm,
+                            currentDepth + 1,
+                            maxDepth,
+                            visited
+                        );
+                        if (nestedMatch != null)
+                        {
+                            return nestedMatch;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Swallow
+            }
+
+            return null;
+        }
+
+        private void NavigateToObject(ScriptableObject targetObject)
+        {
+            if (targetObject == null)
+            {
+                return;
+            }
+
+            Type targetType = targetObject.GetType();
+            bool typeChanged = _namespaceController.SelectedType != targetType;
+            _namespaceController.SelectType(this, targetType);
+
+            if (typeChanged)
+            {
+                LoadObjectTypes(targetType);
+            }
+
+            BuildObjectsView();
+            SelectObject(targetObject);
+            CloseActivePopover();
+            _selectedElement
+                ?.schedule.Execute(() =>
+                {
+                    _objectScrollView?.ScrollTo(_selectedElement);
+                })
+                .ExecuteLater(10);
+        }
+
+        private static VisualElement CreatePopoverBase(string name)
+        {
+            VisualElement popover = new() { name = name };
+            popover.AddToClassList("popover");
+            return popover;
+        }
+
+        internal void BuildAndOpenConfirmationPopover(
+            string message,
+            string confirmText,
+            Action onConfirm,
+            VisualElement triggerElement
+        )
+        {
+            if (_confirmActionPopover == null || onConfirm == null)
+            {
+                return;
+            }
+
+            _confirmActionPopover.Clear();
+
+            Label messageLabel = new(message)
+            {
+                style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
+            };
+            _confirmActionPopover.Add(messageLabel);
+
+            VisualElement buttonContainer = new();
+            buttonContainer.AddToClassList("popover-button-container");
+            _confirmActionPopover.Add(buttonContainer);
+
+            Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
+            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
+            cancelButton.AddToClassList(StyleConstants.ClickableClass);
+            buttonContainer.Add(cancelButton);
+
+            Button confirmButton = new(() =>
+            {
+                onConfirm();
+                CloseActivePopover();
+            })
+            {
+                text = confirmText,
+            };
+            confirmButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            confirmButton.AddToClassList("popover-delete-button");
+            confirmButton.AddToClassList(StyleConstants.ClickableClass);
+            buttonContainer.Add(confirmButton);
+
+            OpenPopover(_confirmActionPopover, triggerElement);
+        }
+
+        private void CloseNestedPopover()
+        {
+            if (_activeNestedPopover == null)
+            {
+                return;
+            }
+
+            _activeNestedPopover.style.display = DisplayStyle.None;
+            _activeNestedPopover = null;
+        }
+
+        private void OpenPopover(
+            VisualElement popover,
+            VisualElement triggerElement,
+            object context = null,
+            bool isNested = false
+        )
+        {
+            if (!isNested)
+            {
+                CloseActivePopover();
+            }
+            else
+            {
+                CloseNestedPopover();
+            }
+
+            if (popover == null || triggerElement == null)
+            {
+                return;
+            }
+
+            if (popover == _searchPopover)
+            {
+                _lastActiveFocusArea = FocusArea.SearchResultsPopover;
+            }
+            else if (popover == _typeAddPopover)
+            {
+                _lastActiveFocusArea = FocusArea.AddTypePopover;
+            }
+            else
+            {
+                _lastActiveFocusArea = FocusArea.None;
+            }
+
+            _popoverContext = context;
+            if (isNested)
+            {
+                _activeNestedPopover = popover;
+            }
+            else
+            {
+                _activePopover = popover;
+            }
+
+            triggerElement
+                .schedule.Execute(() =>
+                {
+                    VisualElement currentlyActive = isNested
+                        ? _activeNestedPopover
+                        : _activePopover;
+                    if (currentlyActive != popover)
+                    {
+                        return;
+                    }
+
+                    Rect triggerBounds = triggerElement.worldBound;
+                    Vector2 triggerPosInRoot = rootVisualElement.WorldToLocal(
+                        triggerBounds.position
+                    );
+
+                    float popoverWidth = popover.resolvedStyle.width;
+                    float popoverHeight = popover.resolvedStyle.height;
+                    if (float.IsNaN(popoverWidth) || popoverWidth <= 0)
+                    {
+                        popoverWidth =
+                            popover.style.width.keyword == StyleKeyword.Auto
+                            || popover.style.width.value.value == 0
+                                ? 300f
+                                : popover.style.width.value.value;
+                    }
+                    if (float.IsNaN(popoverHeight) || popoverHeight <= 0)
+                    {
+                        popoverHeight =
+                            popover.style.height.keyword == StyleKeyword.Auto
+                            || popover.style.height.value.value == 0
+                                ? 150f
+                                : popover.style.height.value.value;
+                    }
+
+                    popoverWidth = Mathf.Min(
+                        popoverWidth,
+                        popover.resolvedStyle.maxWidth.value > 0
+                            ? popover.resolvedStyle.maxWidth.value
+                            : float.MaxValue
+                    );
+                    popoverHeight = Mathf.Min(
+                        popoverHeight,
+                        popover.resolvedStyle.maxHeight.value > 0
+                            ? popover.resolvedStyle.maxHeight.value
+                            : float.MaxValue
+                    );
+                    popoverWidth = Mathf.Max(
+                        popoverWidth,
+                        popover.resolvedStyle.minWidth.value > 0
+                            ? popover.resolvedStyle.minWidth.value
+                            : 50f
+                    );
+                    popoverHeight = Mathf.Max(
+                        popoverHeight,
+                        popover.resolvedStyle.minHeight.value > 0
+                            ? popover.resolvedStyle.minHeight.value
+                            : 30f
+                    );
+
+                    float targetX = triggerPosInRoot.x;
+                    float targetY = triggerPosInRoot.y + triggerBounds.height + 2;
+                    float windowWidth = rootVisualElement.resolvedStyle.width;
+                    float windowHeight = rootVisualElement.resolvedStyle.height;
+
+                    if (
+                        float.IsNaN(windowWidth)
+                        || float.IsNaN(windowHeight)
+                        || windowWidth <= 0
+                        || windowHeight <= 0
+                    )
+                    {
+                        popover.style.left = targetX;
+                        popover.style.top = targetY;
+                    }
+                    else
+                    {
+                        float clampedX = Mathf.Max(0, targetX);
+                        clampedX = Mathf.Min(clampedX, windowWidth - popoverWidth);
+                        clampedX = Mathf.Max(0, clampedX);
+                        float clampedY = Mathf.Max(0, targetY);
+                        clampedY = Mathf.Min(clampedY, windowHeight - popoverHeight);
+                        clampedY = Mathf.Max(0, clampedY);
+
+                        popover.style.left = clampedX;
+                        popover.style.top = clampedY;
+                    }
+                    popover.style.display = DisplayStyle.Flex;
+
+                    if (!isNested)
+                    {
+                        rootVisualElement
+                            .schedule.Execute(() =>
+                            {
+                                if (_activePopover == popover)
+                                {
+                                    rootVisualElement.RegisterCallback<PointerDownEvent>(
+                                        HandleClickOutsidePopover,
+                                        TrickleDown.TrickleDown
+                                    );
+                                }
+                            })
+                            .ExecuteLater(10);
+                    }
+                })
+                .ExecuteLater(1);
+        }
+
+        private void CloseActivePopover()
+        {
+            _lastActiveFocusArea = FocusArea.None;
+            if (_activePopover == _searchPopover)
+            {
+                _currentSearchResultItems.Clear();
+                _searchHighlightIndex = -1;
+                _lastSearchString = null;
+            }
+            else if (_activePopover == _typeAddPopover)
+            {
+                _currentTypePopoverItems.Clear();
+                _typePopoverHighlightIndex = -1;
+                _typeSearchField?.SetValueWithoutNotify("");
+            }
+
+            CloseNestedPopover();
+
+            if (_activePopover == null)
+            {
+                return;
+            }
+
+            _activePopover.style.display = DisplayStyle.None;
+            rootVisualElement.UnregisterCallback<PointerDownEvent>(
+                HandleClickOutsidePopover,
+                TrickleDown.TrickleDown
+            );
+
+            _activePopover = null;
+            _popoverContext = null;
+        }
+
+        private void HandleGlobalKeyDown(KeyDownEvent evt)
+        {
+            Debug.Log($"GlobalKeyDown: Key={evt.keyCode}, FocusArea={_lastActiveFocusArea}");
+
+            if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
+            {
+                switch (evt.keyCode)
+                {
+                    case KeyCode.Escape:
+                        CloseActivePopover();
+                        evt.PreventDefault();
+                        evt.StopPropagation();
+                        return;
+
+                    case KeyCode.DownArrow:
+                    case KeyCode.UpArrow:
+                    case KeyCode.Return:
+                    case KeyCode.KeypadEnter:
+                        if (_lastActiveFocusArea == FocusArea.SearchResultsPopover)
+                        {
+                            _lastEnterPressed = Time.realtimeSinceStartup;
+                            HandleSearchKeyDown(evt);
+                            return;
+                        }
+                        if (_lastActiveFocusArea == FocusArea.AddTypePopover)
+                        {
+                            _lastEnterPressed = Time.realtimeSinceStartup;
+                            HandleTypePopoverKeyDown(evt);
+                            return;
+                        }
+
+                        break;
+                }
+
+                if (evt.keyCode == KeyCode.DownArrow || evt.keyCode == KeyCode.UpArrow)
+                {
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    return;
+                }
+            }
+
+            switch (evt.keyCode)
+            {
+                case KeyCode.DownArrow:
+                {
+                    bool navigationHandled = false;
+                    switch (_lastActiveFocusArea)
+                    {
+                        case FocusArea.TypeList:
+                        {
+                            navigationHandled = true;
+                            _namespaceController.IncrementTypeSelection(this);
+                            break;
+                        }
+                    }
+
+                    if (navigationHandled)
+                    {
+                        evt.PreventDefault();
+                        evt.StopPropagation();
+                    }
+
+                    break;
+                }
+                case KeyCode.UpArrow:
+                {
+                    bool navigationHandled = false;
+                    switch (_lastActiveFocusArea)
+                    {
+                        case FocusArea.TypeList:
+                        {
+                            navigationHandled = true;
+                            _namespaceController.DecrementTypeSelection(this);
+                            break;
+                        }
+                    }
+
+                    if (navigationHandled)
+                    {
+                        evt.PreventDefault();
+                        evt.StopPropagation();
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        private void HandleClickOutsidePopover(PointerDownEvent evt)
+        {
+            VisualElement target = evt.target as VisualElement;
+            if (target == _addTypeButton)
+            {
+                _lastAddTypeClicked = Time.realtimeSinceStartup;
+            }
+            else if (target == _settingsButton)
+            {
+                _lastSettingsClicked = Time.realtimeSinceStartup;
+            }
+
+            _searchField.value = SearchPlaceholder;
+            bool clickInsideNested = false;
+            bool clickInsideMain = false;
+
+            if (
+                _activeNestedPopover != null
+                && _activeNestedPopover.style.display == DisplayStyle.Flex
+            )
+            {
+                VisualElement current = target;
+                while (current != null)
+                {
+                    if (current == _activeNestedPopover)
+                    {
+                        clickInsideNested = true;
+                        break;
+                    }
+
+                    current = current.parent;
+                }
+            }
+
+            if (clickInsideNested)
+            {
+                return;
+            }
+
+            if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
+            {
+                VisualElement current = target;
+                while (current != null)
+                {
+                    if (current == _activePopover)
+                    {
+                        clickInsideMain = true;
+                        break;
+                    }
+
+                    current = current.parent;
+                }
+            }
+
+            if (
+                _activeNestedPopover != null
+                && _activeNestedPopover.style.display == DisplayStyle.Flex
+            )
+            {
+                if (clickInsideMain)
+                {
+                    CloseNestedPopover();
+                }
+                else
+                {
+                    CloseActivePopover();
+                }
+            }
+            else if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
+            {
+                if (!clickInsideMain)
+                {
+                    CloseActivePopover();
+                }
+            }
+            else
+            {
+                rootVisualElement.UnregisterCallback<PointerDownEvent>(
+                    HandleClickOutsidePopover,
+                    TrickleDown.TrickleDown
+                );
+            }
+        }
+
+        private void BuildSettingsPopoverContent()
+        {
+            _settingsPopover.Clear();
+
+            _settingsPopover.Add(
+                new Label("Settings")
+                {
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Bold,
+                        marginBottom = 10,
+                        alignSelf = Align.Center,
+                    },
+                }
+            );
+
+            DataVisualizerSettings settings = Settings;
+            ActionButtonToggle prefsToggle = null;
+            prefsToggle = new ActionButtonToggle(
+                settings.persistStateInSettingsAsset
+                    ? "Persist State in UserState:"
+                    : "Persist State in Settings Asset:",
+                value =>
+                {
+                    if (prefsToggle != null)
+                    {
+                        prefsToggle.Label = value
+                            ? "Persist State in UserState:"
+                            : "Persist State in Settings Asset:";
+                    }
+                }
+            )
+            {
+                value = settings.persistStateInSettingsAsset,
+            };
+            prefsToggle.AddToClassList("settings-prefs-toggle");
+            prefsToggle.RegisterValueChangedCallback(evt =>
+            {
+                bool newModeIsSettingsAsset = evt.newValue;
+                bool previousModeWasSettingsAsset = Settings.persistStateInSettingsAsset;
+                if (previousModeWasSettingsAsset == newModeIsSettingsAsset)
+                {
+                    return;
+                }
+
+                DataVisualizerSettings localSettings = Settings;
+                localSettings.persistStateInSettingsAsset = newModeIsSettingsAsset;
+                MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset);
+                AssetDatabase.SaveAssets();
+                if (!newModeIsSettingsAsset)
+                {
+                    SaveUserStateToFile();
+                }
+            });
+            _settingsPopover.Add(prefsToggle);
+
+            VisualElement dataFolderContainer = new()
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    marginTop = 10,
+                },
+            };
+            Label dataFolderLabel = new("Data Folder:");
+            dataFolderLabel.AddToClassList("settings-data-folder-label");
+            dataFolderContainer.Add(dataFolderLabel);
+            Label dataFolderPathDisplay = new()
+            {
+                text = Settings.DataFolderPath,
+                name = "data-folder-display",
+            };
+            dataFolderPathDisplay.AddToClassList("settings-data-folder-path-display");
+            dataFolderContainer.Add(dataFolderPathDisplay);
+            Button selectFolderButton = new(() => SelectDataFolderForPopover(dataFolderPathDisplay))
+            {
+                text = "Select",
+            };
+            selectFolderButton.AddToClassList("settings-data-folder-button");
+            selectFolderButton.AddToClassList(StyleConstants.ClickableClass);
+            dataFolderContainer.Add(selectFolderButton);
+            _settingsPopover.Add(dataFolderContainer);
+        }
+
+        private void SelectDataFolderForPopover(Label displayField)
+        {
+            if (displayField == null)
+            {
+                Debug.LogError("Cannot select data folder: Display field reference is null.");
+                return;
+            }
+
+            string currentRelativePath = Settings.DataFolderPath;
+            string projectRoot = Path.GetFullPath(Directory.GetCurrentDirectory()).SanitizePath();
+            string startDir = Application.dataPath;
+
+            if (!string.IsNullOrWhiteSpace(currentRelativePath))
+            {
+                try
+                {
+                    string currentFullPath = Path.GetFullPath(
+                            Path.Combine(projectRoot, currentRelativePath)
+                        )
+                        .SanitizePath();
+                    if (Directory.Exists(currentFullPath))
+                    {
+                        startDir = currentFullPath;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning(
+                        $"Could not resolve current DataFolderPath '{currentRelativePath}': {ex.Message}. Starting selection in Assets."
+                    );
+                }
+            }
+
+            string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
+                title: "Select Data Folder (Must be inside Assets)",
+                folder: startDir,
+                defaultName: ""
+            );
+
+            if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
+            {
+                return;
+            }
+
+            selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
+
+            string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
+
+            if (
+                !selectedAbsolutePath.StartsWith(
+                    projectAssetsPath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                Debug.LogError("Selected folder must be inside the project's Assets folder.");
+                EditorUtility.DisplayDialog(
+                    "Invalid Folder",
+                    "The selected folder must be inside the project's 'Assets' directory.",
+                    "OK"
+                );
+                return;
+            }
+
+            string relativePath;
+            if (selectedAbsolutePath.Equals(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
+            {
+                relativePath = "Assets";
+            }
+            else
+            {
+                relativePath = "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+                relativePath = relativePath.Replace("//", "/");
+            }
+
+            DataVisualizerSettings settings = Settings;
+            if (settings.DataFolderPath == relativePath)
+            {
+                return;
+            }
+
+            Debug.Log($"Updating Data Folder from '{settings.DataFolderPath}' to '{relativePath}'");
+            settings._dataFolderPath = relativePath;
+            settings.MarkDirty();
+            AssetDatabase.SaveAssets();
+            displayField.text = settings.DataFolderPath;
+        }
+
+        private void OpenRenamePopover(VisualElement source, ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            string currentPath = AssetDatabase.GetAssetPath(dataObject);
+            if (string.IsNullOrWhiteSpace(currentPath))
+            {
+                return;
+            }
+
+            BuildRenamePopoverContent(currentPath, dataObject.name);
+            OpenPopover(_renamePopover, source, currentPath);
+        }
+
+        private void BuildRenamePopoverContent(string originalPath, string originalName)
+        {
+            _renamePopover.Clear();
+            _renamePopover.userData = originalPath;
+
+            Label renameLabel = new("Enter new name (without extension)");
+            renameLabel.AddToClassList("rename-object-label");
+            _renamePopover.Add(renameLabel);
+            TextField nameTextField = new()
+            {
+                value = Path.GetFileNameWithoutExtension(originalName),
+                name = "rename-textfield",
+            };
+            nameTextField.AddToClassList("rename-text-field");
+            nameTextField.schedule.Execute(() => nameTextField.SelectAll()).ExecuteLater(50);
+            _renamePopover.Add(nameTextField);
+            Label errorLabel = new()
+            {
+                name = "error-label",
+                style =
+                {
+                    color = Color.red,
+                    height = 18,
+                    display = DisplayStyle.None,
+                },
+            };
+            _renamePopover.Add(errorLabel);
+            VisualElement buttonContainer = new();
+            buttonContainer.AddToClassList("popover-button-container");
+            Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
+            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
+            cancelButton.AddToClassList(StyleConstants.ClickableClass);
+            Button renameButton = new(() => HandleRenameConfirmed(nameTextField, errorLabel))
+            {
+                text = "Rename",
+            };
+            renameButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            renameButton.AddToClassList("popover-rename-button");
+            renameButton.AddToClassList(StyleConstants.ClickableClass);
+            buttonContainer.Add(cancelButton);
+            buttonContainer.Add(renameButton);
+            _renamePopover.Add(buttonContainer);
+        }
+
+        private void HandleRenameConfirmed(TextField nameField, Label errorLabel)
+        {
+            errorLabel.style.display = DisplayStyle.None;
+            string originalPath = _popoverContext as string;
+            string newName = nameField.value;
+
+            if (
+                string.IsNullOrWhiteSpace(originalPath)
+                || string.IsNullOrWhiteSpace(newName)
+                || newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            )
+            {
+                errorLabel.text = "Invalid name.";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            if (
+                newName.Equals(
+                    Path.GetFileNameWithoutExtension(originalPath),
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                errorLabel.text = "Name is unchanged.";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            string directory = Path.GetDirectoryName(originalPath);
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                errorLabel.text =
+                    $"Failed to find directory of original asset path '{originalPath}'.";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            string newPath = Path.Combine(directory, newName + Path.GetExtension(originalPath))
+                .SanitizePath();
+            string validationError = AssetDatabase.ValidateMoveAsset(originalPath, newPath);
+
+            if (!string.IsNullOrWhiteSpace(validationError))
+            {
+                errorLabel.text = $"Invalid: {validationError}";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            string error = AssetDatabase.RenameAsset(originalPath, newName);
+            if (string.IsNullOrWhiteSpace(error))
+            {
+                Debug.Log($"Asset renamed successfully to: {newName}");
+                CloseActivePopover();
+                ScheduleRefresh();
+            }
+            else
+            {
+                Debug.LogError($"Asset rename failed: {error}");
+                errorLabel.text = $"Failed: {error}";
+                errorLabel.style.display = DisplayStyle.Flex;
+            }
+        }
+
+        private void OpenConfirmDeletePopover(VisualElement source, ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            BuildConfirmDeletePopoverContent(dataObject);
+            OpenPopover(_confirmDeletePopover, source, dataObject);
+        }
+
+        private void BuildConfirmDeletePopoverContent(ScriptableObject objectToDelete)
+        {
+            _confirmDeletePopover.Clear();
+            _confirmDeletePopover.userData = objectToDelete;
+
+            _confirmDeletePopover.Add(
+                new Label(
+                    $"Delete '<color=yellow><i>{objectToDelete.name}</i></color>'?\nThis cannot be undone."
+                )
+                {
+                    // TODO: CLEAN UP STYLE
+                    style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
+                }
+            );
+            VisualElement buttonContainer = new();
+            buttonContainer.AddToClassList("popover-button-container");
+            Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
+            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            cancelButton.AddToClassList(StyleConstants.ClickableClass);
+            Button deleteButton = new(HandleDeleteConfirmed) { text = "Delete" };
+            deleteButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            deleteButton.AddToClassList("popover-delete-button");
+            deleteButton.AddToClassList(StyleConstants.ClickableClass);
+            buttonContainer.Add(cancelButton);
+            buttonContainer.Add(deleteButton);
+            _confirmDeletePopover.Add(buttonContainer);
+        }
+
+        private void HandleDeleteConfirmed()
+        {
+            ScriptableObject objectToDelete = _popoverContext as ScriptableObject;
+            CloseActivePopover();
+
+            if (objectToDelete == null)
+            {
+                Debug.LogError("Delete failed: context object lost.");
+                return;
+            }
+
+            string path = AssetDatabase.GetAssetPath(objectToDelete);
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                Debug.LogError($"Delete failed: path not found for {objectToDelete.name}");
+                return;
+            }
+
+            _selectedObjects.Remove(objectToDelete);
+            _objectVisualElementMap.Remove(objectToDelete, out VisualElement visualElement);
+            bool deleted = AssetDatabase.DeleteAsset(path);
+            if (deleted)
+            {
+                Debug.Log($"Asset '{path}' deleted successfully.");
+                AssetDatabase.Refresh();
+                visualElement?.RemoveFromHierarchy();
+                if (_selectedObject == objectToDelete)
+                {
+                    SelectObject(null);
+                }
+            }
+            else
+            {
+                Debug.LogError($"Failed delete: {path}");
+                ScheduleRefresh();
+            }
+        }
+
+        private void TogglePopover(VisualElement popover, VisualElement triggerElement)
+        {
+            if (_activePopover == popover && popover.style.display == DisplayStyle.Flex)
+            {
+                CloseActivePopover();
+            }
+            else
+            {
+                if (popover == _settingsPopover)
+                {
+                    if (Time.realtimeSinceStartup <= _lastSettingsClicked + 0.5f)
+                    {
+                        return;
+                    }
+
+                    BuildSettingsPopoverContent();
+                }
+                else if (popover == _typeAddPopover)
+                {
+                    if (Time.realtimeSinceStartup <= _lastAddTypeClicked + 0.5f)
+                    {
+                        return;
+                    }
+
+                    BuildTypeAddList();
+                }
+
+                OpenPopover(popover, triggerElement);
+            }
         }
 
         private VisualElement CreateNamespaceColumn()
@@ -813,28 +2570,538 @@
                     height = Length.Percent(100),
                 },
             };
+
+            VisualElement nsHeader = new();
+            nsHeader.Add(
+                new Label("Namespaces")
+                {
+                    style = { unityFontStyleAndWeight = FontStyle.Bold, paddingLeft = 2 },
+                }
+            );
+            nsHeader.AddToClassList(NamespaceGroupHeaderClass);
+            _addTypeButton = new Button(() =>
+            {
+                if (Time.realtimeSinceStartup < _lastEnterPressed + 0.5f)
+                {
+                    return;
+                }
+
+                TogglePopover(_typeAddPopover, _addTypeButton);
+            })
+            {
+                text = "+",
+                tooltip = "Manage Visible Types",
+            };
+            _addTypeButton.AddToClassList("create-button");
+            _addTypeButton.AddToClassList("icon-button");
+            _addTypeButton.AddToClassList(StyleConstants.ClickableClass);
+            nsHeader.Add(_addTypeButton);
+            namespaceColumn.Add(nsHeader);
+
             ScrollView namespaceScrollView = new(ScrollViewMode.Vertical)
             {
                 name = "namespace-scrollview",
-                style = { flexGrow = 1 },
             };
-            _namespaceListContainer = new VisualElement { name = "namespace-list" };
+            namespaceScrollView.AddToClassList("namespace-scrollview");
+            _namespaceListContainer ??= new VisualElement { name = "namespace-list" };
             namespaceScrollView.Add(_namespaceListContainer);
-            namespaceColumn.Add(
-                new Label("Namespaces")
-                {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        paddingBottom = 5,
-                        paddingLeft = 3,
-                        marginTop = 4,
-                        marginLeft = 1,
-                    },
-                }
-            );
             namespaceColumn.Add(namespaceScrollView);
             return namespaceColumn;
+        }
+
+        private void BuildTypeAddList(string filter = null)
+        {
+            if (string.Equals(SearchPlaceholder, filter, StringComparison.Ordinal))
+            {
+                filter = null;
+            }
+
+            if (_lastTypeAddSearchTerm == filter && _currentTypePopoverItems.Any())
+            {
+                return;
+            }
+
+            try
+            {
+                _currentTypePopoverItems.Clear();
+                _typePopoverHighlightIndex = -1;
+
+                if (_typePopoverListContainer == null)
+                {
+                    return;
+                }
+
+                _typePopoverListContainer.Clear();
+
+                List<string> searchTerms = string.IsNullOrWhiteSpace(filter)
+                    ? new List<string>()
+                    : filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                bool isFiltering = searchTerms.Count > 0;
+
+                List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
+                HashSet<string> managedTypeFullNames = _namespaceController
+                    .GetAllManagedTypeNames()
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                IOrderedEnumerable<IGrouping<string, Type>> groupedTypes = allObjectTypes
+                    .GroupBy(NamespaceController.GetNamespaceKey)
+                    .OrderBy(grouping => grouping.Key);
+
+                bool foundMatches = false;
+                foreach (IGrouping<string, Type> group in groupedTypes)
+                {
+                    string namespaceKey = group.Key;
+                    List<Type> addableTypes = new();
+                    List<VisualElement> typesToShowInGroup = new();
+
+                    bool namespaceMatchesAll =
+                        isFiltering
+                        && searchTerms.All(term =>
+                            namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
+                        );
+
+                    foreach (Type type in group.OrderBy(t => t.Name))
+                    {
+                        string typeName = type.Name;
+                        bool typeMatchesSearch =
+                            !isFiltering
+                            || namespaceMatchesAll
+                            || searchTerms.All(term =>
+                                typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                                || namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
+                            );
+
+                        if (!typeMatchesSearch)
+                        {
+                            continue;
+                        }
+
+                        addableTypes.Add(type);
+                    }
+
+                    if (addableTypes.Count > 0)
+                    {
+                        foundMatches = true;
+
+                        VisualElement namespaceGroupContainer = new()
+                        {
+                            name = $"ns-group-container-{group.Key}",
+                        };
+                        VisualElement header = new() { name = $"ns-header-{group.Key}" };
+                        header.AddToClassList(PopoverNamespaceHeaderClassName);
+
+                        bool startCollapsed = !isFiltering;
+                        if (!startCollapsed)
+                        {
+                            header.AddToClassList(StyleConstants.ExpandedClass);
+                        }
+
+                        foreach (Type type in group.OrderBy(t => t.Name))
+                        {
+                            string typeName = type.Name;
+                            bool typeMatchesSearch =
+                                !isFiltering
+                                || namespaceMatchesAll
+                                || searchTerms.All(term =>
+                                    typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                                    || namespaceKey.Contains(
+                                        term,
+                                        StringComparison.OrdinalIgnoreCase
+                                    )
+                                );
+
+                            if (!typeMatchesSearch)
+                            {
+                                continue;
+                            }
+
+                            bool isManaged = managedTypeFullNames.Contains(type.FullName);
+                            Label typeLabel = CreateHighlightedLabel(
+                                $"{type.Name}",
+                                searchTerms,
+                                PopoverListItemClassName,
+                                bindToContextHovers: false,
+                                header
+                            );
+                            typeLabel.AddToClassList(PopoverListItemClassName);
+                            typeLabel.AddToClassList(StyleConstants.ClickableClass);
+
+                            if (isManaged)
+                            {
+                                typeLabel.SetEnabled(false);
+                                typeLabel.AddToClassList(PopoverListItemDisabledClassName);
+                            }
+                            else
+                            {
+                                typeLabel.RegisterCallback<PointerDownEvent, Type>(
+                                    (evt, typeContext) =>
+                                        HandleTypeSelectionFromPopover(
+                                            evt,
+                                            typeContext,
+                                            namespaceKey
+                                        ),
+                                    type
+                                );
+                            }
+
+                            typesToShowInGroup.Add(typeLabel);
+                        }
+
+                        Label indicator = new(
+                            startCollapsed
+                                ? StyleConstants.ArrowCollapsed
+                                : StyleConstants.ArrowExpanded
+                        )
+                        {
+                            name = $"ns-indicator-{group.Key}",
+                        };
+                        indicator.AddToClassList(PopoverNamespaceIndicatorClassName);
+                        indicator.AddToClassList(StyleConstants.ClickableClass);
+
+                        Label namespaceLabel = CreateHighlightedLabel(
+                            group.Key,
+                            searchTerms,
+                            PopoverListNamespaceClassName
+                        );
+                        namespaceLabel.AddToClassList(PopoverListNamespaceClassName);
+
+                        Dictionary<string, object> clickContext = new()
+                        {
+                            ["NamespaceKey"] = group.Key,
+                            ["AddableTypes"] = addableTypes,
+                            ["ExpandNamespace"] = (Action<PointerDownEvent>)ExpandNamespace,
+                        };
+                        header.userData = clickContext;
+
+                        if (typesToShowInGroup.Count > 1)
+                        {
+                            namespaceLabel.AddToClassList(
+                                "type-selection-list-namespace--not-empty"
+                            );
+                            namespaceLabel.AddToClassList(StyleConstants.ClickableClass);
+
+                            // ReSharper disable once HeapView.CanAvoidClosure
+                            namespaceLabel.RegisterCallback<PointerDownEvent>(evt =>
+                            {
+                                if (evt.button != 0)
+                                {
+                                    return;
+                                }
+
+                                string clickedNamespace = clickContext["NamespaceKey"] as string;
+                                List<Type> typesToAdd = clickContext["AddableTypes"] as List<Type>;
+                                int countToAdd = typesToAdd?.Count ?? 0;
+                                if (countToAdd == 0)
+                                {
+                                    return;
+                                }
+
+                                BuildConfirmNamespaceAddPopoverContent(
+                                    clickedNamespace,
+                                    typesToAdd
+                                );
+                                OpenPopover(
+                                    _confirmNamespaceAddPopover,
+                                    namespaceLabel,
+                                    isNested: true
+                                );
+                                evt.StopPropagation();
+                            });
+                        }
+                        else
+                        {
+                            namespaceLabel.AddToClassList("type-selection-list-namespace--empty");
+                        }
+
+                        header.Add(indicator);
+                        header.Add(namespaceLabel);
+
+                        VisualElement typesSubContainer = new()
+                        {
+                            name = $"types-subcontainer-{group.Key}",
+                            style =
+                            {
+                                marginLeft = 15,
+                                display = startCollapsed ? DisplayStyle.None : DisplayStyle.Flex,
+                            },
+                        };
+
+                        foreach (VisualElement typeVisualElement in typesToShowInGroup)
+                        {
+                            typesSubContainer.Add(typeVisualElement);
+                        }
+
+                        namespaceGroupContainer.Add(header);
+                        namespaceGroupContainer.Add(typesSubContainer);
+                        indicator.RegisterCallback<PointerDownEvent>(ExpandNamespace);
+
+                        void ExpandNamespace(PointerDownEvent evt)
+                        {
+                            if (evt != null && evt.button != 0)
+                            {
+                                return;
+                            }
+
+                            Label currentIndicator = header.Q<Label>(
+                                className: PopoverNamespaceIndicatorClassName
+                            );
+                            VisualElement currentTypesContainer = header.parent.Q<VisualElement>(
+                                $"types-subcontainer-{group.Key}"
+                            );
+                            if (currentIndicator != null && currentTypesContainer != null)
+                            {
+                                bool nowCollapsed =
+                                    currentTypesContainer.style.display == DisplayStyle.None;
+                                currentTypesContainer.style.display = nowCollapsed
+                                    ? DisplayStyle.Flex
+                                    : DisplayStyle.None;
+                                currentIndicator.text = nowCollapsed
+                                    ? StyleConstants.ArrowExpanded
+                                    : StyleConstants.ArrowCollapsed;
+                                header.EnableInClassList(
+                                    StyleConstants.ExpandedClass,
+                                    !nowCollapsed
+                                );
+                            }
+
+                            evt?.StopPropagation();
+                        }
+
+                        _currentTypePopoverItems.Add(header);
+                        _typePopoverListContainer.Add(namespaceGroupContainer);
+                    }
+                }
+
+                if (isFiltering && !foundMatches)
+                {
+                    _typePopoverListContainer.Add(
+                        new Label("No matching types found.")
+                        {
+                            style =
+                            {
+                                color = Color.grey,
+                                paddingBottom = 10,
+                                paddingTop = 10,
+                                paddingLeft = 10,
+                                paddingRight = 10,
+                                unityTextAlign = TextAnchor.MiddleCenter,
+                            },
+                        }
+                    );
+                    _typeAddPopover.style.maxHeight = StyleKeyword.None;
+                }
+                else
+                {
+                    _typeAddPopover.style.maxHeight = StyleKeyword.Null;
+                }
+            }
+            finally
+            {
+                _lastTypeAddSearchTerm = filter;
+            }
+        }
+
+        private void HandleTypePopoverKeyDown(KeyDownEvent evt)
+        {
+            if (
+                _activePopover != _typeAddPopover
+                || _typeAddPopover.style.display == DisplayStyle.None
+                || _currentTypePopoverItems.Count == 0
+            )
+            {
+                return;
+            }
+
+            bool highlightChanged = false;
+
+            switch (evt.keyCode)
+            {
+                case KeyCode.DownArrow:
+                {
+                    _typePopoverHighlightIndex++;
+                    if (_typePopoverHighlightIndex >= _currentTypePopoverItems.Count)
+                    {
+                        _typePopoverHighlightIndex = 0;
+                    }
+
+                    highlightChanged = true;
+                    break;
+                }
+                case KeyCode.UpArrow:
+                {
+                    _typePopoverHighlightIndex--;
+                    if (_typePopoverHighlightIndex < 0)
+                    {
+                        _typePopoverHighlightIndex = _currentTypePopoverItems.Count - 1;
+                    }
+
+                    highlightChanged = true;
+                    break;
+                }
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                {
+                    if (
+                        _typePopoverHighlightIndex >= 0
+                        && _typePopoverHighlightIndex < _currentTypePopoverItems.Count
+                    )
+                    {
+                        VisualElement selectedElement = _currentTypePopoverItems[
+                            _typePopoverHighlightIndex
+                        ];
+                        HandleEnterOnPopoverItem(selectedElement);
+                        evt.PreventDefault();
+                        evt.StopPropagation();
+                    }
+
+                    break;
+                }
+                case KeyCode.Escape:
+                {
+                    CloseActivePopover();
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    break;
+                }
+                default:
+                {
+                    return;
+                }
+            }
+
+            if (highlightChanged)
+            {
+                UpdateTypePopoverHighlight();
+                evt.PreventDefault();
+                evt.StopPropagation();
+            }
+        }
+
+        private void HandleEnterOnPopoverItem(VisualElement element)
+        {
+            if (element == null)
+            {
+                return;
+            }
+
+            if (element.userData is Type selectedType)
+            {
+                HandleTypeSelectionFromPopover(
+                    null,
+                    selectedType,
+                    NamespaceController.GetNamespaceKey(selectedType)
+                );
+            }
+            else if (
+                element.ClassListContains(PopoverNamespaceHeaderClassName)
+                && element.userData != null
+            )
+            {
+                try
+                {
+                    Dictionary<string, object> context =
+                        element.userData as Dictionary<string, object>;
+                    string nsKey = context.GetValueOrDefault("NamespaceKey") as string;
+                    List<Type> addableTypes =
+                        context.GetValueOrDefault("AddableTypes") as List<Type>;
+                    int addableCount = addableTypes?.Count ?? 0;
+
+                    VisualElement parentGroup = element.parent;
+                    VisualElement typesSubContainer = parentGroup?.Q<VisualElement>(
+                        $"types-subcontainer-{nsKey}"
+                    );
+                    Label indicator = element.Q<Label>(
+                        className: PopoverNamespaceIndicatorClassName
+                    );
+
+                    if (typesSubContainer == null || indicator == null)
+                    {
+                        return;
+                    }
+
+                    bool isCollapsed = typesSubContainer.style.display == DisplayStyle.None;
+
+                    if (isCollapsed)
+                    {
+                        Action<PointerDownEvent> explode =
+                            context.GetValueOrDefault("ExpandNamespace")
+                            as Action<PointerDownEvent>;
+                        explode?.Invoke(null);
+                    }
+                    else
+                    {
+                        if (addableCount > 0)
+                        {
+                            BuildConfirmNamespaceAddPopoverContent(nsKey, addableTypes);
+                            OpenPopover(_confirmNamespaceAddPopover, element, isNested: true);
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Error processing Enter on namespace header: {e}");
+                }
+            }
+        }
+
+        private void UpdateTypePopoverHighlight()
+        {
+            if (_currentTypePopoverItems == null || _typeAddPopover == null)
+            {
+                return;
+            }
+
+            ScrollView scrollView = _typeAddPopover.Q<ScrollView>("search-scroll");
+            for (int i = 0; i < _currentTypePopoverItems.Count; i++)
+            {
+                VisualElement item = _currentTypePopoverItems[i];
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (i == _typePopoverHighlightIndex)
+                {
+                    item.AddToClassList(PopoverHighlightClass);
+                    scrollView?.ScrollTo(item);
+                }
+                else
+                {
+                    item.RemoveFromClassList(PopoverHighlightClass);
+                }
+            }
+        }
+
+        private void HandleTypeSelectionFromPopover(
+            PointerDownEvent evt,
+            Type selectedType,
+            string namespaceKey
+        )
+        {
+            if (selectedType != null)
+            {
+                List<string> currentManagedList = _namespaceController.GetManagedTypeNames(
+                    namespaceKey
+                );
+                if (!currentManagedList.Contains(selectedType.FullName))
+                {
+                    if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
+                    {
+                        types = new List<Type>();
+                        _scriptableObjectTypes[namespaceKey] = types;
+                        _namespaceOrder[NamespaceController.GetNamespaceKey(selectedType)] =
+                            _namespaceOrder.Count;
+                    }
+
+                    types.Add(selectedType);
+                    SyncNamespaceAndTypeOrders();
+                    LoadScriptableObjectTypes();
+                    BuildNamespaceView();
+                }
+            }
+
+            CloseActivePopover();
+            evt.StopPropagation();
         }
 
         private VisualElement CreateObjectColumn()
@@ -844,6 +3111,7 @@
                 name = "object-column",
                 style =
                 {
+                    // TODO: MIGRATE ALL STYLES TO USS + SPLIT STYLE SHEETS
                     borderRightWidth = 1,
                     borderRightColor = Color.gray,
                     flexDirection = FlexDirection.Column,
@@ -851,63 +3119,26 @@
                 },
             };
 
-            VisualElement objectHeader = new()
-            {
-                name = "object-header",
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    //justifyContent = Justify.SpaceBetween,
-                    justifyContent = Justify.FlexStart,
-                    alignItems = Align.Center,
-                    paddingBottom = 3,
-                    paddingTop = 3,
-                    paddingLeft = 3,
-                    paddingRight = 3,
-                    height = 24,
-                    flexShrink = 0,
-                    borderBottomWidth = 1,
-                    borderBottomColor = Color.gray,
-                },
-            };
+            VisualElement objectHeader = new() { name = "object-header" };
+            objectHeader.AddToClassList("object-header");
 
-            objectHeader.Add(
-                new Label("Objects")
-                {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        paddingBottom = 5,
-                        marginRight = 5,
-                        marginTop = 1,
-                    },
-                }
-            );
+            objectHeader.Add(new Label("Objects"));
             Button createButton = new(CreateNewObject)
             {
                 text = "+",
                 tooltip = "Create New Object",
                 name = "create-object-button",
-                style =
-                {
-                    unityFontStyleAndWeight = FontStyle.Bold,
-                    color = Color.black,
-                    backgroundColor = new Color(0f, 0.8f, 0f),
-                    width = 20,
-                    height = 20,
-                    paddingLeft = 0,
-                    paddingRight = 0,
-                    marginBottom = 2,
-                },
             };
+            createButton.AddToClassList("create-button");
             createButton.AddToClassList("icon-button");
+            createButton.AddToClassList(StyleConstants.ClickableClass);
             objectHeader.Add(createButton);
             objectColumn.Add(objectHeader);
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
                 name = "object-scrollview",
-                style = { flexGrow = 1 },
             };
+            _objectScrollView.AddToClassList("object-scrollview");
             _objectListContainer = new VisualElement { name = "object-list" };
             _objectScrollView.Add(_objectListContainer);
             objectColumn.Add(_objectScrollView);
@@ -934,7 +3165,8 @@
 
         private void CreateNewObject()
         {
-            if (_selectedType == null)
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null)
             {
                 EditorUtility.DisplayDialog(
                     "Cannot Create Object",
@@ -944,7 +3176,8 @@
                 return;
             }
 
-            if (_settings == null || string.IsNullOrWhiteSpace(_settings.DataFolderPath))
+            DataVisualizerSettings settings = Settings;
+            if (string.IsNullOrWhiteSpace(settings.DataFolderPath))
             {
                 EditorUtility.DisplayDialog(
                     "Cannot Create Object",
@@ -956,7 +3189,7 @@
 
             string targetDirectory = Path.Combine(
                 Directory.GetCurrentDirectory(),
-                _settings.DataFolderPath
+                settings.DataFolderPath
             );
             targetDirectory = Path.GetFullPath(targetDirectory).SanitizePath();
 
@@ -965,7 +3198,7 @@
             {
                 EditorUtility.DisplayDialog(
                     "Invalid Data Folder",
-                    $"The configured Data Folder ('{_settings.DataFolderPath}') is not inside the project's Assets folder.",
+                    $"The configured Data Folder ('{settings.DataFolderPath}') is not inside the project's Assets folder.",
                     "OK"
                 );
                 return;
@@ -982,25 +3215,25 @@
             {
                 EditorUtility.DisplayDialog(
                     "Error",
-                    $"Could not create data directory '{_settings.DataFolderPath}': {e.Message}",
+                    $"Could not create data directory '{settings.DataFolderPath}': {e.Message}",
                     "OK"
                 );
                 return;
             }
 
-            ScriptableObject instance = CreateInstance(_selectedType);
+            ScriptableObject instance = CreateInstance(selectedType);
             if (instance == null)
             {
                 EditorUtility.DisplayDialog(
                     "Error",
-                    $"Failed to create instance of type '{_selectedType.Name}'.",
+                    $"Failed to create instance of type '{selectedType.Name}'.",
                     "OK"
                 );
                 return;
             }
 
-            string baseAssetName = $"New {_selectedType.Name}.asset";
-            string proposedPath = Path.Combine(_settings.DataFolderPath, baseAssetName)
+            string baseAssetName = $"New {selectedType.Name}.asset";
+            string proposedPath = Path.Combine(settings.DataFolderPath, baseAssetName)
                 .SanitizePath();
             string uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
 
@@ -1010,14 +3243,14 @@
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
 
-                BaseDataObject newObject = AssetDatabase.LoadAssetAtPath<BaseDataObject>(
+                ScriptableObject newObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
                     uniquePath
                 );
 
                 if (newObject != null)
                 {
                     _selectedObjects.Insert(0, newObject);
-                    UpdateAndSaveObjectCustomOrder();
+                    UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
                     BuildObjectsView();
                     SelectObject(newObject);
                 }
@@ -1057,11 +3290,9 @@
             }
 
             const string titleFieldName = nameof(BaseDataObject._title);
-            bool titlePotentiallyChanged = string.Equals(
-                property.Name,
-                titleFieldName,
-                StringComparison.Ordinal
-            );
+            bool titlePotentiallyChanged =
+                string.Equals(property.Name, titleFieldName, StringComparison.Ordinal)
+                || string.Equals(property.Name, nameof(name), StringComparison.Ordinal);
 
             if (titlePotentiallyChanged)
             {
@@ -1072,335 +3303,101 @@
         }
 #endif
 
-        private void SelectDataFolder()
+        private void BuildConfirmNamespaceAddPopoverContent(
+            string namespaceKey,
+            List<Type> typesToAdd
+        )
         {
-            if (_settings == null)
+            if (_confirmNamespaceAddPopover == null)
             {
                 return;
             }
 
-            string currentFullPath = Path.GetFullPath(
-                Path.Combine(Directory.GetCurrentDirectory(), _settings.DataFolderPath)
-            );
-            string startDir = Directory.Exists(currentFullPath)
-                ? currentFullPath
-                : Application.dataPath;
+            _confirmNamespaceAddPopover.Clear();
 
-            string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
-                "Select Data Folder",
-                startDir,
-                string.Empty
-            );
-
-            if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
+            int countToAdd = typesToAdd.Count;
+            if (countToAdd == 0)
             {
                 return;
             }
 
-            string projectAssetsPath = Path.GetFullPath(Application.dataPath);
-            selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
-            projectAssetsPath = projectAssetsPath.SanitizePath();
-            if (
-                !selectedAbsolutePath.StartsWith(
-                    projectAssetsPath,
-                    StringComparison.OrdinalIgnoreCase
-                )
-            )
+            _confirmNamespaceAddPopover.style.paddingBottom = 10;
+            _confirmNamespaceAddPopover.style.paddingTop = 10;
+            _confirmNamespaceAddPopover.style.paddingLeft = 10;
+            _confirmNamespaceAddPopover.style.paddingRight = 10;
+
+            string message =
+                $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '<color=yellow><i>{namespaceKey}</i></color>' to Data Visualizer?";
+            Label messageLabel = new(message)
             {
-                Debug.LogError($"Selected folder must be inside the project's Assets folder.");
-                EditorUtility.DisplayDialog(
-                    "Invalid Folder",
-                    "The selected folder must be inside the project's 'Assets' directory.",
-                    "OK"
-                );
-                return;
-            }
-
-            string relativePath;
-            if (selectedAbsolutePath.Equals(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
-            {
-                relativePath = "Assets";
-            }
-            else
-            {
-                relativePath = "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-            }
-
-            if (
-                string.Equals(
-                    _settings.DataFolderPath,
-                    relativePath,
-                    StringComparison.OrdinalIgnoreCase
-                )
-            )
-            {
-                return;
-            }
-
-            _settings._dataFolderPath = relativePath;
-            EditorUtility.SetDirty(_settings);
-            AssetDatabase.SaveAssets();
-            _dataFolderPathDisplay.text = _settings.DataFolderPath;
-            Debug.Log($"Data folder updated to: {_settings.DataFolderPath}");
-        }
-
-        private void BuildSettingsPopup()
-        {
-            _settingsPopup.Clear();
-
-            _settingsPopup.Add(
-                new Label("Settings")
-                {
-                    style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 10 },
-                }
-            );
-
-            Button closeButton = new(() => _settingsPopup.style.display = DisplayStyle.None)
-            {
-                text = "X",
-                style =
-                {
-                    position = Position.Absolute,
-                    top = 2,
-                    right = 2,
-                    width = 20,
-                    height = 20,
-                },
+                style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
             };
-            _settingsPopup.Add(closeButton);
+            _confirmNamespaceAddPopover.Add(messageLabel);
 
-            VisualElement prefsToggleContainer = new()
+            VisualElement buttonContainer = new();
+            buttonContainer.AddToClassList("popover-button-container");
+            _confirmNamespaceAddPopover.Add(buttonContainer);
+
+            Button cancelButton = new(CloseNestedPopover)
             {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    marginBottom = 10,
-                },
+                text = "Cancel",
+                style = { marginRight = 5 },
             };
-            _settingsPopup.Add(prefsToggleContainer);
+            cancelButton.AddToClassList(StyleConstants.ClickableClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
+            buttonContainer.Add(cancelButton);
 
-            Toggle prefsToggle = new("Use Settings Asset for State:")
+            Button confirmButton = new(() =>
             {
-                value = _settings.persistStateInSettingsAsset,
-                tooltip =
-                    $"If checked, window state (selection, order, collapse) is saved within the DataVisualizerSettings asset file.{Environment.NewLine}If unchecked state is saved locally in a JSON file (persistent data path).",
-            };
-            prefsToggle.RegisterValueChangedCallback(evt =>
-            {
-                if (_settings != null)
+                bool stateChanged = false;
+                HashSet<string> currentManagedList = _namespaceController
+                    .GetManagedTypeNames(namespaceKey)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (Type typeToAdd in typesToAdd)
                 {
-                    bool newModeIsSettingsAsset = evt.newValue;
-                    bool previousModeWasSettingsAsset = _settings.persistStateInSettingsAsset;
-
-                    if (previousModeWasSettingsAsset != newModeIsSettingsAsset)
+                    if (!currentManagedList.Add(typeToAdd.FullName))
                     {
-                        // Update flag FIRST
-                        _settings.persistStateInSettingsAsset = newModeIsSettingsAsset;
-                        Debug.Log(
-                            $"Persistence mode changed to: {(newModeIsSettingsAsset ? "Settings Asset" : "User File")}"
-                        );
-
-                        // Perform Migration
-                        MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset); // Pass the NEW mode flag
-
-                        // Mark settings SO dirty (flag changed, maybe data too)
-                        MarkSettingsDirty();
-                        // Save settings SO immediately to persist flag change and potential migrated data
-                        AssetDatabase.SaveAssets();
-
-                        // Save user state file if THAT is the new mode
-                        if (!newModeIsSettingsAsset)
-                        {
-                            SaveUserStateToFile();
-                        }
-
-                        Debug.Log("Persistence mode change and migration complete.");
+                        continue;
                     }
+
+                    if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
+                    {
+                        types = new List<Type>();
+                        _scriptableObjectTypes[namespaceKey] = types;
+                        _namespaceOrder[namespaceKey] = _namespaceOrder.Count;
+                    }
+
+                    types.Add(typeToAdd);
+                    stateChanged = true;
                 }
-            });
-            prefsToggleContainer.Add(prefsToggle);
 
-            VisualElement dataFolderContainer = new()
-            {
-                style =
+                if (stateChanged)
                 {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    marginBottom = 5,
-                },
-            };
-            _settingsPopup.Add(dataFolderContainer);
+                    SyncNamespaceAndTypeOrders();
+                }
 
-            dataFolderContainer.Add(
-                new Label("Data Folder:") { style = { width = 80, flexShrink = 0 } }
-            );
-
-            _dataFolderPathDisplay = new Label(_settings?.DataFolderPath ?? "N/A")
-            {
-                name = "data-folder-display",
-                style =
+                CloseActivePopover();
+                if (stateChanged)
                 {
-                    flexGrow = 1,
-                    backgroundColor = new Color(0.1f, 0.1f, 0.1f),
-                    paddingBottom = 2,
-                    paddingLeft = 2,
-                    paddingRight = 2,
-                    paddingTop = 2,
-                    marginLeft = 5,
-                    marginRight = 5,
-                },
-                pickingMode = PickingMode.Ignore,
-            };
-            dataFolderContainer.Add(_dataFolderPathDisplay);
-
-            Button selectFolderButton = new(SelectDataFolder)
+                    ScheduleRefresh();
+                }
+            })
             {
-                text = "Select...",
-                style = { flexShrink = 0 },
+                text = "Add",
             };
-            dataFolderContainer.Add(selectFolderButton);
+            confirmButton.AddToClassList(StyleConstants.ClickableClass);
+            confirmButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            confirmButton.AddToClassList("popover-confirm-button");
+            buttonContainer.Add(confirmButton);
         }
 
         private void BuildNamespaceView()
         {
-            if (_namespaceListContainer == null)
-            {
-                return;
-            }
-
-            _namespaceListContainer.Clear();
-
-            foreach ((string key, List<Type> types) in _scriptableObjectTypes)
-            {
-                VisualElement namespaceGroupItem = new()
-                {
-                    name = $"namespace-group-{key}",
-                    userData = key,
-                };
-
-                namespaceGroupItem.AddToClassList(NamespaceItemClass);
-                namespaceGroupItem.userData = key;
-                if (types.Count == 0)
-                {
-                    namespaceGroupItem.AddToClassList("namespace-group-item--empty");
-                }
-                _namespaceListContainer.Add(namespaceGroupItem);
-                namespaceGroupItem.RegisterCallback<PointerDownEvent>(OnNamespacePointerDown);
-
-                VisualElement header = new() { name = $"namespace-header-{key}" };
-                header.AddToClassList(NamespaceHeaderClass);
-                namespaceGroupItem.Add(header);
-
-                Label indicator = new(ArrowExpanded) { name = $"namespace-indicator-{key}" };
-                indicator.AddToClassList(NamespaceIndicatorClass);
-                header.Add(indicator);
-
-                Label namespaceLabel = new(key)
-                {
-                    name = $"namespace-name-{key}",
-                    style = { unityFontStyleAndWeight = FontStyle.Bold },
-                };
-                namespaceLabel.AddToClassList(NamespaceLabelClass);
-                header.Add(namespaceLabel);
-
-                VisualElement typesContainer = new()
-                {
-                    name = $"types-container-{key}",
-                    style = { marginLeft = 10 },
-                    userData = key,
-                };
-                namespaceGroupItem.Add(typesContainer);
-
-                bool isCollapsed = GetIsNamespaceCollapsed(key);
-                ApplyNamespaceCollapsedState(indicator, typesContainer, isCollapsed, false);
-
-                indicator.RegisterCallback<PointerDownEvent>(evt =>
-                {
-                    if (evt.button != 0 || evt.propagationPhase == PropagationPhase.TrickleDown)
-                    {
-                        return;
-                    }
-
-                    VisualElement parentGroup = header.parent;
-                    Label associatedIndicator = parentGroup?.Q<Label>(
-                        className: NamespaceIndicatorClass
-                    );
-                    VisualElement associatedTypesContainer = parentGroup?.Q<VisualElement>(
-                        $"types-container-{key}"
-                    );
-                    string nsKey = parentGroup?.userData as string;
-
-                    if (
-                        associatedIndicator != null
-                        && associatedTypesContainer != null
-                        && !string.IsNullOrWhiteSpace(nsKey)
-                    )
-                    {
-                        bool currentlyCollapsed =
-                            associatedTypesContainer.style.display == DisplayStyle.None;
-                        bool newCollapsedState = !currentlyCollapsed;
-
-                        ApplyNamespaceCollapsedState(
-                            associatedIndicator,
-                            associatedTypesContainer,
-                            newCollapsedState,
-                            true
-                        );
-                    }
-
-                    evt.StopPropagation();
-                });
-
-                foreach (Type type in types)
-                {
-                    VisualElement typeItem = new()
-                    {
-                        name = $"type-item-{type.Name}",
-                        userData = type,
-                        pickingMode = PickingMode.Position,
-                        focusable = true,
-                    };
-
-                    typeItem.AddToClassList(TypeItemClass);
-                    Label typeLabel = new(type.Name) { name = "type-item-label" };
-                    typeLabel.AddToClassList(TypeLabelClass);
-                    typeItem.Add(typeLabel);
-
-                    typeItem.RegisterCallback<PointerDownEvent>(OnTypePointerDown);
-                    typeItem.RegisterCallback<PointerUpEvent>(evt =>
-                    {
-                        if (_isDragging || evt.button != 0)
-                        {
-                            return;
-                        }
-
-                        if (typeItem.userData is not Type clickedType)
-                        {
-                            return;
-                        }
-
-                        _selectedTypeElement?.RemoveFromClassList("selected");
-                        _selectedType = clickedType;
-                        _selectedTypeElement = typeItem;
-                        _selectedTypeElement.AddToClassList("selected");
-                        SaveNamespaceAndTypeSelectionState(
-                            GetNamespaceKey(_selectedType),
-                            _selectedType.Name
-                        );
-
-                        LoadObjectTypes(clickedType);
-                        BaseDataObject objectToSelect = DetermineObjectToAutoSelect();
-                        BuildObjectsView();
-                        SelectObject(objectToSelect);
-                        evt.StopPropagation();
-                    });
-                    typesContainer.Add(typeItem);
-                }
-            }
+            _namespaceController.Build(this, ref _namespaceListContainer);
         }
 
-        private void BuildObjectsView()
+        internal void BuildObjectsView()
         {
             if (_objectListContainer == null)
             {
@@ -1411,10 +3408,11 @@
             _objectVisualElementMap.Clear();
             _objectScrollView.scrollOffset = Vector2.zero;
 
-            if (_selectedType != null && _selectedObjects.Count == 0)
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType != null && _selectedObjects.Count == 0)
             {
                 Label emptyLabel = new(
-                    $"No objects of type '{_selectedType.Name}' found.\nUse the '+' button above to create one."
+                    $"No objects of type '{selectedType.Name}' found.\nUse the '+' button above to create one."
                 )
                 {
                     name = "empty-object-list-label",
@@ -1423,7 +3421,7 @@
                 _objectListContainer.Add(emptyLabel);
             }
 
-            foreach (BaseDataObject dataObject in _selectedObjects)
+            foreach (ScriptableObject dataObject in _selectedObjects)
             {
                 if (dataObject == null)
                 {
@@ -1435,6 +3433,7 @@
                     name = $"object-item-row-{dataObject.GetInstanceID()}",
                 };
                 objectItemRow.AddToClassList(ObjectItemClass);
+                objectItemRow.AddToClassList(StyleConstants.ClickableClass);
                 objectItemRow.style.flexDirection = FlexDirection.Row;
                 objectItemRow.style.alignItems = Align.Center;
                 objectItemRow.userData = dataObject;
@@ -1442,10 +3441,22 @@
 
                 VisualElement contentArea = new() { name = "content" };
                 contentArea.AddToClassList(ObjectItemContentClass);
+                contentArea.AddToClassList(StyleConstants.ClickableClass);
                 objectItemRow.Add(contentArea);
 
-                Label titleLabel = new(dataObject.Title) { name = "object-item-label" };
+                string dataObjectName;
+                if (dataObject is BaseDataObject baseDataObject)
+                {
+                    dataObjectName = baseDataObject.Title;
+                }
+                else
+                {
+                    dataObjectName = dataObject.name;
+                }
+
+                Label titleLabel = new(dataObjectName) { name = "object-item-label" };
                 titleLabel.AddToClassList("object-item__label");
+                titleLabel.AddToClassList(StyleConstants.ClickableClass);
                 contentArea.Add(titleLabel);
 
                 VisualElement actionsArea = new()
@@ -1465,37 +3476,28 @@
                 {
                     text = "++",
                     tooltip = "Clone Object",
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        color = new Color(0.4f, 0.7f, 0.4f),
-                    },
                 };
-                cloneButton.AddToClassList(ActionButtonClass);
+                cloneButton.AddToClassList(StyleConstants.ActionButtonClass);
+                cloneButton.AddToClassList("clone-button");
                 actionsArea.Add(cloneButton);
 
-                Button renameButton = new(() => OpenRenamePopup(dataObject))
+                Button renameButton = null;
+                renameButton = new Button(() => OpenRenamePopover(renameButton, dataObject))
                 {
                     text = "✎",
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        color = new Color(0.2f, 0.6f, 0.9f),
-                    },
+                    tooltip = "Rename Object",
                 };
-                renameButton.AddToClassList(ActionButtonClass);
+                renameButton.AddToClassList(StyleConstants.ActionButtonClass);
+                renameButton.AddToClassList("rename-button");
                 actionsArea.Add(renameButton);
 
-                Button deleteButton = new(() => DeleteObject(dataObject))
+                Button deleteButton = null;
+                deleteButton = new Button(() => OpenConfirmDeletePopover(deleteButton, dataObject))
                 {
                     text = "X",
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        color = new Color(0.9f, 0.4f, 0.4f),
-                    },
+                    tooltip = "Delete Object",
                 };
-                deleteButton.AddToClassList(ActionButtonClass);
+                deleteButton.AddToClassList(StyleConstants.ActionButtonClass);
                 deleteButton.AddToClassList("delete-button");
                 actionsArea.Add(deleteButton);
 
@@ -1504,7 +3506,7 @@
 
                 if (_selectedObject == dataObject)
                 {
-                    objectItemRow.AddToClassList("selected");
+                    objectItemRow.AddToClassList(StyleConstants.SelectedClass);
                     _selectedElement = objectItemRow;
                 }
             }
@@ -1535,16 +3537,68 @@
                     _odinPropertyTree.Dispose();
                     _odinPropertyTree = null;
                 }
+
                 _odinInspectorContainer?.MarkDirtyRepaint();
 #endif
                 return;
             }
 
+            if (_selectedElement != null)
+            {
+                try
+                {
+                    TextField assetNameField = new("Asset Name:")
+                    {
+                        value = _selectedObject.name,
+                        isReadOnly = true,
+                        name = "inspector-asset-name-field",
+                    };
+
+                    assetNameField
+                        .Q<TextInputBaseField<string>>(TextField.textInputUssName)
+                        ?.SetEnabled(false);
+
+                    assetNameField.AddToClassList("readonly-display-field");
+                    _inspectorContainer.Add(assetNameField);
+
+                    VisualElement separator = new()
+                    {
+                        style =
+                        {
+                            height = 1,
+                            backgroundColor = new Color(0.3f, 0.3f, 0.3f),
+                            marginTop = 3,
+                            marginBottom = 8,
+                            flexShrink = 0,
+                        },
+                    };
+                    _inspectorContainer.Add(separator);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Error creating asset name display field: {ex}");
+                }
+            }
+
+            // ReSharper disable once RedundantAssignment
             bool useOdinInspector = false;
+            Type objectType = _selectedObject.GetType();
 #if ODIN_INSPECTOR
-            useOdinInspector =
-                !_selectedObject.GetType().IsAttributeDefined(out CustomDataVisualization attribute)
-                || attribute.UseOdinInspector;
+            if (objectType.IsAttributeDefined(out CustomDataVisualization customVisualization))
+            {
+                useOdinInspector = customVisualization.UseOdinInspector;
+            }
+            else if (_selectedObject is SerializedScriptableObject)
+            {
+                useOdinInspector = true;
+            }
+            else if (
+                objectType.IsAttributeDefined<ShowOdinSerializedPropertiesInInspectorAttribute>()
+                && typeof(ISerializationCallbackReceiver).IsAssignableFrom(objectType)
+            )
+            {
+                useOdinInspector = true;
+            }
 
             if (useOdinInspector)
             {
@@ -1609,6 +3663,7 @@
                 {
                     _odinInspectorContainer.RemoveFromHierarchy();
                 }
+
                 _odinPropertyTree?.Dispose();
                 _odinPropertyTree = null;
 #endif
@@ -1654,7 +3709,7 @@
                             )
                         )
                         {
-                            propertyField.RegisterValueChangeCallback(evt =>
+                            propertyField.RegisterValueChangeCallback(_ =>
                             {
                                 _currentInspectorScriptableObject.ApplyModifiedProperties();
                                 rootVisualElement
@@ -1668,14 +3723,6 @@
                         _inspectorContainer.Add(propertyField);
                         enterChildren = false;
                     }
-
-                    VisualElement customElement = _selectedObject.BuildGUI(
-                        new DataVisualizerGUIContext(_currentInspectorScriptableObject)
-                    );
-                    if (customElement != null)
-                    {
-                        _inspectorContainer.Add(customElement);
-                    }
                 }
                 catch (Exception e)
                 {
@@ -1683,132 +3730,104 @@
                     _inspectorContainer.Add(new Label($"Inspector Error: {e.Message}"));
                 }
             }
+
+            VisualElement customElement = TryGetCustomVisualElement(objectType);
+            if (customElement != null)
+            {
+                _inspectorContainer.Add(customElement);
+            }
         }
 
-        private void DeleteObject(BaseDataObject objectToDelete)
+        private VisualElement TryGetCustomVisualElement(Type objectType)
         {
-            if (objectToDelete == null)
-                return;
-            string objectName = objectToDelete.name; // Capture name before potential deletion
+            if (_selectedObject is BaseDataObject baseDataObject)
+            {
+                return baseDataObject.BuildGUI(
+                    new DataVisualizerGUIContext(_currentInspectorScriptableObject)
+                );
+            }
 
-            // --- Show Custom Confirmation Dialog ---
-            var popup = ConfirmActionPopup.CreateAndConfigureInstance(
-                title: "Confirm Delete",
-                message: $"Are you sure you want to delete the asset '{objectName}'?\nThis action cannot be undone.",
-                confirmButtonText: "Delete", // Text for the confirmation button
-                cancelButtonText: "Cancel", // Text for the cancel button
-                position,
-                onComplete: (confirmed) =>
-                { // Callback executed AFTER popup closes
-                    // Only proceed if the user clicked "Delete" (confirmed is true)
-                    if (confirmed)
+            // TODO: CACHE
+            MethodInfo[] availableMethods = objectType
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Where(method => method.ReturnType.IsAssignableFrom(typeof(VisualElement)))
+                .OrderBy(method => method.GetParameters().Length)
+                .Where(method =>
+                {
+                    ParameterInfo[] parameters = method.GetParameters();
+                    if (parameters.Length == 0)
                     {
-                        // --- Deletion Logic (Now inside the callback) ---
-                        string path = AssetDatabase.GetAssetPath(objectToDelete);
-                        if (string.IsNullOrEmpty(path))
+                        return true;
+                    }
+
+                    // TODO: EXPAND TO TAKE IN MY CUSTOM TYPE
+                    return parameters[0].ParameterType == typeof(SerializedObject);
+                })
+                .OrderBy(method => method.Name)
+                .ToArray();
+            MethodInfo visualMethod = availableMethods.FirstOrDefault(
+                ReflectionHelpers.IsAttributeDefined<CustomVisualProviderAttribute>
+            );
+            if (visualMethod == null)
+            {
+                visualMethod = availableMethods.FirstOrDefault();
+            }
+
+            if (visualMethod == null)
+            {
+                return null;
+            }
+
+            ParameterInfo[] parameters = visualMethod.GetParameters();
+            if (parameters.Length == 0)
+            {
+                return visualMethod.Invoke(_selectedObject, Array.Empty<object>()) as VisualElement;
+            }
+
+            if (parameters[0].ParameterType == typeof(SerializedObject))
+            {
+                List<object> arguments = new(parameters.Length)
+                {
+                    _currentInspectorScriptableObject,
+                };
+                for (int i = 1; i < parameters.Length; i++)
+                {
+                    ParameterInfo parameter = parameters[i];
+                    if (parameter.ParameterType.IsValueType)
+                    {
+                        try
                         {
-                            Debug.LogError(
-                                $"Could not find asset path for '{objectName}' post-confirmation. Cannot delete."
+                            object parameterInstance = Activator.CreateInstance(
+                                parameter.ParameterType
                             );
-                            // Maybe refresh UI here just in case?
-                            ScheduleRefresh();
-                            return;
+                            arguments.Add(parameterInstance);
                         }
-
-                        Debug.Log($"User confirmed deletion. Attempting to delete asset: {path}");
-
-                        // Remove from internal list and map FIRST
-                        bool removed = _selectedObjects.Remove(objectToDelete);
-                        _objectVisualElementMap.Remove(objectToDelete, out var visualElement);
-
-                        // Delete the asset file
-                        bool deleted = AssetDatabase.DeleteAsset(path);
-
-                        if (deleted)
+                        catch
                         {
-                            Debug.Log($"Asset '{path}' deleted successfully.");
-                            // Don't need SaveAssets after DeleteAsset usually. Refresh is good.
-                            AssetDatabase.Refresh();
-
-                            // Remove visual element from the list container
-                            visualElement?.RemoveFromHierarchy();
-
-                            // Clear selection if the deleted object was selected
-                            if (_selectedObject == objectToDelete)
-                            {
-                                SelectObject(null); // Clears selection & updates inspector
-                            }
-                            // The AssetPostprocessor might trigger a refresh anyway,
-                            // but removing the element manually provides immediate feedback.
+                            arguments.Add(null);
                         }
-                        else
-                        {
-                            Debug.LogError(
-                                $"Failed to delete asset at '{path}'. Rebuilding view to sync."
-                            );
-                            // Rebuild view fully to reflect actual state if delete failed
-                            ScheduleRefresh(); // Use the reliable refresh mechanism
-                        }
-                        // --- End Deletion Logic ---
                     }
                     else
                     {
-                        Debug.Log("User cancelled deletion.");
+                        arguments.Add(null);
                     }
-                } // End callback lambda
-            ); // End CreateAndConfigureInstance call
-
-            // --- End Custom Confirmation Dialog ---
-
-            // Show the popup modally relative to this DataVisualizer window
-            // This ensures it's centered and blocks input to the parent.
-            popup.ShowModalUtility();
-            // Remove the old EditorUtility.DisplayDialog call entirely
-        }
-
-        private void OpenRenamePopup(BaseDataObject objectToRename)
-        {
-            if (objectToRename == null)
-            {
-                return;
-            }
-
-            string currentPath = AssetDatabase.GetAssetPath(objectToRename);
-            if (string.IsNullOrWhiteSpace(currentPath))
-            {
-                EditorUtility.DisplayDialog(
-                    "Error",
-                    "Cannot rename object: Asset path not found.",
-                    "OK"
-                );
-                return;
-            }
-
-            DataVisualizer mainVisualizerWindow = this;
-
-            RenameAssetPopup.ShowWindow(
-                currentPath,
-                (renameSuccessful) =>
-                {
-                    if (renameSuccessful)
-                    {
-                        if (_selectedType != null)
-                        {
-                            LoadObjectTypes(_selectedType);
-                            BuildObjectsView();
-                            SelectObject(objectToRename);
-                        }
-                        else
-                        {
-                            BuildObjectsView();
-                        }
-                    }
-                    mainVisualizerWindow?.Focus();
                 }
-            );
+
+                try
+                {
+                    return visualMethod.Invoke(_selectedObject, arguments.ToArray())
+                        as VisualElement;
+                }
+                catch
+                {
+                    // Swallow
+                }
+            }
+
+            return null;
         }
 
-        private void CloneObject(BaseDataObject originalObject)
+        private void CloneObject(ScriptableObject originalObject)
         {
             if (originalObject == null)
             {
@@ -1826,7 +3845,7 @@
                 return;
             }
 
-            BaseDataObject cloneInstance = Instantiate(originalObject);
+            ScriptableObject cloneInstance = Instantiate(originalObject);
             if (cloneInstance == null)
             {
                 EditorUtility.DisplayDialog(
@@ -1836,7 +3855,11 @@
                 );
                 return;
             }
-            cloneInstance._assetGuid = Guid.NewGuid().ToString();
+
+            if (cloneInstance is BaseDataObject baseDataObject)
+            {
+                baseDataObject._assetGuid = string.Empty;
+            }
 
             string originalDirectory = Path.GetDirectoryName(originalPath);
             if (string.IsNullOrWhiteSpace(originalDirectory))
@@ -1849,14 +3872,36 @@
                 return;
             }
 
+            const string pattern = @"\(Clone(\s+-?\d+)?\)";
+
             string directory = originalDirectory.SanitizePath();
             string originalName = Path.GetFileNameWithoutExtension(originalPath);
+            originalName = Regex.Replace(originalName, pattern, string.Empty);
+            if (originalName.EndsWith(' '))
+            {
+                int lastIndex = originalName.Length - 1;
+                for (; 0 <= lastIndex; --lastIndex)
+                {
+                    if (!char.IsWhiteSpace(originalName[lastIndex]))
+                    {
+                        break;
+                    }
+                }
+
+                originalName = originalName.Substring(0, lastIndex + 1);
+            }
+
             string extension = Path.GetExtension(originalPath);
-            string proposedName = $"{originalName} (Clone){extension}";
-            string proposedPath = Path.Combine(directory, proposedName).SanitizePath();
-            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
-            string uniqueName = Path.GetFileNameWithoutExtension(uniquePath);
-            cloneInstance._title = uniqueName;
+            string proposedPath;
+            string uniquePath;
+            int count = 0;
+            do
+            {
+                string proposedName =
+                    $"{originalName} (Clone{(count++ == 0 ? string.Empty : $" {count}")}){extension}";
+                proposedPath = Path.Combine(directory, proposedName).SanitizePath();
+                uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
+            } while (!string.Equals(uniquePath, proposedPath, StringComparison.Ordinal));
 
             try
             {
@@ -1864,11 +3909,17 @@
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
 
-                BaseDataObject cloneAsset = AssetDatabase.LoadAssetAtPath<BaseDataObject>(
+                ScriptableObject cloneAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
                     uniquePath
                 );
                 if (cloneAsset != null)
                 {
+                    if (cloneAsset is BaseDataObject cloneDataObject)
+                    {
+                        cloneDataObject._title = cloneAsset.name;
+                        cloneDataObject.OnValidate();
+                    }
+
                     int originalIndex = _selectedObjects.IndexOf(originalObject);
                     if (0 <= originalIndex)
                     {
@@ -1879,7 +3930,7 @@
                         _selectedObjects.Add(cloneAsset);
                     }
 
-                    UpdateAndSaveObjectCustomOrder();
+                    UpdateAndSaveObjectOrderList(cloneAsset.GetType(), _selectedObjects);
                     BuildObjectsView();
                     SelectObject(cloneAsset);
                 }
@@ -1900,71 +3951,52 @@
             }
         }
 
-        // Helper method called when a Type is selected to decide which object to auto-select
-        private BaseDataObject DetermineObjectToAutoSelect()
+        internal ScriptableObject DetermineObjectToAutoSelect()
         {
-            BaseDataObject objectToSelect = null;
-
-            // 1. Ensure there's a selected type and objects have been loaded for it
-            if (_selectedType == null || _selectedObjects == null || _selectedObjects.Count == 0)
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null || _selectedObjects == null || _selectedObjects.Count == 0)
             {
-                // Debug.Log("DetermineObjectToAutoSelect: No selected type or no objects loaded.");
-                return null; // No objects available for this type
+                return null;
             }
 
-            // 2. Get the last selected Object GUID using the persistence helper
-            //    The helper handles checking _settings.PersistStateInSettingsAsset
-            string savedObjectGuid = GetLastSelectedObjectGuidForType(_selectedType.Name);
-            // ... (Find objectToSelect using savedObjectGuid, fallback to first object) ...
-            if (!string.IsNullOrEmpty(savedObjectGuid))
+            ScriptableObject objectToSelect = null;
+            string savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.Name);
+            if (!string.IsNullOrWhiteSpace(savedObjectGuid))
             {
-                objectToSelect = _selectedObjects.FirstOrDefault(obj =>
+                objectToSelect = _selectedObjects.Find(obj =>
                     obj != null
-                    && AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(obj))
-                        == savedObjectGuid
+                    && string.Equals(
+                        AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(obj)),
+                        savedObjectGuid,
+                        StringComparison.Ordinal
+                    )
                 );
             }
-            if (objectToSelect == null && _selectedObjects.Count > 0)
-            { // Fallback
-                objectToSelect = _selectedObjects[0];
-            }
 
-            // Debug.Log($"DetermineObjectToAutoSelect: Checking for last object for type '{_selectedType.Name}'. Saved GUID: '{savedObjectGuid ?? "None"}'");
-
-            // 3. Try to find the object matching the GUID in the current list
-            if (!string.IsNullOrEmpty(savedObjectGuid))
+            if (!string.IsNullOrWhiteSpace(savedObjectGuid))
             {
-                objectToSelect = _selectedObjects.FirstOrDefault(obj =>
+                objectToSelect = _selectedObjects.Find(obj =>
                 {
                     if (obj == null)
+                    {
                         return false;
-                    string path = AssetDatabase.GetAssetPath(obj);
-                    // Safely compare GUIDs
-                    return !string.IsNullOrEmpty(path)
-                        && AssetDatabase.AssetPathToGUID(path) == savedObjectGuid;
-                });
+                    }
 
-                if (objectToSelect != null)
-                {
-                    // Debug.Log($"DetermineObjectToAutoSelect: Found last selected object by GUID: {objectToSelect.name}");
-                }
-                else
-                {
-                    // Debug.Log($"DetermineObjectToAutoSelect: Saved object GUID '{savedObjectGuid}' not found or invalid for type '{_selectedType.Name}'.");
-                    // Optionally clear the now-stale preference?
-                    // ClearLastSelectedObjectGuid();
-                }
+                    string path = AssetDatabase.GetAssetPath(obj);
+                    return !string.IsNullOrWhiteSpace(path)
+                        && string.Equals(
+                            AssetDatabase.AssetPathToGUID(path),
+                            savedObjectGuid,
+                            StringComparison.Ordinal
+                        );
+                });
             }
 
-            // 4. Fallback: If no GUID was saved, or the saved object wasn't found
             if (objectToSelect == null)
             {
-                // Select the first object in the list (_selectedObjects should be correctly sorted by LoadObjectTypes)
                 objectToSelect = _selectedObjects[0];
-                // Debug.Log($"DetermineObjectToAutoSelect: Falling back to first object: {objectToSelect?.name}");
             }
 
-            // Return the object to be selected (could be last selected, first, or potentially null if list was empty initially)
             return objectToSelect;
         }
 
@@ -1975,12 +4007,14 @@
             bool saveState
         )
         {
-            if (_settings == null || indicator == null || typesContainer == null)
+            if (indicator == null || typesContainer == null)
             {
                 return;
             }
 
-            indicator.text = collapsed ? ArrowCollapsed : ArrowExpanded;
+            indicator.text = collapsed
+                ? StyleConstants.ArrowCollapsed
+                : StyleConstants.ArrowExpanded;
             typesContainer.style.display = collapsed ? DisplayStyle.None : DisplayStyle.Flex;
 
             if (saveState)
@@ -1990,43 +4024,12 @@
                 {
                     return;
                 }
+
                 SetIsNamespaceCollapsed(namespaceKey, collapsed);
             }
         }
 
-        private void SaveNamespaceAndTypeSelectionState(string namespaceKey, string typeName)
-        {
-            if (_settings == null)
-            {
-                return;
-            }
-
-            try
-            {
-                if (string.IsNullOrWhiteSpace(namespaceKey))
-                {
-                    return;
-                }
-
-                SetLastSelectedNamespaceKey(namespaceKey);
-                if (string.IsNullOrWhiteSpace(typeName))
-                {
-                    return;
-                }
-
-                if (!string.IsNullOrEmpty(typeName))
-                {
-                    SetLastSelectedTypeName(typeName); // Save *new* type
-                    // DO NOT clear object Guid here. Let SelectObject(null) handle clearing for the type that WAS selected.
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Error saving type/namespace selection state. {e}");
-            }
-        }
-
-        private void RefreshSelectedElementVisuals(BaseDataObject dataObject)
+        private void RefreshSelectedElementVisuals(ScriptableObject dataObject)
         {
             if (
                 dataObject == null
@@ -2035,11 +4038,12 @@
             {
                 return;
             }
+
             UpdateObjectTitleRepresentation(dataObject, visualElement);
         }
 
         private void UpdateObjectTitleRepresentation(
-            BaseDataObject dataObject,
+            ScriptableObject dataObject,
             VisualElement element
         )
         {
@@ -2051,21 +4055,40 @@
             Label titleLabel = element.Q<Label>(className: "object-item__label");
             if (titleLabel == null)
             {
-                Debug.LogError($"Could not find title label within object item element.");
+                Debug.LogError("Could not find title label within object item element.");
                 return;
             }
 
-            string currentTitle = dataObject.Title;
+            string currentTitle;
+            if (dataObject is BaseDataObject baseDataObject)
+            {
+                currentTitle = baseDataObject.Title;
+            }
+            else
+            {
+                currentTitle = dataObject.name;
+            }
+
             if (titleLabel.text != currentTitle)
             {
                 titleLabel.text = currentTitle;
             }
         }
 
-        private void LoadObjectTypes(Type type)
+        internal void LoadObjectTypes(Type type)
         {
+            if (type == null)
+            {
+                return;
+            }
+
             _selectedObjects.Clear();
-            foreach (string assetGuid in AssetDatabase.FindAssets($"t:{type.Name}"))
+            _objectVisualElementMap.Clear();
+
+            List<string> customGuidOrder = GetObjectOrderForType(type.FullName);
+            Dictionary<string, ScriptableObject> objectsByGuid = new();
+            string[] assetGuids = AssetDatabase.FindAssets($"t:{type.Name}");
+            foreach (string assetGuid in assetGuids)
             {
                 string assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
                 if (string.IsNullOrWhiteSpace(assetPath))
@@ -2073,81 +4096,138 @@
                     continue;
                 }
 
-                Object asset = AssetDatabase.LoadAssetAtPath<Object>(assetPath);
-                if (asset is BaseDataObject dataObject && dataObject != null)
+                ScriptableObject asset =
+                    AssetDatabase.LoadMainAssetAtPath(assetPath) as ScriptableObject;
+                if (asset == null || asset.GetType() != type)
                 {
-                    _selectedObjects.Add(dataObject);
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(assetGuid))
+                {
+                    objectsByGuid[assetGuid] = asset;
                 }
             }
-            _selectedObjects.Sort(
-                (lhs, rhs) =>
+
+            List<ScriptableObject> sortedObjects = new();
+
+            foreach (string guid in customGuidOrder)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrWhiteSpace(path))
                 {
-                    if (0 <= lhs._customOrder && 0 <= rhs._customOrder)
-                    {
-                        int comparison = lhs._customOrder.CompareTo(rhs._customOrder);
-                        if (comparison != 0)
-                        {
-                            return comparison;
-                        }
-                    }
-                    return string.Compare(lhs.Title, rhs.Title, StringComparison.OrdinalIgnoreCase);
+                    continue;
                 }
+
+                ScriptableObject dataObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+                if (dataObject == null || dataObject.GetType() != type)
+                {
+                    continue;
+                }
+
+                sortedObjects.Add(dataObject);
+                objectsByGuid.Remove(guid);
+            }
+
+            List<ScriptableObject> remainingObjects = objectsByGuid.Values.ToList();
+            remainingObjects.Sort(
+                (a, b) => string.Compare(a.name, b.name, StringComparison.OrdinalIgnoreCase)
             );
+            sortedObjects.AddRange(remainingObjects);
+
+            _selectedObjects.Clear();
+            _selectedObjects.AddRange(sortedObjects);
             SelectObject(null);
         }
 
         private void LoadScriptableObjectTypes()
         {
-            _scriptableObjectTypes.Clear();
-            foreach (Type type in TypeCache.GetTypesDerivedFrom<BaseDataObject>())
+            HashSet<string> managedTypeFullNames;
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
             {
-                if (type.IsAbstract)
-                {
-                    continue;
-                }
-
-                string key = GetNamespaceKey(type);
-
-                List<Type> types;
-                int index = _scriptableObjectTypes.FindIndex(kvp =>
-                    string.Equals(key, kvp.key, StringComparison.OrdinalIgnoreCase)
-                );
-                if (index < 0)
-                {
-                    types = new List<Type>();
-                    _scriptableObjectTypes.Add((key, types));
-                }
-                else
-                {
-                    types = _scriptableObjectTypes[index].types;
-                }
-                types.Add(type);
+                managedTypeFullNames =
+                    settings
+                        .typeOrders?.SelectMany(order => order.typeNames)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                managedTypeFullNames =
+                    UserState
+                        .typeOrders?.SelectMany(order => order.typeNames)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             }
 
-            if (_settings == null)
-            {
-                _settings = LoadOrCreateSettings();
-            }
+            List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
+
+            List<Type> typesToDisplay = allObjectTypes
+                .Where(t =>
+                    managedTypeFullNames.Contains(t.FullName)
+                    || typeof(BaseDataObject).IsAssignableFrom(t)
+                )
+                .ToList();
+
+            IEnumerable<(string key, List<Type> types)> groups = typesToDisplay
+                .GroupBy(NamespaceController.GetNamespaceKey)
+                .Select(g => (key: g.Key, types: g.ToList()));
+
+            List<(string key, List<Type> types)> orderedTypes = groups.ToList();
 
             List<string> customNamespaceOrder = GetNamespaceOrder();
-            _scriptableObjectTypes.Sort(
+            orderedTypes.Sort(
                 (lhs, rhs) => CompareUsingCustomOrder(lhs.key, rhs.key, customNamespaceOrder)
             );
-            foreach ((string key, List<Type> types) in _scriptableObjectTypes)
+
+            foreach ((string key, List<Type> types) in orderedTypes)
             {
                 List<string> customTypeNameOrder = GetTypeOrderForNamespace(key);
                 types.Sort(
                     (lhs, rhs) => CompareUsingCustomOrder(lhs.Name, rhs.Name, customTypeNameOrder)
                 );
             }
+
+            _scriptableObjectTypes.Clear();
+            _namespaceOrder.Clear();
+            for (int i = 0; i < orderedTypes.Count; ++i)
+            {
+                (string key, List<Type> types) = orderedTypes[i];
+                _scriptableObjectTypes[key] = types;
+                _namespaceOrder[key] = i;
+            }
         }
 
-        private void SelectObject(BaseDataObject dataObject)
+        private List<Type> LoadRelevantScriptableObjectTypes()
         {
-            _selectedElement?.RemoveFromClassList("selected");
+            return _relevantScriptableObjectTypes ??= TypeCache
+                .GetTypesDerivedFrom<ScriptableObject>()
+                .Where(t => !typeof(Editor).IsAssignableFrom(t))
+                .Where(t => !t.IsAbstract && !t.IsGenericType)
+                .ToList();
+        }
+
+        internal void SelectObject(ScriptableObject dataObject)
+        {
+            if (_selectedObject == dataObject)
+            {
+                return;
+            }
+
+            _selectedElement?.RemoveFromClassList(StyleConstants.SelectedClass);
+            foreach (
+                VisualElement child in _selectedElement?.IterateChildrenRecursively()
+                    ?? Enumerable.Empty<VisualElement>()
+            )
+            {
+                child.EnableInClassList(StyleConstants.ClickableClass, true);
+            }
             _selectedObject = dataObject;
+
             _selectedElement = null;
 
+            Type selectedType = _namespaceController.SelectedType;
             if (
                 _selectedObject != null
                 && _objectVisualElementMap.TryGetValue(
@@ -2157,21 +4237,31 @@
             )
             {
                 _selectedElement = newSelectedElement;
-                _selectedElement.AddToClassList("selected");
+                _selectedElement.AddToClassList(StyleConstants.SelectedClass);
+                foreach (VisualElement child in _selectedElement.IterateChildrenRecursively())
+                {
+                    child.EnableInClassList(StyleConstants.ClickableClass, false);
+                }
                 Selection.activeObject = _selectedObject;
-                _objectScrollView.ScrollTo(_selectedElement);
+                _objectScrollView
+                    .schedule.Execute(() =>
+                    {
+                        _objectScrollView?.ScrollTo(_selectedElement);
+                    })
+                    .ExecuteLater(1);
                 try
                 {
-                    if (_selectedType != null)
+                    if (selectedType != null)
                     {
-                        string namespaceKey = GetNamespaceKey(_selectedType);
-                        string typeName = _selectedType.Name;
+                        string namespaceKey = NamespaceController.GetNamespaceKey(selectedType);
+                        string typeName = selectedType.Name;
                         string assetPath = AssetDatabase.GetAssetPath(_selectedObject);
                         string objectGuid = null;
                         if (!string.IsNullOrWhiteSpace(assetPath))
                         {
                             objectGuid = AssetDatabase.AssetPathToGUID(assetPath);
                         }
+
                         SetLastSelectedNamespaceKey(namespaceKey);
                         SetLastSelectedTypeName(typeName);
                         SetLastSelectedObjectGuidForType(typeName, objectGuid);
@@ -2184,25 +4274,35 @@
             }
             else
             {
-                if (_selectedType != null)
+                if (selectedType != null)
                 {
-                    string typeName = _selectedType.Name;
-                    // Debug.Log($"Clearing last object pref for type {typeName} due to null/invalid selection.");
-                    // Call SET with null guid to clear/remove the entry for this specific type
+                    string typeName = selectedType.Name;
                     SetLastSelectedObjectGuidForType(typeName, null);
                 }
             }
 
             _currentInspectorScriptableObject?.Dispose();
             _currentInspectorScriptableObject =
-                (dataObject != null) ? new SerializedObject(dataObject) : null;
+                dataObject != null ? new SerializedObject(dataObject) : null;
+
+            if (dataObject != null)
+            {
+                _namespaceController.SelectType(this, dataObject.GetType());
+            }
+            // Backup trigger, we have some delay issues
+            rootVisualElement
+                .schedule.Execute(
+                    () => _namespaceController.SelectType(this, _selectedObject?.GetType())
+                )
+                .ExecuteLater(1);
+
             BuildInspectorView();
         }
 
         private void OnObjectPointerDown(PointerDownEvent evt)
         {
             VisualElement targetElement = evt.currentTarget as VisualElement;
-            if (targetElement?.userData is not BaseDataObject clickedObject)
+            if (targetElement?.userData is not ScriptableObject clickedObject)
             {
                 return;
             }
@@ -2259,6 +4359,7 @@
             {
                 return;
             }
+
             _lastDragUpdateTime = currentTime;
 
             if (!_isDragging)
@@ -2269,6 +4370,7 @@
                     string dragText = _draggedData switch
                     {
                         BaseDataObject dataObj => dataObj.Title,
+                        ScriptableObject dataObj => dataObj.name,
                         string nsKey => nsKey,
                         Type type => type.Name,
                         _ => "Dragging Item",
@@ -2388,21 +4490,51 @@
             _draggedElement.style.opacity = 1.0f;
             _namespaceListContainer.Insert(targetIndex, _draggedElement);
 
-            int oldDataIndex = _scriptableObjectTypes.FindIndex(kvp =>
-                string.Equals(kvp.key, draggedKey, StringComparison.Ordinal)
-            );
-            if (0 <= oldDataIndex)
+            int oldDataIndex = _namespaceOrder.GetValueOrDefault(draggedKey, -1);
+            if (0 > oldDataIndex)
             {
-                (string key, List<Type> types) draggedItem = _scriptableObjectTypes[oldDataIndex];
-                _scriptableObjectTypes.RemoveAt(oldDataIndex);
-                int dataInsertIndex = targetIndex;
-                dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _scriptableObjectTypes.Count);
-                _scriptableObjectTypes.Insert(dataInsertIndex, draggedItem);
-                UpdateAndSaveNamespaceOrder();
+                return;
             }
+
+            if (oldDataIndex < targetIndex)
+            {
+                foreach (KeyValuePair<string, int> entry in _namespaceOrder.ToArray())
+                {
+                    if (oldDataIndex < entry.Value && entry.Value <= targetIndex)
+                    {
+                        _namespaceOrder[entry.Key] = entry.Value - 1;
+                    }
+                }
+            }
+            else if (targetIndex < oldDataIndex)
+            {
+                foreach (KeyValuePair<string, int> entry in _namespaceOrder.ToArray())
+                {
+                    if (targetIndex <= entry.Value && entry.Value < oldDataIndex)
+                    {
+                        _namespaceOrder[entry.Key] = entry.Value + 1;
+                    }
+                }
+            }
+            else
+            {
+                return;
+            }
+
+            _namespaceOrder[draggedKey] = Mathf.Clamp(targetIndex, 0, _namespaceOrder.Count - 1);
+            UpdateAndSaveNamespaceOrder();
         }
 
-        private void OnNamespacePointerDown(PointerDownEvent evt)
+        private void UpdateAndSaveNamespaceOrder()
+        {
+            List<string> newNamespaceOrder = _namespaceOrder
+                .OrderBy(kvp => kvp.Value)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            SetNamespaceOrder(newNamespaceOrder);
+        }
+
+        internal void OnNamespacePointerDown(PointerDownEvent evt)
         {
             if (
                 evt.currentTarget
@@ -2426,19 +4558,9 @@
             }
         }
 
-        private void UpdateAndSaveNamespaceOrder()
+        internal void OnTypePointerDown(VisualElement namespaceHeader, PointerDownEvent evt)
         {
-            if (_settings == null)
-            {
-                return;
-            }
-
-            List<string> newNamespaceOrder = _scriptableObjectTypes.Select(kvp => kvp.key).ToList();
-            SetNamespaceOrder(newNamespaceOrder);
-        }
-
-        private void OnTypePointerDown(PointerDownEvent evt)
-        {
+            // TODO IMPLEMENT NEW HANDLER
             if (evt.currentTarget is not VisualElement { userData: Type type } targetElement)
             {
                 return;
@@ -2446,6 +4568,7 @@
 
             if (evt.button == 0)
             {
+                _lastActiveFocusArea = FocusArea.TypeList;
                 _draggedElement = targetElement;
                 _draggedData = type;
                 _activeDragType = DragType.Type;
@@ -2492,20 +4615,17 @@
             _draggedElement.style.opacity = 1.0f;
             typesContainer.Insert(targetIndex, _draggedElement);
 
-            int namespaceIndex = _scriptableObjectTypes.FindIndex(kvp =>
-                string.Equals(kvp.key, namespaceKey, StringComparison.Ordinal)
-            );
+            int namespaceIndex = _namespaceOrder.GetValueOrDefault(namespaceKey, -1);
             if (0 <= namespaceIndex)
             {
-                List<Type> typesList = _scriptableObjectTypes[namespaceIndex].types;
-                int oldDataIndex = typesList.IndexOf(draggedType);
+                List<Type> typesList = _scriptableObjectTypes.GetValueOrDefault(namespaceKey, null);
+                int? oldDataIndex = typesList?.IndexOf(draggedType);
                 if (0 <= oldDataIndex)
                 {
-                    typesList.RemoveAt(oldDataIndex);
+                    typesList.RemoveAt(oldDataIndex.Value);
                     int dataInsertIndex = targetIndex;
                     dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, typesList.Count);
                     typesList.Insert(dataInsertIndex, draggedType);
-
                     UpdateAndSaveTypeOrder(namespaceKey, typesList);
                 }
             }
@@ -2513,11 +4633,6 @@
 
         private void UpdateAndSaveTypeOrder(string namespaceKey, List<Type> orderedTypes)
         {
-            if (_settings == null)
-            {
-                return;
-            }
-
             List<string> newTypeNameOrder = orderedTypes.Select(t => t.Name).ToList();
             SetTypeOrderForNamespace(namespaceKey, newTypeNameOrder);
         }
@@ -2525,15 +4640,10 @@
         private void PerformObjectDrop()
         {
             int targetIndex = _inPlaceGhost?.userData is int index ? index : -1;
-
-            if (_inPlaceGhost != null)
-            {
-                _inPlaceGhost.RemoveFromHierarchy();
-            }
-
+            _inPlaceGhost?.RemoveFromHierarchy();
             if (
                 _draggedElement == null
-                || _draggedData is not BaseDataObject draggedObject
+                || _draggedData is not ScriptableObject draggedObject
                 || _objectListContainer == null
             )
             {
@@ -2561,13 +4671,19 @@
             _objectListContainer.Insert(targetIndex, _draggedElement);
 
             int oldDataIndex = _selectedObjects.IndexOf(draggedObject);
-            if (0 <= oldDataIndex)
+            if (0 > oldDataIndex)
             {
-                _selectedObjects.RemoveAt(oldDataIndex);
-                int dataInsertIndex = targetIndex;
-                dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _selectedObjects.Count);
-                _selectedObjects.Insert(dataInsertIndex, draggedObject);
-                UpdateAndSaveObjectCustomOrder();
+                return;
+            }
+
+            _selectedObjects.RemoveAt(oldDataIndex);
+            int dataInsertIndex = targetIndex;
+            dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _selectedObjects.Count);
+            _selectedObjects.Insert(dataInsertIndex, draggedObject);
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType != null)
+            {
+                UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
             }
         }
 
@@ -2631,6 +4747,7 @@
                     {
                         _inPlaceGhost.AddToClassList(className);
                     }
+
                     _inPlaceGhost.AddToClassList("in-place-ghost");
 
                     Label originalLabel =
@@ -2645,6 +4762,7 @@
                         {
                             ghostLabel.AddToClassList(className);
                         }
+
                         ghostLabel.pickingMode = PickingMode.Ignore;
                         _inPlaceGhost.Add(ghostLabel);
                     }
@@ -2744,21 +4862,14 @@
             int targetIndex = -1;
             Vector2 localPointerPos = container.WorldToLocal(pointerPosition);
 
-            int index = 0;
             for (int i = 0; i < childCount; ++i)
             {
                 VisualElement child = container.ElementAt(i);
-
-                float childMidY = child.layout.yMin + child.resolvedStyle.height / 2f;
-                if (localPointerPos.y < childMidY)
+                float yMin = child.layout.yMin + child.layout.height / 2;
+                if (localPointerPos.y < yMin)
                 {
-                    targetIndex = index;
+                    targetIndex = i;
                     break;
-                }
-
-                if (child != _draggedElement)
-                {
-                    index++;
                 }
             }
 
@@ -2834,32 +4945,6 @@
             }
         }
 
-        private void UpdateAndSaveObjectCustomOrder()
-        {
-            List<Object> dirtyObjects = new();
-            for (int i = 0; i < _selectedObjects.Count; i++)
-            {
-                BaseDataObject obj = _selectedObjects[i];
-                if (obj == null)
-                {
-                    continue;
-                }
-
-                int newOrder = i + 1;
-                if (obj._customOrder != newOrder)
-                {
-                    obj._customOrder = newOrder;
-                    EditorUtility.SetDirty(obj);
-                    dirtyObjects.Add(obj);
-                }
-            }
-
-            if (0 < dirtyObjects.Count)
-            {
-                AssetDatabase.SaveAssets();
-            }
-        }
-
         private void CancelDrag()
         {
             if (_inPlaceGhost != null)
@@ -2867,6 +4952,7 @@
                 _inPlaceGhost.RemoveFromHierarchy();
                 _inPlaceGhost = null;
             }
+
             _lastGhostInsertIndex = -1;
             _lastGhostParent = null;
 
@@ -2887,14 +4973,7 @@
             _activeDragType = DragType.None;
         }
 
-        private void MarkSettingsDirty()
-        {
-            if (_settings != null)
-            {
-                EditorUtility.SetDirty(_settings);
-            }
-        }
-
+        [Obsolete("Should not be used internally except by UserState")]
         private void LoadUserStateFromFile()
         {
             if (File.Exists(_userStateFilePath))
@@ -2902,19 +4981,14 @@
                 try
                 {
                     string json = File.ReadAllText(_userStateFilePath);
-                    _userState = JsonUtility.FromJson<DataVisualizerUserState>(json); // Or your preferred JSON lib
+                    _userState = JsonUtility.FromJson<DataVisualizerUserState>(json);
                     if (_userState == null)
-                    { // Handle case where file is empty or invalid JSON
+                    {
                         Debug.LogWarning(
                             $"User state file '{_userStateFilePath}' was empty or invalid. Creating new state."
                         );
                         _userState = new DataVisualizerUserState();
                     }
-                    else
-                    {
-                        Debug.Log("Loaded user state from file.");
-                    }
-                    // Optional: Version check/migration if _userState.Version is old
                 }
                 catch (Exception e)
                 {
@@ -2926,26 +5000,19 @@
             }
             else
             {
-                Debug.Log(
-                    $"User state file not found at '{_userStateFilePath}'. Creating new state."
-                );
                 _userState = new DataVisualizerUserState();
-                // No need to save immediately, save happens on first change.
             }
-            _userStateDirty = false; // Reset dirty flag after loading
+
+            _userStateDirty = false;
         }
 
         private void SaveUserStateToFile()
         {
-            if (_userState == null)
-                return; // Should not happen if loaded correctly
-
             try
             {
-                string json = JsonUtility.ToJson(_userState, true); // Use pretty print
+                string json = JsonUtility.ToJson(UserState, true);
                 File.WriteAllText(_userStateFilePath, json);
-                _userStateDirty = false; // Reset dirty flag after saving
-                // Debug.Log($"User state saved to '{_userStateFilePath}'");
+                _userStateDirty = false;
             }
             catch (Exception e)
             {
@@ -2953,130 +5020,71 @@
             }
         }
 
-        // Helper to mark user state dirty and trigger save (if in file mode)
         private void MarkUserStateDirty()
         {
-            if (!_settings.persistStateInSettingsAsset)
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
             {
-                _userStateDirty = true;
-                // Save immediately? Or rely on OnDisable/periodically?
-                // Let's save immediately for simplicity now.
-                SaveUserStateToFile();
+                return;
             }
+
+            _userStateDirty = true;
+            SaveUserStateToFile();
         }
 
-        // Update Migration Method
-        private void MigratePersistenceState(bool migrateToSettingsAsset)
+        private void UpdateAndSaveObjectOrderList(Type type, List<ScriptableObject> orderedObjects)
         {
-            Debug.Log(
-                $"Migrating persistence state. Target is now: {(migrateToSettingsAsset ? "Settings Asset" : "User File")}"
-            );
-            if (_settings == null)
-                return;
-            if (!migrateToSettingsAsset && _userState == null)
+            if (type == null || orderedObjects == null)
             {
-                LoadUserStateFromFile(); // Ensure user state loaded if migrating TO file
-                if (_userState == null)
+                return;
+            }
+
+            List<string> orderedGuids = new();
+            foreach (ScriptableObject obj in orderedObjects)
+            {
+                if (obj == null)
                 {
-                    Debug.LogError(
-                        "Cannot migrate state to file: User state failed to load/create."
+                    continue;
+                }
+
+                string path = AssetDatabase.GetAssetPath(obj);
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    string guid = AssetDatabase.AssetPathToGUID(path);
+                    if (!string.IsNullOrWhiteSpace(guid))
+                    {
+                        orderedGuids.Add(guid);
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning(
+                        $"Cannot get path/GUID for object '{obj.name}' during order save."
                     );
-                    return;
                 }
             }
 
+            SetObjectOrderForType(type.FullName, orderedGuids);
+        }
+
+        private void MigratePersistenceState(bool migrateToSettingsAsset)
+        {
             try
             {
-                if (migrateToSettingsAsset) // Migrating FROM User File TO Settings Object
+                DataVisualizerUserState userState = UserState;
+                DataVisualizerSettings settings = Settings;
+                if (migrateToSettingsAsset)
                 {
-                    Debug.Log("Migrating FROM User File TO Settings Object...");
-                    if (_userState == null)
-                    {
-                        Debug.LogWarning("User state is null during migration to settings asset.");
-                        return;
-                    }
-
-                    // Simple Key/Value Pairs
-                    _settings.lastSelectedNamespaceKey = _userState.lastSelectedNamespaceKey;
-                    _settings.lastSelectedTypeName = _userState.lastSelectedTypeName;
-                    // --- Migrate Last Object Selections List ---
-                    _settings.lastObjectSelections =
-                        _userState
-                            .LastObjectSelections?.Select(us => new LastObjectSelectionEntry
-                            {
-                                typeName = us.typeName,
-                                objectGuid = us.objectGuid,
-                            })
-                            .ToList() ?? new List<LastObjectSelectionEntry>();
-                    // ---
-
-                    // Lists (create copies)
-                    _settings.namespaceOrder = new List<string>(
-                        _userState.namespaceOrder ?? new List<string>()
-                    );
-                    _settings.typeOrder =
-                        _userState
-                            .typeOrders?.Select(uo => new NamespaceTypeOrder()
-                            {
-                                namespaceKey = uo.namespaceKey,
-                                typeNames = new List<string>(uo.typeNames ?? new List<string>()),
-                            })
-                            .ToList() ?? new List<NamespaceTypeOrder>();
-                    _settings.namespaceCollapseStates =
-                        _userState
-                            .NamespaceCollapseStates?.Select(ucs => new NamespaceCollapseState()
-                            {
-                                namespaceKey = ucs.namespaceKey,
-                                isCollapsed = ucs.isCollapsed,
-                            })
-                            .ToList() ?? new List<NamespaceCollapseState>();
-
-                    MarkSettingsDirty(); // Mark settings dirty as they received data
-                    Debug.Log("Migration TO Settings Object complete.");
+                    settings.HydrateFrom(userState);
+                    settings.MarkDirty();
+                    AssetDatabase.SaveAssets();
+                    Debug.Log("Migration to Settings Object complete.");
                 }
-                else // Migrating FROM Settings Object TO User File
+                else
                 {
-                    Debug.Log("Migrating FROM Settings Object TO User File...");
-                    if (_userState == null)
-                        _userState = new DataVisualizerUserState(); // Ensure instance exists
-
-                    // Simple Key/Value Pairs
-                    _userState.lastSelectedNamespaceKey = _settings.lastSelectedNamespaceKey;
-                    _userState.lastSelectedTypeName = _settings.lastSelectedTypeName;
-                    // --- Migrate Last Object Selections List ---
-                    _userState.LastObjectSelections =
-                        _settings
-                            .lastObjectSelections?.Select(so => new LastObjectSelectionEntry
-                            {
-                                typeName = so.typeName,
-                                objectGuid = so.objectGuid,
-                            })
-                            .ToList() ?? new List<LastObjectSelectionEntry>();
-                    // ---
-
-                    // Lists (create copies)
-                    _userState.namespaceOrder = new List<string>(
-                        _settings.namespaceOrder ?? new List<string>()
-                    );
-                    _userState.typeOrders =
-                        _settings
-                            .typeOrder?.Select(so => new NamespaceTypeOrder
-                            {
-                                namespaceKey = so.namespaceKey,
-                                typeNames = new List<string>(so.typeNames ?? new List<string>()),
-                            })
-                            .ToList() ?? new List<NamespaceTypeOrder>();
-                    _userState.NamespaceCollapseStates =
-                        _settings
-                            .namespaceCollapseStates?.Select(scs => new NamespaceCollapseState
-                            {
-                                namespaceKey = scs.namespaceKey,
-                                isCollapsed = scs.isCollapsed,
-                            })
-                            .ToList() ?? new List<NamespaceCollapseState>();
-
-                    MarkUserStateDirty(); // Mark user state dirty so it gets saved
-                    Debug.Log("Migration TO User File complete.");
+                    userState.HydrateFrom(settings);
+                    MarkUserStateDirty();
+                    Debug.Log("Migration to User File complete.");
                 }
             }
             catch (Exception e)
@@ -3085,259 +5093,333 @@
             }
         }
 
-        // --- Specific Persistence Accessors ---
-
         private string GetLastSelectedNamespaceKey()
         {
-            if (_settings == null)
-                return null;
-            return _settings.persistStateInSettingsAsset
-                ? _settings.lastSelectedNamespaceKey
-                : _userState?.lastSelectedNamespaceKey;
+            DataVisualizerSettings settings = Settings;
+
+            return settings.persistStateInSettingsAsset
+                ? settings.lastSelectedNamespaceKey
+                : UserState.lastSelectedNamespaceKey;
+        }
+
+        private List<string> GetObjectOrderForType(string typeFullName)
+        {
+            if (string.IsNullOrWhiteSpace(typeFullName))
+            {
+                return new List<string>();
+            }
+
+            DataVisualizerSettings settings = Settings;
+
+            if (settings.persistStateInSettingsAsset)
+            {
+                TypeObjectOrder entry = settings.objectOrders?.Find(o =>
+                    string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
+                );
+                return entry?.ObjectGuids?.ToList() ?? new List<string>();
+            }
+            else
+            {
+                TypeObjectOrder entry = UserState.objectOrders?.Find(o =>
+                    string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
+                );
+                return entry?.ObjectGuids?.ToList() ?? new List<string>();
+            }
+        }
+
+        private void SetObjectOrderForType(string typeFullName, List<string> objectGuids)
+        {
+            if (string.IsNullOrWhiteSpace(typeFullName) || objectGuids == null)
+            {
+                return;
+            }
+
+            PersistSettings(
+                settings =>
+                {
+                    List<string> entryList = settings.GetOrCreateObjectOrderList(typeFullName);
+                    if (entryList.SequenceEqual(objectGuids))
+                    {
+                        return false;
+                    }
+
+                    entryList.Clear();
+                    entryList.AddRange(objectGuids);
+                    return true;
+                },
+                userState =>
+                {
+                    List<string> entryList = userState.GetOrCreateObjectOrderList(typeFullName);
+                    if (entryList.SequenceEqual(objectGuids))
+                    {
+                        return false;
+                    }
+
+                    entryList.Clear();
+                    entryList.AddRange(objectGuids);
+                    return true;
+                }
+            );
         }
 
         private void SetLastSelectedNamespaceKey(string value)
         {
-            if (_settings == null)
-                return;
-            if (_settings.persistStateInSettingsAsset)
-            {
-                if (_settings.lastSelectedNamespaceKey != value)
+            PersistSettings(
+                settings =>
                 {
-                    _settings.lastSelectedNamespaceKey = value;
-                    MarkSettingsDirty();
-                }
-            }
-            else if (_userState != null)
-            {
-                if (_userState.lastSelectedNamespaceKey != value)
+                    if (
+                        string.Equals(
+                            settings.lastSelectedNamespaceKey,
+                            value,
+                            StringComparison.Ordinal
+                        )
+                    )
+                    {
+                        return false;
+                    }
+
+                    settings.lastSelectedNamespaceKey = value;
+                    return true;
+                },
+                userState =>
                 {
-                    _userState.lastSelectedNamespaceKey = value;
-                    MarkUserStateDirty();
+                    if (
+                        string.Equals(
+                            userState.lastSelectedNamespaceKey,
+                            value,
+                            StringComparison.Ordinal
+                        )
+                    )
+                    {
+                        return false;
+                    }
+
+                    userState.lastSelectedNamespaceKey = value;
+                    return true;
                 }
-            }
+            );
         }
 
         private string GetLastSelectedTypeName()
-        { // Type depends on the *context* of the last namespace
-            if (_settings == null)
-                return null;
-            // This state is simple enough to store directly without context mapping for now
-            return _settings.persistStateInSettingsAsset
-                ? _settings.lastSelectedTypeName
-                : _userState?.lastSelectedTypeName;
+        {
+            DataVisualizerSettings settings = Settings;
+
+            return settings.persistStateInSettingsAsset
+                ? settings.lastSelectedTypeName
+                : UserState.lastSelectedTypeName;
         }
 
         private void SetLastSelectedTypeName(string value)
         {
-            Debug.Log($"Setting Last Selected Type Name to '{value}'");
-            if (_settings == null)
-                return;
-            if (_settings.persistStateInSettingsAsset)
-            {
-                if (_settings.lastSelectedTypeName != value)
+            PersistSettings(
+                settings =>
                 {
-                    _settings.lastSelectedTypeName = value;
-                    MarkSettingsDirty();
-                }
-            }
-            else if (_userState != null)
-            {
-                if (_userState.lastSelectedTypeName != value)
+                    if (
+                        string.Equals(
+                            settings.lastSelectedTypeName,
+                            value,
+                            StringComparison.Ordinal
+                        )
+                    )
+                    {
+                        return false;
+                    }
+
+                    settings.lastSelectedTypeName = value;
+                    return true;
+                },
+                userState =>
                 {
-                    _userState.lastSelectedTypeName = value;
-                    MarkUserStateDirty();
+                    if (
+                        string.Equals(
+                            userState.lastSelectedTypeName,
+                            value,
+                            StringComparison.Ordinal
+                        )
+                    )
+                    {
+                        return false;
+                    }
+
+                    userState.lastSelectedTypeName = value;
+                    return true;
                 }
-            }
+            );
         }
 
         private string GetLastSelectedObjectGuidForType(string typeName)
         {
-            if (_settings == null || string.IsNullOrEmpty(typeName))
+            if (string.IsNullOrWhiteSpace(typeName))
+            {
                 return null;
+            }
 
-            if (_settings.persistStateInSettingsAsset)
-            {
-                // Use helper on settings object or find manually
-                return _settings.GetLastObjectForType(typeName);
-                // Manual find: return _settings.InternalLastObjectSelections?.Find(e => e.TypeName == typeName)?.ObjectGuid;
-            }
-            else
-            {
-                if (_userState == null)
-                    LoadUserStateFromFile(); // Load if needed
-                // Use helper on user state object or find manually
-                return _userState?.GetLastObjectForType(typeName);
-                // Manual find: return _userState?.LastObjectSelections?.Find(e => e.TypeName == typeName)?.ObjectGuid;
-            }
+            DataVisualizerSettings settings = Settings;
+            return settings.persistStateInSettingsAsset
+                ? settings.GetLastObjectForType(typeName)
+                : UserState.GetLastObjectForType(typeName);
         }
 
-        private void SetLastSelectedObjectGuidForType(string typeName, string objectGuid)
+        internal void SetLastSelectedObjectGuidForType(string typeName, string objectGuid)
         {
-            Debug.Log($"Setting Last Selected Object Guid for Type '{typeName}' to '{objectGuid}'");
-            if (_settings == null || string.IsNullOrEmpty(typeName))
+            if (string.IsNullOrWhiteSpace(typeName))
+            {
                 return;
+            }
 
-            if (_settings.persistStateInSettingsAsset)
-            {
-                // Use helper on settings object
-                _settings.SetLastObjectForType(typeName, objectGuid);
-                MarkSettingsDirty(); // Mark dirty as list might have changed
-            }
-            else if (_userState != null)
-            {
-                // Use helper on user state object
-                _userState.SetLastObjectForType(typeName, objectGuid);
-                MarkUserStateDirty(); // Mark user state dirty as list might have changed
-            }
+            PersistSettings(
+                settings =>
+                {
+                    settings.SetLastObjectForType(typeName, objectGuid);
+                    return true;
+                },
+                userState =>
+                {
+                    userState.SetLastObjectForType(typeName, objectGuid);
+                    return true;
+                }
+            );
         }
 
         private List<string> GetNamespaceOrder()
         {
-            if (_settings == null)
-                return new List<string>();
-            // Ensure list exists in chosen backend
-            if (_settings.persistStateInSettingsAsset)
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
             {
-                if (_settings.namespaceOrder == null)
-                    _settings.namespaceOrder = new List<string>();
-                return _settings.namespaceOrder;
+                return settings.namespaceOrder?.ToList() ?? new List<string>();
             }
-            else
-            {
-                if (_userState == null)
-                    LoadUserStateFromFile(); // Load if missing
-                if (_userState.namespaceOrder == null)
-                    _userState.namespaceOrder = new List<string>();
-                return _userState.namespaceOrder;
-            }
+
+            return UserState.namespaceOrder?.ToList() ?? new List<string>();
         }
 
         private void SetNamespaceOrder(List<string> value)
         {
-            if (_settings == null || value == null)
+            if (value == null)
+            {
                 return;
-            if (_settings.persistStateInSettingsAsset)
-            {
-                // Check if different before assigning and marking dirty
-                if (
-                    _settings.namespaceOrder == null
-                    || !_settings.namespaceOrder.SequenceEqual(value)
-                )
-                {
-                    _settings.namespaceOrder = new List<string>(value); // Assign copy
-                    MarkSettingsDirty();
-                }
             }
-            else if (_userState != null)
-            {
-                if (
-                    _userState.namespaceOrder == null
-                    || !_userState.namespaceOrder.SequenceEqual(value)
-                )
+
+            PersistSettings(
+                settings =>
                 {
-                    _userState.namespaceOrder = new List<string>(value); // Assign copy
-                    MarkUserStateDirty();
+                    if (
+                        settings.namespaceOrder != null
+                        && settings.namespaceOrder.SequenceEqual(value)
+                    )
+                    {
+                        return false;
+                    }
+
+                    settings.namespaceOrder = new List<string>(value);
+                    return true;
+                },
+                userState =>
+                {
+                    if (
+                        userState.namespaceOrder != null
+                        && userState.namespaceOrder.SequenceEqual(value)
+                    )
+                    {
+                        return false;
+                    }
+
+                    userState.namespaceOrder = new List<string>(value);
+                    return true;
                 }
-            }
+            );
         }
 
         private List<string> GetTypeOrderForNamespace(string namespaceKey)
         {
-            if (_settings == null || string.IsNullOrEmpty(namespaceKey))
-                return new List<string>();
-            if (_settings.persistStateInSettingsAsset)
+            if (string.IsNullOrWhiteSpace(namespaceKey))
             {
-                var entry = _settings.typeOrder?.Find(o =>
+                return new List<string>();
+            }
+
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                NamespaceTypeOrder entry = settings.typeOrders?.Find(o =>
                     string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
-                return entry?.typeNames ?? new List<string>(); // Return empty if not found
+                return entry?.typeNames?.ToList() ?? new List<string>();
             }
             else
             {
-                if (_userState == null)
-                    LoadUserStateFromFile();
-                var entry = _userState.typeOrders?.Find(o =>
+                NamespaceTypeOrder entry = UserState.typeOrders?.Find(o =>
                     string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
-                return entry?.typeNames ?? new List<string>();
+                return entry?.typeNames?.ToList() ?? new List<string>();
             }
         }
 
         private void SetTypeOrderForNamespace(string namespaceKey, List<string> typeNames)
         {
-            if (_settings == null || string.IsNullOrEmpty(namespaceKey) || typeNames == null)
+            if (string.IsNullOrWhiteSpace(namespaceKey) || typeNames == null)
+            {
                 return;
-            if (_settings.persistStateInSettingsAsset)
-            {
-                // Use helper to get/create entry, check if different
-                var entryList = _settings.GetOrCreateTypeOrderList(namespaceKey);
-                if (!entryList.SequenceEqual(typeNames))
-                {
-                    entryList.Clear();
-                    entryList.AddRange(typeNames);
-                    MarkSettingsDirty();
-                }
             }
-            else if (_userState != null)
-            {
-                var entryList = _userState.GetOrCreateTypeOrderList(namespaceKey);
-                if (!entryList.SequenceEqual(typeNames))
-                {
-                    entryList.Clear();
-                    entryList.AddRange(typeNames);
-                    MarkUserStateDirty();
-                }
-            }
-        }
 
-        private bool GetIsNamespaceCollapsed(string namespaceKey)
-        {
-            if (_settings == null || string.IsNullOrEmpty(namespaceKey))
-                return false; // Default to expanded
-            if (_settings.persistStateInSettingsAsset)
-            {
-                var entry = _settings.namespaceCollapseStates?.Find(o =>
-                    string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
-                );
-                return entry?.isCollapsed ?? false; // Default to false (expanded)
-            }
-            else
-            {
-                if (_userState == null)
-                    LoadUserStateFromFile();
-                var entry = _userState.NamespaceCollapseStates?.Find(o =>
-                    o.namespaceKey == namespaceKey
-                );
-                return entry?.isCollapsed ?? false;
-            }
+            PersistSettings(
+                settings =>
+                {
+                    List<string> entryList = settings.GetOrCreateTypeOrderList(namespaceKey);
+                    if (entryList.SequenceEqual(typeNames))
+                    {
+                        return false;
+                    }
+
+                    entryList.Clear();
+                    entryList.AddRange(typeNames);
+                    return true;
+                },
+                userState =>
+                {
+                    List<string> entryList = userState.GetOrCreateTypeOrderList(namespaceKey);
+                    if (entryList.SequenceEqual(typeNames))
+                    {
+                        return false;
+                    }
+
+                    entryList.Clear();
+                    entryList.AddRange(typeNames);
+                    return true;
+                }
+            );
         }
 
         private void SetIsNamespaceCollapsed(string namespaceKey, bool isCollapsed)
         {
-            if (_settings == null || string.IsNullOrEmpty(namespaceKey))
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
                 return;
-            if (_settings.persistStateInSettingsAsset)
-            {
-                var entry = _settings.GetOrCreateCollapseState(namespaceKey);
-                if (entry.isCollapsed != isCollapsed)
-                {
-                    entry.isCollapsed = isCollapsed;
-                    MarkSettingsDirty();
-                }
             }
-            else if (_userState != null)
-            {
-                var entry = _userState.GetOrCreateCollapseState(namespaceKey);
-                if (entry.isCollapsed != isCollapsed)
-                {
-                    entry.isCollapsed = isCollapsed;
-                    MarkUserStateDirty();
-                }
-            }
-        }
 
-        // Remove generic helpers Set/Get/DeletePersistentString/Bool
+            PersistSettings(
+                settings =>
+                {
+                    NamespaceCollapseState entry = settings.GetOrCreateCollapseState(namespaceKey);
+                    if (entry.isCollapsed == isCollapsed)
+                    {
+                        return false;
+                    }
+
+                    entry.isCollapsed = isCollapsed;
+                    return true;
+                },
+                userState =>
+                {
+                    NamespaceCollapseState entry = userState.GetOrCreateCollapseState(namespaceKey);
+                    if (entry.isCollapsed == isCollapsed)
+                    {
+                        return false;
+                    }
+
+                    entry.isCollapsed = isCollapsed;
+                    return true;
+                }
+            );
+        }
 
         private static int CompareUsingCustomOrder(
             string keyA,
@@ -3357,18 +5439,6 @@
             }
 
             return 0 <= indexB ? 1 : string.Compare(keyA, keyB, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string GetNamespaceKey(Type type)
-        {
-            if (
-                type.IsAttributeDefined(out CustomDataVisualization attribute)
-                && !string.IsNullOrWhiteSpace(attribute.Namespace)
-            )
-            {
-                return attribute.Namespace;
-            }
-            return type.Namespace?.Split('.').LastOrDefault() ?? "No Namespace";
         }
     }
 #endif

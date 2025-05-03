@@ -1,35 +1,159 @@
-﻿.object-item {
+﻿:root {
+    font-size: 16px;
+}
 
+* {
+    --unity-selection-color: rgba(144, 238, 144, 0.3);
+    transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+.transparent-cursor {
+    --unity-cursor-color: transparent;
+}
+
+.styled-cursor {
+    --unity-cursor-color: white;
+}
+
+.object-item {
     padding: 4px 8px;
     margin: 2px 0;
-    border-width: 1px;
     border-color: rgba(128, 128, 128, 0.5);
     border-radius: 3px;
     background-color: rgba(80, 80, 80, 0.2);
+    border-width: 2px;
 }
 
 .object-item__label {
-    /* Core properties */
-    flex-grow: 1; /* Allow label to take available space */
-    flex-shrink: 1; /* Allow label to shrink if needed */
-    min-width: 0; /* Crucial for flexbox to allow shrinking below content size */
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 5px;
+    height: 20px;
+}
 
-    /* Text Overflow Handling */
-    white-space: nowrap; /* Prevent text from wrapping to the next line */
-    overflow: hidden; /* Hide text that exceeds the element bounds */
-    text-overflow: ellipsis; /* Display '...' for hidden text */
-    margin-right: 5px; /* Add some space between label and action buttons */
+.bold {
+    -unity-font-style: bold;
+}
+
+.icon-button {
+
+}
+
+.popover {
+    margin-top: 2px;
+    position: absolute;
+    min-width: 200px;
+    min-height: 50px;
+    background-color: rgba(0, 0, 0, 0.75);
+    border-radius: 10px;
+    border-width: 0;
+    display: none;
+    flex-direction: column;
+    padding: 10px;
+    color: white;
+}
+
+.rename-object-label {
+    margin-bottom: 5px;
+}
+
+.rename-text-field > #unity-text-input {
+    margin-bottom: 5px;
+    border-radius: 5px;
+    padding: 2px 6px;
+    background-color: rgba(0, 0, 0, 1);
+    --unity-selection-color: rgba(51, 153, 230, 0.4);
+    border-color: rgb(51, 153, 230);
+    color: rgba(255, 255, 255, 0.7);
+    border-width: 2px;
+}
+
+.popover-button {
+    color: white;
+    padding: 2px 6px;
+    font-size: 16px;
+    border-width: 2px;
+    border-radius: 10px;
+    margin-bottom: 2px;
+}
+
+.popover-delete-button {
+    border-color: rgb(230, 102, 102);
+}
+
+.popover-delete-button:hover {
+    background-color: rgb(230, 102, 102);
+    border-color: rgb(230, 102, 102);
+    color: white;
+}
+
+.popover-rename-button {
+    border-color: rgb(51, 153, 230);
+}
+
+.popover-rename-button:hover {
+    background-color: rgb(51, 153, 230);
+    border-color: rgb(51, 153, 230);
+    color: white;
+}
+
+.popover-cancel-button {
+    border-color: darkkhaki;
+    margin-right: 10px;
+}
+
+.popover-confirm-button {
+    border-color: green;
+    margin-right: 10px;
+}
+
+.popover-confirm-button:hover {
+    border-color: green;
+    background-color: green;
+    color: white;
+}
+
+.popover-cancel-button:hover {
+    border-color: darkkhaki;
+    background-color: darkkhaki;
+    color: crimson;
+}
+
+.search-popover {
+    position: absolute;
+    flex-grow: 1;
+    flex-shrink: 1;
+    width: auto;
+    max-height: 500px;
+    background-color: rgba(0, 0, 0, 0.9);
+    border-width: 2px;
+    border-radius: 8px;
+    margin-top: 2px;
+    border-color: rgba(0, 0, 0, 0.9);
+    display: none;
+}
+
+.types-container {
+    margin-left: 10px;
+}
+
+.clickable:hover {
+    cursor: link;
 }
 
 .object-item:hover {
-    background-color: rgba(100, 100, 100, 0.4);
-    border-color: rgba(180, 180, 180, 0.7);
+    background-color: rgba(200, 200, 200, 0.3);
+    border-color: green;
 }
 
 .object-item.selected {
-    background-color: #4A6A8A;
-    border-color: #6E98C2;
-    border-width: 2px;
+    color: lightgreen;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-color: green;
 }
 
 .drag-ghost {
@@ -49,30 +173,84 @@
     width: 100%;
 }
 
+.namespace-item {
+    padding: 4px 8px;
+    margin: 6px;
+    margin-bottom: 0;
+    color: grey;
+    border-color: rgba(128, 128, 128, 0.5);
+    background-color: rgba(60, 60, 60, 1);
+    border-radius: 10px;
+    border-width: 2px;
+}
+
+.namespace-item:hover {
+    border-color: lightgreen;
+}
+
+.namespace-item.selected {
+    color: white;
+    border-color: green;
+}
+
+.namespace-item__label {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 5px;
+    height: 20px;
+}
+
+.namespace-header-right {
+    flex-shrink: 0;
+}
+
+.namespace-delete-button {
+    margin-right: 9px;
+}
+
 .type-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
     margin-left: 10px;
-    padding: 2px 6px;
-    margin-top: 1px;
-    margin-bottom: 1px;
-    border-width: 1px;
-    border-color: rgba(100, 100, 100, 0.3);
-    border-radius: 2px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    color: white;
+    margin-top: 0;
+    margin-bottom: 6px;
+    border-width: 2px;
+    border-color: black;
     background-color: rgba(90, 90, 90, 0.1);
 }
 
 .type-item:hover {
-    background-color: rgba(110, 110, 110, 0.3);
-    border-color: rgba(150, 150, 150, 0.5);
-}
-
-.type-item__label {
-    font-size: 11px;
+    background-color: rgba(200, 200, 200, 0);
+    border-color: lightgreen;
+    cursor: link;
 }
 
 .type-item.selected {
-    background-color: #4A6A8A;
-    border-color: #6E98C2;
-    -unity-font-style: bold;
+
+}
+
+.type-item__label {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 5px;
+    height: 20px;
+}
+
+.type-item.selected {
+    background-color: rgba(0, 0, 0, 0.6);
+    border-color: green;
 }
 
 .type-item--disabled {
@@ -94,59 +272,169 @@
     background-color: rgba(100, 150, 255, 0.1);
 }
 
+.namespace-group-header {
+    flex-direction: row;
+    justify-content: space-between;
+    -unity-font-style: bold;
+    align-items: center;
+    padding: 3px;
+    flex-shrink: 0;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(128, 128, 128, 0.5);
+}
+
+.namespace-group-header > .unity-label {
+    margin-left: 6px;
+}
+
+.namespace-group-header > .unity-button {
+    margin-right: 6px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
 .namespace-header {
     flex-direction: row;
     align-items: center;
-    cursor: link;
+    padding-bottom: 4px;
+    padding-left: 2px;
+    padding-right: 2px;
 }
 
 .namespace-indicator {
     width: 16px;
-    margin-right: 3px;
     font-size: 10px;
+    margin-right: 4px;
     -unity-font-style: bold;
     flex-shrink: 0;
 }
 
-.object-item { /* The main row VE */
+.object-item {
+    color: white;
     min-width: 0;
-    overflow: hidden; /* Hide overflow at the row level too */
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    margin: 6px 6px 0;
+    overflow: hidden;
 }
 
-.object-item-content { /* The VE wrapping the label */
+.object-item-content {
     flex-grow: 1;
     flex-shrink: 1;
-    min-width: 0; /* Allow this container to shrink */
-    /* Add overflow hidden here too as a fallback */
+    min-width: 0;
     overflow: hidden;
-    /* Align label vertically if needed */
-    /* align-items: center; */
 }
 
 .object-item-actions {
     flex-shrink: 0;
 }
 
+.object-header {
+    flex-direction: row;
+    justify-content: space-between;
+    -unity-font-style: bold;
+    align-items: center;
+    padding: 3px;
+    flex-shrink: 0;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(128, 128, 128, 0.5);
+}
+
+.object-header > .unity-label {
+    margin-left: 6px;
+}
+
+.object-header > .unity-button {
+    margin-right: 6px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.object-scrollview {
+    flex-grow: 1;
+}
+
+.object-scrollview > .unity-scroll-view__content-and-vertical-scroll-container {
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
+.namespace-scrollview {
+    flex-grow: 1;
+}
+
+.namespace-scrollview > .unity-scroll-view__content-and-vertical-scroll-container {
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
 .action-button {
+    flex-shrink: 0;
+    font-size: 14px;
     padding: 0;
     min-width: 0;
-    font-size: 12px;
     background-color: transparent;
-    border-width: 0;
-}
-
-.action-button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.delete-button {
-    color: rgb(217, 83, 79) !important; 
+    border-radius: 50%;
+    border-width: 2px;
     -unity-font-style: bold;
 }
 
-.delete-button:hover {
-    color: rgb(200, 60, 56) !important; 
-    background-color: rgba(217, 83, 79, 0.1); 
+.action-button:hover {
+    cursor: link;
+}
+
+.selected.action-button {
+    -unity-font-style: bold;
+}
+
+.action-button:hover {
+    background-color: rgba(255, 255, 255, 0.9);
+}
+
+.selected.action-button:hover {
+    background-color: rgba(255, 255, 255, 0.35);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.create-button {
+    -unity-font-style: bold;
+    color: white;
+    background-color: darkgreen;
+    border-color: white;
+    border-width: 2px;
+    font-size: 26px;
+    padding-bottom: 4px;
+    border-radius: 50%;
+    width: 27px;
+    height: 27px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-bottom: 2px;
+}
+
+.create-button:hover {
+    background-color: white;
+    color: darkgreen;
+    border-color: darkgreen;
+}
+
+.delete-button {
+    border-color: rgb(230, 102, 102);
+    color: rgb(230, 102, 102);
+    padding: 1px 6px;
+}
+
+.clone-button {
+    border-color: rgb(102, 179, 102);
+    color: rgb(102, 179, 102);
+    padding-left: 2px;
+    padding-right: 2px;
+    padding-bottom: 2px;
+}
+
+.rename-button {
+    padding: 4px;
+    padding-bottom: 3px;
+    border-color: rgb(51, 153, 230);
+    color: rgb(51, 153, 230);
 }
 
 .namespace-group-item--empty {
@@ -158,5 +446,256 @@
     white-space: normal;
     margin-top: 20px;
     padding: 5px;
-    font-size: 11px;
+}
+
+.type-selection-list-item {
+    margin-left: 15px;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding: 2px 5px;
+    background-color: transparent;
+    border-radius: 5px;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.type-selection-list-item:hover {
+    color: black;
+    background-color: lightgreen;
+}
+
+
+.type-selection-list-item--disabled {
+    opacity: 0.5;
+}
+
+.type-selection-list-namespace {
+    margin-top: 8px;
+    margin-left: 5px;
+    margin-bottom: 2px;
+    padding: 2px 6px;
+    -unity-font-style: bold;
+    border-width: 2px;
+    border-radius: 5px;
+    border-color: transparent;
+}
+
+.type-selection-list-namespace--not-empty {
+    border-color: white;
+    color: white;
+}
+
+.type-selection-list-namespace--not-empty:hover {
+    border-color: lightgreen;
+}
+
+.type-selection-list-namespace--empty {
+    color: grey;
+}
+
+.unity-text-field__placeholder > .unity-base-text-field__input {
+    color: #969696
+}
+
+.popover-namespace-header {
+    flex-direction: row;
+    align-items: center;
+    padding: 0 2px;
+    -unity-font-style: bold;
+    background-color: transparent;
+    border-radius: 5px;
+    border-width: 2px;
+    border-color: transparent;
+}
+
+.popover-namespace-indicator {
+    padding-top: 6px;
+    font-size: 10px;
+}
+
+.search-result-item {
+    border-radius: 6px;
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+}
+
+.search-result-item:hover {
+    background-color: lightgreen;
+    color: black;
+}
+
+.search-result-type-label {
+    -unity-text-align: middle-right;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.search-result-context-label {
+    font-size: 14px;
+    color: grey;
+    margin-left: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.popover-button-container {
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+.search-result-name-label {
+    flex-grow: 1;
+    -unity-text-align: middle-left;
+    margin-right: 10px;
+}
+
+.type-search-field {
+    margin: 4px;
+    margin-bottom: 2px;
+    border-radius: 8px;
+}
+
+.type-search-field > #unity-text-input {
+    border-color: transparent;
+}
+
+.type-search-field > #unity-text-input > .unity-text-element {
+    padding: 0 4px;
+}
+
+
+.popover-item--highlighted {
+
+    background-color: lightgreen;
+    color: black;
+}
+
+.popover-item--highlighted > .type-selection-list-namespace--not-empty {
+    color: black;
+    border-color: transparent;
+}
+
+.readonly-display-field > .unity-base-text-field__input {
+    color: grey;
+    background-color: transparent;
+    border-width: 0;
+}
+
+.readonly-display-field .unity-label {
+    opacity: 1 !important;
+}
+
+.settings-button {
+    font-size: 26px;
+    padding: 2px 6px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    padding-bottom: 18px;
+    color: white;
+    background-color: chocolate;
+    border-color: white;
+    border-width: 2px;
+}
+
+.settings-button:hover {
+    color: chocolate;
+    background-color: white;
+    border-color: chocolate;
+}
+
+.settings-data-folder-path-display {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.settings-data-folder-path-display.unity-label {
+    color: rgba(255, 255, 255, 0.8);
+    padding: 0 6px;
+    margin: 0 4px;
+    border-radius: 5px;
+    -unity-font-style: italic;
+    flex-shrink: 1;
+    flex-grow: 1;
+    background-color: transparent;
+    -unity-text-align: middle-center;
+    border-width: 2px;
+    border-color: grey;
+}
+
+.settings-data-folder-label {
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+
+.type-add-popover {
+    position: absolute;
+    flex-grow: 1;
+    flex-shrink: 1;
+    width: auto;
+    max-height: 500px;
+    background-color: rgba(0, 0, 0, 0.9);
+    border-width: 2px;
+    border-radius: 8px;
+    margin-top: 2px;
+    border-color: rgba(0, 0, 0, 0.9);
+    display: none;
+}
+
+.type-add-popover-scrollview {
+    width: auto;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.type-add-list-container {
+
+}
+
+.settings-data-folder-button {
+    font-size: 16px;
+    border-radius: 6px;
+    margin-right: 0;
+    flex-grow: 0;
+    flex-shrink: 0;
+    background-color: transparent;
+    color: chocolate;
+    border-color: chocolate;
+    border-width: 2px;
+}
+
+.settings-data-folder-button:hover {
+    color: white;
+    background-color: chocolate;
+}
+
+.settings-prefs-toggle > .unity-text-element {
+    color: white;
+    font-size: 16px;
+}
+
+.settings-prefs-toggle > .unity-toggle__input {
+}
+
+.action-button-toggle {
+    align-self: flex-end;
+}
+
+.action-button-toggle__button {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: white;
+    border-color: chocolate;
+    color: white;
+    border-width: 4px;
+    background-image: none;
+}
+
+.action-button-toggle__button:hover {
+    color: chocolate;
+    background-color: chocolate;
+    border-color: white;
 }

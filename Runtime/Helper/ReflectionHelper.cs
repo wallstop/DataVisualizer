@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.Helper
+﻿namespace WallstopStudios.DataVisualizer.Helper
 {
     using System;
     using System.Collections;
@@ -9,7 +9,7 @@
     using System.Runtime.CompilerServices;
     using Extensions;
 
-    public delegate void FieldSetter<TInstance, in TValue>(ref TInstance instance, TValue value);
+    internal delegate void FieldSetter<TInstance, in TValue>(ref TInstance instance, TValue value);
 
     internal static class ReflectionHelpers
     {
@@ -38,6 +38,21 @@
             }
             attribute = default;
             return false;
+        }
+
+        public static bool IsAttributeDefined<T>(this ICustomAttributeProvider provider)
+            where T : Attribute
+        {
+            return IsAttributeDefined<T>(provider, inherit: true);
+        }
+
+        public static bool IsAttributeDefined<T>(
+            this ICustomAttributeProvider provider,
+            bool inherit
+        )
+            where T : Attribute
+        {
+            return IsAttributeDefined(provider, out T _, inherit);
         }
 
         public static Dictionary<string, PropertyInfo> LoadStaticPropertiesForType<T>()

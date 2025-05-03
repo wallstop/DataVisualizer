@@ -1,20 +1,63 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Data
+﻿namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
 
     [Serializable]
     public sealed class DataVisualizerUserState
     {
-        public int version = 1;
         public string lastSelectedNamespaceKey = string.Empty;
         public string lastSelectedTypeName = string.Empty;
 
         public List<string> namespaceOrder = new();
         public List<NamespaceTypeOrder> typeOrders = new();
 
-        public List<LastObjectSelectionEntry> LastObjectSelections = new();
-        public List<NamespaceCollapseState> NamespaceCollapseStates = new();
+        public List<LastObjectSelectionEntry> lastObjectSelections = new();
+        public List<NamespaceCollapseState> namespaceCollapseStates = new();
+
+        public List<TypeObjectOrder> objectOrders = new();
+        public List<string> managedTypeNames = new();
+
+        public void HydrateFrom(DataVisualizerSettings settings)
+        {
+            if (settings == null)
+            {
+                return;
+            }
+
+            lastSelectedNamespaceKey = settings.lastSelectedNamespaceKey;
+            lastSelectedTypeName = settings.lastSelectedTypeName;
+            namespaceOrder = settings.namespaceOrder?.ToList() ?? new List<string>();
+            typeOrders =
+                settings.typeOrders?.Select(order => order.Clone()).ToList()
+                ?? new List<NamespaceTypeOrder>();
+            lastObjectSelections =
+                settings.lastObjectSelections?.Select(selection => selection.Clone()).ToList()
+                ?? new List<LastObjectSelectionEntry>();
+            namespaceCollapseStates =
+                settings.namespaceCollapseStates?.Select(selection => selection.Clone()).ToList()
+                ?? new List<NamespaceCollapseState>();
+            objectOrders =
+                settings.objectOrders?.Select(order => order.Clone()).ToList()
+                ?? new List<TypeObjectOrder>();
+            managedTypeNames = settings.managedTypeNames?.ToList() ?? new List<string>();
+        }
+
+        public List<string> GetOrCreateObjectOrderList(string typeFullName)
+        {
+            TypeObjectOrder entry = objectOrders.Find(o =>
+                string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
+            );
+            if (entry != null)
+            {
+                return entry.ObjectGuids;
+            }
+
+            entry = new TypeObjectOrder { TypeFullName = typeFullName };
+            objectOrders.Add(entry);
+            return entry.ObjectGuids;
+        }
 
         public void SetLastObjectForType(string typeName, string guid)
         {
@@ -28,11 +71,11 @@
                 return;
             }
 
-            LastObjectSelections.RemoveAll(e =>
-                string.Equals(e.typeName, typeName, StringComparison.Ordinal)
+            lastObjectSelections.RemoveAll(e =>
+                string.Equals(e.typeFullName, typeName, StringComparison.Ordinal)
             );
-            LastObjectSelections.Add(
-                new LastObjectSelectionEntry { typeName = typeName, objectGuid = guid }
+            lastObjectSelections.Add(
+                new LastObjectSelectionEntry { typeFullName = typeName, objectGuid = guid }
             );
         }
 
@@ -43,8 +86,8 @@
                 return null;
             }
 
-            return LastObjectSelections
-                .Find(e => string.Equals(e.typeName, typeName, StringComparison.Ordinal))
+            return lastObjectSelections
+                .Find(e => string.Equals(e.typeFullName, typeName, StringComparison.Ordinal))
                 ?.objectGuid;
         }
 
@@ -63,9 +106,17 @@
             return entry.typeNames;
         }
 
+        public bool HasCollapseState(string namespaceKey)
+        {
+            NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
+                string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
+            );
+            return entry != null;
+        }
+
         public NamespaceCollapseState GetOrCreateCollapseState(string namespaceKey)
         {
-            NamespaceCollapseState entry = NamespaceCollapseStates.Find(o =>
+            NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
                 string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
             );
             if (entry != null)
@@ -74,7 +125,7 @@
             }
 
             entry = new NamespaceCollapseState { namespaceKey = namespaceKey, isCollapsed = false };
-            NamespaceCollapseStates.Add(entry);
+            namespaceCollapseStates.Add(entry);
             return entry;
         }
     }

@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Data
+﻿namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
 
@@ -7,5 +7,14 @@
     {
         public string namespaceKey = string.Empty;
         public bool isCollapsed;
+
+        public NamespaceCollapseState Clone()
+        {
+            return new NamespaceCollapseState
+            {
+                namespaceKey = namespaceKey,
+                isCollapsed = isCollapsed,
+            };
+        }
     }
 }

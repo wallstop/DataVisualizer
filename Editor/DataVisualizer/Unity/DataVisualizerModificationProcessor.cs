@@ -1,9 +1,10 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Unity
+﻿namespace WallstopStudios.DataVisualizer.Editor.Unity
 {
 #if UNITY_EDITOR
+    using System.Linq;
     using Data;
     using UnityEditor;
-    using WallstopStudios.DataVisualizer;
+    using UnityEngine;
 
     public sealed class DataVisualizerModificationProcessor : AssetModificationProcessor
     {
@@ -12,15 +13,9 @@
         private static string[] OnWillSaveAssets(string[] paths)
         {
             bool needsRefresh = false;
-            DataVisualizer openWindow = null;
 
-            foreach (string path in paths)
+            foreach (string path in paths.Where(DataVisualizerAssetProcessor.IsAsset))
             {
-                if (!path.EndsWith(".asset", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
                 System.Type assetType = AssetDatabase.GetMainAssetTypeAtPath(path);
 
                 if (assetType == null)
@@ -28,47 +23,28 @@
                     continue;
                 }
 
-                bool isSettingsAsset = typeof(DataVisualizerSettings).IsAssignableFrom(assetType);
-                bool isBDOAsset = typeof(BaseDataObject).IsAssignableFrom(assetType);
+                bool isScriptableObject = typeof(ScriptableObject).IsAssignableFrom(assetType);
 
-                if (isBDOAsset)
-                { // Always refresh if a BaseDataObject is saved
-                    needsRefresh = true;
-                }
-                else if (isSettingsAsset)
+                if (
+                    !isScriptableObject
+                    || typeof(DataVisualizerSettings).IsAssignableFrom(assetType)
+                )
                 {
-                    // Only refresh from settings save IF the window is NOT using EditorPrefs
-                    // (because if using EditorPrefs, saving settings file doesn't affect window state)
-                    var settingsInstance = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(
-                        path
-                    );
-                    if (settingsInstance != null && !settingsInstance.persistStateInSettingsAsset)
-                    {
-                        needsRefresh = true; // Settings file changed AND it's the active persistence method
-                    }
+                    continue;
                 }
 
-                if (needsRefresh)
-                {
-                    if (openWindow == null)
-                    {
-                        openWindow = EditorWindow.GetWindow<DataVisualizer>(false, null, false);
-                    }
-
-                    if (openWindow != null)
-                    {
-                        needsRefresh = true;
-                        break;
-                    }
-                }
+                needsRefresh = true;
+                break;
             }
 
-            if (needsRefresh && openWindow != null && !RefreshSignalThisSave)
+            if (!needsRefresh || RefreshSignalThisSave)
             {
-                EditorApplication.delayCall += DataVisualizer.SignalRefresh;
-                RefreshSignalThisSave = true;
-                EditorApplication.delayCall += ResetSignalFlag;
+                return paths;
             }
+
+            EditorApplication.delayCall += DataVisualizer.SignalRefresh;
+            RefreshSignalThisSave = true;
+            EditorApplication.delayCall += ResetSignalFlag;
             return paths;
         }
 

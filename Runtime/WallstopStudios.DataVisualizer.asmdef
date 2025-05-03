@@ -1,6 +1,6 @@
 {
     "name": "WallstopStudios.DataVisualizer",
-    "rootNamespace": "WallstopStudios",
+    "rootNamespace": "WallstopStudios.DataVisualizer",
     "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -1,11 +1,20 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Data
+﻿namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
 
     [Serializable]
     public sealed class LastObjectSelectionEntry
     {
-        public string typeName = string.Empty;
+        public string typeFullName = string.Empty;
         public string objectGuid = string.Empty;
+
+        public LastObjectSelectionEntry Clone()
+        {
+            return new LastObjectSelectionEntry
+            {
+                typeFullName = typeFullName,
+                objectGuid = objectGuid,
+            };
+        }
     }
 }

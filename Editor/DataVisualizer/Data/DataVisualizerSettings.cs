@@ -1,8 +1,10 @@
-﻿namespace WallstopStudios.Editor.DataVisualizer.Data
+﻿namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using Helper;
+    using UnityEditor;
     using UnityEngine;
     using UnityEngine.Serialization;
 
@@ -24,7 +26,7 @@
         internal string _dataFolderPath = DefaultDataFolderPath;
 
         [Tooltip(
-            "If true, window state (selection, order, collapse) is saved globally in EditorPrefs. If false, state is saved within this settings asset file."
+            "If true, window state (selection, order, collapse) is saved in a special ScriptableObject. If false, state is saved within this settings asset file."
         )]
         public bool persistStateInSettingsAsset;
 
@@ -39,20 +41,30 @@
         [HideInInspector]
         internal string lastSelectedTypeName;
 
-        [SerializeField, HideInInspector]
+        [SerializeField]
+        [HideInInspector]
         internal List<LastObjectSelectionEntry> lastObjectSelections = new();
 
         [SerializeField]
         [HideInInspector]
         internal List<string> namespaceOrder = new();
 
+        [FormerlySerializedAs("typeOrder")]
         [SerializeField]
         [HideInInspector]
-        internal List<NamespaceTypeOrder> typeOrder = new();
+        internal List<NamespaceTypeOrder> typeOrders = new();
+
+        [SerializeField]
+        [HideInInspector]
+        internal List<TypeObjectOrder> objectOrders = new();
 
         [SerializeField]
         [HideInInspector]
         internal List<NamespaceCollapseState> namespaceCollapseStates = new();
+
+        [SerializeField]
+        [HideInInspector]
+        internal List<string> managedTypeNames = new();
 
         private void OnValidate()
         {
@@ -67,60 +79,122 @@
             }
         }
 
+        public void MarkDirty()
+        {
+#if UNITY_EDITOR
+            EditorUtility.SetDirty(this);
+#endif
+        }
+
+        public void HydrateFrom(DataVisualizerUserState userState)
+        {
+            if (userState == null)
+            {
+                return;
+            }
+
+            lastSelectedNamespaceKey = userState.lastSelectedNamespaceKey;
+            lastSelectedTypeName = userState.lastSelectedTypeName;
+            namespaceOrder = userState.namespaceOrder?.ToList() ?? new List<string>();
+            typeOrders =
+                userState.typeOrders?.Select(order => order.Clone()).ToList()
+                ?? new List<NamespaceTypeOrder>();
+            lastObjectSelections =
+                userState.lastObjectSelections?.Select(selection => selection.Clone()).ToList()
+                ?? new List<LastObjectSelectionEntry>();
+
+            namespaceCollapseStates =
+                userState.namespaceCollapseStates?.Select(state => state.Clone()).ToList()
+                ?? new List<NamespaceCollapseState>();
+            objectOrders =
+                userState.objectOrders?.Select(order => order.Clone()).ToList()
+                ?? new List<TypeObjectOrder>();
+            managedTypeNames = userState.managedTypeNames?.ToList() ?? new List<string>();
+            MarkDirty();
+        }
+
+        internal List<string> GetOrCreateObjectOrderList(string typeFullName)
+        {
+            TypeObjectOrder entry = objectOrders.Find(o =>
+                string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
+            );
+            if (entry != null)
+            {
+                return entry.ObjectGuids;
+            }
+
+            entry = new TypeObjectOrder { TypeFullName = typeFullName };
+            objectOrders.Add(entry);
+            return entry.ObjectGuids;
+        }
+
         internal void SetLastObjectForType(string typeName, string guid)
         {
-            if (string.IsNullOrEmpty(typeName))
-                return;
-            // Remove existing entry for this type first
-            // Add new entry only if guid is valid
-            if (!string.IsNullOrEmpty(guid))
+            if (string.IsNullOrWhiteSpace(typeName))
             {
-                lastObjectSelections.RemoveAll(e =>
-                    string.Equals(e.typeName, typeName, StringComparison.Ordinal)
-                );
-                lastObjectSelections.Add(
-                    new LastObjectSelectionEntry { typeName = typeName, objectGuid = guid }
-                );
+                return;
             }
+
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                return;
+            }
+
+            lastObjectSelections.RemoveAll(e =>
+                string.Equals(e.typeFullName, typeName, StringComparison.Ordinal)
+            );
+            lastObjectSelections.Add(
+                new LastObjectSelectionEntry { typeFullName = typeName, objectGuid = guid }
+            );
         }
 
         internal string GetLastObjectForType(string typeName)
         {
-            if (string.IsNullOrEmpty(typeName))
+            if (string.IsNullOrWhiteSpace(typeName))
+            {
                 return null;
+            }
+
             return lastObjectSelections
-                .Find(e => string.Equals(e.typeName, typeName, StringComparison.Ordinal))
+                .Find(e => string.Equals(e.typeFullName, typeName, StringComparison.Ordinal))
                 ?.objectGuid;
         }
 
         internal List<string> GetOrCreateTypeOrderList(string namespaceKey)
         {
-            NamespaceTypeOrder entry = typeOrder.Find(o =>
+            NamespaceTypeOrder entry = typeOrders.Find(o =>
                 string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
             );
-            if (entry == null)
+            if (entry != null)
             {
-                entry = new NamespaceTypeOrder() { namespaceKey = namespaceKey };
-                typeOrder.Add(entry);
+                return entry.typeNames;
             }
+
+            entry = new NamespaceTypeOrder() { namespaceKey = namespaceKey };
+            typeOrders.Add(entry);
             return entry.typeNames;
         }
 
-        // Helper method to find or create collapse state entry
+        internal bool HasCollapseState(string namespaceKey)
+        {
+            NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
+                string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
+            );
+            return entry != null;
+        }
+
         internal NamespaceCollapseState GetOrCreateCollapseState(string namespaceKey)
         {
             NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
                 string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
             );
-            if (entry == null)
+            if (entry != null)
             {
-                entry = new NamespaceCollapseState
-                {
-                    namespaceKey = namespaceKey,
-                    isCollapsed = false,
-                }; // Default expanded
-                namespaceCollapseStates.Add(entry);
+                return entry;
             }
+
+            entry = new NamespaceCollapseState { namespaceKey = namespaceKey, isCollapsed = false }; // Default expanded
+            namespaceCollapseStates.Add(entry);
             return entry;
         }
     }
