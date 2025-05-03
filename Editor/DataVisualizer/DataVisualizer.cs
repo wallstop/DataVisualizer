@@ -1032,6 +1032,19 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                 }
 
+                if (
+                    packageRoot.StartsWith("Library", StringComparison.OrdinalIgnoreCase)
+                    && packageRoot.Contains("PackageCache", StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    int packageCacheIndex = packageRoot.IndexOf(
+                        "PackageCache",
+                        StringComparison.OrdinalIgnoreCase
+                    );
+                    packageRoot = packageRoot[packageCacheIndex..];
+                    packageRoot = "Packages/" + packageRoot;
+                }
+
                 char pathSeparator = Path.DirectorySeparatorChar;
                 string styleSheetPath =
                     $"{packageRoot}{pathSeparator}Editor{pathSeparator}DataVisualizer{pathSeparator}Styles{pathSeparator}DataVisualizerStyles.uss";

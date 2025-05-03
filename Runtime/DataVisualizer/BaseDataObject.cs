@@ -4,6 +4,7 @@
 
 namespace WallstopStudios.DataVisualizer
 {
+    using System;
     using Sirenix.OdinInspector;
     using UnityEditor;
     using UnityEngine;
@@ -16,6 +17,7 @@ namespace WallstopStudios.DataVisualizer
 #else
         ScriptableObject
 #endif
+            , IComparable<BaseDataObject>
     {
         public virtual string Id => _assetGuid;
 
@@ -74,6 +76,39 @@ namespace WallstopStudios.DataVisualizer
         public virtual VisualElement BuildGUI(DataVisualizerGUIContext context)
         {
             return null;
+        }
+
+        public int CompareTo(BaseDataObject other)
+        {
+            if (ReferenceEquals(this, other))
+            {
+                return 0;
+            }
+
+            if (other is null)
+            {
+                return 1;
+            }
+
+            int titleComparison = string.Compare(Title, other.Title, StringComparison.Ordinal);
+            if (titleComparison != 0)
+            {
+                return titleComparison;
+            }
+
+            int nameComparison = string.Compare(name, other.name, StringComparison.Ordinal);
+            if (nameComparison != 0)
+            {
+                return nameComparison;
+            }
+
+            int idComparison = string.Compare(Id, other.Id, StringComparison.Ordinal);
+            if (idComparison != 0)
+            {
+                return idComparison;
+            }
+
+            return string.Compare(_description, other._description, StringComparison.Ordinal);
         }
     }
 }
