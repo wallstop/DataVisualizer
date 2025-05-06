@@ -4,10 +4,10 @@
     using System.Collections.Generic;
     using System.Linq;
     using Data;
+    using Helper;
     using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
-    using WallstopStudios.DataVisualizer.Helper;
 
     public sealed class NamespaceController
     {
@@ -177,11 +177,10 @@
                 VisualElement namespaceGroupItem = new()
                 {
                     name = $"namespace-group-{key}",
-                    userData = key,
+                    userData = namespaceKey,
                 };
 
                 namespaceGroupItem.AddToClassList(StyleConstants.NamespaceItemClass);
-                namespaceGroupItem.userData = key;
                 if (types.Count == 0)
                 {
                     namespaceGroupItem.AddToClassList(StyleConstants.NamespaceGroupItemEmptyClass);
@@ -207,6 +206,12 @@
                 Label namespaceLabel = new(key) { name = $"namespace-name-{key}" };
                 namespaceLabel.AddToClassList(StyleConstants.BoldClass);
                 namespaceLabel.AddToClassList(StyleConstants.NamespaceLabelClass);
+                namespaceLabel.AddToClassList(StyleConstants.ClickableClass);
+                // namespaceLabel.RegisterCallback<PointerDownEvent>(ToggleNamespace);
+                // namespaceLabel.RegisterCallback<PointerDownEvent>(
+                //     dataVisualizer.OnNamespacePointerDown
+                // );
+
                 header.Add(namespaceLabel);
 
                 VisualElement headerRight = new();
@@ -243,12 +248,12 @@
                 VisualElement typesContainer = new()
                 {
                     name = $"types-container-{key}",
-                    userData = key,
+                    userData = namespaceKey,
                 };
                 typesContainer.AddToClassList(StyleConstants.TypesContainerClass);
                 namespaceGroupItem.Add(typesContainer);
 
-                bool isCollapsed = GetIsNamespaceCollapsed(dataVisualizer, key);
+                bool isCollapsed = GetIsNamespaceCollapsed(dataVisualizer, namespaceKey);
                 ApplyNamespaceCollapsedState(
                     dataVisualizer,
                     indicator,
@@ -258,43 +263,7 @@
                 );
 
                 // ReSharper disable once HeapView.CanAvoidClosure
-                indicator.RegisterCallback<PointerDownEvent>(evt =>
-                {
-                    if (evt.button != 0 || evt.propagationPhase == PropagationPhase.TrickleDown)
-                    {
-                        return;
-                    }
-
-                    VisualElement parentGroup = header.parent;
-                    Label associatedIndicator = parentGroup?.Q<Label>(
-                        className: StyleConstants.NamespaceIndicatorClass
-                    );
-                    VisualElement associatedTypesContainer = parentGroup?.Q<VisualElement>(
-                        $"types-container-{key}"
-                    );
-                    string nsKey = parentGroup?.userData as string;
-
-                    if (
-                        associatedIndicator != null
-                        && associatedTypesContainer != null
-                        && !string.IsNullOrWhiteSpace(nsKey)
-                    )
-                    {
-                        bool currentlyCollapsed =
-                            associatedTypesContainer.style.display == DisplayStyle.None;
-                        bool newCollapsedState = !currentlyCollapsed;
-
-                        ApplyNamespaceCollapsedState(
-                            dataVisualizer,
-                            associatedIndicator,
-                            associatedTypesContainer,
-                            newCollapsedState,
-                            true
-                        );
-                    }
-
-                    evt.StopPropagation();
-                });
+                indicator.RegisterCallback<PointerDownEvent>(ToggleNamespace);
 
                 // ReSharper disable once ForCanBeConvertedToForeach
                 for (int i = 0; i < types.Count; i++)
@@ -355,6 +324,44 @@
                     }
 
                     typesContainer.Add(typeItem);
+                }
+
+                continue;
+
+                void ToggleNamespace(PointerDownEvent evt)
+                {
+                    if (evt.button != 0 || evt.propagationPhase == PropagationPhase.TrickleDown)
+                    {
+                        return;
+                    }
+
+                    VisualElement parentGroup = header.parent;
+                    Label associatedIndicator = parentGroup?.Q<Label>(
+                        className: StyleConstants.NamespaceIndicatorClass
+                    );
+                    VisualElement associatedTypesContainer = parentGroup?.Q<VisualElement>(
+                        $"types-container-{namespaceKey}"
+                    );
+                    string nsKey = parentGroup?.userData as string;
+
+                    if (
+                        associatedIndicator != null
+                        && associatedTypesContainer != null
+                        && !string.IsNullOrWhiteSpace(nsKey)
+                    )
+                    {
+                        bool currentlyCollapsed =
+                            associatedTypesContainer.style.display == DisplayStyle.None;
+                        bool newCollapsedState = !currentlyCollapsed;
+
+                        ApplyNamespaceCollapsedState(
+                            dataVisualizer,
+                            associatedIndicator,
+                            associatedTypesContainer,
+                            newCollapsedState,
+                            true
+                        );
+                    }
                 }
             }
         }

@@ -39,9 +39,8 @@
             void OnFocusIn()
             {
                 if (string.Equals(textField.value, placeholder, StringComparison.Ordinal))
-                {
                     textField.SetValueWithoutNotify(string.Empty);
-                }
+                { }
 
                 textField.RemoveFromClassList(PlaceholderTextFieldClass);
 

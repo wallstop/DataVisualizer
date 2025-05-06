@@ -211,7 +211,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _namespaceController = new NamespaceController(_scriptableObjectTypes, _namespaceOrder);
         }
 
-        [MenuItem("Tools/Data Visualizer")]
+        [MenuItem("Tools/Wallstop Studios/Data Visualizer")]
         public static void ShowWindow()
         {
             DataVisualizer window = GetWindow<DataVisualizer>("Data Visualizer");
@@ -4777,7 +4777,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     if (originalLabel != null)
                     {
-                        Label ghostLabel = new(originalLabel.text);
+                        Label ghostLabel = new(dragText);
                         foreach (string className in originalLabel.GetClasses())
                         {
                             ghostLabel.AddToClassList(className);
