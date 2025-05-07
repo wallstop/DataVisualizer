@@ -72,6 +72,17 @@
     border-width: 2px;
 }
 
+.create-text-field > #unity-text-input {
+    margin-bottom: 5px;
+    border-radius: 5px;
+    padding: 2px 6px;
+    background-color: rgba(0, 0, 0, 1);
+    --unity-selection-color: rgba(0, 128, 0, 0.4);
+    border-color: rgb(0, 128, 0);
+    color: rgba(255, 255, 255, 0.7);
+    border-width: 2px;
+}
+
 .popover-button {
     color: white;
     padding: 2px 6px;
@@ -98,6 +109,16 @@
 .popover-rename-button:hover {
     background-color: rgb(51, 153, 230);
     border-color: rgb(51, 153, 230);
+    color: white;
+}
+
+.popover-create-button {
+    border-color: green;
+}
+
+.popover-create-button:hover {
+    background-color: green;
+    border-color: green;
     color: white;
 }
 

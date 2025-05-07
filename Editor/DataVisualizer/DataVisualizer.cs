@@ -145,6 +145,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private VisualElement _settingsPopover;
         private VisualElement _renamePopover;
+        private VisualElement _createPopover;
         private VisualElement _confirmDeletePopover;
         private VisualElement _confirmActionPopover;
         private VisualElement _typeAddPopover;
@@ -960,17 +961,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             BuildSettingsPopoverContent();
             root.Add(_settingsPopover);
 
+            _createPopover = CreatePopoverBase("create-popover");
+            root.Add(_createPopover);
             _renamePopover = CreatePopoverBase("rename-popover");
-
             root.Add(_renamePopover);
-
             _confirmDeletePopover = CreatePopoverBase("confirm-delete-popover");
-
+            root.Add(_confirmDeletePopover);
             _confirmActionPopover = CreatePopoverBase("confirm-action-popover");
             root.Add(_confirmActionPopover);
-
-            root.Add(_confirmDeletePopover);
-
             _searchPopover = new VisualElement { name = "search-popover" };
             _searchPopover.AddToClassList("search-popover");
             root.Add(_searchPopover);
@@ -2360,6 +2358,53 @@ namespace WallstopStudios.DataVisualizer.Editor
             OpenPopover(_renamePopover, source, currentPath);
         }
 
+        private void BuildCreatePopoverContent(Type type)
+        {
+            _createPopover.Clear();
+            _createPopover.userData = type;
+
+            Label createLabel = new("Enter new name (without extension)");
+            createLabel.AddToClassList("create-object-label");
+            _createPopover.Add(createLabel);
+            TextField nameTextField = new()
+            {
+                value = Path.GetFileNameWithoutExtension(
+                    NamespaceController.GetTypeDisplayName(type)
+                ),
+                name = "create-textfield",
+            };
+            nameTextField.AddToClassList("create-text-field");
+            nameTextField.schedule.Execute(() => nameTextField.SelectAll()).ExecuteLater(50);
+            _createPopover.Add(nameTextField);
+            Label errorLabel = new()
+            {
+                name = "error-label",
+                style =
+                {
+                    color = Color.red,
+                    height = 18,
+                    display = DisplayStyle.None,
+                },
+            };
+            _createPopover.Add(errorLabel);
+            VisualElement buttonContainer = new();
+            buttonContainer.AddToClassList("popover-button-container");
+            Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
+            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
+            cancelButton.AddToClassList(StyleConstants.ClickableClass);
+            Button createButton = new(() => HandleCreateConfirmed(type, nameTextField, errorLabel))
+            {
+                text = "Create",
+            };
+            createButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            createButton.AddToClassList("popover-create-button");
+            createButton.AddToClassList(StyleConstants.ClickableClass);
+            buttonContainer.Add(cancelButton);
+            buttonContainer.Add(createButton);
+            _createPopover.Add(buttonContainer);
+        }
+
         private void BuildRenamePopoverContent(string originalPath, string originalName)
         {
             _renamePopover.Clear();
@@ -2403,6 +2448,39 @@ namespace WallstopStudios.DataVisualizer.Editor
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(renameButton);
             _renamePopover.Add(buttonContainer);
+        }
+
+        private void HandleCreateConfirmed(Type type, TextField nameField, Label errorLabel)
+        {
+            errorLabel.style.display = DisplayStyle.None;
+            string newName = nameField.value;
+
+            if (
+                string.IsNullOrWhiteSpace(newName)
+                || newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            )
+            {
+                errorLabel.text = "Invalid name.";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            string directory = Settings.DataFolderPath;
+
+            string proposedName = $"{newName}.asset";
+            string proposedPath = Path.Combine(directory, proposedName).SanitizePath();
+            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
+            if (!string.Equals(proposedPath, uniquePath, StringComparison.Ordinal))
+            {
+                errorLabel.text = "Name is not unique.";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            ScriptableObject instance = CreateInstance(type);
+            AssetDatabase.CreateAsset(instance, uniquePath);
+            CloseActivePopover();
+            ScheduleRefresh();
         }
 
         private void HandleRenameConfirmed(TextField nameField, Label errorLabel)
@@ -3143,7 +3221,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             objectHeader.AddToClassList("object-header");
 
             objectHeader.Add(new Label("Objects"));
-            Button createButton = new(CreateNewObject)
+            Button createButton = null;
+            createButton = new Button(() =>
+            {
+                BuildCreatePopoverContent(_namespaceController.SelectedType);
+                OpenPopover(_createPopover, createButton);
+            })
             {
                 text = "+",
                 tooltip = "Create New Object",
@@ -3181,115 +3264,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             _inspectorScrollView.Add(_inspectorContainer);
             inspectorColumn.Add(_inspectorScrollView);
             return inspectorColumn;
-        }
-
-        private void CreateNewObject()
-        {
-            Type selectedType = _namespaceController.SelectedType;
-            if (selectedType == null)
-            {
-                EditorUtility.DisplayDialog(
-                    "Cannot Create Object",
-                    "Please select a Type in the first column before creating an object.",
-                    "OK"
-                );
-                return;
-            }
-
-            DataVisualizerSettings settings = Settings;
-            if (string.IsNullOrWhiteSpace(settings.DataFolderPath))
-            {
-                EditorUtility.DisplayDialog(
-                    "Cannot Create Object",
-                    "Data Folder Path is not set correctly in Settings.",
-                    "OK"
-                );
-                return;
-            }
-
-            string targetDirectory = Path.Combine(
-                Directory.GetCurrentDirectory(),
-                settings.DataFolderPath
-            );
-            targetDirectory = Path.GetFullPath(targetDirectory).SanitizePath();
-
-            string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
-            if (!targetDirectory.StartsWith(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
-            {
-                EditorUtility.DisplayDialog(
-                    "Invalid Data Folder",
-                    $"The configured Data Folder ('{settings.DataFolderPath}') is not inside the project's Assets folder.",
-                    "OK"
-                );
-                return;
-            }
-
-            try
-            {
-                if (!Directory.Exists(targetDirectory))
-                {
-                    Directory.CreateDirectory(targetDirectory);
-                }
-            }
-            catch (Exception e)
-            {
-                EditorUtility.DisplayDialog(
-                    "Error",
-                    $"Could not create data directory '{settings.DataFolderPath}': {e.Message}",
-                    "OK"
-                );
-                return;
-            }
-
-            ScriptableObject instance = CreateInstance(selectedType);
-            if (instance == null)
-            {
-                EditorUtility.DisplayDialog(
-                    "Error",
-                    $"Failed to create instance of type '{selectedType.Name}'.",
-                    "OK"
-                );
-                return;
-            }
-
-            string baseAssetName = $"New {selectedType.Name}.asset";
-            string proposedPath = Path.Combine(settings.DataFolderPath, baseAssetName)
-                .SanitizePath();
-            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
-
-            try
-            {
-                AssetDatabase.CreateAsset(instance, uniquePath);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-
-                ScriptableObject newObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
-                    uniquePath
-                );
-
-                if (newObject != null)
-                {
-                    _selectedObjects.Insert(0, newObject);
-                    UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
-                    BuildObjectsView();
-                    SelectObject(newObject);
-                }
-                else
-                {
-                    Debug.LogError($"Failed to load the newly created asset at {uniquePath}");
-                    BuildObjectsView();
-                    SelectObject(null);
-                }
-            }
-            catch (Exception e)
-            {
-                EditorUtility.DisplayDialog(
-                    "Error Creating Asset",
-                    $"Failed to create asset at '{uniquePath}': {e.Message}",
-                    "OK"
-                );
-                DestroyImmediate(instance);
-            }
         }
 
 #if ODIN_INSPECTOR

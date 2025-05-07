@@ -14,7 +14,7 @@
             return new TypeObjectOrder
             {
                 TypeFullName = TypeFullName,
-                ObjectGuids = new(ObjectGuids),
+                ObjectGuids = new List<string>(ObjectGuids),
             };
         }
     }

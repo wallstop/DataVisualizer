@@ -14,7 +14,7 @@
             return new NamespaceTypeOrder
             {
                 namespaceKey = namespaceKey,
-                typeNames = new(typeNames),
+                typeNames = new List<string>(typeNames),
             };
         }
     }
