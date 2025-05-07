@@ -207,10 +207,6 @@
                 namespaceLabel.AddToClassList(StyleConstants.BoldClass);
                 namespaceLabel.AddToClassList(StyleConstants.NamespaceLabelClass);
                 namespaceLabel.AddToClassList(StyleConstants.ClickableClass);
-                // namespaceLabel.RegisterCallback<PointerDownEvent>(ToggleNamespace);
-                // namespaceLabel.RegisterCallback<PointerDownEvent>(
-                //     dataVisualizer.OnNamespacePointerDown
-                // );
 
                 header.Add(namespaceLabel);
 
@@ -281,7 +277,7 @@
                     typeItem.AddToClassList(StyleConstants.TypeItemClass);
                     _namespaceCache[type] = typeItem;
 
-                    Label typeLabel = new(type.Name) { name = TypeItemLabelName };
+                    Label typeLabel = new(GetTypeDisplayName(type)) { name = TypeItemLabelName };
                     typeLabel.AddToClassList(StyleConstants.TypeLabelClass);
                     typeLabel.AddToClassList(StyleConstants.ClickableClass);
                     typeItem.Add(typeLabel);
@@ -736,13 +732,31 @@
             }
 
             if (
-                type.IsAttributeDefined(out CustomDataVisualization attribute)
+                type.IsAttributeDefined(out CustomDataVisualizationAttribute attribute)
                 && !string.IsNullOrWhiteSpace(attribute.Namespace)
             )
             {
                 return attribute.Namespace;
             }
             return type.Namespace?.Split('.').LastOrDefault() ?? emptyNamespace;
+        }
+
+        internal static string GetTypeDisplayName(Type type)
+        {
+            const string emptyType = "No Type";
+            if (type == null)
+            {
+                return emptyType;
+            }
+            if (
+                type.IsAttributeDefined(out CustomDataVisualizationAttribute attribute)
+                && !string.IsNullOrWhiteSpace(attribute.TypeName)
+            )
+            {
+                return attribute.TypeName;
+            }
+
+            return type.Name;
         }
     }
 }

@@ -3604,7 +3604,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             bool useOdinInspector = false;
             Type objectType = _selectedObject.GetType();
 #if ODIN_INSPECTOR
-            if (objectType.IsAttributeDefined(out CustomDataVisualization customVisualization))
+            if (
+                objectType.IsAttributeDefined(
+                    out CustomDataVisualizationAttribute customVisualization
+                )
+            )
             {
                 useOdinInspector = customVisualization.UseOdinInspector;
             }
@@ -4392,7 +4396,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         BaseDataObject dataObj => dataObj.Title,
                         ScriptableObject dataObj => dataObj.name,
                         string nsKey => nsKey,
-                        Type type => type.Name,
+                        Type type => NamespaceController.GetTypeDisplayName(type),
                         _ => "Dragging Item",
                     };
                     StartDragVisuals(evt.position, dragText);
