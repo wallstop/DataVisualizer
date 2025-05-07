@@ -24,6 +24,7 @@ namespace WallstopStudios.DataVisualizer.Editor
     using UnityEngine.UIElements;
     using Utilities;
     using Helper;
+    using Object = UnityEngine.Object;
 
     public sealed class DataVisualizer : EditorWindow
     {
@@ -153,6 +154,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _confirmNamespaceAddPopover;
         private VisualElement _activeNestedPopover;
         private object _popoverContext;
+        private bool _isDraggingPopover;
+        private Vector2 _popoverDragStartMousePos;
+        private Vector2 _popoverDragStartPos;
 
         private TextField _searchField;
         private VisualElement _searchPopover;
@@ -405,7 +409,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .ToList();
             List<NamespaceTypeOrder> typeOrder = _namespaceOrder
                 .OrderBy(kvp => kvp.Value)
-                .Select(kvp => new NamespaceTypeOrder()
+                .Select(kvp => new NamespaceTypeOrder
                 {
                     namespaceKey = kvp.Key,
                     typeNames = _scriptableObjectTypes[kvp.Key]
@@ -994,9 +998,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             root.Add(_typeAddPopover);
 
             _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
-            _confirmNamespaceAddPopover.style.width = 300;
-            _confirmNamespaceAddPopover.style.minHeight = 80;
-            _confirmNamespaceAddPopover.style.maxHeight = 150;
             root.Add(_confirmNamespaceAddPopover);
 
             BuildNamespaceView();
@@ -1749,11 +1750,133 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .ExecuteLater(10);
         }
 
-        private static VisualElement CreatePopoverBase(string name)
+        private VisualElement CreatePopoverBase(string popoverName)
         {
-            VisualElement popover = new() { name = name };
+            VisualElement popover = new() { name = popoverName };
             popover.AddToClassList("popover");
+
+            VisualElement dragHandle = new() { name = $"{popoverName}-drag-handle" };
+            dragHandle.AddToClassList("popover-drag-handle");
+            dragHandle.RegisterCallback<PointerDownEvent>(OnPopoverDragHandlePointerDown);
+            popover.Add(dragHandle);
+            VisualElement contentWrapper = new()
+            {
+                name = $"{popoverName}-content-wrapper",
+                style =
+                {
+                    flexGrow = 1,
+                    paddingBottom = 5,
+                    paddingLeft = 5,
+                    paddingRight = 5,
+                    paddingTop = 5,
+                },
+            };
+            popover.Add(contentWrapper);
             return popover;
+        }
+
+        private void OnPopoverDragHandlePointerDown(PointerDownEvent evt)
+        {
+            VisualElement target = _activeNestedPopover ?? _activePopover;
+            VisualElement handle = evt.currentTarget as VisualElement;
+            VisualElement popover = handle?.parent;
+            if (popover == null || popover != target)
+            {
+                return;
+            }
+
+            if (evt.button == 0)
+            {
+                _isDraggingPopover = true;
+                _popoverDragStartMousePos = evt.position;
+                _popoverDragStartPos = new Vector2(
+                    popover.resolvedStyle.left,
+                    popover.resolvedStyle.top
+                );
+
+                popover.CapturePointer(evt.pointerId);
+                popover.RegisterCallback<PointerMoveEvent>(OnPopoverPointerMove);
+                popover.RegisterCallback<PointerUpEvent>(OnPopoverPointerUp);
+                popover.RegisterCallback<PointerCaptureOutEvent>(OnPopoverPointerCaptureOut);
+                evt.StopPropagation();
+            }
+        }
+
+        private void OnPopoverPointerMove(PointerMoveEvent evt)
+        {
+            VisualElement popover = _activeNestedPopover ?? _activePopover;
+            if (!_isDraggingPopover || popover == null || !popover.HasPointerCapture(evt.pointerId))
+            {
+                return;
+            }
+
+            Vector2 mouseDelta = (Vector2)evt.position - _popoverDragStartMousePos;
+
+            float targetX = _popoverDragStartPos.x + mouseDelta.x;
+            float targetY = _popoverDragStartPos.y + mouseDelta.y;
+
+            float popoverWidth = popover.resolvedStyle.width;
+            float popoverHeight = popover.resolvedStyle.height;
+            if (float.IsNaN(popoverWidth) || popoverWidth <= 0)
+            {
+                popoverWidth = 300f;
+            }
+
+            if (float.IsNaN(popoverHeight) || popoverHeight <= 0)
+            {
+                popoverHeight = 150f;
+            }
+            float windowWidth = rootVisualElement.resolvedStyle.width;
+            float windowHeight = rootVisualElement.resolvedStyle.height;
+
+            float clampedX = targetX,
+                clampedY = targetY;
+            if (
+                !float.IsNaN(windowWidth)
+                && !float.IsNaN(windowHeight)
+                && windowWidth > 0
+                && windowHeight > 0
+            )
+            {
+                clampedX = Mathf.Max(0, targetX);
+                clampedX = Mathf.Min(clampedX, windowWidth - popoverWidth);
+                clampedX = Mathf.Max(0, clampedX);
+
+                clampedY = Mathf.Max(0, targetY);
+                clampedY = Mathf.Min(clampedY, windowHeight - popoverHeight);
+                clampedY = Mathf.Max(0, clampedY);
+            }
+
+            popover.style.left = clampedX;
+            popover.style.top = clampedY;
+        }
+
+        private void OnPopoverPointerUp(PointerUpEvent evt)
+        {
+            VisualElement popover = _activeNestedPopover ?? _activePopover;
+            if (!_isDraggingPopover || popover == null || !popover.HasPointerCapture(evt.pointerId))
+            {
+                return;
+            }
+
+            _isDraggingPopover = false;
+            popover.ReleasePointer(evt.pointerId);
+            popover.UnregisterCallback<PointerMoveEvent>(OnPopoverPointerMove);
+            popover.UnregisterCallback<PointerUpEvent>(OnPopoverPointerUp);
+            popover.UnregisterCallback<PointerCaptureOutEvent>(OnPopoverPointerCaptureOut);
+            evt.StopPropagation();
+        }
+
+        private void OnPopoverPointerCaptureOut(PointerCaptureOutEvent evt)
+        {
+            VisualElement popover = _activeNestedPopover ?? _activePopover;
+            if (_isDraggingPopover && popover != null)
+            {
+                _isDraggingPopover = false;
+                popover.UnregisterCallback<PointerMoveEvent>(OnPopoverPointerMove);
+                popover.UnregisterCallback<PointerUpEvent>(OnPopoverPointerUp);
+                popover.UnregisterCallback<PointerCaptureOutEvent>(OnPopoverPointerCaptureOut);
+            }
         }
 
         internal void BuildAndOpenConfirmationPopover(
@@ -1875,12 +1998,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     float popoverWidth = popover.resolvedStyle.width;
                     float popoverHeight = popover.resolvedStyle.height;
+
                     if (float.IsNaN(popoverWidth) || popoverWidth <= 0)
                     {
                         popoverWidth =
                             popover.style.width.keyword == StyleKeyword.Auto
                             || popover.style.width.value.value == 0
-                                ? 300f
+                                ? 350f
                                 : popover.style.width.value.value;
                     }
                     if (float.IsNaN(popoverHeight) || popoverHeight <= 0)
@@ -2170,19 +2294,31 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void BuildSettingsPopoverContent()
         {
-            _settingsPopover.Clear();
+            VisualElement dragHandle = _settingsPopover.Q(className: "popover-drag-handle");
+            VisualElement contentWrapper = _settingsPopover.Q(
+                name: $"{_settingsPopover.name}-content-wrapper"
+            );
+            if (dragHandle == null || contentWrapper == null)
+            {
+                return;
+            }
 
-            _settingsPopover.Add(
+            dragHandle.AddToClassList("settings");
+            dragHandle.Clear();
+            contentWrapper.Clear();
+
+            // Add Title to Drag Handle
+            dragHandle.Add(
                 new Label("Settings")
                 {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        marginBottom = 10,
-                        alignSelf = Align.Center,
-                    },
+                    style = { unityFontStyleAndWeight = FontStyle.Bold, marginLeft = 5 },
                 }
             );
+
+            Button closeButton = new(CloseActivePopover) { text = "X" };
+            closeButton.AddToClassList("popover-close-button");
+            closeButton.AddToClassList(StyleConstants.ClickableClass);
+            dragHandle.Add(closeButton);
 
             DataVisualizerSettings settings = Settings;
             ActionButtonToggle prefsToggle = null;
@@ -2222,7 +2358,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     SaveUserStateToFile();
                 }
             });
-            _settingsPopover.Add(prefsToggle);
+            contentWrapper.Add(prefsToggle);
 
             VisualElement dataFolderContainer = new()
             {
@@ -2235,6 +2371,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             Label dataFolderLabel = new("Data Folder:");
             dataFolderLabel.AddToClassList("settings-data-folder-label");
+
             dataFolderContainer.Add(dataFolderLabel);
             Label dataFolderPathDisplay = new()
             {
@@ -2242,6 +2379,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 name = "data-folder-display",
             };
             dataFolderPathDisplay.AddToClassList("settings-data-folder-path-display");
+            dataFolderPathDisplay.AddToClassList(StyleConstants.ClickableClass);
+            dataFolderPathDisplay.RegisterCallback<PointerDownEvent, DataVisualizerSettings>(
+                (evt, context) =>
+                {
+                    Object dataFolderPath = AssetDatabase.LoadAssetAtPath<Object>(
+                        context.DataFolderPath
+                    );
+                    if (dataFolderPath != null)
+                    {
+                        EditorGUIUtility.PingObject(dataFolderPath);
+                    }
+                },
+                Settings
+            );
             dataFolderContainer.Add(dataFolderPathDisplay);
             Button selectFolderButton = new(() => SelectDataFolderForPopover(dataFolderPathDisplay))
             {
@@ -2250,7 +2401,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             selectFolderButton.AddToClassList("settings-data-folder-button");
             selectFolderButton.AddToClassList(StyleConstants.ClickableClass);
             dataFolderContainer.Add(selectFolderButton);
-            _settingsPopover.Add(dataFolderContainer);
+            contentWrapper.Add(dataFolderContainer);
         }
 
         private void SelectDataFolderForPopover(Label displayField)
@@ -2360,12 +2511,35 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void BuildCreatePopoverContent(Type type)
         {
-            _createPopover.Clear();
+            VisualElement dragHandle = _createPopover.Q(className: "popover-drag-handle");
+            VisualElement contentWrapper = _createPopover.Q(
+                name: $"{_createPopover.name}-content-wrapper"
+            );
+            if (dragHandle == null || contentWrapper == null)
+            {
+                return;
+            }
+
+            dragHandle.AddToClassList("create");
+            dragHandle.Clear();
+            contentWrapper.Clear();
             _createPopover.userData = type;
+
+            dragHandle.Add(
+                new Label("Create")
+                {
+                    style = { unityFontStyleAndWeight = FontStyle.Bold, marginLeft = 5 },
+                }
+            );
+
+            Button closeButton = new(CloseActivePopover) { text = "X" };
+            closeButton.AddToClassList("popover-close-button");
+            closeButton.AddToClassList(StyleConstants.ClickableClass);
+            dragHandle.Add(closeButton);
 
             Label createLabel = new("Enter new name (without extension)");
             createLabel.AddToClassList("create-object-label");
-            _createPopover.Add(createLabel);
+            contentWrapper.Add(createLabel);
             TextField nameTextField = new()
             {
                 value = Path.GetFileNameWithoutExtension(
@@ -2375,7 +2549,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             nameTextField.AddToClassList("create-text-field");
             nameTextField.schedule.Execute(() => nameTextField.SelectAll()).ExecuteLater(50);
-            _createPopover.Add(nameTextField);
+            contentWrapper.Add(nameTextField);
             Label errorLabel = new()
             {
                 name = "error-label",
@@ -2386,7 +2560,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     display = DisplayStyle.None,
                 },
             };
-            _createPopover.Add(errorLabel);
+            contentWrapper.Add(errorLabel);
             VisualElement buttonContainer = new();
             buttonContainer.AddToClassList("popover-button-container");
             Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
@@ -2402,17 +2576,40 @@ namespace WallstopStudios.DataVisualizer.Editor
             createButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(createButton);
-            _createPopover.Add(buttonContainer);
+            contentWrapper.Add(buttonContainer);
         }
 
         private void BuildRenamePopoverContent(string originalPath, string originalName)
         {
-            _renamePopover.Clear();
+            VisualElement dragHandle = _renamePopover.Q(className: "popover-drag-handle");
+            VisualElement contentWrapper = _renamePopover.Q(
+                name: $"{_renamePopover.name}-content-wrapper"
+            );
+            if (dragHandle == null || contentWrapper == null)
+            {
+                return;
+            }
+
+            dragHandle.AddToClassList("rename");
+            dragHandle.Clear();
+            contentWrapper.Clear();
             _renamePopover.userData = originalPath;
+
+            dragHandle.Add(
+                new Label("Rename")
+                {
+                    style = { unityFontStyleAndWeight = FontStyle.Bold, marginLeft = 5 },
+                }
+            );
+
+            Button closeButton = new(CloseActivePopover) { text = "X" };
+            closeButton.AddToClassList("popover-close-button");
+            closeButton.AddToClassList(StyleConstants.ClickableClass);
+            dragHandle.Add(closeButton);
 
             Label renameLabel = new("Enter new name (without extension)");
             renameLabel.AddToClassList("rename-object-label");
-            _renamePopover.Add(renameLabel);
+            contentWrapper.Add(renameLabel);
             TextField nameTextField = new()
             {
                 value = Path.GetFileNameWithoutExtension(originalName),
@@ -2420,7 +2617,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             nameTextField.AddToClassList("rename-text-field");
             nameTextField.schedule.Execute(() => nameTextField.SelectAll()).ExecuteLater(50);
-            _renamePopover.Add(nameTextField);
+            contentWrapper.Add(nameTextField);
             Label errorLabel = new()
             {
                 name = "error-label",
@@ -2431,7 +2628,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     display = DisplayStyle.None,
                 },
             };
-            _renamePopover.Add(errorLabel);
+            contentWrapper.Add(errorLabel);
             VisualElement buttonContainer = new();
             buttonContainer.AddToClassList("popover-button-container");
             Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
@@ -2447,7 +2644,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             renameButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(renameButton);
-            _renamePopover.Add(buttonContainer);
+            contentWrapper.Add(buttonContainer);
         }
 
         private void HandleCreateConfirmed(Type type, TextField nameField, Label errorLabel)
@@ -2560,10 +2757,33 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void BuildConfirmDeletePopoverContent(ScriptableObject objectToDelete)
         {
-            _confirmDeletePopover.Clear();
+            VisualElement dragHandle = _confirmDeletePopover.Q(className: "popover-drag-handle");
+            VisualElement contentWrapper = _confirmDeletePopover.Q(
+                name: $"{_confirmDeletePopover.name}-content-wrapper"
+            );
+            if (dragHandle == null || contentWrapper == null)
+            {
+                return;
+            }
+
             _confirmDeletePopover.userData = objectToDelete;
 
-            _confirmDeletePopover.Add(
+            dragHandle.AddToClassList("confirm-delete");
+            dragHandle.Clear();
+            contentWrapper.Clear();
+
+            dragHandle.Add(
+                new Label("Confirm Delete")
+                {
+                    style = { unityFontStyleAndWeight = FontStyle.Bold, marginLeft = 5 },
+                }
+            );
+            Button closeButton = new(CloseActivePopover) { text = "X" };
+            closeButton.AddToClassList("popover-close-button");
+            closeButton.AddToClassList(StyleConstants.ClickableClass);
+            dragHandle.Add(closeButton);
+
+            contentWrapper.Add(
                 new Label(
                     $"Delete '<color=yellow><i>{objectToDelete.name}</i></color>'?\nThis cannot be undone."
                 )
@@ -2584,7 +2804,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             deleteButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(deleteButton);
-            _confirmDeletePopover.Add(buttonContainer);
+            contentWrapper.Add(buttonContainer);
         }
 
         private void HandleDeleteConfirmed()
@@ -3307,7 +3527,32 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _confirmNamespaceAddPopover.Clear();
+            VisualElement dragHandle = _confirmNamespaceAddPopover.Q(
+                className: "popover-drag-handle"
+            );
+            VisualElement contentWrapper = _confirmNamespaceAddPopover.Q(
+                name: $"{_confirmNamespaceAddPopover.name}-content-wrapper"
+            );
+            if (dragHandle == null || contentWrapper == null)
+            {
+                return;
+            }
+
+            dragHandle.AddToClassList("namespace-add");
+            dragHandle.Clear();
+            contentWrapper.Clear();
+
+            dragHandle.Add(
+                new Label("Confirm Namespace Add")
+                {
+                    style = { unityFontStyleAndWeight = FontStyle.Bold, marginLeft = 5 },
+                }
+            );
+
+            Button closeButton = new(CloseNestedPopover) { text = "X" };
+            closeButton.AddToClassList("popover-close-button");
+            closeButton.AddToClassList(StyleConstants.ClickableClass);
+            dragHandle.Add(closeButton);
 
             int countToAdd = typesToAdd.Count;
             if (countToAdd == 0)
@@ -3326,11 +3571,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
             };
-            _confirmNamespaceAddPopover.Add(messageLabel);
+            contentWrapper.Add(messageLabel);
 
             VisualElement buttonContainer = new();
             buttonContainer.AddToClassList("popover-button-container");
-            _confirmNamespaceAddPopover.Add(buttonContainer);
+            contentWrapper.Add(buttonContainer);
 
             Button cancelButton = new(CloseNestedPopover)
             {

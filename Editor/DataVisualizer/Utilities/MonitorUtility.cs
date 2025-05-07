@@ -89,7 +89,7 @@
         private static Rect GetPrimaryMonitorRect_Windows_PInvoke()
         {
             // Point (0,0) should be on the primary monitor in virtual screen coords
-            POINT zeroPoint = new POINT { X = 0, Y = 0 };
+            POINT zeroPoint = new() { X = 0, Y = 0 };
 
             // Get the handle to the primary monitor
             IntPtr hMonitor = MonitorFromPoint(zeroPoint, MONITOR_DEFAULTTOPRIMARY);
@@ -102,7 +102,7 @@
                 return Rect.zero;
             }
 
-            MONITORINFO monitorInfo = new MONITORINFO();
+            MONITORINFO monitorInfo = new();
             monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO)); // Crucial: Set the size field
 
             // Get monitor information

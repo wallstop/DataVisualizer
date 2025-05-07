@@ -122,6 +122,40 @@
     color: white;
 }
 
+.popover-drag-handle {
+    height: 20px;
+    margin-bottom: 5px;
+    border-width: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    background-color: transparent;
+}
+
+.popover-drag-handle.settings {
+    color: chocolate;
+}
+
+.popover-drag-handle.create {
+    color: green;
+}
+
+.popover-drag-handle.namespace-add {
+    color: green;
+}
+
+.popover-drag-handle.rename {
+    color: rgb(51, 153, 230);
+}
+
+.popover-drag-handle.confirm-delete {
+    color: rgb(230, 102, 102);
+}
+
+.popover-drag-handle > .unity-text-element {
+    background-color: transparent;
+}
+
 .popover-cancel-button {
     border-color: darkkhaki;
     margin-right: 10px;
@@ -142,6 +176,16 @@
     border-color: darkkhaki;
     background-color: darkkhaki;
     color: crimson;
+}
+
+.popover-close-button {
+    color: rgb(230, 102, 102);
+    -unity-font-style: bold;
+    padding: 10px 5px;
+    font-size: 16px;
+    border-width: 2px;
+    border-color: rgb(230, 102, 102);
+    border-radius: 50%;
 }
 
 .search-popover {
