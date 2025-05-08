@@ -14,8 +14,10 @@ namespace WallstopStudios.DataVisualizer.Editor
     using Data;
     using Extensions;
     using Search;
+#if ODIN_INSPECTOR
     using Sirenix.OdinInspector;
     using Sirenix.OdinInspector.Editor;
+#endif
     using Styles;
     using UI;
     using UnityEditor;
