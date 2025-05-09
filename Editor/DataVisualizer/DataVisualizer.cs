@@ -289,7 +289,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             _selectedElement = null;
             _selectedObject = null;
-            _namespaceController.SelectType(this, null);
             _scriptableObjectTypes.Clear();
             _namespaceOrder.Clear();
             _namespaceController.Clear();
@@ -611,7 +610,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private DataVisualizerSettings LoadOrCreateSettings()
         {
             DataVisualizerSettings settings = null;
-
             string[] guids = AssetDatabase.FindAssets($"t:{nameof(DataVisualizerSettings)}");
 
             if (0 < guids.Length)
@@ -671,6 +669,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
+            DirectoryHelper.EnsureDirectoryExists(settings.DataFolderPath.SanitizePath());
             return settings;
         }
 
@@ -811,7 +810,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             string savedObjectGuid = null;
             if (selectedType != null)
             {
-                savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.Name);
+                savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.FullName);
             }
 
             ScriptableObject objectToSelect = null;
@@ -841,6 +840,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             SelectObject(objectToSelect);
+            if (objectToSelect == null)
+            {
+                _namespaceController.SelectType(this, selectedType);
+                rootVisualElement
+                    .schedule.Execute(() => _namespaceController.SelectType(this, selectedType))
+                    .ExecuteLater(1);
+            }
         }
 
         private VisualElement FindTypeElement(Type targetType)
@@ -1700,7 +1706,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         (
                             field.FieldType.IsClass
                             || field.FieldType is { IsValueType: true, IsPrimitive: false }
-                        ) && !typeof(UnityEngine.Object).IsAssignableFrom(field.FieldType)
+                        ) && !typeof(Object).IsAssignableFrom(field.FieldType)
                     )
                     {
                         MatchDetail nestedMatch = SearchStringProperties(
@@ -3446,6 +3452,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             Button createButton = null;
             createButton = new Button(() =>
             {
+                if (_namespaceController.SelectedType == null)
+                {
+                    return;
+                }
                 BuildCreatePopoverContent(_namespaceController.SelectedType);
                 OpenPopover(_createPopover, createButton);
             })
@@ -4205,7 +4215,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             ScriptableObject objectToSelect = null;
-            string savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.Name);
+            string savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.FullName);
             if (!string.IsNullOrWhiteSpace(savedObjectGuid))
             {
                 objectToSelect = _selectedObjects.Find(obj =>
@@ -4382,7 +4392,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _selectedObjects.Clear();
             _selectedObjects.AddRange(sortedObjects);
-            SelectObject(null);
         }
 
         private void LoadScriptableObjectTypes()
@@ -4448,18 +4457,38 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             return _relevantScriptableObjectTypes ??= TypeCache
                 .GetTypesDerivedFrom<ScriptableObject>()
-                .Where(t => !typeof(Editor).IsAssignableFrom(t))
-                .Where(t => !t.IsAbstract && !t.IsGenericType)
+                .Where(type => !IsSubclassOf(type, typeof(Editor)))
+                .Where(type => !IsSubclassOf(type, typeof(EditorWindow)))
+                .Where(type => !IsSubclassOf(type, typeof(ScriptableSingleton<>)))
+                .Where(type => !type.IsAbstract && !type.IsGenericType)
                 .ToList();
+        }
+
+        public static bool IsSubclassOf(Type typeToCheck, Type baseClass)
+        {
+            if (typeToCheck == null)
+            {
+                return false;
+            }
+
+            Type currentType = typeToCheck;
+
+            while (currentType != null && currentType != typeof(object))
+            {
+                Type typeToCheckAgainst = currentType.IsGenericType
+                    ? currentType.GetGenericTypeDefinition()
+                    : currentType;
+                if (typeToCheckAgainst == baseClass)
+                {
+                    return true;
+                }
+                currentType = currentType.BaseType;
+            }
+            return false;
         }
 
         internal void SelectObject(ScriptableObject dataObject)
         {
-            if (_selectedObject == dataObject)
-            {
-                return;
-            }
-
             _selectedElement?.RemoveFromClassList(StyleConstants.SelectedClass);
             foreach (
                 VisualElement child in _selectedElement?.IterateChildrenRecursively()
@@ -4469,10 +4498,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 child.EnableInClassList(StyleConstants.ClickableClass, true);
             }
             _selectedObject = dataObject;
-
             _selectedElement = null;
-
-            Type selectedType = _namespaceController.SelectedType;
             if (
                 _selectedObject != null
                 && _objectVisualElementMap.TryGetValue(
@@ -4494,36 +4520,26 @@ namespace WallstopStudios.DataVisualizer.Editor
                         _objectScrollView?.ScrollTo(_selectedElement);
                     })
                     .ExecuteLater(1);
-                try
-                {
-                    if (selectedType != null)
-                    {
-                        string namespaceKey = NamespaceController.GetNamespaceKey(selectedType);
-                        string typeName = selectedType.Name;
-                        string assetPath = AssetDatabase.GetAssetPath(_selectedObject);
-                        string objectGuid = null;
-                        if (!string.IsNullOrWhiteSpace(assetPath))
-                        {
-                            objectGuid = AssetDatabase.AssetPathToGUID(assetPath);
-                        }
+            }
 
-                        SetLastSelectedNamespaceKey(namespaceKey);
-                        SetLastSelectedTypeName(typeName);
-                        SetLastSelectedObjectGuidForType(typeName, objectGuid);
-                    }
-                }
-                catch (Exception e)
+            try
+            {
+                if (_selectedObject != null)
                 {
-                    Debug.LogError($"Error saving selection state. {e}");
+                    string typeName = _selectedObject.GetType().FullName;
+                    string assetPath = AssetDatabase.GetAssetPath(_selectedObject);
+                    string objectGuid = null;
+                    if (!string.IsNullOrWhiteSpace(assetPath))
+                    {
+                        objectGuid = AssetDatabase.AssetPathToGUID(assetPath);
+                    }
+
+                    SetLastSelectedObjectGuidForType(typeName, objectGuid);
                 }
             }
-            else
+            catch (Exception e)
             {
-                if (selectedType != null)
-                {
-                    string typeName = selectedType.Name;
-                    SetLastSelectedObjectGuidForType(typeName, null);
-                }
+                Debug.LogError($"Error saving selection state. {e}");
             }
 
             _currentInspectorScriptableObject?.Dispose();
@@ -4533,14 +4549,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (dataObject != null)
             {
                 _namespaceController.SelectType(this, dataObject.GetType());
+                rootVisualElement
+                    .schedule.Execute(
+                        () => _namespaceController.SelectType(this, dataObject.GetType())
+                    )
+                    .ExecuteLater(1);
             }
             // Backup trigger, we have some delay issues
-            rootVisualElement
-                .schedule.Execute(
-                    () => _namespaceController.SelectType(this, _selectedObject?.GetType())
-                )
-                .ExecuteLater(1);
-
             BuildInspectorView();
         }
 
@@ -5452,44 +5467,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             return settings.persistStateInSettingsAsset
                 ? settings.lastSelectedTypeName
                 : UserState.lastSelectedTypeName;
-        }
-
-        private void SetLastSelectedTypeName(string value)
-        {
-            PersistSettings(
-                settings =>
-                {
-                    if (
-                        string.Equals(
-                            settings.lastSelectedTypeName,
-                            value,
-                            StringComparison.Ordinal
-                        )
-                    )
-                    {
-                        return false;
-                    }
-
-                    settings.lastSelectedTypeName = value;
-                    return true;
-                },
-                userState =>
-                {
-                    if (
-                        string.Equals(
-                            userState.lastSelectedTypeName,
-                            value,
-                            StringComparison.Ordinal
-                        )
-                    )
-                    {
-                        return false;
-                    }
-
-                    userState.lastSelectedTypeName = value;
-                    return true;
-                }
-            );
         }
 
         private string GetLastSelectedObjectGuidForType(string typeName)
