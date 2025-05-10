@@ -843,9 +843,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (objectToSelect == null)
             {
                 _namespaceController.SelectType(this, selectedType);
-                rootVisualElement
-                    .schedule.Execute(() => _namespaceController.SelectType(this, selectedType))
-                    .ExecuteLater(1);
             }
         }
 
@@ -2389,7 +2386,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             dataFolderPathDisplay.AddToClassList("settings-data-folder-path-display");
             dataFolderPathDisplay.AddToClassList(StyleConstants.ClickableClass);
             dataFolderPathDisplay.RegisterCallback<PointerDownEvent, DataVisualizerSettings>(
-                (evt, context) =>
+                (_, context) =>
                 {
                     Object dataFolderPath = AssetDatabase.LoadAssetAtPath<Object>(
                         context.DataFolderPath
@@ -4464,7 +4461,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .ToList();
         }
 
-        public static bool IsSubclassOf(Type typeToCheck, Type baseClass)
+        private static bool IsSubclassOf(Type typeToCheck, Type baseClass)
         {
             if (typeToCheck == null)
             {
@@ -4550,9 +4547,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _namespaceController.SelectType(this, dataObject.GetType());
                 rootVisualElement
-                    .schedule.Execute(
-                        () => _namespaceController.SelectType(this, dataObject.GetType())
-                    )
+                    .schedule.Execute(() =>
+                    {
+                        if (_selectedObject == dataObject)
+                        {
+                            _namespaceController.SelectType(this, dataObject.GetType());
+                        }
+                    })
                     .ExecuteLater(1);
             }
             // Backup trigger, we have some delay issues
@@ -5422,48 +5423,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        private void SetLastSelectedNamespaceKey(string value)
-        {
-            PersistSettings(
-                settings =>
-                {
-                    if (
-                        string.Equals(
-                            settings.lastSelectedNamespaceKey,
-                            value,
-                            StringComparison.Ordinal
-                        )
-                    )
-                    {
-                        return false;
-                    }
-
-                    settings.lastSelectedNamespaceKey = value;
-                    return true;
-                },
-                userState =>
-                {
-                    if (
-                        string.Equals(
-                            userState.lastSelectedNamespaceKey,
-                            value,
-                            StringComparison.Ordinal
-                        )
-                    )
-                    {
-                        return false;
-                    }
-
-                    userState.lastSelectedNamespaceKey = value;
-                    return true;
-                }
-            );
-        }
-
         private string GetLastSelectedTypeName()
         {
             DataVisualizerSettings settings = Settings;
-
             return settings.persistStateInSettingsAsset
                 ? settings.lastSelectedTypeName
                 : UserState.lastSelectedTypeName;
