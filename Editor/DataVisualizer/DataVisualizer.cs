@@ -4696,6 +4696,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             if (_activeDragType != DragType.None && _draggedElement != null)
             {
+                _draggedElement.UnregisterCallback<KeyDownEvent>(HandleGlobalKeyDown);
                 _draggedElement.UnregisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
                 _draggedElement.UnregisterCallback<PointerUpEvent>(OnCapturedPointerUp);
                 _draggedElement.UnregisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
