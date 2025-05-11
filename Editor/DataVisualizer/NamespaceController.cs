@@ -129,13 +129,6 @@
             _selectedType = null;
             if (!TryGet(type, out VisualElement element))
             {
-                if (type != null)
-                {
-                    Debug.LogWarning(
-                        $"Could not find type {type?.FullName}. Namespace cache: [{string.Join(",", _namespaceCache.Keys.Select(nsType => nsType.Name).OrderBy(x => x))}]."
-                    );
-                }
-
                 return;
             }
 
@@ -222,11 +215,18 @@
                             $"Remove {removableTypeCount} non-core type{(removableTypeCount > 1 ? "s" : "")} from namespace '{namespaceKey}'?",
                             "Remove",
                             () =>
+                            {
                                 HandleRemoveNamespaceTypesConfirmed(
                                     dataVisualizer,
                                     namespaceKey,
                                     nonCoreManagedTypes
-                                ),
+                                );
+                                if (nonCoreManagedTypes.Contains(SelectedType))
+                                {
+                                    SelectType(dataVisualizer, null);
+                                    dataVisualizer.SelectObject(null);
+                                }
+                            },
                             namespaceRemoveButton
                         );
                     })
@@ -306,7 +306,15 @@
                             dataVisualizer.BuildAndOpenConfirmationPopover(
                                 $"Remove type '<color=yellow><i>{type.Name}</i></color>' from Data Visualizer?",
                                 "Remove",
-                                () => HandleRemoveTypeConfirmed(dataVisualizer, type),
+                                () =>
+                                {
+                                    HandleRemoveTypeConfirmed(dataVisualizer, type);
+                                    if (type == SelectedType)
+                                    {
+                                        SelectType(dataVisualizer, null);
+                                        dataVisualizer.SelectObject(null);
+                                    }
+                                },
                                 typeRemoveButton
                             );
                         })

@@ -30,6 +30,9 @@
         )]
         public bool persistStateInSettingsAsset;
 
+        [Tooltip("If true, when selecting an Object, it will be selected in the Inspector.")]
+        public bool selectActiveObject;
+
         [
             Header("Saved State (Internal - Use only if EditorPrefs is disabled)"),
             SerializeField,

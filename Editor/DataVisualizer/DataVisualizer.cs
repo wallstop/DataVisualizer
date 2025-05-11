@@ -166,6 +166,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private string _lastSearchString;
 
         private Button _addTypeButton;
+        private Button _createObjectButton;
         private Button _settingsButton;
         private TextField _typeSearchField;
         private VisualElement _typePopoverListContainer;
@@ -502,12 +503,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
 
                     selectedType ??= typesInNamespace[0];
-                }
-                else
-                {
-                    Debug.LogWarning(
-                        $"Failed to find any types for namespace {previousNamespaceKey}."
-                    );
                 }
             }
 
@@ -1740,17 +1735,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             BuildObjectsView();
             SelectObject(targetObject);
             CloseActivePopover();
-            _selectedElement
-                ?.schedule.Execute(() =>
-                {
-                    _objectScrollView?.ScrollTo(_selectedElement);
-                })
-                .ExecuteLater(10);
         }
 
         private VisualElement CreatePopoverBase(string popoverName)
         {
-            VisualElement popover = new() { name = popoverName };
+            VisualElement popover = new() { name = popoverName, focusable = true };
             popover.AddToClassList("popover");
 
             VisualElement dragHandle = new() { name = $"{popoverName}-drag-handle" };
@@ -1889,17 +1878,37 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _confirmActionPopover.Clear();
+            VisualElement dragHandle = _confirmActionPopover.Q(className: "popover-drag-handle");
+            VisualElement contentWrapper = _confirmActionPopover.Q(
+                name: $"{_confirmActionPopover.name}-content-wrapper"
+            );
+            if (dragHandle == null || contentWrapper == null)
+            {
+                return;
+            }
+
+            dragHandle.AddToClassList("delete-button");
+            dragHandle.Clear();
+            contentWrapper.Clear();
+
+            dragHandle.Add(
+                new Label("Remove") { style = { unityFontStyleAndWeight = FontStyle.Bold } }
+            );
+
+            Button closeButton = new(CloseActivePopover) { text = "X" };
+            closeButton.AddToClassList("popover-close-button");
+            closeButton.AddToClassList(StyleConstants.ClickableClass);
+            dragHandle.Add(closeButton);
 
             Label messageLabel = new(message)
             {
                 style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
             };
-            _confirmActionPopover.Add(messageLabel);
+            contentWrapper.Add(messageLabel);
 
             VisualElement buttonContainer = new();
             buttonContainer.AddToClassList("popover-button-container");
-            _confirmActionPopover.Add(buttonContainer);
+            contentWrapper.Add(buttonContainer);
 
             Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
             cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
@@ -2322,15 +2331,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             ActionButtonToggle prefsToggle = null;
             prefsToggle = new ActionButtonToggle(
                 settings.persistStateInSettingsAsset
-                    ? "Persist State in UserState:"
-                    : "Persist State in Settings Asset:",
+                    ? "Persist State in UserState: "
+                    : "Persist State in Settings Asset: ",
                 value =>
                 {
                     if (prefsToggle != null)
                     {
                         prefsToggle.Label = value
-                            ? "Persist State in UserState:"
-                            : "Persist State in Settings Asset:";
+                            ? "Persist State in UserState: "
+                            : "Persist State in Settings Asset: ";
                     }
                 }
             )
@@ -2357,6 +2366,40 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             });
             contentWrapper.Add(prefsToggle);
+
+            ActionButtonToggle selectionToggle = null;
+            selectionToggle = new ActionButtonToggle(
+                settings.selectActiveObject
+                    ? "Don't Select Active Object: "
+                    : "Select Active Object: ",
+                value =>
+                {
+                    if (selectionToggle != null)
+                    {
+                        selectionToggle.Label = value
+                            ? "Don't Select Active Object: "
+                            : "Select Active Object: ";
+                    }
+                }
+            )
+            {
+                value = settings.selectActiveObject,
+            };
+            selectionToggle.AddToClassList("settings-prefs-toggle");
+            selectionToggle.RegisterValueChangedCallback(evt =>
+            {
+                bool newSelectActiveObject = evt.newValue;
+                bool previousSelectActiveObject = Settings.selectActiveObject;
+                if (newSelectActiveObject == previousSelectActiveObject)
+                {
+                    return;
+                }
+
+                DataVisualizerSettings localSettings = Settings;
+                localSettings.selectActiveObject = newSelectActiveObject;
+                AssetDatabase.SaveAssets();
+            });
+            contentWrapper.Add(selectionToggle);
 
             VisualElement dataFolderContainer = new()
             {
@@ -2673,7 +2716,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             ScriptableObject instance = CreateInstance(type);
-            AssetDatabase.CreateAsset(instance, uniquePath);
+            try
+            {
+                AssetDatabase.CreateAsset(instance, uniquePath);
+            }
+            finally
+            {
+                DestroyImmediate(instance);
+            }
+
             CloseActivePopover();
             ScheduleRefresh();
         }
@@ -3439,25 +3490,27 @@ namespace WallstopStudios.DataVisualizer.Editor
             objectHeader.AddToClassList("object-header");
 
             objectHeader.Add(new Label("Objects"));
-            Button createButton = null;
-            createButton = new Button(() =>
+            _createObjectButton = null;
+            _createObjectButton = new Button(() =>
             {
                 if (_namespaceController.SelectedType == null)
                 {
                     return;
                 }
                 BuildCreatePopoverContent(_namespaceController.SelectedType);
-                OpenPopover(_createPopover, createButton);
+                OpenPopover(_createPopover, _createObjectButton);
             })
             {
                 text = "+",
                 tooltip = "Create New Object",
                 name = "create-object-button",
             };
-            createButton.AddToClassList("create-button");
-            createButton.AddToClassList("icon-button");
-            createButton.AddToClassList(StyleConstants.ClickableClass);
-            objectHeader.Add(createButton);
+            _createObjectButton.AddToClassList("create-button");
+            _createObjectButton.AddToClassList("icon-button");
+            _createObjectButton.AddToClassList(StyleConstants.ClickableClass);
+            _createObjectButton.style.display =
+                _namespaceController.SelectedType != null ? DisplayStyle.Flex : DisplayStyle.None;
+            objectHeader.Add(_createObjectButton);
             objectColumn.Add(objectHeader);
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
@@ -3983,6 +4036,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        // TODO: WAY SMARTER STUFF
         private VisualElement TryGetCustomVisualElement(Type objectType)
         {
             if (_selectedObject is BaseDataObject baseDataObject)
@@ -4153,6 +4207,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 AssetDatabase.CreateAsset(cloneInstance, uniquePath);
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
+                Destroy(cloneInstance);
 
                 ScriptableObject cloneAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
                     uniquePath
@@ -4447,10 +4502,41 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             return _relevantScriptableObjectTypes ??= TypeCache
                 .GetTypesDerivedFrom<ScriptableObject>()
+                .Where(type => type != typeof(ScriptableObject))
                 .Where(type => !IsSubclassOf(type, typeof(Editor)))
                 .Where(type => !IsSubclassOf(type, typeof(EditorWindow)))
                 .Where(type => !IsSubclassOf(type, typeof(ScriptableSingleton<>)))
                 .Where(type => !type.IsAbstract && !type.IsGenericType)
+                .Where(type =>
+                    type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
+                )
+                .Where(type =>
+                    type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true
+                )
+                .Where(type =>
+                {
+                    ScriptableObject instance = CreateInstance(type);
+                    try
+                    {
+                        using SerializedObject serializedObject = new(instance);
+                        using SerializedProperty scriptProperty = serializedObject.FindProperty(
+                            "m_Script"
+                        );
+                        if (scriptProperty == null)
+                        {
+                            return false;
+                        }
+
+                        return scriptProperty.objectReferenceValue != null;
+                    }
+                    finally
+                    {
+                        if (instance != null)
+                        {
+                            DestroyImmediate(instance);
+                        }
+                    }
+                })
                 .ToList();
         }
 
@@ -4503,13 +4589,29 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     child.EnableInClassList(StyleConstants.ClickableClass, false);
                 }
-                Selection.activeObject = _selectedObject;
-                _objectScrollView
-                    .schedule.Execute(() =>
-                    {
-                        _objectScrollView?.ScrollTo(_selectedElement);
-                    })
-                    .ExecuteLater(1);
+
+                if (Settings.selectActiveObject)
+                {
+                    Selection.activeObject = _selectedObject;
+                }
+
+                Rect targetElementWorldBound = newSelectedElement.worldBound;
+                Rect scrollViewContentViewportWorldBound = _objectScrollView
+                    .contentViewport
+                    .worldBound;
+                bool isElementInView = targetElementWorldBound.Overlaps(
+                    scrollViewContentViewportWorldBound
+                );
+
+                if (!isElementInView)
+                {
+                    _objectScrollView
+                        .schedule.Execute(() =>
+                        {
+                            _objectScrollView?.ScrollTo(_selectedElement);
+                        })
+                        .ExecuteLater(1);
+                }
             }
 
             try
@@ -4530,6 +4632,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             catch (Exception e)
             {
                 Debug.LogError($"Error saving selection state. {e}");
+            }
+
+            if (_createObjectButton != null)
+            {
+                _createObjectButton.style.display =
+                    _namespaceController.SelectedType != null
+                        ? DisplayStyle.Flex
+                        : DisplayStyle.None;
             }
 
             _currentInspectorScriptableObject?.Dispose();
@@ -4573,6 +4683,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _activeDragType = DragType.Object;
                 _dragStartPosition = evt.position;
                 targetElement.CapturePointer(evt.pointerId);
+                targetElement.Focus();
+                targetElement.RegisterCallback<KeyDownEvent>(HandleGlobalKeyDown);
                 targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
                 targetElement.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
                 targetElement.RegisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);

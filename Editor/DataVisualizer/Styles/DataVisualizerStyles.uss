@@ -48,6 +48,7 @@
     position: absolute;
     min-width: 200px;
     min-height: 50px;
+    max-width: 500px;
     background-color: rgba(0, 0, 0, 0.75);
     border-radius: 10px;
     border-width: 0;
@@ -343,6 +344,7 @@
     -unity-font-style: bold;
     align-items: center;
     padding: 3px;
+    height: 42px;
     flex-shrink: 0;
     border-bottom-width: 1px;
     border-bottom-color: rgba(128, 128, 128, 0.5);
@@ -400,6 +402,7 @@
     -unity-font-style: bold;
     align-items: center;
     padding: 3px;
+    height: 42px;
     flex-shrink: 0;
     border-bottom-width: 1px;
     border-bottom-color: rgba(128, 128, 128, 0.5);
