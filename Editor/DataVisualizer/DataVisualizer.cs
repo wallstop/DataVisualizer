@@ -37,7 +37,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string PrefsSplitterInnerKey = PrefsPrefix + "SplitterInnerFixedPaneWidth";
         private const string PrefsInitialSizeAppliedKey = PrefsPrefix + "InitialSizeApplied";
 
-        private const string SettingsDefaultPath = "Assets/DataVisualizerSettings.asset";
+        private const string SettingsDefaultPath = "Assets/Editor/DataVisualizerSettings.asset";
         private const string UserStateFileName = "DataVisualizerUserState.json";
 
         private const string NamespaceItemClass = "namespace-item";
@@ -607,34 +607,27 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private DataVisualizerSettings LoadOrCreateSettings()
+        private static DataVisualizerSettings LoadOrCreateSettings()
         {
             DataVisualizerSettings settings = null;
-            string[] guids = AssetDatabase.FindAssets($"t:{nameof(DataVisualizerSettings)}");
 
-            if (0 < guids.Length)
+            DataVisualizerSettings[] foundSettings = AssetDatabase
+                .FindAssets($"t:{nameof(DataVisualizerSettings)}")
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Select(AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>)
+                .Where(s => s != null)
+                .ToArray();
+
+            if (0 < foundSettings.Length)
             {
-                if (1 < guids.Length)
+                if (1 < foundSettings.Length)
                 {
                     Debug.LogWarning(
-                        $"Multiple DataVisualizerSettings assets found ({guids.Length}). Using the first one."
+                        $"Multiple DataVisualizerSettings assets found ({foundSettings.Length}). Using the first one."
                     );
                 }
 
-                foreach (string guid in guids)
-                {
-                    string path = AssetDatabase.GUIDToAssetPath(guid);
-                    if (string.IsNullOrWhiteSpace(path))
-                    {
-                        continue;
-                    }
-
-                    settings = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(path);
-                    if (settings != null)
-                    {
-                        break;
-                    }
-                }
+                settings = foundSettings[0];
             }
 
             if (settings == null)

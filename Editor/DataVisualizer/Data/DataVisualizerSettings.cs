@@ -10,7 +10,7 @@
 
     [CreateAssetMenu(
         fileName = "DataVisualizerSettings",
-        menuName = "DataVisualizer/Data Visualizer Settings",
+        menuName = "Wallstop Studios/DataVisualizer/Data Visualizer Settings",
         order = 1
     )]
     public sealed class DataVisualizerSettings : ScriptableObject
