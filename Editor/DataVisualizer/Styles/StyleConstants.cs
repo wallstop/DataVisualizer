@@ -17,6 +17,7 @@
 
         public const string PopoverButtonClass = "popover-button";
         public const string PopoverCancelButtonClass = "popover-cancel-button";
+        public const string PopoverPrimaryActionClass = "popover-primary-action";
 
         public const string TransparentCursorClass = "transparent-cursor";
         public const string StyledCursorClass = "styled-cursor";

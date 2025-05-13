@@ -1759,6 +1759,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
             popover.Add(contentWrapper);
+            dragHandle.RegisterCallback<KeyDownEvent>(HandlePopoverKeyDown);
             return popover;
         }
 
@@ -1782,6 +1783,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
 
                 popover.CapturePointer(evt.pointerId);
+                popover.Focus();
                 popover.RegisterCallback<PointerMoveEvent>(OnPopoverPointerMove);
                 popover.RegisterCallback<PointerUpEvent>(OnPopoverPointerUp);
                 popover.RegisterCallback<PointerCaptureOutEvent>(OnPopoverPointerCaptureOut);
@@ -1916,20 +1918,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             cancelButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(cancelButton);
 
-            Button confirmButton = new(() =>
-            {
-                onConfirm();
-                CloseActivePopover();
-            })
-            {
-                text = confirmText,
-            };
+            Button confirmButton = new(Confirm) { text = confirmText, userData = (Action)Confirm };
+            confirmButton.AddToClassList(StyleConstants.PopoverPrimaryActionClass);
             confirmButton.AddToClassList(StyleConstants.PopoverButtonClass);
             confirmButton.AddToClassList("popover-delete-button");
             confirmButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(confirmButton);
 
             OpenPopover(_confirmActionPopover, triggerElement);
+            return;
+
+            void Confirm()
+            {
+                onConfirm();
+                CloseActivePopover();
+            }
         }
 
         private void CloseNestedPopover()
@@ -2076,7 +2079,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                         popover.style.top = clampedY;
                     }
                     popover.style.display = DisplayStyle.Flex;
-
                     if (!isNested)
                     {
                         rootVisualElement
@@ -2084,6 +2086,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                             {
                                 if (_activePopover == popover)
                                 {
+                                    popover.Focus();
+                                    //popover.RegisterCallback<KeyDownEvent>(HandlePopoverKeyDown);
                                     rootVisualElement.RegisterCallback<PointerDownEvent>(
                                         HandleClickOutsidePopover,
                                         TrickleDown.TrickleDown
@@ -2091,6 +2095,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                                 }
                             })
                             .ExecuteLater(10);
+                    }
+                    else if (_activeNestedPopover == popover)
+                    {
+                        popover.Focus();
                     }
                 })
                 .ExecuteLater(1);
@@ -2131,26 +2139,30 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleGlobalKeyDown(KeyDownEvent evt)
         {
-            if (_activePopover != null && _activePopover.style.display == DisplayStyle.Flex)
+            VisualElement activePopover = _activeNestedPopover ?? _activePopover;
+            if (activePopover != null && activePopover.style.display == DisplayStyle.Flex)
             {
                 switch (evt.keyCode)
                 {
                     case KeyCode.Escape:
+                    {
                         CloseActivePopover();
                         evt.PreventDefault();
                         evt.StopPropagation();
                         return;
-
+                    }
                     case KeyCode.DownArrow:
                     case KeyCode.UpArrow:
                     case KeyCode.Return:
                     case KeyCode.KeypadEnter:
+                    {
                         if (_lastActiveFocusArea == FocusArea.SearchResultsPopover)
                         {
                             _lastEnterPressed = Time.realtimeSinceStartup;
                             HandleSearchKeyDown(evt);
                             return;
                         }
+
                         if (_lastActiveFocusArea == FocusArea.AddTypePopover)
                         {
                             _lastEnterPressed = Time.realtimeSinceStartup;
@@ -2158,7 +2170,26 @@ namespace WallstopStudios.DataVisualizer.Editor
                             return;
                         }
 
+                        if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
+                        {
+                            Button primaryButton = activePopover
+                                .IterateChildrenRecursively()
+                                .Where(child =>
+                                    child.ClassListContains(
+                                        StyleConstants.PopoverPrimaryActionClass
+                                    )
+                                )
+                                .OfType<Button>()
+                                .FirstOrDefault();
+
+                            if (primaryButton?.userData is Action action)
+                            {
+                                action.Invoke();
+                            }
+                        }
+
                         break;
+                    }
                 }
 
                 if (evt.keyCode == KeyCode.DownArrow || evt.keyCode == KeyCode.UpArrow)
@@ -2209,6 +2240,45 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         evt.PreventDefault();
                         evt.StopPropagation();
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        private void HandlePopoverKeyDown(KeyDownEvent evt)
+        {
+            VisualElement activePopover = _activeNestedPopover ?? _activePopover;
+            if (activePopover == null || activePopover.style.display != DisplayStyle.Flex)
+            {
+                return;
+            }
+
+            switch (evt.keyCode)
+            {
+                case KeyCode.Escape:
+                {
+                    CloseActivePopover();
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    return;
+                }
+                case KeyCode.None when evt.character is '\n' or '\r':
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                {
+                    Button primaryButton = activePopover
+                        .IterateChildrenRecursively()
+                        .Where(child =>
+                            child.ClassListContains(StyleConstants.PopoverPrimaryActionClass)
+                        )
+                        .OfType<Button>()
+                        .FirstOrDefault();
+
+                    if (primaryButton?.userData is Action action)
+                    {
+                        action.Invoke();
                     }
 
                     break;
@@ -2608,16 +2678,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
             cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
             cancelButton.AddToClassList(StyleConstants.ClickableClass);
-            Button createButton = new(() => HandleCreateConfirmed(type, nameTextField, errorLabel))
-            {
-                text = "Create",
-            };
+            Button createButton = new(Create) { text = "Create", userData = (Action)Create };
+
+            createButton.AddToClassList(StyleConstants.PopoverPrimaryActionClass);
             createButton.AddToClassList(StyleConstants.PopoverButtonClass);
             createButton.AddToClassList("popover-create-button");
             createButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(createButton);
             contentWrapper.Add(buttonContainer);
+            return;
+
+            void Create()
+            {
+                HandleCreateConfirmed(type, nameTextField, errorLabel);
+            }
         }
 
         private void BuildRenamePopoverContent(string originalPath, string originalName)
@@ -2676,16 +2751,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
             cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
             cancelButton.AddToClassList(StyleConstants.ClickableClass);
-            Button renameButton = new(() => HandleRenameConfirmed(nameTextField, errorLabel))
-            {
-                text = "Rename",
-            };
+            Button renameButton = new(Rename) { text = "Rename", userData = (Action)Rename };
+            renameButton.AddToClassList(StyleConstants.PopoverPrimaryActionClass);
             renameButton.AddToClassList(StyleConstants.PopoverButtonClass);
             renameButton.AddToClassList("popover-rename-button");
             renameButton.AddToClassList(StyleConstants.ClickableClass);
             buttonContainer.Add(cancelButton);
             buttonContainer.Add(renameButton);
             contentWrapper.Add(buttonContainer);
+            return;
+
+            void Rename()
+            {
+                HandleRenameConfirmed(nameTextField, errorLabel);
+            }
         }
 
         private void HandleCreateConfirmed(Type type, TextField nameField, Label errorLabel)
@@ -2716,15 +2795,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             ScriptableObject instance = CreateInstance(type);
-            try
-            {
-                AssetDatabase.CreateAsset(instance, uniquePath);
-            }
-            finally
-            {
-                DestroyImmediate(instance);
-            }
-
+            AssetDatabase.CreateAsset(instance, uniquePath);
             CloseActivePopover();
             ScheduleRefresh();
         }
@@ -2847,7 +2918,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
             cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
             cancelButton.AddToClassList(StyleConstants.ClickableClass);
-            Button deleteButton = new(HandleDeleteConfirmed) { text = "Delete" };
+            Button deleteButton = new(HandleDeleteConfirmed)
+            {
+                text = "Delete",
+                userData = (Action)HandleDeleteConfirmed,
+            };
+            deleteButton.AddToClassList(StyleConstants.PopoverPrimaryActionClass);
             deleteButton.AddToClassList(StyleConstants.PopoverButtonClass);
             deleteButton.AddToClassList("popover-delete-button");
             deleteButton.AddToClassList(StyleConstants.ClickableClass);
@@ -3005,14 +3081,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                     : filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
                 bool isFiltering = searchTerms.Count > 0;
 
-                List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
                 HashSet<string> managedTypeFullNames = _namespaceController
                     .GetAllManagedTypeNames()
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                IOrderedEnumerable<IGrouping<string, Type>> groupedTypes = allObjectTypes
-                    .GroupBy(NamespaceController.GetNamespaceKey)
-                    .OrderBy(grouping => grouping.Key);
+                IOrderedEnumerable<IGrouping<string, Type>> groupedTypes =
+                    LoadRelevantScriptableObjectTypes()
+                        .Except(_scriptableObjectTypes.Values.SelectMany(x => x))
+                        .GroupBy(NamespaceController.GetNamespaceKey)
+                        .OrderBy(grouping => grouping.Key);
 
                 bool foundMatches = false;
                 foreach (IGrouping<string, Type> group in groupedTypes)
@@ -3642,7 +3719,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
             buttonContainer.Add(cancelButton);
 
-            Button confirmButton = new(() =>
+            Button confirmButton = new(Confirm) { text = "Add", userData = (Action)Confirm };
+            confirmButton.AddToClassList(StyleConstants.PopoverPrimaryActionClass);
+            confirmButton.AddToClassList(StyleConstants.ClickableClass);
+            confirmButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            confirmButton.AddToClassList("popover-confirm-button");
+            buttonContainer.Add(confirmButton);
+            return;
+
+            void Confirm()
             {
                 bool stateChanged = false;
                 HashSet<string> currentManagedList = _namespaceController
@@ -3676,14 +3761,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     ScheduleRefresh();
                 }
-            })
-            {
-                text = "Add",
-            };
-            confirmButton.AddToClassList(StyleConstants.ClickableClass);
-            confirmButton.AddToClassList(StyleConstants.PopoverButtonClass);
-            confirmButton.AddToClassList("popover-confirm-button");
-            buttonContainer.Add(confirmButton);
+            }
         }
 
         private void BuildNamespaceView()
@@ -4207,7 +4285,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 AssetDatabase.CreateAsset(cloneInstance, uniquePath);
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
-                Destroy(cloneInstance);
 
                 ScriptableObject cloneAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
                     uniquePath
@@ -4247,7 +4324,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     $"Failed to create cloned asset at '{uniquePath}': {e.Message}",
                     "OK"
                 );
-                DestroyImmediate(cloneInstance);
             }
         }
 
@@ -4684,7 +4760,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _dragStartPosition = evt.position;
                 targetElement.CapturePointer(evt.pointerId);
                 targetElement.Focus();
-                targetElement.RegisterCallback<KeyDownEvent>(HandleGlobalKeyDown);
                 targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
                 targetElement.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
                 targetElement.RegisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
@@ -4696,7 +4771,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             if (_activeDragType != DragType.None && _draggedElement != null)
             {
-                _draggedElement.UnregisterCallback<KeyDownEvent>(HandleGlobalKeyDown);
                 _draggedElement.UnregisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
                 _draggedElement.UnregisterCallback<PointerUpEvent>(OnCapturedPointerUp);
                 _draggedElement.UnregisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
