@@ -593,6 +593,11 @@
     color: black;
 }
 
+.search-result-item--highlighted {
+    background-color: lightgreen;
+    color: black;
+}
+
 .search-result-type-label {
     -unity-text-align: middle-right;
     font-size: 12px;

@@ -906,7 +906,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                         && context._activePopover != context._searchPopover
                     )
                     {
-                        context.OpenPopover(context._searchPopover, context._searchField);
+                        context.OpenPopover(
+                            context._searchPopover,
+                            context._searchField,
+                            shouldFocus: false
+                        );
                     }
                 },
                 this
@@ -1395,7 +1399,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (_activePopover != _searchPopover)
                 {
-                    OpenPopover(_searchPopover, _searchField);
+                    OpenPopover(_searchPopover, _searchField, shouldFocus: false);
                 }
             }
             else
@@ -1950,7 +1954,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement popover,
             VisualElement triggerElement,
             object context = null,
-            bool isNested = false
+            bool isNested = false,
+            bool shouldFocus = true
         )
         {
             if (!isNested)
@@ -2086,8 +2091,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                             {
                                 if (_activePopover == popover)
                                 {
-                                    popover.Focus();
-                                    //popover.RegisterCallback<KeyDownEvent>(HandlePopoverKeyDown);
+                                    if (shouldFocus)
+                                    {
+                                        popover.Focus();
+                                    }
                                     rootVisualElement.RegisterCallback<PointerDownEvent>(
                                         HandleClickOutsidePopover,
                                         TrickleDown.TrickleDown
@@ -2098,7 +2105,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                     else if (_activeNestedPopover == popover)
                     {
-                        popover.Focus();
+                        if (shouldFocus)
+                        {
+                            popover.Focus();
+                        }
                     }
                 })
                 .ExecuteLater(1);
