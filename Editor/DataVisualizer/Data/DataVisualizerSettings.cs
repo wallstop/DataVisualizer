@@ -28,7 +28,7 @@
         [Tooltip(
             "If true, window state (selection, order, collapse) is saved in a special ScriptableObject. If false, state is saved within this settings asset file."
         )]
-        public bool persistStateInSettingsAsset;
+        public bool persistStateInSettingsAsset = true;
 
         [Tooltip("If true, when selecting an Object, it will be selected in the Inspector.")]
         public bool selectActiveObject;
