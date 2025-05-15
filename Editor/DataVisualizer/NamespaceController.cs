@@ -151,7 +151,17 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public void Build(DataVisualizer dataVisualizer, ref VisualElement namespaceListContainer)
         {
-            _selectedType = null;
+            HashSet<Type> currentTypes = _managedTypes.SelectMany(x => x.Value).ToHashSet();
+            if (currentTypes.SetEquals(_namespaceCache.Keys))
+            {
+                return;
+            }
+
+            if (!currentTypes.Contains(_selectedType))
+            {
+                _selectedType = null;
+            }
+
             namespaceListContainer ??= new VisualElement { name = "namespace-list" };
             namespaceListContainer.Clear();
             _namespaceCache.Clear();

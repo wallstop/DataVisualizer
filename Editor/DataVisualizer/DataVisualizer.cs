@@ -542,6 +542,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 });
             }
 
+            PopulateSearchCache();
             BuildNamespaceView();
             BuildObjectsView();
 
@@ -556,7 +557,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             SelectObject(selectedObject);
-            PopulateSearchCache();
             _namespaceController.SelectType(this, selectedType);
         }
 
@@ -4806,6 +4806,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void SelectObject(ScriptableObject dataObject)
         {
+            if (_selectedObject == dataObject)
+            {
+                return;
+            }
+
             _selectedElement?.RemoveFromClassList(StyleConstants.SelectedClass);
             foreach (
                 VisualElement child in _selectedElement?.IterateChildrenRecursively()
