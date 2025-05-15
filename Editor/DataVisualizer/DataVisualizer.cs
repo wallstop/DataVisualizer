@@ -166,6 +166,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         private string _lastSearchString;
 
         private Button _addTypeButton;
+        private Button _addTypesFromScriptFolderButton;
+        private Button _addTypesFromDataFolderButton;
         private Button _createObjectButton;
         private Button _settingsButton;
         private TextField _typeSearchField;
@@ -2805,13 +2807,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             ScriptableObject instance = CreateInstance(type);
+            if (instance is ICreatable creatable)
+            {
+                creatable.BeforeCreate();
+            }
+            else
+            {
+                creatable = null;
+            }
             AssetDatabase.CreateAsset(instance, uniquePath);
             AssetDatabase.Refresh();
-
-            if (instance is BaseDataObject baseDataObject)
-            {
-                baseDataObject.OnValidate();
-            }
+            creatable?.AfterCreate();
 
             CloseActivePopover();
             ScheduleRefresh();
@@ -2866,9 +2872,22 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            ScriptableObject original = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
+                originalPath
+            );
+            if (original is IRenamable renamable)
+            {
+                renamable.BeforeRename(newName);
+            }
+            else
+            {
+                renamable = null;
+            }
+
             string error = AssetDatabase.RenameAsset(originalPath, newName);
             if (string.IsNullOrWhiteSpace(error))
             {
+                renamable?.AfterRename(newName);
                 Debug.Log($"Asset renamed successfully to: {newName}");
                 CloseActivePopover();
                 ScheduleRefresh();
@@ -3039,6 +3058,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             );
             nsHeader.AddToClassList(NamespaceGroupHeaderClass);
+
+            VisualElement addButtonHeader = new()
+            {
+                style = { flexDirection = FlexDirection.Row, alignItems = Align.FlexEnd },
+            };
+            nsHeader.Add(addButtonHeader);
+
             _addTypeButton = new Button(() =>
             {
                 if (Time.realtimeSinceStartup < _lastEnterPressed + 0.5f)
@@ -3055,7 +3081,158 @@ namespace WallstopStudios.DataVisualizer.Editor
             _addTypeButton.AddToClassList("create-button");
             _addTypeButton.AddToClassList("icon-button");
             _addTypeButton.AddToClassList(StyleConstants.ClickableClass);
-            nsHeader.Add(_addTypeButton);
+
+            _addTypesFromDataFolderButton = new Button(() =>
+            {
+                string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
+                    title: "Select Data Object Type Load Folder (Must be inside Assets)",
+                    folder: "Assets",
+                    defaultName: ""
+                );
+
+                if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
+                {
+                    return;
+                }
+
+                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
+                string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
+
+                if (
+                    !selectedAbsolutePath.StartsWith(
+                        projectAssetsPath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    Debug.LogError("Selected folder must be inside the project's Assets folder.");
+                    EditorUtility.DisplayDialog(
+                        "Invalid Folder",
+                        "The selected folder must be inside the project's 'Assets' directory.",
+                        "OK"
+                    );
+                    return;
+                }
+
+                HashSet<Type> currentlyManagedTypes = _scriptableObjectTypes
+                    .SelectMany(x => x.Value)
+                    .ToHashSet();
+                List<Type> scriptableObjectTypes = AssetDatabase
+                    .FindAssets($"t:{nameof(ScriptableObject)}", new[] { projectAssetsPath })
+                    .Select(AssetDatabase.GUIDToAssetPath)
+                    .Select(AssetDatabase.LoadAssetAtPath<ScriptableObject>)
+                    .Where(so => so != null)
+                    .Select(so => so.GetType())
+                    .Where(IsLoadableType)
+                    .Where(type => !currentlyManagedTypes.Contains(type))
+                    .Distinct()
+                    .ToList();
+
+                bool stateChanged = false;
+                foreach (Type typeToAdd in scriptableObjectTypes)
+                {
+                    string namespaceKey = NamespaceController.GetNamespaceKey(typeToAdd);
+                    if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
+                    {
+                        types = new List<Type>();
+                        _scriptableObjectTypes[namespaceKey] = types;
+                        _namespaceOrder[namespaceKey] = _namespaceOrder.Count;
+                    }
+
+                    types.Add(typeToAdd);
+                    stateChanged = true;
+                }
+
+                if (stateChanged)
+                {
+                    SyncNamespaceAndTypeOrders();
+                }
+            })
+            {
+                text = "+",
+                tooltip = "Load Types from Data Folder (Scriptable Object Instances)",
+            };
+            _addTypesFromDataFolderButton.AddToClassList("load-from-data-folder-button");
+            _addTypesFromDataFolderButton.AddToClassList("icon-button");
+            _addTypesFromDataFolderButton.AddToClassList(StyleConstants.ClickableClass);
+
+            _addTypesFromScriptFolderButton = new Button(() =>
+            {
+                string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
+                    title: "Select Script Load Folder (Must be inside Assets)",
+                    folder: "Assets",
+                    defaultName: ""
+                );
+
+                if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
+                {
+                    return;
+                }
+
+                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
+                string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
+
+                if (
+                    !selectedAbsolutePath.StartsWith(
+                        projectAssetsPath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    Debug.LogError("Selected folder must be inside the project's Assets folder.");
+                    EditorUtility.DisplayDialog(
+                        "Invalid Folder",
+                        "The selected folder must be inside the project's 'Assets' directory.",
+                        "OK"
+                    );
+                    return;
+                }
+
+                HashSet<Type> currentlyManagedTypes = _scriptableObjectTypes
+                    .SelectMany(x => x.Value)
+                    .ToHashSet();
+                List<Type> scriptableObjectTypes = AssetDatabase
+                    .FindAssets("t:Monoscript", new[] { projectAssetsPath })
+                    .Select(AssetDatabase.GUIDToAssetPath)
+                    .Select(AssetDatabase.LoadAssetAtPath<MonoScript>)
+                    .Where(script => script != null)
+                    .Select(script => script.GetClass())
+                    .Where(IsLoadableType)
+                    .Where(type => !currentlyManagedTypes.Contains(type))
+                    .Distinct()
+                    .ToList();
+
+                bool stateChanged = false;
+                foreach (Type typeToAdd in scriptableObjectTypes)
+                {
+                    string namespaceKey = NamespaceController.GetNamespaceKey(typeToAdd);
+                    if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
+                    {
+                        types = new List<Type>();
+                        _scriptableObjectTypes[namespaceKey] = types;
+                        _namespaceOrder[namespaceKey] = _namespaceOrder.Count;
+                    }
+
+                    types.Add(typeToAdd);
+                    stateChanged = true;
+                }
+
+                if (stateChanged)
+                {
+                    SyncNamespaceAndTypeOrders();
+                }
+            })
+            {
+                text = "+",
+                tooltip = "Load Types from Scripts (Scripts Folder)",
+            };
+            _addTypesFromScriptFolderButton.AddToClassList("load-from-script-folder-button");
+            _addTypesFromScriptFolderButton.AddToClassList("icon-button");
+            _addTypesFromScriptFolderButton.AddToClassList(StyleConstants.ClickableClass);
+
+            addButtonHeader.Add(_addTypeButton);
+            addButtonHeader.Add(_addTypesFromDataFolderButton);
+            addButtonHeader.Add(_addTypesFromScriptFolderButton);
             namespaceColumn.Add(nsHeader);
 
             ScrollView namespaceScrollView = new(ScrollViewMode.Vertical)
@@ -3834,9 +4011,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 objectItemRow.Add(contentArea);
 
                 string dataObjectName;
-                if (dataObject is BaseDataObject baseDataObject)
+                if (dataObject is IDisplayable displayable)
                 {
-                    dataObjectName = baseDataObject.Title;
+                    dataObjectName = displayable.Title;
                 }
                 else
                 {
@@ -4087,98 +4264,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            VisualElement customElement = TryGetCustomVisualElement(objectType);
+            VisualElement customElement = TryGetCustomVisualElement();
             if (customElement != null)
             {
                 _inspectorContainer.Add(customElement);
             }
         }
 
-        // TODO: WAY SMARTER STUFF
-        private VisualElement TryGetCustomVisualElement(Type objectType)
+        private VisualElement TryGetCustomVisualElement()
         {
-            if (_selectedObject is BaseDataObject baseDataObject)
+            if (_selectedObject is IGUIProvider guiProvider)
             {
-                return baseDataObject.BuildGUI(
+                return guiProvider.BuildGUI(
                     new DataVisualizerGUIContext(_currentInspectorScriptableObject)
                 );
-            }
-
-            // TODO: CACHE
-            MethodInfo[] availableMethods = objectType
-                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                .Where(method => method.ReturnType.IsAssignableFrom(typeof(VisualElement)))
-                .OrderBy(method => method.GetParameters().Length)
-                .Where(method =>
-                {
-                    ParameterInfo[] parameters = method.GetParameters();
-                    if (parameters.Length == 0)
-                    {
-                        return true;
-                    }
-
-                    // TODO: EXPAND TO TAKE IN MY CUSTOM TYPE
-                    return parameters[0].ParameterType == typeof(SerializedObject);
-                })
-                .OrderBy(method => method.Name)
-                .ToArray();
-            MethodInfo visualMethod = availableMethods.FirstOrDefault(
-                ReflectionHelpers.IsAttributeDefined<CustomVisualProviderAttribute>
-            );
-            if (visualMethod == null)
-            {
-                visualMethod = availableMethods.FirstOrDefault();
-            }
-
-            if (visualMethod == null)
-            {
-                return null;
-            }
-
-            ParameterInfo[] parameters = visualMethod.GetParameters();
-            if (parameters.Length == 0)
-            {
-                return visualMethod.Invoke(_selectedObject, Array.Empty<object>()) as VisualElement;
-            }
-
-            if (parameters[0].ParameterType == typeof(SerializedObject))
-            {
-                List<object> arguments = new(parameters.Length)
-                {
-                    _currentInspectorScriptableObject,
-                };
-                for (int i = 1; i < parameters.Length; i++)
-                {
-                    ParameterInfo parameter = parameters[i];
-                    if (parameter.ParameterType.IsValueType)
-                    {
-                        try
-                        {
-                            object parameterInstance = Activator.CreateInstance(
-                                parameter.ParameterType
-                            );
-                            arguments.Add(parameterInstance);
-                        }
-                        catch
-                        {
-                            arguments.Add(null);
-                        }
-                    }
-                    else
-                    {
-                        arguments.Add(null);
-                    }
-                }
-
-                try
-                {
-                    return visualMethod.Invoke(_selectedObject, arguments.ToArray())
-                        as VisualElement;
-                }
-                catch
-                {
-                    // Swallow
-                }
             }
 
             return null;
@@ -4211,11 +4310,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     "OK"
                 );
                 return;
-            }
-
-            if (cloneInstance is BaseDataObject baseDataObject)
-            {
-                baseDataObject._assetGuid = string.Empty;
             }
 
             string originalDirectory = Path.GetDirectoryName(originalPath);
@@ -4262,6 +4356,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             try
             {
+                if (cloneInstance is IDuplicable duplicable)
+                {
+                    duplicable.BeforeClone(originalObject);
+                }
                 AssetDatabase.CreateAsset(cloneInstance, uniquePath);
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
@@ -4271,10 +4369,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
                 if (cloneAsset != null)
                 {
-                    if (cloneAsset is BaseDataObject cloneDataObject)
+                    if (cloneAsset is IDuplicable cloneDataObject)
                     {
-                        cloneDataObject._title = cloneAsset.name;
-                        cloneDataObject.OnValidate();
+                        cloneDataObject.AfterClone(originalObject);
                     }
 
                     int originalIndex = _selectedObjects.IndexOf(originalObject);
@@ -4416,9 +4513,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             string currentTitle;
-            if (dataObject is BaseDataObject baseDataObject)
+            if (dataObject is IDisplayable displayable)
             {
-                currentTitle = baseDataObject.Title;
+                currentTitle = displayable.Title;
             }
             else
             {
@@ -4558,42 +4655,45 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             return _relevantScriptableObjectTypes ??= TypeCache
                 .GetTypesDerivedFrom<ScriptableObject>()
-                .Where(type => type != typeof(ScriptableObject))
-                .Where(type => !IsSubclassOf(type, typeof(Editor)))
-                .Where(type => !IsSubclassOf(type, typeof(EditorWindow)))
-                .Where(type => !IsSubclassOf(type, typeof(ScriptableSingleton<>)))
-                .Where(type => !type.IsAbstract && !type.IsGenericType)
-                .Where(type =>
-                    type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
-                )
-                .Where(type =>
-                    type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true
-                )
-                .Where(type =>
-                {
-                    ScriptableObject instance = CreateInstance(type);
-                    try
-                    {
-                        using SerializedObject serializedObject = new(instance);
-                        using SerializedProperty scriptProperty = serializedObject.FindProperty(
-                            "m_Script"
-                        );
-                        if (scriptProperty == null)
-                        {
-                            return false;
-                        }
-
-                        return scriptProperty.objectReferenceValue != null;
-                    }
-                    finally
-                    {
-                        if (instance != null)
-                        {
-                            DestroyImmediate(instance);
-                        }
-                    }
-                })
+                .Where(IsLoadableType)
                 .ToList();
+        }
+
+        internal static bool IsLoadableType(Type type)
+        {
+            bool allowed =
+                type != typeof(ScriptableObject)
+                && !type.IsAbstract
+                && !type.IsGenericType
+                && !IsSubclassOf(type, typeof(Editor))
+                && !IsSubclassOf(type, typeof(EditorWindow))
+                && !IsSubclassOf(type, typeof(ScriptableSingleton<>))
+                && type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
+                && type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true;
+            if (!allowed)
+            {
+                return false;
+            }
+
+            ScriptableObject instance = CreateInstance(type);
+            try
+            {
+                using SerializedObject serializedObject = new(instance);
+                using SerializedProperty scriptProperty = serializedObject.FindProperty("m_Script");
+                if (scriptProperty == null)
+                {
+                    return false;
+                }
+
+                return scriptProperty.objectReferenceValue != null;
+            }
+            finally
+            {
+                if (instance != null)
+                {
+                    DestroyImmediate(instance);
+                }
+            }
         }
 
         private static bool IsSubclassOf(Type typeToCheck, Type baseClass)
@@ -4790,8 +4890,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _isDragging = true;
                     string dragText = _draggedData switch
                     {
-                        BaseDataObject dataObj => dataObj.Title,
-                        ScriptableObject dataObj => dataObj.name,
+                        IDisplayable displayable => displayable.Title,
+                        Object dataObj => dataObj.name,
                         string nsKey => nsKey,
                         Type type => NamespaceController.GetTypeDisplayName(type),
                         _ => "Dragging Item",

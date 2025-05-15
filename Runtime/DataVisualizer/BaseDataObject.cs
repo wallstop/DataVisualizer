@@ -13,13 +13,20 @@ namespace WallstopStudios.DataVisualizer
     using Sirenix.OdinInspector;
 #endif
 
-    public abstract class BaseDataObject :
+    public abstract class BaseDataObject
+        :
 #if ODIN_INSPECTOR
         SerializedScriptableObject
 #else
         ScriptableObject
 #endif
-            , IComparable<BaseDataObject>
+            ,
+            IComparable<BaseDataObject>,
+            IDuplicable,
+            ICreatable,
+            IRenamable,
+            IGUIProvider,
+            IDisplayable
     {
         public virtual string Id => _assetGuid;
 
@@ -52,6 +59,11 @@ namespace WallstopStudios.DataVisualizer
         protected string _description = string.Empty;
 
         protected internal virtual void OnValidate()
+        {
+            TrySetAssetPath();
+        }
+
+        private void TrySetAssetPath()
         {
 #if UNITY_EDITOR
             if (Application.isPlaying)
@@ -112,5 +124,30 @@ namespace WallstopStudios.DataVisualizer
 
             return string.Compare(Description, other.Description, StringComparison.Ordinal);
         }
+
+        public virtual void BeforeClone(ScriptableObject previous)
+        {
+            _assetGuid = string.Empty;
+        }
+
+        public virtual void AfterClone(ScriptableObject previous)
+        {
+            TrySetAssetPath();
+            if (previous is BaseDataObject baseDataObject)
+            {
+                _title = baseDataObject.Title + " (Clone)";
+            }
+        }
+
+        public virtual void BeforeCreate() { }
+
+        public virtual void AfterCreate()
+        {
+            TrySetAssetPath();
+        }
+
+        public virtual void BeforeRename(string newName) { }
+
+        public virtual void AfterRename(string newName) { }
     }
 }

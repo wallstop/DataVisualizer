@@ -484,6 +484,50 @@
     border-color: darkgreen;
 }
 
+.load-from-data-folder-button {
+    -unity-font-style: bold;
+    color: white;
+    background-color: chocolate;
+    border-color: white;
+    border-width: 2px;
+    font-size: 26px;
+    padding-bottom: 4px;
+    border-radius: 50%;
+    width: 27px;
+    height: 27px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-bottom: 2px;
+}
+
+.load-from-data-folder-button:hover {
+    background-color: white;
+    color: chocolate;
+    border-color: chocolate;
+}
+
+.load-from-script-folder-button {
+    -unity-font-style: bold;
+    color: white;
+    background-color: rgb(51, 153, 230);
+    border-color: white;
+    border-width: 2px;
+    font-size: 26px;
+    padding-bottom: 4px;
+    border-radius: 50%;
+    width: 27px;
+    height: 27px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-bottom: 2px;
+}
+
+.load-from-script-folder-button:hover {
+    background-color: white;
+    color: rgb(51, 153, 230);
+    border-color: rgb(51, 153, 230);
+}
+
 .delete-button {
     border-color: rgb(230, 102, 102);
     color: rgb(230, 102, 102);
