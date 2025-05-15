@@ -162,9 +162,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             )
             {
                 string namespaceKey = key;
-                List<Type> nonCoreManagedTypes = types
-                    .Where(t => !typeof(BaseDataObject).IsAssignableFrom(t))
-                    .ToList();
+                List<Type> nonCoreManagedTypes = types.Where(IsTypeRemovable).ToList();
                 int removableTypeCount = nonCoreManagedTypes.Count;
                 bool showNamespaceRemoveButton = removableTypeCount > 1;
 
@@ -266,7 +264,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 for (int i = 0; i < types.Count; i++)
                 {
                     Type type = types[i];
-                    bool isRemovableType = !typeof(BaseDataObject).IsAssignableFrom(type);
+                    bool isRemovableType = IsTypeRemovable(type);
 
                     VisualElement typeItem = new()
                     {
@@ -607,10 +605,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             foreach (Type type in typesToRemove)
             {
                 string typeName = type.FullName;
-                if (
-                    typeof(BaseDataObject).IsAssignableFrom(type)
-                    || !currentManagedList.Remove(typeName)
-                )
+                if (!IsTypeRemovable(type) || !currentManagedList.Remove(typeName))
                 {
                     continue;
                 }
@@ -635,7 +630,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleRemoveTypeConfirmed(DataVisualizer dataVisualizer, Type typeToRemove)
         {
-            if (typeToRemove == null || typeof(BaseDataObject).IsAssignableFrom(typeToRemove))
+            if (!IsTypeRemovable(typeToRemove))
             {
                 Debug.LogWarning(
                     $"Attempted to remove BaseDataObject derivative '{typeToRemove?.FullName}' or null type."
@@ -730,6 +725,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             return _managedTypes
                 .Values.SelectMany(types => types.Select(type => type.FullName))
                 .ToList();
+        }
+
+        internal static bool IsTypeRemovable(Type type)
+        {
+            return type == null
+                || (
+                    !typeof(BaseDataObject).IsAssignableFrom(type)
+                    && !type.IsAttributeDefined<CustomDataVisualizationAttribute>()
+                );
         }
 
         internal static string GetNamespaceKey(Type type)

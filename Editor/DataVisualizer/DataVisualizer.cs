@@ -2806,6 +2806,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             ScriptableObject instance = CreateInstance(type);
             AssetDatabase.CreateAsset(instance, uniquePath);
+            AssetDatabase.Refresh();
+
+            if (instance is BaseDataObject baseDataObject)
+            {
+                baseDataObject.OnValidate();
+            }
+
             CloseActivePopover();
             ScheduleRefresh();
         }
@@ -4055,72 +4062,34 @@ namespace WallstopStudios.DataVisualizer.Editor
 #endif
                 try
                 {
-                    _currentInspectorScriptableObject.UpdateIfRequiredOrScript();
-                    SerializedProperty serializedProperty =
-                        _currentInspectorScriptableObject.GetIterator();
-                    bool enterChildren = true;
-                    const string titleFieldName = nameof(BaseDataObject._title);
-
-                    if (serializedProperty.NextVisible(true))
+                    if (
+                        _currentInspectorScriptableObject == null
+                        || _currentInspectorScriptableObject.targetObject != _selectedObject
+                    )
                     {
-                        using (
-                            new EditorGUI.DisabledScope(
-                                string.Equals(
-                                    "m_Script",
-                                    serializedProperty.propertyPath,
-                                    StringComparison.Ordinal
-                                )
-                            )
-                        )
-                        {
-                            PropertyField scriptField = new(serializedProperty);
-                            scriptField.Bind(_currentInspectorScriptableObject);
-                            _inspectorContainer.Add(scriptField);
-                        }
-
-                        enterChildren = false;
+                        _currentInspectorScriptableObject?.Dispose();
+                        _currentInspectorScriptableObject = new SerializedObject(_selectedObject);
+                    }
+                    else
+                    {
+                        _currentInspectorScriptableObject.UpdateIfRequiredOrScript();
                     }
 
-                    while (serializedProperty.NextVisible(enterChildren))
+                    InspectorElement inspectorElement = new(_selectedObject);
+                    _inspectorContainer.Add(inspectorElement);
+                    VisualElement customElement = TryGetCustomVisualElement(objectType);
+                    if (customElement != null)
                     {
-                        SerializedProperty currentPropCopy = serializedProperty.Copy();
-                        PropertyField propertyField = new(currentPropCopy);
-                        propertyField.Bind(_currentInspectorScriptableObject);
-
-                        if (
-                            string.Equals(
-                                currentPropCopy.propertyPath,
-                                titleFieldName,
-                                StringComparison.Ordinal
-                            )
-                        )
-                        {
-                            propertyField.RegisterValueChangeCallback(_ =>
-                            {
-                                _currentInspectorScriptableObject.ApplyModifiedProperties();
-                                rootVisualElement
-                                    .schedule.Execute(
-                                        () => RefreshSelectedElementVisuals(_selectedObject)
-                                    )
-                                    .ExecuteLater(1);
-                            });
-                        }
-
-                        _inspectorContainer.Add(propertyField);
-                        enterChildren = false;
+                        _inspectorContainer.Add(customElement);
                     }
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError($"Error creating standard inspector. {e}");
-                    _inspectorContainer.Add(new Label($"Inspector Error: {e.Message}"));
+                    Debug.LogError($"Error creating standard inspector with InspectorElement: {e}");
+                    _inspectorContainer.Add(
+                        new Label($"Standard Inspector Element Error: {e.Message}")
+                    );
                 }
-            }
-
-            VisualElement customElement = TryGetCustomVisualElement(objectType);
-            if (customElement != null)
-            {
-                _inspectorContainer.Add(customElement);
             }
         }
 
@@ -4428,7 +4397,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             UpdateObjectTitleRepresentation(dataObject, visualElement);
         }
 
-        private void UpdateObjectTitleRepresentation(
+        private static void UpdateObjectTitleRepresentation(
             ScriptableObject dataObject,
             VisualElement element
         )
@@ -4549,9 +4518,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
 
             List<Type> typesToDisplay = allObjectTypes
-                .Where(t =>
-                    managedTypeFullNames.Contains(t.FullName)
-                    || typeof(BaseDataObject).IsAssignableFrom(t)
+                .Where(type =>
+                    managedTypeFullNames.Contains(type.FullName)
+                    || !NamespaceController.IsTypeRemovable(type)
                 )
                 .ToList();
 
