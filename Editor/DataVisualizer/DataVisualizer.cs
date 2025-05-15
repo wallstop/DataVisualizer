@@ -1037,34 +1037,46 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
 
                 const string packageCache = "PackageCache";
-                int packageCacheIndex = unityRelativeStyleSheetPath.IndexOf(
-                    packageCache,
-                    StringComparison.OrdinalIgnoreCase
-                );
-                if (0 <= packageCacheIndex)
-                {
-                    unityRelativeStyleSheetPath = unityRelativeStyleSheetPath[
-                        (packageCacheIndex + packageCache.Length)..
-                    ];
-                    unityRelativeStyleSheetPath = "Packages" + unityRelativeStyleSheetPath;
-                }
+                int packageCacheIndex;
                 if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
                 {
                     styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
                         unityRelativeStyleSheetPath
                     );
-                    if (styleSheet == null)
+                }
+
+                if (styleSheet == null)
+                {
+                    packageCacheIndex = unityRelativeStyleSheetPath.IndexOf(
+                        packageCache,
+                        StringComparison.OrdinalIgnoreCase
+                    );
+                    if (0 <= packageCacheIndex)
+                    {
+                        unityRelativeStyleSheetPath = unityRelativeStyleSheetPath[
+                            (packageCacheIndex + packageCache.Length)..
+                        ];
+                        unityRelativeStyleSheetPath = "Packages" + unityRelativeStyleSheetPath;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
+                    {
+                        styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                            unityRelativeStyleSheetPath
+                        );
+                        if (styleSheet == null)
+                        {
+                            Debug.LogError(
+                                $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
+                            );
+                        }
+                    }
+                    else
                     {
                         Debug.LogError(
-                            $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
+                            $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
                         );
                     }
-                }
-                else
-                {
-                    Debug.LogError(
-                        $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
-                    );
                 }
 
                 string fontPath =
@@ -1072,20 +1084,26 @@ namespace WallstopStudios.DataVisualizer.Editor
                 string unityRelativeFontPath = DirectoryHelper.AbsoluteToUnityRelativePath(
                     fontPath
                 );
-                packageCacheIndex = unityRelativeFontPath.IndexOf(
-                    packageCache,
-                    StringComparison.OrdinalIgnoreCase
-                );
-                if (0 <= packageCacheIndex)
+
+                font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
+                if (font == null)
                 {
-                    unityRelativeFontPath = unityRelativeFontPath[
-                        (packageCacheIndex + packageCache.Length)..
-                    ];
-                    unityRelativeFontPath = "Packages" + unityRelativeFontPath;
-                }
-                if (!string.IsNullOrWhiteSpace(unityRelativeFontPath))
-                {
-                    font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
+                    packageCacheIndex = unityRelativeFontPath.IndexOf(
+                        packageCache,
+                        StringComparison.OrdinalIgnoreCase
+                    );
+                    if (0 <= packageCacheIndex)
+                    {
+                        unityRelativeFontPath = unityRelativeFontPath[
+                            (packageCacheIndex + packageCache.Length)..
+                        ];
+                        unityRelativeFontPath = "Packages" + unityRelativeFontPath;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(unityRelativeFontPath))
+                    {
+                        font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
+                    }
                 }
             }
             else
