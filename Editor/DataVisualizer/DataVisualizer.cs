@@ -1035,8 +1035,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 string unityRelativeStyleSheetPath = DirectoryHelper.AbsoluteToUnityRelativePath(
                     styleSheetPath
                 );
+                unityRelativeStyleSheetPath = unityRelativeStyleSheetPath.SanitizePath();
 
-                const string packageCache = "PackageCache";
+                const string packageCache = "PackageCache/";
                 int packageCacheIndex;
                 if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
                 {
@@ -1045,7 +1046,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     );
                 }
 
-                if (styleSheet == null)
+                if (styleSheet == null && !string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
                 {
                     packageCacheIndex = unityRelativeStyleSheetPath.IndexOf(
                         packageCache,
@@ -1056,7 +1057,22 @@ namespace WallstopStudios.DataVisualizer.Editor
                         unityRelativeStyleSheetPath = unityRelativeStyleSheetPath[
                             (packageCacheIndex + packageCache.Length)..
                         ];
-                        unityRelativeStyleSheetPath = "Packages" + unityRelativeStyleSheetPath;
+                        int forwardIndex = unityRelativeStyleSheetPath.IndexOf(
+                            "/",
+                            StringComparison.Ordinal
+                        );
+                        if (0 <= forwardIndex)
+                        {
+                            unityRelativeStyleSheetPath = unityRelativeStyleSheetPath.Substring(
+                                forwardIndex
+                            );
+                            unityRelativeStyleSheetPath =
+                                "Packages/" + PackageId + "/" + unityRelativeStyleSheetPath;
+                        }
+                        else
+                        {
+                            unityRelativeStyleSheetPath = "Packages/" + unityRelativeStyleSheetPath;
+                        }
                     }
 
                     if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
@@ -1097,7 +1113,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                         unityRelativeFontPath = unityRelativeFontPath[
                             (packageCacheIndex + packageCache.Length)..
                         ];
-                        unityRelativeFontPath = "Packages" + unityRelativeFontPath;
+                        int forwardIndex = unityRelativeFontPath.IndexOf(
+                            "/",
+                            StringComparison.Ordinal
+                        );
+                        if (0 <= forwardIndex)
+                        {
+                            unityRelativeFontPath = unityRelativeFontPath.Substring(forwardIndex);
+                            unityRelativeFontPath =
+                                "Packages/" + PackageId + "/" + unityRelativeFontPath;
+                        }
+                        else
+                        {
+                            unityRelativeFontPath = "Packages/" + unityRelativeFontPath;
+                        }
                     }
 
                     if (!string.IsNullOrWhiteSpace(unityRelativeFontPath))
@@ -3132,11 +3161,28 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return;
                 }
 
+                string relativePath;
+                if (
+                    selectedAbsolutePath.Equals(
+                        projectAssetsPath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    relativePath = "Assets";
+                }
+                else
+                {
+                    relativePath =
+                        "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+                    relativePath = relativePath.Replace("//", "/");
+                }
+
                 HashSet<Type> currentlyManagedTypes = _scriptableObjectTypes
                     .SelectMany(x => x.Value)
                     .ToHashSet();
                 List<Type> scriptableObjectTypes = AssetDatabase
-                    .FindAssets($"t:{nameof(ScriptableObject)}", new[] { projectAssetsPath })
+                    .FindAssets($"t:{nameof(ScriptableObject)}", new[] { relativePath })
                     .Select(AssetDatabase.GUIDToAssetPath)
                     .Select(AssetDatabase.LoadAssetAtPath<ScriptableObject>)
                     .Where(so => so != null)
@@ -3164,6 +3210,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (stateChanged)
                 {
                     SyncNamespaceAndTypeOrders();
+                    LoadScriptableObjectTypes();
+                    BuildNamespaceView();
                 }
             })
             {
@@ -3206,11 +3254,28 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return;
                 }
 
+                string relativePath;
+                if (
+                    selectedAbsolutePath.Equals(
+                        projectAssetsPath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    relativePath = "Assets";
+                }
+                else
+                {
+                    relativePath =
+                        "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+                    relativePath = relativePath.Replace("//", "/");
+                }
+
                 HashSet<Type> currentlyManagedTypes = _scriptableObjectTypes
                     .SelectMany(x => x.Value)
                     .ToHashSet();
                 List<Type> scriptableObjectTypes = AssetDatabase
-                    .FindAssets("t:Monoscript", new[] { projectAssetsPath })
+                    .FindAssets("t:Monoscript", new[] { relativePath })
                     .Select(AssetDatabase.GUIDToAssetPath)
                     .Select(AssetDatabase.LoadAssetAtPath<MonoScript>)
                     .Where(script => script != null)
@@ -3238,6 +3303,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (stateChanged)
                 {
                     SyncNamespaceAndTypeOrders();
+                    LoadScriptableObjectTypes();
+                    BuildNamespaceView();
                 }
             })
             {
