@@ -4077,11 +4077,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     InspectorElement inspectorElement = new(_selectedObject);
                     _inspectorContainer.Add(inspectorElement);
-                    VisualElement customElement = TryGetCustomVisualElement(objectType);
-                    if (customElement != null)
-                    {
-                        _inspectorContainer.Add(customElement);
-                    }
                 }
                 catch (Exception e)
                 {
@@ -4090,6 +4085,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                         new Label($"Standard Inspector Element Error: {e.Message}")
                     );
                 }
+            }
+
+            VisualElement customElement = TryGetCustomVisualElement(objectType);
+            if (customElement != null)
+            {
+                _inspectorContainer.Add(customElement);
             }
         }
 
