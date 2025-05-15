@@ -7,6 +7,7 @@
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.Serialization;
+    using Utilities;
 
     [CreateAssetMenu(
         fileName = "DataVisualizerSettings",
@@ -33,40 +34,38 @@
         [Tooltip("If true, when selecting an Object, it will be selected in the Inspector.")]
         public bool selectActiveObject;
 
-        [
-            Header("Saved State (Internal - Use only if EditorPrefs is disabled)"),
-            SerializeField,
-            HideInInspector
-        ]
+        [Header("Saved State (Internal - Use only if EditorPrefs is disabled)")]
+        [SerializeField]
+        [ReadOnly]
         internal string lastSelectedNamespaceKey;
 
         [SerializeField]
-        [HideInInspector]
+        [ReadOnly]
         internal string lastSelectedTypeName;
 
         [SerializeField]
-        [HideInInspector]
+        [ReadOnly]
         internal List<LastObjectSelectionEntry> lastObjectSelections = new();
 
         [SerializeField]
-        [HideInInspector]
+        [ReadOnly]
         internal List<string> namespaceOrder = new();
 
         [FormerlySerializedAs("typeOrder")]
         [SerializeField]
-        [HideInInspector]
+        [ReadOnly]
         internal List<NamespaceTypeOrder> typeOrders = new();
 
         [SerializeField]
-        [HideInInspector]
+        [ReadOnly]
         internal List<TypeObjectOrder> objectOrders = new();
 
         [SerializeField]
-        [HideInInspector]
+        [ReadOnly]
         internal List<NamespaceCollapseState> namespaceCollapseStates = new();
 
         [SerializeField]
-        [HideInInspector]
+        [ReadOnly]
         internal List<string> managedTypeNames = new();
 
         private void OnValidate()

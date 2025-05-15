@@ -1,6 +1,8 @@
 ﻿namespace WallstopStudios.DataVisualizer.Editor.Unity
 {
 #if UNITY_EDITOR
+    using System;
+    using System.Collections.Generic;
     using System.Linq;
     using Data;
     using UnityEditor;
@@ -15,39 +17,48 @@
             string[] movedFromAssetPaths
         )
         {
-            bool needsRefresh = deletedAssets.Where(IsAsset).Any();
-            if (!needsRefresh)
+            if (deletedAssets.Length <= 0)
             {
-                needsRefresh = importedAssets
-                    .Where(IsAsset)
-                    .Select(AssetDatabase.LoadAssetAtPath<ScriptableObject>)
-                    .Where(so => so != null)
-                    .Any(asset => asset is not DataVisualizerSettings);
+                return;
             }
 
-            if (!needsRefresh)
+            DataVisualizer window = DataVisualizer.Instance;
+            if (window == null)
             {
-                for (int i = 0; i < movedAssets.Length && i < movedFromAssetPaths.Length; i++)
-                {
-                    string newPath = movedAssets[i];
-                    string oldPath = movedFromAssetPaths[i];
-
-                    if (IsAsset(newPath) || IsAsset(oldPath))
-                    {
-                        needsRefresh = true;
-                        break;
-                    }
-                }
+                return;
             }
 
-            if (needsRefresh)
+            HashSet<Type> relevantTypes = window
+                ._scriptableObjectTypes.SelectMany(x => x.Value)
+                .ToHashSet();
+            if (deletedAssets.Any(asset => IsRelevantAsset(relevantTypes, asset)))
             {
                 EditorApplication.delayCall += DataVisualizer.SignalRefresh;
             }
         }
 
-        internal static bool IsAsset(string path) =>
-            path.EndsWith(".asset", System.StringComparison.OrdinalIgnoreCase);
+        internal static bool IsRelevantAsset(HashSet<Type> relevantTypes, string path)
+        {
+            bool isAsset = path.EndsWith(".asset", StringComparison.OrdinalIgnoreCase);
+            if (!isAsset)
+            {
+                return false;
+            }
+
+            ScriptableObject so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+            if (
+                so != null
+                && (
+                    relevantTypes.Contains(so.GetType())
+                    || typeof(DataVisualizerSettings).IsAssignableFrom(so.GetType())
+                )
+            )
+            {
+                return true;
+            }
+
+            return false;
+        }
     }
 #endif
 }

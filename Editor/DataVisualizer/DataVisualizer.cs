@@ -26,6 +26,7 @@ namespace WallstopStudios.DataVisualizer.Editor
     using UnityEngine.UIElements;
     using Utilities;
     using Helper;
+    using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
 
     public sealed class DataVisualizer : EditorWindow
@@ -61,9 +62,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string SearchPlaceholder = "Search...";
 
         private const int MaxSearchResults = 25;
-
-        private const float DragDistanceThreshold = 5f;
-        private const float DragUpdateThrottleTime = 0.05f;
         private const float DefaultOuterSplitWidth = 200f;
         private const float DefaultInnerSplitWidth = 250f;
 
@@ -82,6 +80,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             AddTypePopover = 2,
             SearchResultsPopover = 3,
         }
+
+        internal static DataVisualizer Instance;
 
         private static readonly StringBuilder CachedStringBuilder = new();
 
@@ -115,7 +115,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private readonly Dictionary<string, List<Type>> _scriptableObjectTypes = new(
+        internal readonly Dictionary<string, List<Type>> _scriptableObjectTypes = new(
             StringComparer.Ordinal
         );
 
@@ -188,9 +188,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _lastGhostParent;
         private VisualElement _draggedElement;
         private VisualElement _dragGhost;
-        private Vector2 _dragStartPosition;
         internal bool _isDragging;
-        private float _lastDragUpdateTime;
         private SerializedObject _currentInspectorScriptableObject;
 
         private string _userStateFilePath;
@@ -208,6 +206,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private float? _lastAddTypeClicked;
         private float? _lastSettingsClicked;
         private float? _lastEnterPressed;
+        private bool _needsRefresh;
 
         private Label _dataFolderPathDisplay;
 #if ODIN_INSPECTOR
@@ -249,6 +248,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnEnable()
         {
+            Instance = this;
             _isSearchCachePopulated = false;
             _objectVisualElementMap.Clear();
             _selectedObject = null;
@@ -290,6 +290,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void Cleanup()
         {
+            if (Instance == this)
+            {
+                Instance = null;
+            }
             _selectedElement = null;
             _selectedObject = null;
             _scriptableObjectTypes.Clear();
@@ -388,12 +392,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public static void SignalRefresh()
         {
-            if (!HasOpenInstances<DataVisualizer>())
-            {
-                return;
-            }
-
-            DataVisualizer window = GetWindow<DataVisualizer>(false, null, false);
+            DataVisualizer window = Instance;
             if (window != null)
             {
                 window.ScheduleRefresh();
@@ -402,7 +401,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void ScheduleRefresh()
         {
-            rootVisualElement.schedule.Execute(RefreshAllViews).ExecuteLater(50);
+            if (_needsRefresh)
+            {
+                return;
+            }
+
+            _needsRefresh = true;
+            rootVisualElement.schedule.Execute(RefreshAllViews).ExecuteLater(1);
         }
 
         private void SyncNamespaceAndTypeOrders()
@@ -558,6 +563,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             SelectObject(selectedObject);
             _namespaceController.SelectType(this, selectedType);
+            _needsRefresh = false;
         }
 
         private VisualElement FindAncestorNamespaceGroup(VisualElement startingElement)
@@ -4009,36 +4015,35 @@ namespace WallstopStudios.DataVisualizer.Editor
             void Confirm()
             {
                 bool stateChanged = false;
-                HashSet<string> currentManagedList = _namespaceController
-                    .GetManagedTypeNames(namespaceKey)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                HashSet<Type> currentManagedList = _scriptableObjectTypes
+                    .SelectMany(x => x.Value)
+                    .ToHashSet();
                 foreach (Type typeToAdd in typesToAdd)
                 {
-                    if (!currentManagedList.Add(typeToAdd.FullName))
+                    if (!currentManagedList.Add(typeToAdd))
                     {
                         continue;
                     }
 
-                    if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
+                    string typeNamespace = NamespaceController.GetNamespaceKey(typeToAdd);
+                    if (!_scriptableObjectTypes.TryGetValue(typeNamespace, out List<Type> types))
                     {
                         types = new List<Type>();
-                        _scriptableObjectTypes[namespaceKey] = types;
-                        _namespaceOrder[namespaceKey] = _namespaceOrder.Count;
+                        _scriptableObjectTypes[typeNamespace] = types;
+                        _namespaceOrder[typeNamespace] = _namespaceOrder.Count;
                     }
 
                     types.Add(typeToAdd);
                     stateChanged = true;
                 }
 
+                CloseActivePopover();
+
                 if (stateChanged)
                 {
                     SyncNamespaceAndTypeOrders();
-                }
-
-                CloseActivePopover();
-                if (stateChanged)
-                {
-                    ScheduleRefresh();
+                    LoadScriptableObjectTypes();
+                    BuildNamespaceView();
                 }
             }
         }
@@ -4233,8 +4238,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             // ReSharper disable once RedundantAssignment
             bool useOdinInspector = false;
-            Type objectType = _selectedObject.GetType();
 #if ODIN_INSPECTOR
+            Type objectType = _selectedObject.GetType();
             if (
                 objectType.IsAttributeDefined(
                     out CustomDataVisualizationAttribute customVisualization
@@ -4924,10 +4929,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (evt.button == 0)
             {
+                _lastActiveFocusArea = FocusArea.None;
                 _draggedElement = targetElement;
                 _draggedData = clickedObject;
                 _activeDragType = DragType.Object;
-                _dragStartPosition = evt.position;
+                _isDragging = false;
                 targetElement.CapturePointer(evt.pointerId);
                 targetElement.Focus();
                 targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
@@ -4965,33 +4971,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _dragGhost.style.top = evt.position.y - _dragGhost.resolvedStyle.height;
             }
 
-            float currentTime = Time.realtimeSinceStartup;
-            if (currentTime - _lastDragUpdateTime < DragUpdateThrottleTime)
-            {
-                return;
-            }
-
-            _lastDragUpdateTime = currentTime;
-
             if (!_isDragging)
             {
-                if (DragDistanceThreshold < Vector2.Distance(evt.position, _dragStartPosition))
+                _isDragging = true;
+                string dragText = _draggedData switch
                 {
-                    _isDragging = true;
-                    string dragText = _draggedData switch
-                    {
-                        IDisplayable displayable => displayable.Title,
-                        Object dataObj => dataObj.name,
-                        string nsKey => nsKey,
-                        Type type => NamespaceController.GetTypeDisplayName(type),
-                        _ => "Dragging Item",
-                    };
-                    StartDragVisuals(evt.position, dragText);
-                }
-                else
-                {
-                    return;
-                }
+                    IDisplayable displayable => displayable.Title,
+                    Object dataObj => dataObj.name,
+                    string nsKey => nsKey,
+                    Type type => NamespaceController.GetTypeDisplayName(type),
+                    _ => "Dragging Item",
+                };
+                StartDragVisuals(evt.position, dragText);
             }
 
             if (_isDragging)
@@ -5160,7 +5151,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _draggedElement = targetElement;
                 _draggedData = namespaceKey;
                 _activeDragType = DragType.Namespace;
-                _dragStartPosition = evt.position;
                 targetElement.CapturePointer(evt.pointerId);
                 targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
                 targetElement.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
@@ -5183,7 +5173,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _draggedElement = targetElement;
                 _draggedData = type;
                 _activeDragType = DragType.Type;
-                _dragStartPosition = evt.position;
                 _isDragging = false;
                 targetElement.CapturePointer(evt.pointerId);
                 targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
@@ -5211,7 +5200,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            if (targetIndex < 01)
+            if (targetIndex < 0)
             {
                 return;
             }
@@ -5244,7 +5233,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void UpdateAndSaveTypeOrder(string namespaceKey, List<Type> orderedTypes)
         {
-            List<string> newTypeNameOrder = orderedTypes.Select(t => t.Name).ToList();
+            List<string> newTypeNameOrder = orderedTypes.Select(t => t.FullName).ToList();
             SetTypeOrderForNamespace(namespaceKey, newTypeNameOrder);
         }
 
@@ -5333,8 +5322,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _dragGhost.style.visibility = Visibility.Visible;
-            _dragGhost.style.left = currentPosition.x - _draggedElement.resolvedStyle.width / 2;
-            _dragGhost.style.top = currentPosition.y - _draggedElement.resolvedStyle.height;
+            _dragGhost.style.left = currentPosition.x - _dragGhost.resolvedStyle.width / 2;
+            _dragGhost.style.top = currentPosition.y - _dragGhost.resolvedStyle.height;
             _dragGhost.BringToFront();
 
             if (_inPlaceGhost == null)
@@ -5395,7 +5384,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _lastGhostInsertIndex = -1;
             _lastGhostParent = null;
-            _lastDragUpdateTime = Time.realtimeSinceStartup;
             _draggedElement.style.display = DisplayStyle.None;
             _draggedElement.style.opacity = 0.5f;
         }
