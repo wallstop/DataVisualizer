@@ -336,14 +336,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 #endif
         }
 
-        private void PopulateSearchCache()
+        internal void PopulateSearchCache()
         {
             _allManagedObjectsCache.Clear();
-            HashSet<Type> managedTypes = _scriptableObjectTypes
+            List<Type> managedTypes = _scriptableObjectTypes
                 .SelectMany(tuple => tuple.Value)
-                .ToHashSet();
+                .ToList();
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
-
             foreach (Type type in managedTypes)
             {
                 string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
@@ -3274,6 +3273,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     SyncNamespaceAndTypeOrders();
                     LoadScriptableObjectTypes();
                     BuildNamespaceView();
+                    PopulateSearchCache();
                 }
             })
             {
@@ -3367,6 +3367,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     SyncNamespaceAndTypeOrders();
                     LoadScriptableObjectTypes();
                     BuildNamespaceView();
+                    PopulateSearchCache();
                 }
             })
             {
@@ -3384,12 +3385,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _typeSearchField = new TextField { name = "type-search-field" };
             _typeSearchField.AddToClassList("type-search-field");
-            _typeSearchField.SetPlaceholderText(SearchPlaceholder);
+            _typeSearchField.SetPlaceholderText(SearchPlaceholder, changeValueOnFocus: false);
             _typeSearchField.RegisterValueChangedCallback(evt => PerformTypeSearch(evt.newValue));
-            _typeSearchField.RegisterCallback<FocusOutEvent, DataVisualizer>(
-                (_, context) => context.PerformTypeSearch(string.Empty),
-                this
-            );
+            // _typeSearchField.RegisterCallback<FocusOutEvent, DataVisualizer>(
+            //     (_, context) => context.PerformTypeSearch(string.Empty),
+            //     this
+            // );
             namespaceColumn.Add(_typeSearchField);
 
             ScrollView namespaceScrollView = new(ScrollViewMode.Vertical)
@@ -3892,6 +3893,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     SyncNamespaceAndTypeOrders();
                     LoadScriptableObjectTypes();
                     BuildNamespaceView();
+                    PopulateSearchCache();
                 }
             }
 
@@ -4109,6 +4111,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     SyncNamespaceAndTypeOrders();
                     LoadScriptableObjectTypes();
                     BuildNamespaceView();
+                    PopulateSearchCache();
                 }
             }
         }

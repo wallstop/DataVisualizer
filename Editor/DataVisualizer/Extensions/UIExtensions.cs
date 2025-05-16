@@ -3,7 +3,6 @@
     using System;
     using System.Collections.Generic;
     using Styles;
-    using UnityEngine;
     using UnityEngine.UIElements;
 
     internal static class UIExtensions
@@ -18,10 +17,12 @@
         /// <param name="textField">Target TextField.</param>
         /// <param name="placeholder">Text to use as a placeholder.</param>
         /// <param name="clearExistingText">If true, will set the text in the TextField to the empty string.</param>
+        /// <param name="changeValueOnFocus">If true, will reset the text to the placeHolder when focus is changed (out).</param>
         public static void SetPlaceholderText(
             this TextField textField,
             string placeholder,
-            bool clearExistingText = true
+            bool clearExistingText = true,
+            bool changeValueOnFocus = true
         )
         {
             if (clearExistingText)
@@ -30,6 +31,7 @@
             }
 
             IVisualElementScheduledItem blinkSchedule = null;
+            textField.SetValueWithoutNotify(placeholder);
             OnFocusOut();
             textField.RegisterCallback<FocusInEvent>(_ => OnFocusIn());
             textField.RegisterCallback<FocusOutEvent>(_ => OnFocusOut());
@@ -43,10 +45,7 @@
                     textField.SetValueWithoutNotify(string.Empty);
                 }
 
-                { }
-
                 textField.RemoveFromClassList(PlaceholderTextFieldClass);
-
                 blinkSchedule?.Pause();
 
                 bool shouldRenderCursor = true;
@@ -68,12 +67,20 @@
 
             void OnFocusOut()
             {
-                textField.SetValueWithoutNotify(placeholder);
-                textField.AddToClassList(PlaceholderTextFieldClass);
                 blinkSchedule?.Pause();
                 blinkSchedule = null;
-                textField.EnableInClassList(StyleConstants.TransparentCursorClass, false);
-                textField.EnableInClassList(StyleConstants.StyledCursorClass, true);
+                if (string.IsNullOrWhiteSpace(textField.value))
+                {
+                    textField.SetValueWithoutNotify(placeholder);
+                }
+
+                if (changeValueOnFocus)
+                {
+                    textField.SetValueWithoutNotify(placeholder);
+                    textField.AddToClassList(PlaceholderTextFieldClass);
+                    textField.EnableInClassList(StyleConstants.TransparentCursorClass, false);
+                    textField.EnableInClassList(StyleConstants.StyledCursorClass, true);
+                }
             }
         }
 
