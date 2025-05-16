@@ -3387,10 +3387,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             _typeSearchField.AddToClassList("type-search-field");
             _typeSearchField.SetPlaceholderText(SearchPlaceholder, changeValueOnFocus: false);
             _typeSearchField.RegisterValueChangedCallback(evt => PerformTypeSearch(evt.newValue));
-            // _typeSearchField.RegisterCallback<FocusOutEvent, DataVisualizer>(
-            //     (_, context) => context.PerformTypeSearch(string.Empty),
-            //     this
-            // );
             namespaceColumn.Add(_typeSearchField);
 
             ScrollView namespaceScrollView = new(ScrollViewMode.Vertical)
@@ -5617,30 +5613,22 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void UpdateInPlaceGhostPosition(Vector2 pointerPosition)
         {
             VisualElement container = null;
-            VisualElement positioningParent;
 
             switch (_activeDragType)
             {
                 case DragType.Object:
                 {
                     container = _objectListContainer.contentContainer;
-                    positioningParent = _objectListContainer.contentContainer;
                     break;
                 }
                 case DragType.Namespace:
                 {
                     container = _namespaceListContainer;
-                    positioningParent = _namespaceListContainer;
                     break;
                 }
                 case DragType.Type:
                 {
-                    if (_draggedElement != null)
-                    {
-                        container = _draggedElement.parent;
-                    }
-
-                    positioningParent = container;
+                    container = _draggedElement?.parent;
                     break;
                 }
                 default:
@@ -5661,12 +5649,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            if (
-                container == null
-                || positioningParent == null
-                || _draggedElement == null
-                || _inPlaceGhost == null
-            )
+            if (container == null || _draggedElement == null || _inPlaceGhost == null)
             {
                 if (_inPlaceGhost?.parent != null)
                 {
@@ -5684,30 +5667,65 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             int childCount = container.childCount;
-            int targetIndex = -1;
+            int targetIndex;
             Vector2 localPointerPos = container.WorldToLocal(pointerPosition);
 
-            for (int i = 0; i < childCount; ++i)
+            if (_activeDragType != DragType.Namespace)
             {
-                VisualElement child = container.ElementAt(i);
-                float yMin = child.layout.yMin + child.layout.height / 2;
-                if (localPointerPos.y < yMin)
+                targetIndex = -1;
+                for (int i = 0; i < childCount; ++i)
                 {
-                    targetIndex = i;
-                    break;
+                    VisualElement child = container.ElementAt(i);
+                    float midpoint = child.layout.yMin + child.layout.height / 2f;
+                    if (localPointerPos.y < midpoint)
+                    {
+                        targetIndex = i;
+                        break;
+                    }
+                }
+
+                if (targetIndex < 0)
+                {
+                    targetIndex = childCount;
                 }
             }
-
-            if (targetIndex < 0)
+            else
             {
-                targetIndex = childCount;
-                targetIndex = Math.Max(0, targetIndex);
+                targetIndex = 0;
+                if (0 <= localPointerPos.y)
+                {
+                    bool seenInPlaceGhost = false;
+                    for (int i = 0; i < childCount; ++i)
+                    {
+                        VisualElement child = container.ElementAt(i);
+                        if (child == _inPlaceGhost)
+                        {
+                            seenInPlaceGhost = true;
+                        }
+                        float yMax = child.layout.yMax;
+                        if (localPointerPos.y < yMax)
+                        {
+                            if (seenInPlaceGhost)
+                            {
+                                targetIndex = i;
+                            }
+                            else
+                            {
+                                targetIndex = i + 1;
+                            }
+
+                            break;
+                        }
+                    }
+                }
             }
+            targetIndex = Mathf.Max(0, targetIndex);
+            targetIndex = Mathf.Min(targetIndex, childCount);
 
             bool targetIndexValid = true;
-            int maxIndex = positioningParent.childCount;
+            int maxIndex = childCount;
 
-            if (_inPlaceGhost.parent == positioningParent)
+            if (_inPlaceGhost.parent == container)
             {
                 maxIndex--;
             }
@@ -5715,23 +5733,23 @@ namespace WallstopStudios.DataVisualizer.Editor
             maxIndex = Math.Max(0, maxIndex);
             targetIndex = Mathf.Clamp(targetIndex, 0, maxIndex + 1);
 
-            if (targetIndex != _lastGhostInsertIndex || positioningParent != _lastGhostParent)
+            if (targetIndex != _lastGhostInsertIndex || container != _lastGhostParent)
             {
-                if (_inPlaceGhost.parent != null && _inPlaceGhost.parent != positioningParent)
+                if (_inPlaceGhost.parent != null && _inPlaceGhost.parent != container)
                 {
                     _inPlaceGhost.RemoveFromHierarchy();
-                    positioningParent.Add(_inPlaceGhost);
+                    container.Add(_inPlaceGhost);
                 }
-                else if (0 <= targetIndex && targetIndex <= positioningParent.childCount)
+                else if (0 <= targetIndex && targetIndex <= container.childCount)
                 {
                     _inPlaceGhost.RemoveFromHierarchy();
-                    if (positioningParent.childCount < targetIndex)
+                    if (container.childCount < targetIndex)
                     {
-                        positioningParent.Add(_inPlaceGhost);
+                        container.Add(_inPlaceGhost);
                     }
                     else
                     {
-                        positioningParent.Insert(targetIndex, _inPlaceGhost);
+                        container.Insert(targetIndex, _inPlaceGhost);
                     }
                 }
                 else
@@ -5745,7 +5763,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 _lastGhostInsertIndex = targetIndex;
-                _lastGhostParent = positioningParent;
+                _lastGhostParent = container;
             }
             else
             {
