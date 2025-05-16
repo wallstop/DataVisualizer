@@ -170,8 +170,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Button _addTypesFromDataFolderButton;
         private Button _createObjectButton;
         private Button _settingsButton;
-        private TextField _typeSearchField;
+        private TextField _typeAddSearchField;
         private VisualElement _typePopoverListContainer;
+
+        private TextField _typeSearchField;
 
         private float _lastSavedOuterWidth = -1f;
         private float _lastSavedInnerWidth = -1f;
@@ -898,11 +900,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _settingsButton.AddToClassList(StyleConstants.ClickableClass);
             headerRow.Add(_settingsButton);
 
-            _searchField = new TextField
-            {
-                name = "global-search-field",
-                style = { flexGrow = 1, marginRight = 10 },
-            };
+            _searchField = new TextField { name = "global-search-field" };
+            _searchField.AddToClassList("global-search-field");
             _searchField.SetPlaceholderText(SearchPlaceholder);
             _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue));
             _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
@@ -938,6 +937,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _lastSavedOuterWidth = initialOuterWidth;
             _lastSavedInnerWidth = initialInnerWidth;
             _namespaceColumnElement = CreateNamespaceColumn();
+
             _objectColumnElement = CreateObjectColumn();
             VisualElement inspectorColumn = CreateInspectorColumn();
 
@@ -985,12 +985,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             _typeAddPopover = new VisualElement { name = "type-add-popover" };
             _typeAddPopover.AddToClassList("type-add-popover");
 
-            _typeSearchField = new TextField { name = "type-search-field" };
-            _typeSearchField.AddToClassList("type-search-field");
-            _typeSearchField.SetPlaceholderText(SearchPlaceholder);
-            _typeSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue));
-            _typeSearchField.RegisterCallback<KeyDownEvent>(HandleTypePopoverKeyDown);
-            _typeAddPopover.Add(_typeSearchField);
+            _typeAddSearchField = new TextField { name = "type-add-search-field" };
+            _typeAddSearchField.AddToClassList("type-add-search-field");
+            _typeAddSearchField.SetPlaceholderText(SearchPlaceholder);
+            _typeAddSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue));
+            _typeAddSearchField.RegisterCallback<KeyDownEvent>(HandleTypePopoverKeyDown);
+            _typeAddPopover.Add(_typeAddSearchField);
 
             ScrollView typePopoverScrollView = new(ScrollViewMode.Vertical);
             typePopoverScrollView.AddToClassList("type-add-popover-scrollview");
@@ -1171,6 +1171,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private void HandleTypeSearchKeyDown(KeyDownEvent evt) { }
+
         private void HandleSearchKeyDown(KeyDownEvent evt)
         {
             if (
@@ -1278,6 +1280,38 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     item.RemoveFromClassList(SearchResultHighlightClass);
                 }
+            }
+        }
+
+        private void PerformTypeSearch(string searchText)
+        {
+            if (
+                string.IsNullOrWhiteSpace(searchText)
+                || string.Equals(SearchPlaceholder, searchText, StringComparison.Ordinal)
+            )
+            {
+                foreach (VisualElement typeItem in _namespaceController._namespaceCache.Values)
+                {
+                    typeItem.style.display = DisplayStyle.Flex;
+                }
+
+                return;
+            }
+
+            string[] searchTerms = searchText.Split(
+                new[] { ' ' },
+                StringSplitOptions.RemoveEmptyEntries
+            );
+
+            foreach (
+                KeyValuePair<Type, VisualElement> entry in _namespaceController._namespaceCache
+            )
+            {
+                string typeDisplayName = NamespaceController.GetTypeDisplayName(entry.Key);
+                bool shouldDisplay = searchTerms.All(term =>
+                    typeDisplayName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                );
+                entry.Value.style.display = shouldDisplay ? DisplayStyle.Flex : DisplayStyle.None;
             }
         }
 
@@ -2182,7 +2216,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _currentTypePopoverItems.Clear();
                 _typePopoverHighlightIndex = -1;
-                _typeSearchField?.SetValueWithoutNotify("");
+                _typeAddSearchField?.SetValueWithoutNotify("");
             }
 
             CloseNestedPopover();
@@ -3339,6 +3373,16 @@ namespace WallstopStudios.DataVisualizer.Editor
             addButtonHeader.Add(_addTypesFromScriptFolderButton);
             namespaceColumn.Add(nsHeader);
 
+            _typeSearchField = new TextField { name = "type-search-field" };
+            _typeSearchField.AddToClassList("type-search-field");
+            _typeSearchField.SetPlaceholderText(SearchPlaceholder);
+            _typeSearchField.RegisterValueChangedCallback(evt => PerformTypeSearch(evt.newValue));
+            _typeSearchField.RegisterCallback<FocusOutEvent, DataVisualizer>(
+                (_, context) => context.PerformTypeSearch(string.Empty),
+                this
+            );
+            namespaceColumn.Add(_typeSearchField);
+
             ScrollView namespaceScrollView = new(ScrollViewMode.Vertical)
             {
                 name = "namespace-scrollview",
@@ -4097,15 +4141,17 @@ namespace WallstopStudios.DataVisualizer.Editor
                     continue;
                 }
 
+                ScriptableObject localDataObject = dataObject;
+
                 VisualElement objectItemRow = new()
                 {
-                    name = $"object-item-row-{dataObject.GetInstanceID()}",
+                    name = $"object-item-row-{localDataObject.GetInstanceID()}",
                 };
                 objectItemRow.AddToClassList(ObjectItemClass);
                 objectItemRow.AddToClassList(StyleConstants.ClickableClass);
                 objectItemRow.style.flexDirection = FlexDirection.Row;
                 objectItemRow.style.alignItems = Align.Center;
-                objectItemRow.userData = dataObject;
+                objectItemRow.userData = localDataObject;
                 objectItemRow.RegisterCallback<PointerDownEvent>(OnObjectPointerDown);
 
                 VisualElement contentArea = new() { name = "content" };
@@ -4114,13 +4160,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 objectItemRow.Add(contentArea);
 
                 string dataObjectName;
-                if (dataObject is IDisplayable displayable)
+                if (localDataObject is IDisplayable displayable)
                 {
                     dataObjectName = displayable.Title;
                 }
                 else
                 {
-                    dataObjectName = dataObject.name;
+                    dataObjectName = localDataObject.name;
                 }
 
                 Label titleLabel = new(dataObjectName) { name = "object-item-label" };
@@ -4141,7 +4187,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 actionsArea.AddToClassList(ObjectItemActionsClass);
                 objectItemRow.Add(actionsArea);
 
-                Button cloneButton = new(() => CloneObject(dataObject))
+                Button cloneButton = new(() => CloneObject(localDataObject))
                 {
                     text = "++",
                     tooltip = "Clone Object",
@@ -4151,7 +4197,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 actionsArea.Add(cloneButton);
 
                 Button renameButton = null;
-                renameButton = new Button(() => OpenRenamePopover(renameButton, dataObject))
+                renameButton = new Button(() => OpenRenamePopover(renameButton, localDataObject))
                 {
                     text = "@",
                     tooltip = "Rename Object",
@@ -4160,8 +4206,95 @@ namespace WallstopStudios.DataVisualizer.Editor
                 renameButton.AddToClassList("rename-button");
                 actionsArea.Add(renameButton);
 
+                Button moveButton = null;
+                moveButton = new Button(() =>
+                {
+                    if (localDataObject == null)
+                    {
+                        return;
+                    }
+
+                    string assetPath = AssetDatabase.GetAssetPath(localDataObject);
+                    string startDirectory = Path.GetDirectoryName(assetPath) ?? string.Empty;
+                    string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
+                        title: "Select New Location (Must be inside Assets)",
+                        folder: startDirectory,
+                        defaultName: ""
+                    );
+
+                    if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
+                    {
+                        return;
+                    }
+
+                    selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
+
+                    string projectAssetsPath = Path.GetFullPath(Application.dataPath)
+                        .SanitizePath();
+
+                    if (
+                        !selectedAbsolutePath.StartsWith(
+                            projectAssetsPath,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
+                    {
+                        Debug.LogError(
+                            "Selected folder must be inside the project's Assets folder."
+                        );
+                        EditorUtility.DisplayDialog(
+                            "Invalid Folder",
+                            "The selected folder must be inside the project's 'Assets' directory.",
+                            "OK"
+                        );
+                        return;
+                    }
+
+                    string relativePath;
+                    if (
+                        selectedAbsolutePath.Equals(
+                            projectAssetsPath,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
+                    {
+                        relativePath = "Assets";
+                    }
+                    else
+                    {
+                        relativePath =
+                            "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+                        relativePath = relativePath.Replace("//", "/");
+                    }
+
+                    string targetPath = $"{relativePath}/{localDataObject.name}.asset";
+                    if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Ignore same path operation
+                        return;
+                    }
+
+                    string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
+                    if (!string.IsNullOrWhiteSpace(errorMessage))
+                    {
+                        Debug.LogError(
+                            $"Error moving asset {localDataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}"
+                        );
+                        EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
+                    }
+                })
+                {
+                    text = "➔",
+                    tooltip = "Move Object",
+                };
+                moveButton.AddToClassList(StyleConstants.ActionButtonClass);
+                moveButton.AddToClassList("move-button");
+                actionsArea.Add(moveButton);
+
                 Button deleteButton = null;
-                deleteButton = new Button(() => OpenConfirmDeletePopover(deleteButton, dataObject))
+                deleteButton = new Button(
+                    () => OpenConfirmDeletePopover(deleteButton, localDataObject)
+                )
                 {
                     text = "X",
                     tooltip = "Delete Object",
@@ -4170,10 +4303,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 deleteButton.AddToClassList("delete-button");
                 actionsArea.Add(deleteButton);
 
-                _objectVisualElementMap[dataObject] = objectItemRow;
+                _objectVisualElementMap[localDataObject] = objectItemRow;
                 _objectListContainer.Add(objectItemRow);
 
-                if (_selectedObject == dataObject)
+                if (_selectedObject == localDataObject)
                 {
                     objectItemRow.AddToClassList(StyleConstants.SelectedClass);
                     _selectedElement = objectItemRow;

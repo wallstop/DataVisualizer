@@ -33,6 +33,7 @@
     text-overflow: ellipsis;
     margin-right: 5px;
     height: 20px;
+    padding-top: 2px;
 }
 
 .bold {
@@ -226,7 +227,7 @@
     position: absolute;
     border-width: 1px;
     border-color: white;
-    background-color: rgba(70, 130, 180, 0.7);
+    background-color: rgba(0, 0, 0, 0.75);
     border-radius: 3px;
     padding: 4px 8px;
     opacity: 0.8;
@@ -542,6 +543,13 @@
     padding-bottom: 2px;
 }
 
+.move-button {
+    border-color: goldenrod;
+    color: goldenrod;
+    padding: 3px;
+    padding-bottom: 4px;
+}
+
 .rename-button {
     padding: 1px 6px;
     background-color: transparent;
@@ -551,6 +559,22 @@
 
 .namespace-group-item--empty {
     opacity: 0.6;
+}
+
+.global-search-field {
+    flex-grow: 1;
+    margin-right: 10px;
+    border-radius: 4px;
+}
+
+.type-search-field {
+    flex-grow: 0;
+    margin: 5px;
+    border-radius: 4px;
+}
+
+.type-search-field > #unity-text-input {
+    border-top-right-radius: 0;
 }
 
 .empty-object-list-label {
@@ -668,20 +692,19 @@
     margin-right: 10px;
 }
 
-.type-search-field {
+.type-add-search-field {
     margin: 4px;
     margin-bottom: 2px;
     border-radius: 8px;
 }
 
-.type-search-field > #unity-text-input {
+.type-add-search-field > #unity-text-input {
     border-color: transparent;
 }
 
-.type-search-field > #unity-text-input > .unity-text-element {
+.type-add-search-field > #unity-text-input > .unity-text-element {
     padding: 0 4px;
 }
-
 
 .popover-item--highlighted {
 

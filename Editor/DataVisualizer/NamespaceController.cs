@@ -16,7 +16,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public Type SelectedType => _selectedType;
 
-        private readonly Dictionary<Type, VisualElement> _namespaceCache = new();
+        internal readonly Dictionary<Type, VisualElement> _namespaceCache = new();
 
         private readonly Dictionary<string, List<Type>> _managedTypes;
         private readonly Dictionary<string, int> _namespaceOrder;
