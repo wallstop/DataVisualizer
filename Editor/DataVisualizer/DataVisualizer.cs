@@ -5237,6 +5237,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             _draggedElement.style.display = DisplayStyle.Flex;
             _draggedElement.style.opacity = 1.0f;
             _namespaceListContainer.Insert(targetIndex, _draggedElement);
+            foreach (VisualElement child in _namespaceListContainer.Children())
+            {
+                NamespaceController.RecalibrateVisualElements(child);
+            }
 
             int oldDataIndex = _namespaceOrder.GetValueOrDefault(draggedKey, -1);
             if (0 > oldDataIndex)
@@ -5360,6 +5364,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             _draggedElement.style.display = DisplayStyle.Flex;
             _draggedElement.style.opacity = 1.0f;
             typesContainer.Insert(targetIndex, _draggedElement);
+            foreach (VisualElement child in typesContainer.Children())
+            {
+                NamespaceController.RecalibrateVisualElements(child);
+            }
 
             int namespaceIndex = _namespaceOrder.GetValueOrDefault(namespaceKey, -1);
             if (0 <= namespaceIndex)
