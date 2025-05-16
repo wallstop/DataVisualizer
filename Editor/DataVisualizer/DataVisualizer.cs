@@ -1171,8 +1171,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void HandleTypeSearchKeyDown(KeyDownEvent evt) { }
-
         private void HandleSearchKeyDown(KeyDownEvent evt)
         {
             if (
@@ -5613,7 +5611,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void UpdateInPlaceGhostPosition(Vector2 pointerPosition)
         {
             VisualElement container = null;
-
             switch (_activeDragType)
             {
                 case DragType.Object:
@@ -5630,22 +5627,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     container = _draggedElement?.parent;
                     break;
-                }
-                default:
-                {
-                    if (_inPlaceGhost?.parent != null)
-                    {
-                        _inPlaceGhost.RemoveFromHierarchy();
-                    }
-
-                    if (_inPlaceGhost != null)
-                    {
-                        _inPlaceGhost.style.visibility = Visibility.Hidden;
-                    }
-
-                    _lastGhostInsertIndex = -1;
-                    _lastGhostParent = null;
-                    return;
                 }
             }
 
@@ -5939,7 +5920,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private string GetLastSelectedNamespaceKey()
         {
             DataVisualizerSettings settings = Settings;
-
             return settings.persistStateInSettingsAsset
                 ? settings.lastSelectedNamespaceKey
                 : UserState.lastSelectedNamespaceKey;
