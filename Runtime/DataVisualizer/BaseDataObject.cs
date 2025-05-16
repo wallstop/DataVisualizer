@@ -5,6 +5,7 @@
 namespace WallstopStudios.DataVisualizer
 {
     using System;
+    using System.Text.RegularExpressions;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.Serialization;
@@ -28,6 +29,11 @@ namespace WallstopStudios.DataVisualizer
             IGUIProvider,
             IDisplayable
     {
+        protected static readonly Regex CloneRegex = new(
+            @"^(.*?)(\s\(Clone(?: (\d+))?\))?$",
+            RegexOptions.Compiled
+        );
+
         public virtual string Id => _assetGuid;
 
         public virtual string Title
@@ -135,8 +141,45 @@ namespace WallstopStudios.DataVisualizer
             TrySetAssetPath();
             if (previous is BaseDataObject baseDataObject)
             {
-                _title = baseDataObject.Title + " (Clone)";
+                _title = IncrementCloneSuffix(baseDataObject.Title);
             }
+        }
+
+        private static string IncrementCloneSuffix(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+            {
+                return " (Clone)";
+            }
+
+            Match match = CloneRegex.Match(input);
+            if (!match.Success)
+            {
+                return input + " (Clone)";
+            }
+
+            string baseName = match.Groups[1].Value;
+            string existingCloneSuffix = match.Groups[2].Value;
+            string numberPart = match.Groups[3].Value;
+
+            if (string.IsNullOrEmpty(existingCloneSuffix))
+            {
+                return input + " (Clone)";
+            }
+
+            if (string.IsNullOrEmpty(numberPart))
+            {
+                return (string.IsNullOrEmpty(baseName) && input.Trim() == "(Clone)" ? "" : baseName)
+                    + " (Clone 1)";
+            }
+
+            if (!int.TryParse(numberPart, out int cloneNumber))
+            {
+                return baseName + " (Clone 1)";
+            }
+
+            cloneNumber++;
+            return baseName + " (Clone " + cloneNumber + ")";
         }
 
         public virtual void BeforeCreate() { }

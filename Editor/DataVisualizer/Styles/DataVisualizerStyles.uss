@@ -32,6 +32,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     margin-right: 5px;
+    margin-left: 5px;
     height: 20px;
     padding-top: 2px;
 }
@@ -604,8 +605,7 @@
 .empty-object-list-label {
     color: grey;
     white-space: normal;
-    margin-top: 20px;
-    padding: 5px;
+    margin: 10px;
 }
 
 .type-selection-list-item {

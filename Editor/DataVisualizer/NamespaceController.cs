@@ -147,9 +147,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             ScriptableObject objectToSelect = dataVisualizer.DetermineObjectToAutoSelect();
             dataVisualizer.BuildObjectsView();
             dataVisualizer.SelectObject(objectToSelect);
+            dataVisualizer.UpdateCreateObjectButtonStyle();
         }
 
-        public static void RecalibrateVisualElements(VisualElement item)
+        public static void RecalibrateVisualElements(VisualElement item, int offset = 0)
         {
             VisualElement parent = item?.parent;
             if (parent == null)
@@ -166,9 +167,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             Button goUpButton = item.Q<Button>("go-up-button");
             if (goUpButton != null)
             {
-                goUpButton.EnableInClassList("go-button-disabled", index == 0);
-                goUpButton.EnableInClassList(StyleConstants.ActionButtonClass, index != 0);
-                goUpButton.EnableInClassList("go-button", index != 0);
+                int compensatedIndex = Mathf.Max(0, index - offset);
+                goUpButton.EnableInClassList("go-button-disabled", compensatedIndex == 0);
+                goUpButton.EnableInClassList(
+                    StyleConstants.ActionButtonClass,
+                    compensatedIndex != 0
+                );
+                goUpButton.EnableInClassList("go-button", compensatedIndex != 0);
             }
             Button goDownButton = item.Q<Button>("go-down-button");
             if (goDownButton != null)
