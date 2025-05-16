@@ -16,7 +16,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public Type SelectedType => _selectedType;
 
-        private readonly Dictionary<Type, VisualElement> _namespaceCache = new();
+        internal readonly Dictionary<Type, VisualElement> _namespaceCache = new();
 
         private readonly Dictionary<string, List<Type>> _managedTypes;
         private readonly Dictionary<string, int> _namespaceOrder;
@@ -149,6 +149,42 @@ namespace WallstopStudios.DataVisualizer.Editor
             dataVisualizer.SelectObject(objectToSelect);
         }
 
+        public static void RecalibrateVisualElements(VisualElement item)
+        {
+            VisualElement parent = item?.parent;
+            if (parent == null)
+            {
+                return;
+            }
+
+            int index = parent.IndexOf(item);
+            if (index < 0)
+            {
+                return;
+            }
+
+            Button goUpButton = item.Q<Button>("go-up-button");
+            if (goUpButton != null)
+            {
+                goUpButton.EnableInClassList("go-button-disabled", index == 0);
+                goUpButton.EnableInClassList(StyleConstants.ActionButtonClass, index != 0);
+                goUpButton.EnableInClassList("go-button", index != 0);
+            }
+            Button goDownButton = item.Q<Button>("go-down-button");
+            if (goDownButton != null)
+            {
+                goDownButton.EnableInClassList(
+                    "go-button-disabled",
+                    index == parent.childCount - 1
+                );
+                goDownButton.EnableInClassList(
+                    StyleConstants.ActionButtonClass,
+                    index != parent.childCount - 1
+                );
+                goDownButton.EnableInClassList("go-button", index != parent.childCount - 1);
+            }
+        }
+
         public void Build(DataVisualizer dataVisualizer, ref VisualElement namespaceListContainer)
         {
             HashSet<Type> currentTypes = _managedTypes.SelectMany(x => x.Value).ToHashSet();
@@ -164,13 +200,14 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             namespaceListContainer ??= new VisualElement { name = "namespace-list" };
             namespaceListContainer.Clear();
+            VisualElement namespaceContainer = namespaceListContainer;
             _namespaceCache.Clear();
-            foreach (
-                (string key, List<Type> types) in _managedTypes.OrderBy(kvp =>
-                    _namespaceOrder.GetValueOrDefault(kvp.Key, _namespaceOrder.Count)
-                )
-            )
+            KeyValuePair<string, List<Type>>[] orderedEntries = _managedTypes
+                .OrderBy(kvp => _namespaceOrder.GetValueOrDefault(kvp.Key, _namespaceOrder.Count))
+                .ToArray();
+            for (int index = 0; index < orderedEntries.Length; index++)
             {
+                (string key, List<Type> types) = orderedEntries[index];
                 string namespaceKey = key;
                 List<Type> nonCoreManagedTypes = types.Where(IsTypeRemovable).ToList();
                 int removableTypeCount = nonCoreManagedTypes.Count;
@@ -204,6 +241,58 @@ namespace WallstopStudios.DataVisualizer.Editor
                 indicator.AddToClassList(StyleConstants.NamespaceIndicatorClass);
                 indicator.AddToClassList(StyleConstants.ClickableClass);
                 header.Add(indicator);
+
+                Button namespaceGoUpButton = new(() =>
+                {
+                    namespaceContainer.Remove(namespaceGroupItem);
+                    namespaceContainer.Insert(0, namespaceGroupItem);
+                    foreach (VisualElement child in namespaceContainer.Children())
+                    {
+                        RecalibrateVisualElements(child);
+                    }
+                })
+                {
+                    name = "go-up-button",
+                    text = "↑",
+                    tooltip = $"Move {namespaceKey} to top",
+                };
+                if (_managedTypes.Count == 1 || index == 0)
+                {
+                    namespaceGoUpButton.AddToClassList("go-button-disabled");
+                }
+                else
+                {
+                    namespaceGoUpButton.AddToClassList(StyleConstants.ActionButtonClass);
+                    namespaceGoUpButton.AddToClassList("go-button");
+                }
+
+                header.Add(namespaceGoUpButton);
+
+                Button namespaceGoDownButton = new(() =>
+                {
+                    namespaceContainer.Remove(namespaceGroupItem);
+                    namespaceContainer.Insert(namespaceContainer.childCount, namespaceGroupItem);
+                    foreach (VisualElement child in namespaceContainer.Children())
+                    {
+                        RecalibrateVisualElements(child);
+                    }
+                })
+                {
+                    name = "go-down-button",
+                    text = "↓",
+                    tooltip = $"Move {namespaceKey} to bottom",
+                };
+                if (_managedTypes.Count == 1 || index == orderedEntries.Length - 1)
+                {
+                    namespaceGoDownButton.AddToClassList("go-button-disabled");
+                }
+                else
+                {
+                    namespaceGoDownButton.AddToClassList(StyleConstants.ActionButtonClass);
+                    namespaceGoDownButton.AddToClassList("go-button");
+                }
+
+                header.Add(namespaceGoDownButton);
 
                 Label namespaceLabel = new(key) { name = $"namespace-name-{key}" };
                 namespaceLabel.AddToClassList(StyleConstants.BoldClass);
@@ -286,6 +375,58 @@ namespace WallstopStudios.DataVisualizer.Editor
                     typeItem.AddToClassList(StyleConstants.TypeItemClass);
                     _namespaceCache[type] = typeItem;
 
+                    Button goUpButton = new(() =>
+                    {
+                        typesContainer.Remove(typeItem);
+                        typesContainer.Insert(0, typeItem);
+                        foreach (VisualElement child in typesContainer.Children())
+                        {
+                            RecalibrateVisualElements(child);
+                        }
+                    })
+                    {
+                        name = "go-up-button",
+                        text = "↑",
+                        tooltip = $"Move {GetTypeDisplayName(type)} to top",
+                    };
+                    if (types.Count == 1 || i == 0)
+                    {
+                        goUpButton.AddToClassList("go-button-disabled");
+                    }
+                    else
+                    {
+                        goUpButton.AddToClassList(StyleConstants.ActionButtonClass);
+                        goUpButton.AddToClassList("go-button");
+                    }
+
+                    typeItem.Add(goUpButton);
+
+                    Button goDownButton = new(() =>
+                    {
+                        typesContainer.Remove(typeItem);
+                        typesContainer.Insert(typesContainer.childCount, typeItem);
+                        foreach (VisualElement child in typesContainer.Children())
+                        {
+                            RecalibrateVisualElements(child);
+                        }
+                    })
+                    {
+                        name = "go-down-button",
+                        text = "↓",
+                        tooltip = $"Move {GetTypeDisplayName(type)} to bottom",
+                    };
+                    if (types.Count == 1 || i == types.Count - 1)
+                    {
+                        goDownButton.AddToClassList("go-button-disabled");
+                    }
+                    else
+                    {
+                        goDownButton.AddToClassList(StyleConstants.ActionButtonClass);
+                        goDownButton.AddToClassList("go-button");
+                    }
+
+                    typeItem.Add(goDownButton);
+
                     Label typeLabel = new(GetTypeDisplayName(type)) { name = TypeItemLabelName };
                     typeLabel.AddToClassList(StyleConstants.TypeLabelClass);
                     typeLabel.AddToClassList(StyleConstants.ClickableClass);
@@ -329,7 +470,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         })
                         {
                             text = "X",
-                            tooltip = $"Remove {type.FullName}",
+                            tooltip = $"Remove {GetTypeDisplayName(type)}",
                         };
                         typeRemoveButton.AddToClassList(StyleConstants.ActionButtonClass);
                         typeRemoveButton.AddToClassList(StyleConstants.DeleteButtonClass);
