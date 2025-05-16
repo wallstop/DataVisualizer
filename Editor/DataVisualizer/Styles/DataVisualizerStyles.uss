@@ -543,8 +543,8 @@
 }
 
 .rename-button {
-    padding: 4px;
-    padding-bottom: 3px;
+    padding: 1px 6px;
+    background-color: transparent;
     border-color: rgb(51, 153, 230);
     color: rgb(51, 153, 230);
 }

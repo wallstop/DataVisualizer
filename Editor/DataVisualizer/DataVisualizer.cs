@@ -125,7 +125,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             new();
 
         private readonly List<ScriptableObject> _selectedObjects = new();
-        private readonly List<ScriptableObject> _allManagedSOsCache = new();
+        private readonly List<ScriptableObject> _allManagedObjectsCache = new();
         private readonly List<VisualElement> _currentSearchResultItems = new();
         private readonly List<VisualElement> _currentTypePopoverItems = new();
 
@@ -299,7 +299,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _scriptableObjectTypes.Clear();
             _namespaceOrder.Clear();
             _namespaceController.Clear();
-            _allManagedSOsCache.Clear();
+            _allManagedObjectsCache.Clear();
             _currentSearchResultItems.Clear();
             _currentTypePopoverItems.Clear();
             _isSearchCachePopulated = false;
@@ -335,18 +335,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void PopulateSearchCache()
         {
-            _allManagedSOsCache.Clear();
+            _allManagedObjectsCache.Clear();
             HashSet<Type> managedTypes = _scriptableObjectTypes
                 .SelectMany(tuple => tuple.Value)
                 .ToHashSet();
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
 
-            foreach (
-                Type type in AppDomain
-                    .CurrentDomain.GetAssemblies()
-                    .SelectMany(assembly => assembly.GetTypes())
-                    .Where(managedTypes.Contains)
-            )
+            foreach (Type type in managedTypes)
             {
                 string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
                 foreach (string guid in guids)
@@ -364,13 +359,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                         if (obj != null && obj.GetType() == type)
                         {
-                            _allManagedSOsCache.Add(obj);
+                            _allManagedObjectsCache.Add(obj);
                         }
                     }
                 }
             }
 
-            _allManagedSOsCache.Sort(
+            _allManagedObjectsCache.Sort(
                 (a, b) =>
                 {
                     int comparison = string.Compare(a.name, b.name, StringComparison.Ordinal);
@@ -504,7 +499,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     if (!string.IsNullOrWhiteSpace(previousTypeName))
                     {
-                        selectedType = typesInNamespace.FirstOrDefault(t =>
+                        selectedType = typesInNamespace.Find(t =>
                             string.Equals(t.Name, previousTypeName, StringComparison.Ordinal)
                         );
                     }
@@ -545,6 +540,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                             StringComparison.OrdinalIgnoreCase
                         );
                 });
+            }
+
+            if (selectedObject == null)
+            {
+                selectedObject = _selectedObjects.FirstOrDefault();
             }
 
             PopulateSearchCache();
@@ -1311,7 +1311,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             List<(ScriptableObject refernce, SearchResultMatchInfo match)> results = new();
-            foreach (ScriptableObject obj in _allManagedSOsCache)
+            foreach (ScriptableObject obj in _allManagedObjectsCache)
             {
                 if (obj == null)
                 {
@@ -3039,6 +3039,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            int index = _selectedObjects.IndexOf(objectToDelete);
             _selectedObjects.Remove(objectToDelete);
             _objectVisualElementMap.Remove(objectToDelete, out VisualElement visualElement);
             bool deleted = AssetDatabase.DeleteAsset(path);
@@ -3049,7 +3050,19 @@ namespace WallstopStudios.DataVisualizer.Editor
                 visualElement?.RemoveFromHierarchy();
                 if (_selectedObject == objectToDelete)
                 {
-                    SelectObject(null);
+                    int targetIndex = Mathf.Max(0, index - 1);
+                    if (targetIndex < _selectedObjects.Count)
+                    {
+                        SelectObject(_selectedObjects[targetIndex]);
+                    }
+                    else if (0 < _selectedObjects.Count)
+                    {
+                        SelectObject(_selectedObjects[0]);
+                    }
+                    else
+                    {
+                        SelectObject(null);
+                    }
                 }
             }
             else
@@ -4140,7 +4153,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 Button renameButton = null;
                 renameButton = new Button(() => OpenRenamePopover(renameButton, dataObject))
                 {
-                    text = "✎",
+                    text = "@",
                     tooltip = "Rename Object",
                 };
                 renameButton.AddToClassList(StyleConstants.ActionButtonClass);
