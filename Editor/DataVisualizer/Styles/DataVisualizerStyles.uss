@@ -395,6 +395,7 @@
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0;
+    height: 24px;
     overflow: hidden;
 }
 
