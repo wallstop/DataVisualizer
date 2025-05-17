@@ -166,6 +166,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private TwoPaneSplitView _innerSplitView;
         private VisualElement _namespaceColumnElement;
         private Label _namespaceColumnLabel;
+        private TextField _assetNameTextField;
         private VisualElement _objectColumnElement;
 
         private VisualElement _settingsPopover;
@@ -2753,7 +2754,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             displayField.text = settings.DataFolderPath;
         }
 
-        private void OpenRenamePopover(VisualElement source, ScriptableObject dataObject)
+        private void OpenRenamePopover(
+            Label titleLabel,
+            VisualElement source,
+            ScriptableObject dataObject
+        )
         {
             if (dataObject == null)
             {
@@ -2766,7 +2771,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            BuildRenamePopoverContent(currentPath, dataObject.name);
+            BuildRenamePopoverContent(titleLabel, currentPath, dataObject.name);
             OpenPopover(_renamePopover, source, currentPath);
         }
 
@@ -2845,7 +2850,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void BuildRenamePopoverContent(string originalPath, string originalName)
+        private void BuildRenamePopoverContent(
+            Label titleLabel,
+            string originalPath,
+            string originalName
+        )
         {
             VisualElement dragHandle = _renamePopover.Q(className: "popover-drag-handle");
             VisualElement contentWrapper = _renamePopover.Q(
@@ -2913,7 +2922,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             void Rename()
             {
-                HandleRenameConfirmed(nameTextField, errorLabel);
+                HandleRenameConfirmed(titleLabel, nameTextField, errorLabel);
             }
         }
 
@@ -2954,14 +2963,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 creatable = null;
             }
             AssetDatabase.CreateAsset(instance, uniquePath);
-            AssetDatabase.Refresh();
             creatable?.AfterCreate();
 
             CloseActivePopover();
-            ScheduleRefresh();
+            if (type == _namespaceController.SelectedType)
+            {
+                BuildObjectRow(instance, _objectListContainer.childCount);
+                foreach (VisualElement child in _objectListContainer.Children())
+                {
+                    NamespaceController.RecalibrateVisualElements(child, offset: 1);
+                }
+            }
         }
 
-        private void HandleRenameConfirmed(TextField nameField, Label errorLabel)
+        private void HandleRenameConfirmed(Label titleLabel, TextField nameField, Label errorLabel)
         {
             errorLabel.style.display = DisplayStyle.None;
             string originalPath = _popoverContext as string;
@@ -2999,8 +3014,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            string newPath = Path.Combine(directory, newName + Path.GetExtension(originalPath))
-                .SanitizePath();
+            string newFullName = newName + Path.GetExtension(originalPath);
+            string newPath = Path.Combine(directory, newFullName).SanitizePath();
             string validationError = AssetDatabase.ValidateMoveAsset(originalPath, newPath);
 
             if (!string.IsNullOrWhiteSpace(validationError))
@@ -3028,7 +3043,22 @@ namespace WallstopStudios.DataVisualizer.Editor
                 renamable?.AfterRename(newName);
                 Debug.Log($"Asset renamed successfully to: {newName}");
                 CloseActivePopover();
-                ScheduleRefresh();
+                if (_selectedObject == original && _assetNameTextField != null)
+                {
+                    _assetNameTextField.value = newName;
+                }
+
+                if (titleLabel != null)
+                {
+                    if (original is IDisplayable displayable)
+                    {
+                        titleLabel.text = displayable.Title;
+                    }
+                    else
+                    {
+                        titleLabel.text = newName;
+                    }
+                }
             }
             else
             {
@@ -3320,10 +3350,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (stateChanged)
                 {
-                    SyncNamespaceAndTypeOrders();
-                    LoadScriptableObjectTypes();
-                    BuildNamespaceView();
-                    PopulateSearchCache();
+                    SyncNamespaceChanges();
                 }
             })
             {
@@ -3414,10 +3441,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (stateChanged)
                 {
-                    SyncNamespaceAndTypeOrders();
-                    LoadScriptableObjectTypes();
-                    BuildNamespaceView();
-                    PopulateSearchCache();
+                    SyncNamespaceChanges();
                 }
             })
             {
@@ -3936,10 +3960,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
 
                     types.Add(selectedType);
-                    SyncNamespaceAndTypeOrders();
-                    LoadScriptableObjectTypes();
-                    BuildNamespaceView();
-                    PopulateSearchCache();
+                    SyncNamespaceChanges();
                 }
             }
 
@@ -4154,12 +4175,17 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (stateChanged)
                 {
-                    SyncNamespaceAndTypeOrders();
-                    LoadScriptableObjectTypes();
-                    BuildNamespaceView();
-                    PopulateSearchCache();
+                    SyncNamespaceChanges();
                 }
             }
+        }
+
+        private void SyncNamespaceChanges()
+        {
+            SyncNamespaceAndTypeOrders();
+            LoadScriptableObjectTypes();
+            BuildNamespaceView();
+            PopulateSearchCache();
         }
 
         private void BuildNamespaceView()
@@ -4199,229 +4225,230 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             for (int i = 0; i < _selectedObjects.Count; i++)
             {
-                ScriptableObject dataObject = _selectedObjects[i];
+                BuildObjectRow(_selectedObjects[i], i);
+            }
+        }
+
+        private void BuildObjectRow(ScriptableObject dataObject, int index)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            string dataObjectName;
+            if (dataObject is IDisplayable displayable)
+            {
+                dataObjectName = displayable.Title;
+            }
+            else
+            {
+                dataObjectName = dataObject.name;
+            }
+
+            VisualElement objectItemRow = new()
+            {
+                name = $"object-item-row-{dataObject.GetInstanceID()}",
+            };
+            objectItemRow.AddToClassList(ObjectItemClass);
+            objectItemRow.AddToClassList(StyleConstants.ClickableClass);
+            objectItemRow.style.flexDirection = FlexDirection.Row;
+            objectItemRow.style.alignItems = Align.Center;
+            objectItemRow.userData = dataObject;
+            objectItemRow.RegisterCallback<PointerDownEvent>(OnObjectPointerDown);
+
+            Button goUpButton = new(() =>
+            {
+                _objectListContainer.Remove(objectItemRow);
+                _objectListContainer.Insert(1, objectItemRow);
+                foreach (VisualElement child in _objectListContainer.Children())
+                {
+                    NamespaceController.RecalibrateVisualElements(child, offset: 1);
+                }
+            })
+            {
+                name = "go-up-button",
+                text = "↑",
+                tooltip = $"Move {dataObjectName} to top",
+            };
+            if (_selectedObjects.Count == 1 || index == 0)
+            {
+                goUpButton.AddToClassList("go-button-disabled");
+            }
+            else
+            {
+                goUpButton.AddToClassList(StyleConstants.ActionButtonClass);
+                goUpButton.AddToClassList("go-button");
+            }
+
+            objectItemRow.Add(goUpButton);
+
+            Button goDownButton = new(() =>
+            {
+                _objectListContainer.Remove(objectItemRow);
+                _objectListContainer.Insert(_objectListContainer.childCount, objectItemRow);
+                foreach (VisualElement child in _objectListContainer.Children())
+                {
+                    NamespaceController.RecalibrateVisualElements(child, offset: 1);
+                }
+            })
+            {
+                name = "go-down-button",
+                text = "↓",
+                tooltip = $"Move {dataObjectName} to bottom",
+            };
+            if (_selectedObjects.Count == 1 || index == _selectedObjects.Count - 1)
+            {
+                goDownButton.AddToClassList("go-button-disabled");
+            }
+            else
+            {
+                goDownButton.AddToClassList(StyleConstants.ActionButtonClass);
+                goDownButton.AddToClassList("go-button");
+            }
+
+            objectItemRow.Add(goDownButton);
+
+            VisualElement contentArea = new() { name = "content" };
+            contentArea.AddToClassList(ObjectItemContentClass);
+            contentArea.AddToClassList(StyleConstants.ClickableClass);
+            objectItemRow.Add(contentArea);
+
+            Label titleLabel = new(dataObjectName) { name = "object-item-label" };
+            titleLabel.AddToClassList("object-item__label");
+            titleLabel.AddToClassList(StyleConstants.ClickableClass);
+            contentArea.Add(titleLabel);
+
+            VisualElement actionsArea = new()
+            {
+                name = "actions",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    flexShrink = 0,
+                },
+            };
+            actionsArea.AddToClassList(ObjectItemActionsClass);
+            objectItemRow.Add(actionsArea);
+
+            Button cloneButton = new(() => CloneObject(dataObject))
+            {
+                text = "++",
+                tooltip = "Clone Object",
+            };
+            cloneButton.AddToClassList(StyleConstants.ActionButtonClass);
+            cloneButton.AddToClassList("clone-button");
+            actionsArea.Add(cloneButton);
+
+            Button renameButton = null;
+            renameButton = new Button(() => OpenRenamePopover(titleLabel, renameButton, dataObject))
+            {
+                text = "@",
+                tooltip = "Rename Object",
+            };
+            renameButton.AddToClassList(StyleConstants.ActionButtonClass);
+            renameButton.AddToClassList("rename-button");
+            actionsArea.Add(renameButton);
+
+            Button moveButton = new(() =>
+            {
                 if (dataObject == null)
                 {
-                    continue;
+                    return;
                 }
 
-                string dataObjectName;
-                if (dataObject is IDisplayable displayable)
-                {
-                    dataObjectName = displayable.Title;
-                }
-                else
-                {
-                    dataObjectName = dataObject.name;
-                }
+                string assetPath = AssetDatabase.GetAssetPath(dataObject);
+                string startDirectory = Path.GetDirectoryName(assetPath) ?? string.Empty;
+                string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
+                    title: "Select New Location (Must be inside Assets)",
+                    folder: startDirectory,
+                    defaultName: ""
+                );
 
-                VisualElement objectItemRow = new()
+                if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
                 {
-                    name = $"object-item-row-{dataObject.GetInstanceID()}",
-                };
-                objectItemRow.AddToClassList(ObjectItemClass);
-                objectItemRow.AddToClassList(StyleConstants.ClickableClass);
-                objectItemRow.style.flexDirection = FlexDirection.Row;
-                objectItemRow.style.alignItems = Align.Center;
-                objectItemRow.userData = dataObject;
-                objectItemRow.RegisterCallback<PointerDownEvent>(OnObjectPointerDown);
-
-                Button goUpButton = new(() =>
-                {
-                    _objectListContainer.Remove(objectItemRow);
-                    _objectListContainer.Insert(1, objectItemRow);
-                    foreach (VisualElement child in _objectListContainer.Children())
-                    {
-                        NamespaceController.RecalibrateVisualElements(child, offset: 1);
-                    }
-                })
-                {
-                    name = "go-up-button",
-                    text = "↑",
-                    tooltip = $"Move {dataObjectName} to top",
-                };
-                if (_selectedObjects.Count == 1 || i == 0)
-                {
-                    goUpButton.AddToClassList("go-button-disabled");
-                }
-                else
-                {
-                    goUpButton.AddToClassList(StyleConstants.ActionButtonClass);
-                    goUpButton.AddToClassList("go-button");
+                    return;
                 }
 
-                objectItemRow.Add(goUpButton);
+                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
 
-                Button goDownButton = new(() =>
+                string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
+
+                if (
+                    !selectedAbsolutePath.StartsWith(
+                        projectAssetsPath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
                 {
-                    _objectListContainer.Remove(objectItemRow);
-                    _objectListContainer.Insert(_objectListContainer.childCount, objectItemRow);
-                    foreach (VisualElement child in _objectListContainer.Children())
-                    {
-                        NamespaceController.RecalibrateVisualElements(child, offset: 1);
-                    }
-                })
-                {
-                    name = "go-down-button",
-                    text = "↓",
-                    tooltip = $"Move {dataObjectName} to bottom",
-                };
-                if (_selectedObjects.Count == 1 || i == _selectedObjects.Count - 1)
-                {
-                    goDownButton.AddToClassList("go-button-disabled");
-                }
-                else
-                {
-                    goDownButton.AddToClassList(StyleConstants.ActionButtonClass);
-                    goDownButton.AddToClassList("go-button");
-                }
-
-                objectItemRow.Add(goDownButton);
-
-                VisualElement contentArea = new() { name = "content" };
-                contentArea.AddToClassList(ObjectItemContentClass);
-                contentArea.AddToClassList(StyleConstants.ClickableClass);
-                objectItemRow.Add(contentArea);
-
-                Label titleLabel = new(dataObjectName) { name = "object-item-label" };
-                titleLabel.AddToClassList("object-item__label");
-                titleLabel.AddToClassList(StyleConstants.ClickableClass);
-                contentArea.Add(titleLabel);
-
-                VisualElement actionsArea = new()
-                {
-                    name = "actions",
-                    style =
-                    {
-                        flexDirection = FlexDirection.Row,
-                        alignItems = Align.Center,
-                        flexShrink = 0,
-                    },
-                };
-                actionsArea.AddToClassList(ObjectItemActionsClass);
-                objectItemRow.Add(actionsArea);
-
-                Button cloneButton = new(() => CloneObject(dataObject))
-                {
-                    text = "++",
-                    tooltip = "Clone Object",
-                };
-                cloneButton.AddToClassList(StyleConstants.ActionButtonClass);
-                cloneButton.AddToClassList("clone-button");
-                actionsArea.Add(cloneButton);
-
-                Button renameButton = null;
-                renameButton = new Button(() => OpenRenamePopover(renameButton, dataObject))
-                {
-                    text = "@",
-                    tooltip = "Rename Object",
-                };
-                renameButton.AddToClassList(StyleConstants.ActionButtonClass);
-                renameButton.AddToClassList("rename-button");
-                actionsArea.Add(renameButton);
-
-                Button moveButton = new(() =>
-                {
-                    if (dataObject == null)
-                    {
-                        return;
-                    }
-
-                    string assetPath = AssetDatabase.GetAssetPath(dataObject);
-                    string startDirectory = Path.GetDirectoryName(assetPath) ?? string.Empty;
-                    string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
-                        title: "Select New Location (Must be inside Assets)",
-                        folder: startDirectory,
-                        defaultName: ""
+                    Debug.LogError("Selected folder must be inside the project's Assets folder.");
+                    EditorUtility.DisplayDialog(
+                        "Invalid Folder",
+                        "The selected folder must be inside the project's 'Assets' directory.",
+                        "OK"
                     );
-
-                    if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
-                    {
-                        return;
-                    }
-
-                    selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
-
-                    string projectAssetsPath = Path.GetFullPath(Application.dataPath)
-                        .SanitizePath();
-
-                    if (
-                        !selectedAbsolutePath.StartsWith(
-                            projectAssetsPath,
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                    )
-                    {
-                        Debug.LogError(
-                            "Selected folder must be inside the project's Assets folder."
-                        );
-                        EditorUtility.DisplayDialog(
-                            "Invalid Folder",
-                            "The selected folder must be inside the project's 'Assets' directory.",
-                            "OK"
-                        );
-                        return;
-                    }
-
-                    string relativePath;
-                    if (
-                        selectedAbsolutePath.Equals(
-                            projectAssetsPath,
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                    )
-                    {
-                        relativePath = "Assets";
-                    }
-                    else
-                    {
-                        relativePath =
-                            "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-                        relativePath = relativePath.Replace("//", "/");
-                    }
-
-                    string targetPath = $"{relativePath}/{dataObject.name}.asset";
-                    if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Ignore same path operation
-                        return;
-                    }
-
-                    string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
-                    if (!string.IsNullOrWhiteSpace(errorMessage))
-                    {
-                        Debug.LogError(
-                            $"Error moving asset {dataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}"
-                        );
-                        EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
-                    }
-                })
-                {
-                    text = "➔",
-                    tooltip = "Move Object",
-                };
-                moveButton.AddToClassList(StyleConstants.ActionButtonClass);
-                moveButton.AddToClassList("move-button");
-                actionsArea.Add(moveButton);
-
-                Button deleteButton = null;
-                deleteButton = new Button(() => OpenConfirmDeletePopover(deleteButton, dataObject))
-                {
-                    text = "X",
-                    tooltip = "Delete Object",
-                };
-                deleteButton.AddToClassList(StyleConstants.ActionButtonClass);
-                deleteButton.AddToClassList("delete-button");
-                actionsArea.Add(deleteButton);
-
-                _objectVisualElementMap[dataObject] = objectItemRow;
-                _objectListContainer.Add(objectItemRow);
-
-                if (_selectedObject == dataObject)
-                {
-                    objectItemRow.AddToClassList(StyleConstants.SelectedClass);
-                    _selectedElement = objectItemRow;
+                    return;
                 }
+
+                string relativePath;
+                if (
+                    selectedAbsolutePath.Equals(
+                        projectAssetsPath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    relativePath = "Assets";
+                }
+                else
+                {
+                    relativePath =
+                        "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+                    relativePath = relativePath.Replace("//", "/");
+                }
+
+                string targetPath = $"{relativePath}/{dataObject.name}.asset";
+                if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Ignore same path operation
+                    return;
+                }
+
+                string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
+                if (!string.IsNullOrWhiteSpace(errorMessage))
+                {
+                    Debug.LogError(
+                        $"Error moving asset {dataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}"
+                    );
+                    EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
+                }
+            })
+            {
+                text = "➔",
+                tooltip = "Move Object",
+            };
+            moveButton.AddToClassList(StyleConstants.ActionButtonClass);
+            moveButton.AddToClassList("move-button");
+            actionsArea.Add(moveButton);
+
+            Button deleteButton = null;
+            deleteButton = new Button(() => OpenConfirmDeletePopover(deleteButton, dataObject))
+            {
+                text = "X",
+                tooltip = "Delete Object",
+            };
+            deleteButton.AddToClassList(StyleConstants.ActionButtonClass);
+            deleteButton.AddToClassList("delete-button");
+            actionsArea.Add(deleteButton);
+
+            _objectVisualElementMap[dataObject] = objectItemRow;
+            _objectListContainer.Add(objectItemRow);
+
+            if (_selectedObject == dataObject)
+            {
+                objectItemRow.AddToClassList(StyleConstants.SelectedClass);
+                _selectedElement = objectItemRow;
             }
         }
 
@@ -4460,19 +4487,19 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 try
                 {
-                    TextField assetNameField = new("Asset Name:")
+                    _assetNameTextField = new TextField("Asset Name:")
                     {
                         value = _selectedObject.name,
                         isReadOnly = true,
                         name = "inspector-asset-name-field",
                     };
 
-                    assetNameField
+                    _assetNameTextField
                         .Q<TextInputBaseField<string>>(TextField.textInputUssName)
                         ?.SetEnabled(false);
 
-                    assetNameField.AddToClassList("readonly-display-field");
-                    _inspectorContainer.Add(assetNameField);
+                    _assetNameTextField.AddToClassList("readonly-display-field");
+                    _inspectorContainer.Add(_assetNameTextField);
 
                     VisualElement separator = new()
                     {
