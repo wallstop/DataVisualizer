@@ -918,8 +918,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return emptyType;
             }
             if (
-                type.IsAttributeDefined(out CustomDataVisualizationAttribute attribute)
-                && !string.IsNullOrWhiteSpace(attribute.TypeName)
+                type.IsAttributeDefined(
+                    out CustomDataVisualizationAttribute attribute,
+                    inherit: false
+                ) && !string.IsNullOrWhiteSpace(attribute.TypeName)
             )
             {
                 return attribute.TypeName;

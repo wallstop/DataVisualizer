@@ -115,6 +115,24 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private int HiddenNamespaces
+        {
+#pragma warning disable CS0618 // Type or member is obsolete
+            get => _hiddenNamespaces;
+            set
+            {
+                _hiddenNamespaces = value;
+                if (_namespaceColumnLabel != null)
+                {
+                    _namespaceColumnLabel.text =
+                        value <= 0
+                            ? "Namespaces"
+                            : $"Namespaces (<b><color=yellow>{value}</color></b> hidden)";
+                }
+            }
+#pragma warning restore CS0618 // Type or member is obsolete
+        }
+
         internal readonly Dictionary<string, List<Type>> _scriptableObjectTypes = new(
             StringComparer.Ordinal
         );
@@ -123,6 +141,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
             new();
+
+        [Obsolete("Use HiddenNamespaces property instead")]
+        private int _hiddenNamespaces;
 
         private readonly List<ScriptableObject> _selectedObjects = new();
         private readonly List<ScriptableObject> _allManagedObjectsCache = new();
@@ -144,6 +165,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private TwoPaneSplitView _outerSplitView;
         private TwoPaneSplitView _innerSplitView;
         private VisualElement _namespaceColumnElement;
+        private Label _namespaceColumnLabel;
         private VisualElement _objectColumnElement;
 
         private VisualElement _settingsPopover;
@@ -1283,33 +1305,64 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void PerformTypeSearch(string searchText)
         {
-            if (
-                string.IsNullOrWhiteSpace(searchText)
-                || string.Equals(SearchPlaceholder, searchText, StringComparison.Ordinal)
-            )
+            HashSet<VisualElement> typeElements =
+                _namespaceController._namespaceCache.Values.ToHashSet();
+            try
             {
-                foreach (VisualElement typeItem in _namespaceController._namespaceCache.Values)
+                if (
+                    string.IsNullOrWhiteSpace(searchText)
+                    || string.Equals(SearchPlaceholder, searchText, StringComparison.Ordinal)
+                )
                 {
-                    typeItem.style.display = DisplayStyle.Flex;
+                    foreach (VisualElement typeItem in _namespaceController._namespaceCache.Values)
+                    {
+                        typeItem.style.display = DisplayStyle.Flex;
+                    }
+                    return;
                 }
 
-                return;
-            }
-
-            string[] searchTerms = searchText.Split(
-                new[] { ' ' },
-                StringSplitOptions.RemoveEmptyEntries
-            );
-
-            foreach (
-                KeyValuePair<Type, VisualElement> entry in _namespaceController._namespaceCache
-            )
-            {
-                string typeDisplayName = NamespaceController.GetTypeDisplayName(entry.Key);
-                bool shouldDisplay = searchTerms.All(term =>
-                    typeDisplayName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                string[] searchTerms = searchText.Split(
+                    new[] { ' ' },
+                    StringSplitOptions.RemoveEmptyEntries
                 );
-                entry.Value.style.display = shouldDisplay ? DisplayStyle.Flex : DisplayStyle.None;
+
+                foreach (
+                    KeyValuePair<Type, VisualElement> entry in _namespaceController._namespaceCache
+                )
+                {
+                    typeElements.Add(entry.Value);
+                    string typeDisplayName = NamespaceController.GetTypeDisplayName(entry.Key);
+                    bool shouldDisplay = Array.TrueForAll(
+                        searchTerms,
+                        term => typeDisplayName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    );
+                    entry.Value.style.display = shouldDisplay
+                        ? DisplayStyle.Flex
+                        : DisplayStyle.None;
+                }
+            }
+            finally
+            {
+                int hiddenNamespaces = 0;
+                foreach (
+                    VisualElement parent in _namespaceController
+                        ._namespaceCache.Values.Select(value => value.parent?.parent)
+                        .Where(parent => parent != null)
+                        .Distinct()
+                )
+                {
+                    bool allInvisible = parent
+                        .IterateChildrenRecursively()
+                        .Where(typeElements.Contains)
+                        .All(child => child.style.display == DisplayStyle.None);
+                    parent.style.display = allInvisible ? DisplayStyle.None : DisplayStyle.Flex;
+                    if (allInvisible)
+                    {
+                        hiddenNamespaces++;
+                    }
+                }
+
+                HiddenNamespaces = hiddenNamespaces;
             }
         }
 
@@ -3157,12 +3210,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
 
             VisualElement nsHeader = new();
-            nsHeader.Add(
-                new Label("Namespaces")
-                {
-                    style = { unityFontStyleAndWeight = FontStyle.Bold, paddingLeft = 2 },
-                }
-            );
+            _namespaceColumnLabel = new Label("Namespaces")
+            {
+                style = { unityFontStyleAndWeight = FontStyle.Bold, paddingLeft = 2 },
+            };
+            nsHeader.Add(_namespaceColumnLabel);
             nsHeader.AddToClassList(NamespaceGroupHeaderClass);
 
             VisualElement addButtonHeader = new()
