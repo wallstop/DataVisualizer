@@ -4068,6 +4068,37 @@ namespace WallstopStudios.DataVisualizer.Editor
         }
 #endif
 
+        private void ListenForPropertyChange(InspectorElement inspectorElement)
+        {
+            if (_currentInspectorScriptableObject == null)
+            {
+                return;
+            }
+
+            SerializedProperty property = _currentInspectorScriptableObject.FindProperty(
+                nameof(BaseDataObject._title)
+            );
+            if (property == null)
+            {
+                property = _currentInspectorScriptableObject.FindProperty(
+                    nameof(IDisplayable.Title)
+                );
+                if (property == null)
+                {
+                    return;
+                }
+            }
+            inspectorElement.TrackPropertyValue(
+                property,
+                _ =>
+                {
+                    rootVisualElement
+                        .schedule.Execute(() => RefreshSelectedElementVisuals(_selectedObject))
+                        .ExecuteLater(1);
+                }
+            );
+        }
+
         private void BuildConfirmNamespaceAddPopoverContent(
             string namespaceKey,
             List<Type> typesToAdd
@@ -4627,6 +4658,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
 
                     InspectorElement inspectorElement = new(_selectedObject);
+                    ListenForPropertyChange(inspectorElement);
                     _inspectorContainer.Add(inspectorElement);
                 }
                 catch (Exception e)
