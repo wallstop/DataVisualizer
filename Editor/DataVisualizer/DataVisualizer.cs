@@ -26,6 +26,7 @@ namespace WallstopStudios.DataVisualizer.Editor
     using UnityEngine.UIElements;
     using Utilities;
     using Helper;
+    using UnityEditor.VersionControl;
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
 
@@ -2963,11 +2964,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 creatable = null;
             }
             AssetDatabase.CreateAsset(instance, uniquePath);
+            AssetDatabase.SaveAssets();
             creatable?.AfterCreate();
 
             CloseActivePopover();
             if (type == _namespaceController.SelectedType)
             {
+                _selectedObjects.Add(instance);
                 BuildObjectRow(instance, _objectListContainer.childCount);
                 foreach (VisualElement child in _objectListContainer.Children())
                 {
@@ -3040,6 +3043,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             string error = AssetDatabase.RenameAsset(originalPath, newName);
             if (string.IsNullOrWhiteSpace(error))
             {
+                AssetDatabase.SaveAssets();
                 renamable?.AfterRename(newName);
                 Debug.Log($"Asset renamed successfully to: {newName}");
                 CloseActivePopover();
@@ -4447,6 +4451,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
+                AssetDatabase.SaveAssets();
                 if (!string.IsNullOrWhiteSpace(errorMessage))
                 {
                     Debug.LogError(
@@ -4768,7 +4773,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 AssetDatabase.CreateAsset(cloneInstance, uniquePath);
                 AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
 
                 ScriptableObject cloneAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
                     uniquePath
