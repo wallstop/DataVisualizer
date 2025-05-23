@@ -2943,9 +2943,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             string directory = Settings.DataFolderPath;
+            string typedDirectory = Path.Combine(directory, (type.FullName ?? type.Name).Replace(".", Path.DirectorySeparatorChar.ToString())).SanitizePath();
+            DirectoryHelper.EnsureDirectoryExists(typedDirectory);
 
             string proposedName = $"{newName}.asset";
-            string proposedPath = Path.Combine(directory, proposedName).SanitizePath();
+            string proposedPath = Path.Combine(typedDirectory, proposedName).SanitizePath();
             string uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
             if (!string.Equals(proposedPath, uniquePath, StringComparison.Ordinal))
             {
