@@ -8,7 +8,6 @@
     using UnityEditor;
 #endif
 
-
     internal static class DirectoryHelper
     {
         public static void EnsureDirectoryExists(string relativeDirectoryPath)

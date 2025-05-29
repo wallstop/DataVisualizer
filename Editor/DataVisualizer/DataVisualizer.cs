@@ -26,7 +26,6 @@ namespace WallstopStudios.DataVisualizer.Editor
     using UnityEngine.UIElements;
     using Utilities;
     using Helper;
-    using UnityEditor.VersionControl;
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
 
@@ -4607,8 +4606,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     if (_odinInspectorContainer == null)
                     {
-                        _odinInspectorContainer = new IMGUIContainer(
-                            () => _odinPropertyTree?.Draw()
+                        _odinInspectorContainer = new IMGUIContainer(() => _odinPropertyTree?.Draw()
                         )
                         {
                             name = "odin-inspector",
