@@ -67,6 +67,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private enum DragType
         {
+            [Obsolete("Please use a valid value")]
             None = 0,
             Object = 1,
             Namespace = 2,
@@ -75,6 +76,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private enum FocusArea
         {
+            [Obsolete("Please use a valid value")]
             None = 0,
             TypeList = 1,
             AddTypePopover = 2,
@@ -83,10 +85,19 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private enum LabelFilterSection
         {
+            [Obsolete("Please use a valid value")]
             None = 0,
             Available = 1,
             AND = 2,
             OR = 3,
+        }
+
+        private enum LabelCombinationType
+        {
+            [Obsolete("Please use a valid value")]
+            None = 0,
+            And = 1,
+            Or = 2,
         }
 
         internal static DataVisualizer Instance;
@@ -215,6 +226,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private string _draggedLabelText;
         private LabelFilterSection _dragSourceSection;
+        private LabelCombinationType _labelCombinationType = LabelCombinationType.And;
         private VisualElement _draggedLabelPillVisual; // The VE being dragged
 
         private TextField _searchField;
@@ -308,6 +320,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnEnable()
         {
+            _nextColorIndex = 0;
             Instance = this;
             _isSearchCachePopulated = false;
             _objectVisualElementMap.Clear();
@@ -4079,15 +4092,29 @@ namespace WallstopStudios.DataVisualizer.Editor
                     flexDirection = FlexDirection.Row,
                     flexWrap = Wrap.Wrap,
                     minHeight = 22,
-                    marginBottom = 3,
-                    paddingBottom = 2,
-                    paddingLeft = 2,
-                    paddingRight = 2,
-                    paddingTop = 2,
+                    paddingBottom = 4,
+                    paddingLeft = 4,
+                    paddingRight = 4,
+                    paddingTop = 4,
+                    width = new StyleLength(new Length(100, LengthUnit.Percent)),
+
+                    borderBottomColor = Color.white,
+                    borderTopColor = Color.white,
+                    borderLeftColor = Color.white,
+                    borderRightColor = Color.white,
+                    borderBottomWidth = 1,
+                    borderTopWidth = 1,
+                    borderLeftWidth = 1,
+                    borderRightWidth = 1,
+                    borderTopRightRadius = 6,
+                    borderTopLeftRadius = 6,
+                    borderBottomRightRadius = 6,
+                    borderBottomLeftRadius = 6,
                 },
             };
             var availableRow = new VisualElement
             {
+                name = "available-row",
                 style =
                 {
                     flexDirection = FlexDirection.Row,
@@ -4140,15 +4167,61 @@ namespace WallstopStudios.DataVisualizer.Editor
                     flexDirection = FlexDirection.Row,
                     flexWrap = Wrap.Wrap,
                     minHeight = 22,
-                    paddingBottom = 2,
-                    paddingLeft = 2,
-                    paddingRight = 2,
-                    paddingTop = 2,
+                    paddingBottom = 4,
+                    paddingLeft = 4,
+                    paddingRight = 4,
+                    paddingTop = 4,
+                    width = new StyleLength(new Length(100, LengthUnit.Percent)),
+
+                    borderBottomColor = Color.white,
+                    borderTopColor = Color.white,
+                    borderLeftColor = Color.white,
+                    borderRightColor = Color.white,
+                    borderBottomWidth = 1,
+                    borderTopWidth = 1,
+                    borderLeftWidth = 1,
+                    borderRightWidth = 1,
+                    borderTopRightRadius = 6,
+                    borderTopLeftRadius = 6,
+                    borderBottomRightRadius = 6,
+                    borderBottomLeftRadius = 6,
                     backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.3f),
                 },
             };
             andRow.Add(_andLabelsContainer);
             labelFilterSectionRoot.Add(andRow);
+
+            var andOrToggle = new HorizontalToggle
+            {
+                name = "and-or-toggle",
+                LeftText = "AND",
+                RightText = "OR",
+                style =
+                {
+                    alignSelf = Align.Center,
+                    marginBottom = 6,
+                    marginTop = 6,
+                },
+            };
+            andOrToggle.OnLeftSelected += () =>
+            {
+                andOrToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
+                andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, false);
+                andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, true);
+                _labelCombinationType = LabelCombinationType.And;
+                UpdateLabelAreaAndFilter();
+            };
+            andOrToggle.OnRightSelected += () =>
+            {
+                andOrToggle.Indicator.style.backgroundColor = new Color(1f, 0.5f, 0.3137254902f);
+                andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, true);
+                andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, false);
+                _labelCombinationType = LabelCombinationType.Or;
+                UpdateLabelAreaAndFilter();
+            };
+            andOrToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
+            andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, true);
+            labelFilterSectionRoot.Add(andOrToggle);
 
             // OR Labels Container (initially hidden if empty)
             var orRow = new VisualElement
@@ -4181,10 +4254,24 @@ namespace WallstopStudios.DataVisualizer.Editor
                     flexDirection = FlexDirection.Row,
                     flexWrap = Wrap.Wrap,
                     minHeight = 22,
-                    paddingBottom = 2,
-                    paddingLeft = 2,
-                    paddingRight = 2,
-                    paddingTop = 2,
+                    paddingBottom = 4,
+                    paddingLeft = 4,
+                    paddingRight = 4,
+                    paddingTop = 4,
+                    width = new StyleLength(new Length(100, LengthUnit.Percent)),
+
+                    borderBottomColor = Color.white,
+                    borderTopColor = Color.white,
+                    borderLeftColor = Color.white,
+                    borderRightColor = Color.white,
+                    borderBottomWidth = 1,
+                    borderTopWidth = 1,
+                    borderLeftWidth = 1,
+                    borderRightWidth = 1,
+                    borderTopRightRadius = 6,
+                    borderTopLeftRadius = 6,
+                    borderBottomRightRadius = 6,
+                    borderBottomLeftRadius = 6,
                     backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.3f),
                 },
             };
@@ -4197,8 +4284,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 name = "filter-status-label",
                 style =
                 {
-                    fontSize = 10,
                     color = Color.gray,
+                    alignSelf = Align.Center,
                     marginTop = 3,
                     minHeight = 12,
                 },
@@ -4320,7 +4407,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     // For now, allow dropping anywhere and let PerformDrop sort it out
                     DragAndDrop.visualMode = DragAndDropVisualMode.Move;
                     container.AddToClassList("drop-target-hover"); // Add USS class for visual feedback
-                    Debug.Log($"DragEnter on {targetSection} with {draggedText}");
                 }
                 evt.StopPropagation();
             });
@@ -4328,7 +4414,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             container.RegisterCallback<DragLeaveEvent>(evt =>
             {
                 container.RemoveFromClassList("drop-target-hover");
-                Debug.Log($"DragLeave from {targetSection}");
                 evt.StopPropagation();
             });
 
@@ -4357,13 +4442,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     )
                 )
                 {
-                    Debug.Log(
-                        $"DragPerform on {targetSection}: Label '{draggedLabelText}' from {sourceSection}"
-                    );
-
                     if (sourceSection == targetSection)
                     {
-                        Debug.Log("Dropped in the same section. No change.");
                         // DragAndDrop.AcceptDrag(); // Accept to finalize drag even if no change
                         // evt.StopPropagation();
                         // return;
@@ -4377,19 +4457,30 @@ namespace WallstopStudios.DataVisualizer.Editor
                     // Update the filter configuration
                     if (_currentTypeLabelFilterConfig != null)
                     {
-                        Debug.Log($"Doing the thing!");
-                        // Remove from all (handles moving from any source)
-                        _currentTypeLabelFilterConfig.AndLabels.Remove(draggedLabelText);
-                        _currentTypeLabelFilterConfig.OrLabels.Remove(draggedLabelText);
-
                         // Add to the target section
                         if (targetSection == LabelFilterSection.AND)
                         {
-                            _currentTypeLabelFilterConfig.AndLabels.Add(draggedLabelText);
+                            if (!_currentTypeLabelFilterConfig.AndLabels.Contains(draggedLabelText))
+                            {
+                                _currentTypeLabelFilterConfig.AndLabels.Add(draggedLabelText);
+                            }
+
+                            if (sourceSection == LabelFilterSection.OR)
+                            {
+                                _currentTypeLabelFilterConfig.OrLabels.Remove(draggedLabelText);
+                            }
                         }
                         else if (targetSection == LabelFilterSection.OR)
                         {
-                            _currentTypeLabelFilterConfig.OrLabels.Add(draggedLabelText);
+                            if (!_currentTypeLabelFilterConfig.OrLabels.Contains(draggedLabelText))
+                            {
+                                _currentTypeLabelFilterConfig.OrLabels.Add(draggedLabelText);
+                            }
+
+                            if (sourceSection == LabelFilterSection.AND)
+                            {
+                                _currentTypeLabelFilterConfig.AndLabels.Remove(draggedLabelText);
+                            }
                         }
                         // If targetSection is Available, it's already removed from AND/OR, so it becomes available.
 
@@ -4497,8 +4588,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return _currentUniqueLabelsForType.ToList();
             return _currentUniqueLabelsForType
                 .Where(l =>
-                    !_currentTypeLabelFilterConfig.AndLabels.Contains(l)
-                    && !_currentTypeLabelFilterConfig.OrLabels.Contains(l)
+                    !(
+                        _currentTypeLabelFilterConfig.AndLabels.Contains(l)
+                        && _currentTypeLabelFilterConfig.OrLabels.Contains(l)
+                    )
                 )
                 .ToList();
         }
@@ -4573,12 +4666,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                     flexDirection = FlexDirection.Row, // Arrange label and X button horizontally
                     alignItems = Align.Center,
                     marginRight = 3,
-                    marginBottom = 3,
                     paddingLeft = 6,
                     paddingRight = 2, // Adjust padding for X button
                     paddingTop = 1,
                     paddingBottom = 1,
-                    height = 18,
                     borderBottomWidth = 0,
                     borderTopWidth = 0,
                     borderLeftWidth = 0,
@@ -4598,15 +4689,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 style =
                 {
-                    fontSize = 10,
                     color = IsColorDark(pillContainer.style.backgroundColor.value)
                         ? Color.white
                         : Color.black,
                     marginRight =
-                        (
-                            currentSection == LabelFilterSection.AND
-                            || currentSection == LabelFilterSection.OR
-                        )
+                        currentSection == LabelFilterSection.AND
+                        || currentSection == LabelFilterSection.OR
                             ? 2
                             : 0, // Space before X
                 },
@@ -4659,15 +4747,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                     tooltip = $"Remove '{labelText}' from filter",
                 };
                 removeButton.AddToClassList("label-pill-remove-button"); // New class for X button styling
+                removeButton.AddToClassList(StyleConstants.ClickableClass);
                 // Style the X button to be very small and discreet
-                removeButton.style.fontSize = 8;
-                removeButton.style.height = 14;
-                removeButton.style.width = 14;
-                removeButton.style.paddingLeft = 0;
-                removeButton.style.paddingRight = 0;
-                removeButton.style.paddingTop = 0;
-                removeButton.style.paddingBottom = 0;
-                removeButton.style.marginLeft = 2;
+                removeButton.style.unityFontStyleAndWeight = FontStyle.Bold;
+                removeButton.style.fontSize = 16;
+                removeButton.style.paddingLeft = 2;
+                removeButton.style.paddingRight = 4;
+                removeButton.style.paddingTop = 2;
+                removeButton.style.paddingBottom = 2;
                 removeButton.style.backgroundColor = Color.clear;
                 removeButton.style.borderBottomWidth = 0;
                 removeButton.style.borderTopWidth = 0;
@@ -4766,8 +4853,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             var andLabels = _currentTypeLabelFilterConfig.AndLabels;
             var orLabels = _currentTypeLabelFilterConfig.OrLabels;
 
-            bool noAndFilter = (andLabels == null || andLabels.Count == 0);
-            bool noOrFilter = (orLabels == null || orLabels.Count == 0);
+            bool noAndFilter = andLabels == null || andLabels.Count == 0;
+            bool noOrFilter = orLabels == null || orLabels.Count == 0;
 
             if (noAndFilter && noOrFilter)
             {
@@ -4795,22 +4882,53 @@ namespace WallstopStudios.DataVisualizer.Editor
                         noOrFilter
                         || orLabels.Any(filterLabel => objLabelsSet.Contains(filterLabel));
 
-                    if (matchesAnd && matchesOr)
+                    switch (_labelCombinationType)
                     {
-                        _filteredObjects.Add(obj);
+                        case LabelCombinationType.And:
+                        {
+                            if (matchesAnd && matchesOr)
+                            {
+                                _filteredObjects.Add(obj);
+                            }
+
+                            break;
+                        }
+                        case LabelCombinationType.Or:
+                        {
+                            if (matchesAnd || matchesOr)
+                            {
+                                _filteredObjects.Add(obj);
+                            }
+
+                            break;
+                        }
+                        default:
+                        {
+                            throw new InvalidEnumArgumentException(
+                                nameof(_labelCombinationType),
+                                (int)_labelCombinationType,
+                                typeof(LabelCombinationType)
+                            );
+                        }
                     }
                 }
             }
 
             int totalCount = _selectedObjects.Count;
             int shownCount = _filteredObjects.Count;
-            _filterStatusLabel.text =
-                $"Showing {shownCount} of {totalCount} object{(totalCount != 1 ? "s" : "")}"
-                + (
-                    shownCount < totalCount
-                        ? $" ({totalCount - shownCount} hidden by label filter)."
-                        : "."
-                );
+            if (shownCount == totalCount)
+            {
+                _filterStatusLabel.style.display = DisplayStyle.None;
+            }
+            else
+            {
+                _filterStatusLabel.style.display = DisplayStyle.Flex;
+                int hidden = totalCount - shownCount;
+                _filterStatusLabel.text =
+                    hidden < 20
+                        ? $"<b><color=yellow>{hidden}</color></b> objects hidden by label filter."
+                        : $"<b><color=red>{hidden}</color></b> objects hidden by label filter.";
+            }
 
             BuildObjectsView(); // Rebuild the object list view with the new _filteredObjects
         }
@@ -4937,7 +5055,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             else
             {
                 // Generate a consistent color from hash for additional labels
-                float hue = (Mathf.Abs(labelText.GetHashCode() % 256)) / 255f;
+                float hue = Mathf.Abs(labelText.GetHashCode() % 256) / 255f;
                 color = Color.HSVToRGB(hue, 0.65f, 0.90f); // Ensure good saturation/value
             }
             _labelColorCache[labelText] = color;
@@ -4946,7 +5064,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private bool IsColorDark(Color c)
         {
-            return (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) < 0.5f; // Luminance check
+            return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b < 0.5f; // Luminance check
         }
 
         private void BuildConfirmNamespaceAddPopoverContent(
@@ -5092,6 +5210,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             )
             {
                 name = "empty-object-list-label",
+                style = { alignSelf = Align.Center },
             };
             _emptyObjectLabel.AddToClassList("empty-object-list-label");
             _objectListContainer.Add(_emptyObjectLabel);
@@ -5101,33 +5220,35 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            _emptyObjectLabel.style.display = DisplayStyle.None;
             if (_filteredObjects == null || !_filteredObjects.Any())
             {
                 // If _selectedObjects has items, then filter is active and hiding all
                 if (_selectedObjects != null && _selectedObjects.Any())
                 {
-                    _objectListContainer.Add(
-                        new Label(
-                            $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' match the current label filter."
-                        )
-                        { /* styles */
-                        }
-                    );
+                    var noMatchLabel = new Label(
+                        $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' match the current label filter."
+                    )
+                    {
+                        style = { alignSelf = Align.Center },
+                    };
+                    noMatchLabel.AddToClassList("empty-object-list-label");
+                    _objectListContainer.Add(noMatchLabel);
                 }
                 else
                 {
-                    _objectListContainer.Add(
-                        new Label(
-                            $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' found."
-                        )
-                        { /* styles */
-                        }
-                    );
+                    var noMatchLabel = new Label(
+                        $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' found."
+                    )
+                    {
+                        style = { alignSelf = Align.Center },
+                    };
+                    noMatchLabel.AddToClassList("empty-object-list-label");
+                    _objectListContainer.Add(noMatchLabel);
                 }
                 return;
             }
 
-            _emptyObjectLabel.style.display = DisplayStyle.None;
             for (int i = 0; i < _filteredObjects.Count; i++)
             {
                 BuildObjectRow(_filteredObjects[i], i);

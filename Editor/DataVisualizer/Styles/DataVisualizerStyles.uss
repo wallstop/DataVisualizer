@@ -870,9 +870,8 @@
 .label-pill {
     margin-right: 4px;
     margin-bottom: 4px;
-    padding: 2px 6px;
-    height: 18px;
-    font-size: 10px;
+    /*padding: 2px 6px;*/
+    /*height: 18px;*/
     border-radius: 3px;
     border-width: 0; /* Remove default button border */
     -unity-font-style: bold;
@@ -922,3 +921,80 @@
 .label-pill-container:active { /* While dragging */
     cursor: slide-arrow;
 }
+
+/* HorizontalToggleStyle.uss */
+
+.horizontal-toggle {
+    min-height: 24px; /* Example height */
+    flex-direction: row;
+    align-items: center;
+    width: 200px; /* Example width */
+}
+
+.horizontal-toggle__container {
+    flex-grow: 1; /* Allow the container to fill the toggle's width */
+    height: 100%;
+    flex-direction: row; /* Align items horizontally */
+    border-radius: 6px; /* Rounded corners for the main background */
+    overflow: hidden; /* Important for the indicator animation and rounded corners */
+    position: relative; /* For absolute positioning of the indicator */
+}
+
+.horizontal-toggle__label-container {
+    flex-grow: 1;
+    flex-direction: row; /* Align labels horizontally */
+    height: 100%;
+    /* Make sure labels are on top of the indicator */
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+}
+
+
+.horizontal-toggle__left-label,
+.horizontal-toggle__right-label {
+    flex-grow: 1; /* Each label takes half the space */
+    flex-basis: 0; /* Distribute space evenly */
+    justify-content: center; /* Center text horizontally */
+    align-items: center; /* Center text vertically */
+    align-content: center;
+    align-self: center;
+    -unity-text-align: middle-center;
+}
+
+.horizontal-toggle__indicator {
+    position: absolute; /* Positioned relative to the __container */
+    top: 0;
+    height: 100%;
+    border-radius: 6px; /* Rounded corners for the indicator */
+    /* z-index: 0; // Already behind due to order of addition, but can be explicit */
+    /* Transition properties are handled by C# for position and width */
+}
+
+/* Example of changing the indicator's appearance when selected (optional, C# handles color) */
+.horizontal-toggle__indicator--selected {
+    /* You could add a border or shadow here if desired when "selected" animation completes */
+}
+
+
+/* --- Example: If you want to control colors purely from USS and not from C# properties --- */
+/*
+.horizontal-toggle__container {
+    background-color: #333333;
+}
+
+.horizontal-toggle__indicator {
+    background-color: #1A8CFF;
+}
+
+.horizontal-toggle__left-label,
+.horizontal-toggle__right-label {
+    color: #B3B3B3; // Unselected text color
+}
+
+.horizontal-toggle--left-selected .horizontal-toggle__left-label,
+.horizontal-toggle--right-selected .horizontal-toggle__right-label {
+    color: white; // Selected text color
+}
+*/
