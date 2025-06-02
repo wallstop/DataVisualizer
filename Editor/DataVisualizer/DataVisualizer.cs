@@ -213,6 +213,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         };
         private int _nextColorIndex = 0;
 
+        private string _draggedLabelText;
+        private LabelFilterSection _dragSourceSection;
+        private VisualElement _draggedLabelPillVisual; // The VE being dragged
+
         private TextField _searchField;
         private VisualElement _searchPopover;
         private bool _isSearchCachePopulated;
@@ -4201,6 +4205,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             labelFilterSectionRoot.Add(_filterStatusLabel);
 
+            SetupDropTarget(availableRow, LabelFilterSection.Available);
+
+            // Setup Drop Target for AND Labels Container
+            SetupDropTarget(andRow, LabelFilterSection.AND);
+
+            // Setup Drop Target for OR Labels Container
+            SetupDropTarget(orRow, LabelFilterSection.OR);
+
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
                 name = "object-scrollview",
@@ -4294,6 +4306,119 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         // --- Label Filtering Core Logic ---
 
+        // In DataVisualizer.cs
+
+        private void SetupDropTarget(VisualElement container, LabelFilterSection targetSection)
+        {
+            container.RegisterCallback<DragEnterEvent>(evt =>
+            {
+                // Check if we're dragging the right type of data
+                string draggedText = DragAndDrop.GetGenericData("DraggedLabelText") as string;
+                if (!string.IsNullOrEmpty(draggedText))
+                {
+                    // Optional: Check if drop is valid (e.g., not dropping into source section)
+                    // For now, allow dropping anywhere and let PerformDrop sort it out
+                    DragAndDrop.visualMode = DragAndDropVisualMode.Move;
+                    container.AddToClassList("drop-target-hover"); // Add USS class for visual feedback
+                    Debug.Log($"DragEnter on {targetSection} with {draggedText}");
+                }
+                evt.StopPropagation();
+            });
+
+            container.RegisterCallback<DragLeaveEvent>(evt =>
+            {
+                container.RemoveFromClassList("drop-target-hover");
+                Debug.Log($"DragLeave from {targetSection}");
+                evt.StopPropagation();
+            });
+
+            container.RegisterCallback<DragUpdatedEvent>(evt =>
+            {
+                // Keep visual mode if data is still valid
+                string draggedText = DragAndDrop.GetGenericData("DraggedLabelText") as string;
+                if (!string.IsNullOrEmpty(draggedText))
+                {
+                    DragAndDrop.visualMode = DragAndDropVisualMode.Move;
+                }
+                evt.StopPropagation();
+            });
+
+            container.RegisterCallback<DragPerformEvent>(evt =>
+            {
+                string draggedLabelText = DragAndDrop.GetGenericData("DraggedLabelText") as string;
+                string sourceSectionString = DragAndDrop.GetGenericData("SourceSection") as string;
+
+                if (
+                    !string.IsNullOrEmpty(draggedLabelText)
+                    && !string.IsNullOrEmpty(sourceSectionString)
+                    && Enum.TryParse<LabelFilterSection>(
+                        sourceSectionString,
+                        out LabelFilterSection sourceSection
+                    )
+                )
+                {
+                    Debug.Log(
+                        $"DragPerform on {targetSection}: Label '{draggedLabelText}' from {sourceSection}"
+                    );
+
+                    if (sourceSection == targetSection)
+                    {
+                        Debug.Log("Dropped in the same section. No change.");
+                        // DragAndDrop.AcceptDrag(); // Accept to finalize drag even if no change
+                        // evt.StopPropagation();
+                        // return;
+                        // Actually, if we allow dropping in same section, it effectively does nothing useful
+                        // unless we want to reorder *within* a section (not currently supported).
+                        // For now, let's just accept and let UI rebuild without actual data change.
+                    }
+
+                    DragAndDrop.AcceptDrag(); // Indicate the drop was handled
+
+                    // Update the filter configuration
+                    if (_currentTypeLabelFilterConfig != null)
+                    {
+                        Debug.Log($"Doing the thing!");
+                        // Remove from all (handles moving from any source)
+                        _currentTypeLabelFilterConfig.AndLabels.Remove(draggedLabelText);
+                        _currentTypeLabelFilterConfig.OrLabels.Remove(draggedLabelText);
+
+                        // Add to the target section
+                        if (targetSection == LabelFilterSection.AND)
+                        {
+                            _currentTypeLabelFilterConfig.AndLabels.Add(draggedLabelText);
+                        }
+                        else if (targetSection == LabelFilterSection.OR)
+                        {
+                            _currentTypeLabelFilterConfig.OrLabels.Add(draggedLabelText);
+                        }
+                        // If targetSection is Available, it's already removed from AND/OR, so it becomes available.
+
+                        // Ensure distinctness
+                        _currentTypeLabelFilterConfig.AndLabels = _currentTypeLabelFilterConfig
+                            .AndLabels.Distinct()
+                            .ToList();
+                        _currentTypeLabelFilterConfig.OrLabels = _currentTypeLabelFilterConfig
+                            .OrLabels.Distinct()
+                            .ToList();
+
+                        SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
+                        PopulateLabelPillContainers(); // Refresh UI
+                        ApplyLabelFilter(); // Re-filter objects
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning("DragPerform: Invalid drag data received.");
+                }
+
+                // Reset drag state
+                _draggedLabelText = null;
+                _draggedLabelPillVisual = null;
+                container.RemoveFromClassList("drop-target-hover"); // Clean up style
+                evt.StopPropagation();
+            });
+        }
+
         /// <summary>
         /// Called when the selected ScriptableObject type changes.
         /// Discovers labels, loads/applies persisted filter config, and updates the UI.
@@ -4380,6 +4505,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void PopulateLabelPillContainers()
         {
+            var availableLabels = GetCurrentlyAvailableLabels();
             PopulateSingleLabelContainer(
                 _availableLabelsContainer,
                 GetCurrentlyAvailableLabels(),
@@ -4397,15 +4523,25 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
 
             // Control visibility of AND/OR sections
-            bool hasAndFilters = _currentTypeLabelFilterConfig.AndLabels.Any();
-            bool hasOrFilters = _currentTypeLabelFilterConfig.OrLabels.Any();
-            _andLabelsContainer.parent.style.display = hasAndFilters
+            bool hasActiveFilters = true;
+            // bool hasActiveFilters =
+            //     (
+            //         _currentTypeLabelFilterConfig.AndLabels != null
+            //         && _currentTypeLabelFilterConfig.AndLabels.Any()
+            //     )
+            //     || (
+            //         _currentTypeLabelFilterConfig.OrLabels != null
+            //         && _currentTypeLabelFilterConfig.OrLabels.Any()
+            //     );
+
+            _andLabelsContainer.parent.style.display = hasActiveFilters
                 ? DisplayStyle.Flex
                 : DisplayStyle.None;
-            _orLabelsContainer.parent.style.display = hasOrFilters
+            _orLabelsContainer.parent.style.display = hasActiveFilters
                 ? DisplayStyle.Flex
                 : DisplayStyle.None;
-            _availableLabelsContainer.parent.style.display = GetCurrentlyAvailableLabels().Any()
+            // Available labels visibility depends on whether there are any labels not in AND/OR
+            _availableLabelsContainer.parent.style.display = availableLabels.Any()
                 ? DisplayStyle.Flex
                 : DisplayStyle.None;
         }
@@ -4425,67 +4561,186 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        // Inside DataVisualizer.cs
         private VisualElement CreateLabelPill(string labelText, LabelFilterSection currentSection)
         {
-            var pill = new Button(() => OnLabelPillClicked(labelText, currentSection))
+            // Main container for the pill (label + optional X button)
+            var pillContainer = new VisualElement
             {
-                text = labelText,
-                name = $"label-pill-{labelText.Replace(" ", "-").ToLowerInvariant()}",
-                tooltip = $"Click to move '{labelText}'",
+                name = $"label-pill-container-{labelText.Replace(" ", "-").ToLowerInvariant()}",
+                style =
+                {
+                    flexDirection = FlexDirection.Row, // Arrange label and X button horizontally
+                    alignItems = Align.Center,
+                    marginRight = 3,
+                    marginBottom = 3,
+                    paddingLeft = 6,
+                    paddingRight = 2, // Adjust padding for X button
+                    paddingTop = 1,
+                    paddingBottom = 1,
+                    height = 18,
+                    borderBottomWidth = 0,
+                    borderTopWidth = 0,
+                    borderLeftWidth = 0,
+                    borderRightWidth = 0,
+                    borderTopLeftRadius = 3,
+                    borderTopRightRadius = 3,
+                    borderBottomLeftRadius = 3,
+                    borderBottomRightRadius = 3,
+                    backgroundColor = GetColorForLabel(labelText), // Color the whole pill container
+                },
             };
-            pill.AddToClassList("label-pill"); // For general styling
-            pill.style.backgroundColor = GetColorForLabel(labelText);
-            pill.style.color = IsColorDark(pill.style.backgroundColor.value)
-                ? Color.white
-                : Color.black;
-            // Common pill styles (adjust in USS)
-            pill.style.marginRight = 3;
-            pill.style.marginBottom = 3;
-            pill.style.paddingLeft = 6;
-            pill.style.paddingRight = 6;
-            pill.style.paddingTop = 1;
-            pill.style.paddingBottom = 1;
-            pill.style.height = 18;
-            pill.style.fontSize = 10;
-            pill.style.borderBottomWidth = 0;
-            pill.style.borderLeftWidth = 0;
-            pill.style.borderRightWidth = 0;
-            pill.style.borderTopWidth = 0;
-            pill.style.unityTextAlign = TextAnchor.MiddleCenter;
-            pill.style.borderBottomLeftRadius =
-                pill.style.borderBottomRightRadius =
-                pill.style.borderTopLeftRadius =
-                pill.style.borderTopRightRadius =
-                    3;
-            return pill;
+            pillContainer.AddToClassList("label-pill-container"); // New base class for styling
+            pillContainer.userData = labelText; // Store label text for convenience
+
+            // Label part of the pill
+            var labelElement = new Label(labelText)
+            {
+                style =
+                {
+                    fontSize = 10,
+                    color = IsColorDark(pillContainer.style.backgroundColor.value)
+                        ? Color.white
+                        : Color.black,
+                    marginRight =
+                        (
+                            currentSection == LabelFilterSection.AND
+                            || currentSection == LabelFilterSection.OR
+                        )
+                            ? 2
+                            : 0, // Space before X
+                },
+            };
+            labelElement.AddToClassList("label-pill-text"); // New class for styling text part
+            labelElement.pickingMode = PickingMode.Ignore; // Label itself shouldn't interfere with parent's drag
+            pillContainer.Add(labelElement);
+
+            pillContainer.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button == 0) // Left click
+                {
+                    // Prepare for drag
+                    _draggedLabelText = labelText;
+                    _dragSourceSection = currentSection;
+                    _draggedLabelPillVisual = pillContainer; // Store a reference to the visual being dragged
+
+                    DragAndDrop.PrepareStartDrag();
+                    // Store data to be retrieved on drop
+                    DragAndDrop.SetGenericData("DraggedLabelText", _draggedLabelText);
+                    DragAndDrop.SetGenericData("SourceSection", _dragSourceSection.ToString());
+
+                    // Provide object references for visual feedback (optional, Unity might create a ghost)
+                    DragAndDrop.objectReferences = new UnityEngine.Object[] { }; // Empty for now
+
+                    // Start the drag
+                    // Debug.Log($"Starting drag for '{_draggedLabelText}' from {currentSection}");
+                    DragAndDrop.StartDrag(labelText); // Title of the drag operation
+
+                    // Change cursor while dragging (might be handled by OS/Unity)
+                    // pillContainer.style.cursor = CursorStyle.Grabbing;
+
+                    evt.StopPropagation(); // Consume the event to prevent other actions
+                }
+            });
+
+            // Interaction depends on the section
+            if (currentSection == LabelFilterSection.Available)
+            {
+                pillContainer.tooltip = $"Drag '{labelText}' to an AND/OR filter section.";
+            }
+            else // AND or OR sections
+            {
+                // Add "X" button for removal
+                var removeButton = new Button(() => RemoveLabelFromFilter(labelText, currentSection)
+                )
+                {
+                    text = "x",
+                    name = $"remove-label-{labelText.Replace(" ", "-")}",
+                    tooltip = $"Remove '{labelText}' from filter",
+                };
+                removeButton.AddToClassList("label-pill-remove-button"); // New class for X button styling
+                // Style the X button to be very small and discreet
+                removeButton.style.fontSize = 8;
+                removeButton.style.height = 14;
+                removeButton.style.width = 14;
+                removeButton.style.paddingLeft = 0;
+                removeButton.style.paddingRight = 0;
+                removeButton.style.paddingTop = 0;
+                removeButton.style.paddingBottom = 0;
+                removeButton.style.marginLeft = 2;
+                removeButton.style.backgroundColor = Color.clear;
+                removeButton.style.borderBottomWidth = 0;
+                removeButton.style.borderTopWidth = 0;
+                removeButton.style.borderLeftWidth = 0;
+                removeButton.style.borderRightWidth = 0;
+                removeButton.style.color = labelElement.style.color.value; // Match text color
+                pillContainer.Add(removeButton);
+            }
+            return pillContainer;
         }
 
+        // Inside DataVisualizer.cs
+
+        // Called when clicking the main body of a label pill (or an "Available" pill)
         private void OnLabelPillClicked(string labelText, LabelFilterSection currentSection)
         {
             if (_currentTypeLabelFilterConfig == null)
                 return;
 
-            // Remove from all lists first to avoid duplicates and handle moves cleanly
+            // Remove from all lists first (safe)
             _currentTypeLabelFilterConfig.AndLabels.Remove(labelText);
             _currentTypeLabelFilterConfig.OrLabels.Remove(labelText);
 
-            // Add to the next section in the cycle: Available -> AND -> OR -> Available
+            // Add to the next section in the cycle
             switch (currentSection)
             {
-                case LabelFilterSection.Available:
+                case LabelFilterSection.Available: // Clicked "Available" -> Moves to "AND"
                     _currentTypeLabelFilterConfig.AndLabels.Add(labelText);
                     break;
-                case LabelFilterSection.AND:
+                case LabelFilterSection.AND: // Clicked "AND" (label part) -> Moves to "OR"
                     _currentTypeLabelFilterConfig.OrLabels.Add(labelText);
                     break;
-                case LabelFilterSection.OR:
-                    // Becomes available, so no add needed here, just removal from OR done above
+                case LabelFilterSection.OR: // Clicked "OR" (label part) -> Becomes "Available"
+                    // Removed from OR above, so it's now available by default
                     break;
             }
+
+            // Ensure distinctness and save
+            _currentTypeLabelFilterConfig.AndLabels = _currentTypeLabelFilterConfig
+                .AndLabels.Distinct()
+                .ToList();
+            _currentTypeLabelFilterConfig.OrLabels = _currentTypeLabelFilterConfig
+                .OrLabels.Distinct()
+                .ToList();
 
             SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
             PopulateLabelPillContainers(); // Refresh label UI
             ApplyLabelFilter(); // Re-filter objects
+        }
+
+        // Called by the 'X' button on label pills in AND or OR sections
+        private void RemoveLabelFromFilter(string labelText, LabelFilterSection sectionItWasIn)
+        {
+            if (_currentTypeLabelFilterConfig == null)
+                return;
+            bool changed = false;
+
+            // Remove from the specific list it was in
+            if (sectionItWasIn == LabelFilterSection.AND)
+            {
+                changed = _currentTypeLabelFilterConfig.AndLabels.Remove(labelText);
+            }
+            else if (sectionItWasIn == LabelFilterSection.OR)
+            {
+                changed = _currentTypeLabelFilterConfig.OrLabels.Remove(labelText);
+            }
+
+            if (changed)
+            {
+                SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
+                PopulateLabelPillContainers();
+                ApplyLabelFilter();
+            }
         }
 
         /// <summary>

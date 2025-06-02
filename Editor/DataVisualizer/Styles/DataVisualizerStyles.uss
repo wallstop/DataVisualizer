@@ -882,3 +882,43 @@
 .label-pill:hover {
     opacity: 0.85; /* Slight feedback on hover */
 }
+
+.label-pill-container {
+    /* Base styling for the pill if any - background color is set in C# */
+}
+
+.label-pill-text.clickable {
+    cursor: link;
+}
+.label-pill-text.clickable:hover {
+    /* Optional: slightly change text color or add underline */
+    opacity: 0.8;
+}
+
+.label-pill-remove-button {
+    /* Make X button subtle */
+    min-width: 14px;
+    background-color: transparent; /* Or very subtle hover */
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+    align-self: center; /* Vertically align X */
+}
+.label-pill-remove-button:hover {
+    background-color: rgba(255,255,255,0.2);
+}
+
+.drop-target-hover {
+    /* Example: A semi-transparent overlay or border change */
+    background-color: rgba(100, 149, 237, 0.2); /* Cornflower blue, semi-transparent */
+    out: 1px dashed cornflowerblue;
+    outline-offset: -1px;
+}
+
+/* Ensure label pill container can show grab cursor */
+.label-pill-container.clickable { /* If using a clickable class for general pills */
+    cursor: move-arrow;
+}
+.label-pill-container:active { /* While dragging */
+    cursor: slide-arrow;
+}
