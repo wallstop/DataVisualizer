@@ -28,10 +28,13 @@
         [FormerlySerializedAs("CombinationType")]
         public LabelCombinationType combinationType = LabelCombinationType.And;
 
+        public bool isCollapsed;
+
         public TypeLabelFilterConfig Clone()
         {
             return new TypeLabelFilterConfig
             {
+                isCollapsed = isCollapsed,
                 combinationType = combinationType,
                 typeFullName = typeFullName ?? string.Empty,
                 andLabels = andLabels?.ToList() ?? new List<string>(),

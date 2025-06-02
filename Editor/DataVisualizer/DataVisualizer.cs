@@ -68,7 +68,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private enum DragType
         {
-            [Obsolete("Please use a valid value")]
             None = 0,
             Object = 1,
             Namespace = 2,
@@ -77,7 +76,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private enum FocusArea
         {
-            [Obsolete("Please use a valid value")]
             None = 0,
             TypeList = 1,
             AddTypePopover = 2,
@@ -1295,55 +1293,22 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        // Add these methods to DataVisualizer.cs
-
         private VisualElement CreateProcessorColumn()
         {
-            _processorAreaElement = new VisualElement
-            {
-                name = "processor-column",
-                style =
-                {
-                    width = 180, // Initial fixed width, can be made resizable later
-                    minWidth = 30, // Minimum for collapsed state
-                    flexDirection = FlexDirection.Column, // Stack header and list vertically
-                    borderRightWidth = 1,
-                    borderRightColor = Color.gray,
-                    paddingLeft = 0,
-                    paddingBottom = 0,
-                    paddingRight = 0,
-                    paddingTop = 0,
-                },
-            };
+            _processorAreaElement = new VisualElement { name = "processor-column" };
+            _processorAreaElement.AddToClassList("processor-column");
 
-            // Header with Toggle Button
-            VisualElement header = new()
-            {
-                name = "processor-column-header",
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    justifyContent = Justify.SpaceBetween,
-                    paddingLeft = 3,
-                    paddingBottom = 3,
-                    paddingRight = 3,
-                    paddingTop = 3,
-                    height = 24, // Consistent header height
-                    flexShrink = 0,
-                    borderBottomWidth = 1,
-                    borderBottomColor = Color.gray,
-                },
-            };
+            VisualElement header = new() { name = "processor-column-header" };
+            header.AddToClassList("processor-column-header");
             _processorHeaderLabel = new Label("Processors")
             {
                 style = { unityFontStyleAndWeight = FontStyle.Bold },
             };
             _processorToggleCollapseButton = new Button(ToggleProcessorContentCollapse)
             {
-                text = "V", /* Default */
+                text = "V",
             };
-            _processorToggleCollapseButton.AddToClassList("icon-button"); // Small button style
+            _processorToggleCollapseButton.AddToClassList("icon-button");
             _processorToggleCollapseButton.style.width = 20;
             _processorToggleCollapseButton.style.height = 20;
 
@@ -1351,12 +1316,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             header.Add(_processorToggleCollapseButton);
             _processorAreaElement.Add(header);
 
-            // ScrollView for processor list
             ScrollView scrollView = new(ScrollViewMode.Vertical)
             {
                 name = "processor-list-scrollview",
-                style = { flexGrow = 1 }, // Takes remaining space
             };
+            scrollView.AddToClassList("processor-list-scrollview");
             _processorListContainer = new VisualElement { name = "processor-list-container" };
             scrollView.Add(_processorListContainer);
             _processorAreaElement.Add(scrollView);
@@ -1364,7 +1328,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             return _processorAreaElement;
         }
 
-        // Call this when _selectedType changes, or when collapse state toggles
         internal void BuildProcessorColumnView()
         {
             if (_processorListContainer == null || _processorAreaElement == null)
@@ -1374,9 +1337,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _processorListContainer.Clear();
             _compatibleDataProcessors.Clear();
-
-            const string ArrowCollapsed = "►";
-            const string ArrowExpanded = "▼";
 
             if (_namespaceController.SelectedType != null)
             {
@@ -1389,41 +1349,32 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (_compatibleDataProcessors.Count == 0)
             {
-                _processorAreaElement.style.display = DisplayStyle.None; // Hide whole column
-                // OR: Show column but with a "No processors" message
-                // _processorHeaderLabel.text = "Processors";
-                // _processorToggleCollapseButton.SetEnabled(false);
-                // _processorToggleCollapseButton.text = "-";
-                // _processorListContainer.Add(new Label("No processors for this type.") {style = {color = Color.gray, unityTextAlign = TextAnchor.MiddleCenter, marginTop = 10}});
-                // _processorListContainer.parent.style.display = DisplayStyle.Flex; // Ensure scrollview is visible
+                _processorAreaElement.style.display = DisplayStyle.None;
                 return;
             }
 
-            // If we reach here, there are compatible processors
-            _processorAreaElement.style.display = DisplayStyle.Flex; // Ensure column is visible
+            _processorAreaElement.style.display = DisplayStyle.Flex;
             _processorToggleCollapseButton.SetEnabled(true);
 
-            // Update toggle button and header text
             if (_isProcessorColumnContentCollapsed)
             {
-                _processorToggleCollapseButton.text = ArrowCollapsed;
-                _processorHeaderLabel.text = $"Processors ({_compatibleDataProcessors.Count})"; // Show count when collapsed
-                _processorListContainer.parent.style.display = DisplayStyle.None; // Hide ScrollView
+                _processorToggleCollapseButton.text = StyleConstants.ArrowCollapsed;
+                _processorHeaderLabel.text = $"Processors ({_compatibleDataProcessors.Count})";
+                _processorListContainer.parent.style.display = DisplayStyle.None;
             }
-            else // Expanded
+            else
             {
-                _processorToggleCollapseButton.text = ArrowExpanded;
+                _processorToggleCollapseButton.text = StyleConstants.ArrowExpanded;
                 _processorHeaderLabel.text = "Processors";
-                _processorListContainer.parent.style.display = DisplayStyle.Flex; // Show ScrollView
+                _processorListContainer.parent.style.display = DisplayStyle.Flex;
 
-                // Populate processor buttons
                 foreach (IDataProcessor processor in _compatibleDataProcessors)
                 {
                     Button procButton = new(() => RunDataProcessor(processor))
                     {
-                        text = processor.Name, // From IDataProcessor
+                        text = processor.Name,
                         tooltip = processor.Description,
-                        style = { marginTop = 2, marginBottom = 2 }, // From IDataProcessor
+                        style = { marginTop = 2, marginBottom = 2 },
                     };
                     _processorListContainer.Add(procButton);
                 }
@@ -1437,7 +1388,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 PrefsProcessorColumnCollapsedKey,
                 _isProcessorColumnContentCollapsed
             );
-            BuildProcessorColumnView(); // Rebuild to show/hide content
+            BuildProcessorColumnView();
         }
 
         private void RunDataProcessor(IDataProcessor processor)
@@ -1456,22 +1407,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 + $"object{(_selectedObjects.Count != 1 ? "s" : "")} "
                 + $"of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}'?";
 
-            // Use existing generic confirmation popover
             BuildAndOpenConfirmationPopover(
                 message,
                 "Run",
                 () =>
-                { // OnConfirm action
+                {
                     try
                     {
                         Debug.Log($"Running processor '{processor.Name}'...");
-                        processor.Process(_namespaceController.SelectedType, _selectedObjects); // Pass ALL selected objects for the type
+                        processor.Process(_namespaceController.SelectedType, _selectedObjects);
                         Debug.Log($"Processor '{processor.Name}' finished.");
 
-                        // Assume processor might have changed asset data
-                        AssetDatabase.SaveAssets(); // Save any changes
-                        AssetDatabase.Refresh(); // Refresh asset database
-                        ScheduleRefresh(); // Full refresh of DataVisualizer
+                        AssetDatabase.SaveAssets();
+                        AssetDatabase.Refresh();
+                        ScheduleRefresh();
                     }
                     catch (Exception ex)
                     {
@@ -1483,9 +1432,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         );
                     }
                 },
-                _processorAreaElement.Q<Button>() // Trigger element for popover positioning (e.g., the run button itself or column header)
-            // This might need specific trigger later if run button is deep.
-            // For now, using any button in the column as placeholder.
+                _processorAreaElement.Q<Button>()
             );
         }
 
@@ -2418,7 +2365,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             else
             {
+#pragma warning disable CS0618 // Type or member is obsolete
                 _lastActiveFocusArea = FocusArea.None;
+#pragma warning restore CS0618 // Type or member is obsolete
             }
 
             _popoverContext = context;
@@ -4323,18 +4272,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             objectColumn.Add(_processorAreaElement);
 
-            _labelFilterSelectionRoot = new VisualElement
-            {
-                name = "label-filter-section-root",
-                style =
-                {
-                    marginBottom = 5,
-                    paddingBottom = new StyleLength(new Length(2, LengthUnit.Pixel)),
-                    paddingLeft = new StyleLength(new Length(2, LengthUnit.Pixel)),
-                    paddingRight = new StyleLength(new Length(2, LengthUnit.Pixel)),
-                    paddingTop = new StyleLength(new Length(2, LengthUnit.Pixel)),
-                },
-            };
+            _labelFilterSelectionRoot = new VisualElement { name = "label-filter-section-root" };
+            _labelFilterSelectionRoot.AddToClassList("label-filter-section-root");
             objectColumn.Add(_labelFilterSelectionRoot);
 
             _availableLabelsContainer = new VisualElement { name = "available-labels-container" };
@@ -4842,7 +4781,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 style =
                 {
-                    color = IsColorDark(labelColor) ? Color.white : Color.black,
+                    color = Color.white,
                     marginRight =
                         currentSection == LabelFilterSection.AND
                         || currentSection == LabelFilterSection.OR
@@ -5182,7 +5121,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             return color;
         }
 
-        private bool IsColorDark(Color c)
+        private static bool IsColorDark(Color c)
         {
             return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b < 0.5f; // Luminance check
         }
@@ -6193,10 +6132,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 };
                 pillContainer.AddToClassList("label-pill");
 
-                Label labelElement = new(labelText)
-                {
-                    style = { color = IsColorDark(backgroundColor) ? Color.white : Color.black },
-                };
+                Label labelElement = new(labelText) { style = { color = Color.white } };
                 labelElement.AddToClassList("label-pill-text");
                 pillContainer.Add(labelElement);
 

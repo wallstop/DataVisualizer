@@ -885,6 +885,11 @@
     border-color: darkgreen;
 }
 
+.label-filter-section-root {
+    padding: 2px;
+    background-color: rgb(33, 33, 33);
+}
+
 .label-pill {
     cursor: pan;
     padding: 0 2px;
@@ -938,7 +943,7 @@
 }
 
 .drop-target-hover {
-    background-color: rgba(0, 0, 0, 1);
+    background-color: rgb(0, 0, 0);
 }
 
 .label-pill-container.clickable {
@@ -950,16 +955,39 @@
 }
 
 .label-logical-grouping {
-    background-color: rgba(0, 0, 0 0.3);
     padding: 6px 0;
     margin: 0 4px;
     border-radius: 6px;
 }
 
+.processor-column {
+    flex-direction: column;
+    border-right-width: 1;
+    padding: 0;
+}
+
+.processor-column-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3;
+    flex-shrink: 0;
+    padding-bottom: 6px;
+    border-bottom-width: 1;
+    border-bottom-color: white;
+}
+
+.processor-list-scrollview {
+    flex-grow: 1;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    border-bottom-width: 1;
+    border-bottom-color: white;
+}
+
 .horizontal-toggle {
     min-height: 24px;
     align-self: center;
-    /*margin-left: 84px;*/
     margin-top: 4px;
     margin-bottom: 4px;
     flex-direction: row;
@@ -999,8 +1027,8 @@
 }
 
 .horizontal-toggle__left-label.unselected:hover,
-.horizontal-toggle__right-label.unselected:hover {
-    -unity-font-style: bold;
+.horizontal-toggle__right-label.unselected:hover{
+    -unity-font-style: italic;
 }
 
 .horizontal-toggle__indicator {
