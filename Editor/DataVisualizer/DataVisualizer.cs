@@ -224,6 +224,13 @@ namespace WallstopStudios.DataVisualizer.Editor
         };
         private int _nextColorIndex = 0;
 
+        // Add these fields at the class level in DataVisualizer.cs
+        private VisualElement _inspectorLabelsSection; // Main container for this section
+        private VisualElement _inspectorCurrentLabelsContainer; // Holds the displayed label pills
+        private TextField _inspectorNewLabelInput; // Input field for new labels
+
+        // The "Add" button can be a local variable in BuildInspectorView if not needed elsewhere
+
         private string _draggedLabelText;
         private LabelFilterSection _dragSourceSection;
         private LabelCombinationType _labelCombinationType = LabelCombinationType.And;
@@ -4925,7 +4932,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _filterStatusLabel.style.display = DisplayStyle.Flex;
                 int hidden = totalCount - shownCount;
                 _filterStatusLabel.text =
-                    hidden < 20
+                    hidden < 20 && hidden != totalCount
                         ? $"<b><color=yellow>{hidden}</color></b> objects hidden by label filter."
                         : $"<b><color=red>{hidden}</color></b> objects hidden by label filter.";
             }
@@ -5545,6 +5552,74 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     Debug.LogError($"Error creating asset name display field: {ex}");
                 }
+
+                if (_selectedObject != null) // Only show if an object is selected
+                {
+                    // Create the main container for this section if it doesn't exist or needs rebuilding
+                    _inspectorLabelsSection = new VisualElement
+                    {
+                        name = "inspector-labels-section",
+                    };
+                    _inspectorLabelsSection.style.marginTop = 5; // Space above the section
+                    _inspectorLabelsSection.style.marginBottom = 10; // Space below the section
+
+                    var sectionHeader = new Label("Asset Labels:")
+                    {
+                        style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 3 },
+                    };
+                    _inspectorLabelsSection.Add(sectionHeader);
+
+                    // Container for displaying current labels as interactive pills
+                    _inspectorCurrentLabelsContainer = new VisualElement
+                    {
+                        name = "inspector-current-labels",
+                        style =
+                        {
+                            flexDirection = FlexDirection.Row, // Arrange pills horizontally
+                            flexWrap = Wrap.Wrap, // Allow pills to wrap to next line
+                            marginBottom = 5, // Space before the "add label" input
+                        },
+                    };
+                    _inspectorLabelsSection.Add(_inspectorCurrentLabelsContainer);
+
+                    // Input area for adding new labels
+                    var addLabelRow = new VisualElement
+                    {
+                        style = { flexDirection = FlexDirection.Row, alignItems = Align.Center },
+                    };
+
+                    _inspectorNewLabelInput = new TextField
+                    {
+                        name = "inspector-new-label-input",
+                        style = { flexGrow = 1, marginRight = 5 }, // Take available width
+                    };
+                    _inspectorNewLabelInput.SetPlaceholderText("Type new label and press Enter...");
+                    // Handle Enter key to add label from TextField
+                    _inspectorNewLabelInput.RegisterCallback<KeyDownEvent>(evt =>
+                    {
+                        if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
+                        {
+                            AddLabelToSelectedAsset();
+                            evt.PreventDefault(); // Stop Enter from being processed further
+                            evt.StopPropagation();
+                        }
+                    });
+                    addLabelRow.Add(_inspectorNewLabelInput);
+
+                    // "Add" button for the new label input
+                    var inspectorAddLabelButton = new Button(AddLabelToSelectedAsset)
+                    {
+                        text = "Add",
+                    };
+                    addLabelRow.Add(inspectorAddLabelButton);
+                    _inspectorLabelsSection.Add(addLabelRow);
+
+                    // Add the entire labels section to the main inspector container
+                    _inspectorContainer.Add(_inspectorLabelsSection);
+
+                    // Populate the pills for the currently selected object's labels
+                    PopulateInspectorLabelsUI();
+                }
             }
 
             // ReSharper disable once RedundantAssignment
@@ -5682,6 +5757,207 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Populates the inspector's label area with pills for the currently selected object.
+        /// </summary>
+        private void PopulateInspectorLabelsUI()
+        {
+            // Ensure the container VE exists (it's created in BuildInspectorView)
+            // and an object is actually selected.
+            if (_inspectorCurrentLabelsContainer == null || _selectedObject == null)
+            {
+                _inspectorCurrentLabelsContainer?.Clear(); // Clear if no object or container missing
+                return;
+            }
+            _inspectorCurrentLabelsContainer.Clear(); // Clear previous pills
+
+            string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
+
+            if (currentLabels.Length == 0)
+            {
+                _inspectorCurrentLabelsContainer.Add(
+                    new Label("No labels assigned.")
+                    {
+                        style =
+                        {
+                            color = Color.gray,
+                            fontSize = 10,
+                            unityFontStyleAndWeight = FontStyle.Italic,
+                        },
+                    }
+                );
+                return;
+            }
+
+            // Display labels alphabetically
+            foreach (string labelText in currentLabels.OrderBy(l => l))
+            {
+                // Create a container for each pill (label text + remove button)
+                var pillContainer = new VisualElement
+                {
+                    name = $"inspector-label-pill-{labelText.Replace(" ", "-").ToLowerInvariant()}",
+                    style =
+                    {
+                        flexDirection = FlexDirection.Row, // Arrange text and 'x' side-by-side
+                        alignItems = Align.Center, // Vertically center text and 'x'
+                        marginRight = 4, // Spacing between pills
+                        marginBottom = 4, // Spacing for wrapped pills
+                        paddingLeft = 6,
+                        paddingRight = 2, // Less padding on right for the 'x' button
+                        paddingTop = 1,
+                        paddingBottom = 1,
+                        height = 18, // Consistent pill height
+                        borderTopRightRadius = 3, // Rounded corners
+                        borderBottomLeftRadius = 3,
+                        borderBottomRightRadius = 3,
+                        borderTopLeftRadius = 3,
+                        backgroundColor = GetColorForLabel(labelText), // Use your existing color helper
+                    },
+                };
+                pillContainer.AddToClassList("label-pill-container"); // For potential shared USS styling
+
+                // Label text part of the pill
+                var labelElement = new Label(labelText)
+                {
+                    style =
+                    {
+                        fontSize = 10,
+                        // Use existing helper to decide text color based on background
+                        color = IsColorDark(pillContainer.style.backgroundColor.value)
+                            ? Color.white
+                            : Color.black,
+                        marginRight = 2, // Small space before the 'x' button
+                    },
+                };
+                labelElement.AddToClassList("label-pill-text");
+                pillContainer.Add(labelElement);
+
+                // "X" Remove Button for this label
+                var removeButton = new Button(() => RemoveLabelFromSelectedAsset(labelText))
+                {
+                    text = "x", // Simple 'x' is common for remove
+                    tooltip = $"Remove label '{labelText}'",
+                };
+                removeButton.AddToClassList("label-pill-remove-button"); // For specific USS styling
+                // Minimal styling for the 'x' button to make it small and subtle
+                removeButton.style.fontSize = 8;
+                removeButton.style.height = 14;
+                removeButton.style.width = 14;
+                removeButton.style.paddingLeft = 0;
+                removeButton.style.paddingRight = 0;
+                removeButton.style.paddingTop = 0;
+                removeButton.style.paddingBottom = 0;
+                removeButton.style.marginLeft = 2;
+                removeButton.style.backgroundColor = Color.clear; // Transparent background
+                removeButton.style.borderLeftWidth = 0;
+                removeButton.style.borderRightWidth = 0;
+                removeButton.style.borderTopWidth = 0;
+                removeButton.style.borderBottomWidth = 0;
+                removeButton.style.color = labelElement.style.color.value; // Match text color for subtlety
+                pillContainer.Add(removeButton);
+
+                _inspectorCurrentLabelsContainer.Add(pillContainer);
+            }
+        }
+
+        /// <summary>
+        /// Called by the "Add Label" button or Enter key in the inspector's new label input field.
+        /// </summary>
+        private void AddLabelToSelectedAsset()
+        {
+            if (_selectedObject == null || _inspectorNewLabelInput == null)
+                return;
+
+            string newLabelText = _inspectorNewLabelInput.value?.Trim();
+            if (string.IsNullOrWhiteSpace(newLabelText))
+            {
+                // Debug.LogWarning("Label text cannot be empty.");
+                _inspectorNewLabelInput.SetValueWithoutNotify(""); // Clear input even if empty
+                return;
+            }
+
+            // Unity labels are case-sensitive when applying but often displayed mixed-case.
+            // It's generally good to prevent adding visually identical labels differing only by case,
+            // though AssetDatabase.SetLabels will treat them as distinct if case differs.
+            string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
+            if (currentLabels.Any(l => l.Equals(newLabelText, StringComparison.Ordinal))) // Exact case match
+            {
+                // Debug.Log($"Label '{newLabelText}' already exists on asset '{_selectedObject.name}'.");
+                _inspectorNewLabelInput.SetValueWithoutNotify(""); // Clear input
+                _inspectorNewLabelInput.Focus(); // Keep focus to add another
+                return;
+            }
+
+            List<string> updatedLabels = currentLabels.ToList();
+            updatedLabels.Add(newLabelText);
+
+            try
+            {
+                AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
+                EditorUtility.SetDirty(_selectedObject); // Mark asset dirty so changes are saved
+
+                // Debug.Log($"Added label '{newLabelText}' to asset '{_selectedObject.name}'");
+
+                _inspectorNewLabelInput.SetValueWithoutNotify(""); // Clear input field after successful add
+
+                PopulateInspectorLabelsUI(); // Refresh this inspector section's label display
+
+                // Refresh the object column's available labels and re-filter the list
+                // as a new unique label might have been introduced for the current type.
+                UpdateLabelAreaAndFilter();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(
+                    $"Error adding label '{newLabelText}' to asset '{_selectedObject.name}': {ex}"
+                );
+            }
+            _inspectorNewLabelInput.Focus(); // Return focus for adding more labels easily
+        }
+
+        /// <summary>
+        /// Called by the "X" button on a label pill in the Inspector.
+        /// </summary>
+        private void RemoveLabelFromSelectedAsset(string labelToRemove)
+        {
+            if (_selectedObject == null || string.IsNullOrEmpty(labelToRemove))
+                return;
+
+            string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
+            // Filter out the label to remove (case-sensitive for matching what's on the asset)
+            List<string> updatedLabels = currentLabels
+                .Where(l => !l.Equals(labelToRemove, StringComparison.Ordinal))
+                .ToList();
+
+            // Check if a label was actually found and thus removed
+            if (updatedLabels.Count < currentLabels.Length)
+            {
+                try
+                {
+                    AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
+                    EditorUtility.SetDirty(_selectedObject);
+
+                    // Debug.Log($"Removed label '{labelToRemove}' from asset '{_selectedObject.name}'");
+
+                    PopulateInspectorLabelsUI(); // Refresh this inspector section
+
+                    // The removed label might no longer be present on *any* object of this type.
+                    // UpdateLabelAreaAndFilter will re-discover available labels and adjust.
+                    UpdateLabelAreaAndFilter();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError(
+                        $"Error removing label '{labelToRemove}' from asset '{_selectedObject.name}': {ex}"
+                    );
+                }
+            }
+            else
+            {
+                // Debug.LogWarning($"Label '{labelToRemove}' not found on asset '{_selectedObject.name}' for removal.");
+            }
         }
 
         private void CloneObject(ScriptableObject originalObject)
