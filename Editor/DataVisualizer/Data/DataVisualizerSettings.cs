@@ -68,6 +68,10 @@
         [ReadOnly]
         internal List<string> managedTypeNames = new();
 
+        [SerializeField]
+        [ReadOnly]
+        internal List<TypeLabelFilterConfig> labelFilterConfigs = new();
+
         private void OnValidate()
         {
             if (Application.isEditor && !Application.isPlaying)
@@ -112,6 +116,9 @@
                 userState.objectOrders?.Select(order => order.Clone()).ToList()
                 ?? new List<TypeObjectOrder>();
             managedTypeNames = userState.managedTypeNames?.ToList() ?? new List<string>();
+            labelFilterConfigs =
+                userState.labelFilterConfigs?.Select(config => config.Clone()).ToList()
+                ?? new List<TypeLabelFilterConfig>();
             MarkDirty();
         }
 

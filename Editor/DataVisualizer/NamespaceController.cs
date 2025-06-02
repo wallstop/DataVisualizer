@@ -145,6 +145,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             SaveNamespaceAndTypeSelectionState(dataVisualizer, namespaceKey, _selectedType);
             dataVisualizer.LoadObjectTypes(_selectedType);
             ScriptableObject objectToSelect = dataVisualizer.DetermineObjectToAutoSelect();
+            dataVisualizer.UpdateLabelAreaAndFilter();
             dataVisualizer.BuildObjectsView();
             dataVisualizer.SelectObject(objectToSelect);
             dataVisualizer.UpdateCreateObjectButtonStyle();

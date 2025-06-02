@@ -81,6 +81,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             SearchResultsPopover = 3,
         }
 
+        private enum LabelFilterSection
+        {
+            None = 0,
+            Available = 1,
+            AND = 2,
+            OR = 3,
+        }
+
         internal static DataVisualizer Instance;
 
         private static readonly StringBuilder CachedStringBuilder = new();
@@ -125,9 +133,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (_namespaceColumnLabel != null)
                 {
                     _namespaceColumnLabel.text =
-                        value <= 0
-                            ? "Namespaces"
-                            : $"Namespaces (<b><color=yellow>{value}</color></b> hidden)";
+                        value <= 0 ? "Namespaces"
+                        : value <= 15 ? $"Namespaces (<b><color=yellow>{value}</color></b> hidden)"
+                        : $"Namespaces (<b><color=red>{value}</color></b> hidden)";
                 }
             }
 #pragma warning restore CS0618 // Type or member is obsolete
@@ -182,6 +190,28 @@ namespace WallstopStudios.DataVisualizer.Editor
         private bool _isDraggingPopover;
         private Vector2 _popoverDragStartMousePos;
         private Vector2 _popoverDragStartPos;
+
+        private VisualElement _availableLabelsContainer;
+        private VisualElement _andLabelsContainer;
+        private VisualElement _orLabelsContainer;
+        private Label _filterStatusLabel; // To show "X of Y objects hidden"
+
+        private List<string> _currentUniqueLabelsForType = new List<string>(); // Discovered labels for current SO type
+        private TypeLabelFilterConfig _currentTypeLabelFilterConfig; // Active filter for current SO type
+        private List<ScriptableObject> _filteredObjects = new List<ScriptableObject>(); // Result of filtering _selectedObjects
+        private Dictionary<string, Color> _labelColorCache = new Dictionary<string, Color>();
+        private List<Color> _predefinedLabelColors = new List<Color>
+        {
+            new Color(0.32f, 0.55f, 0.78f),
+            new Color(0.90f, 0.42f, 0.32f),
+            new Color(0.45f, 0.70f, 0.40f),
+            new Color(0.82f, 0.60f, 0.28f),
+            new Color(0.50f, 0.48f, 0.70f),
+            new Color(0.75f, 0.45f, 0.60f),
+            new Color(0.30f, 0.65f, 0.65f),
+            new Color(0.65f, 0.65f, 0.35f),
+        };
+        private int _nextColorIndex = 0;
 
         private TextField _searchField;
         private VisualElement _searchPopover;
@@ -2942,7 +2972,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             string directory = Settings.DataFolderPath;
-            string typedDirectory = Path.Combine(directory, (type.FullName ?? type.Name).Replace(".", Path.DirectorySeparatorChar.ToString())).SanitizePath();
+            string typedDirectory = Path.Combine(
+                    directory,
+                    (type.FullName ?? type.Name).Replace(
+                        ".",
+                        Path.DirectorySeparatorChar.ToString()
+                    )
+                )
+                .SanitizePath();
             DirectoryHelper.EnsureDirectoryExists(typedDirectory);
 
             string proposedName = $"{newName}.asset";
@@ -4013,6 +4050,157 @@ namespace WallstopStudios.DataVisualizer.Editor
             UpdateCreateObjectButtonStyle();
             objectHeader.Add(_createObjectButton);
             objectColumn.Add(objectHeader);
+
+            // --- Label Filter UI Area ---
+            var labelFilterSectionRoot = new VisualElement
+            {
+                name = "label-filter-section-root",
+                style =
+                {
+                    marginBottom = 5,
+                    paddingBottom = new StyleLength(new Length(2, LengthUnit.Pixel)),
+                    paddingLeft = new StyleLength(new Length(2, LengthUnit.Pixel)),
+                    paddingRight = new StyleLength(new Length(2, LengthUnit.Pixel)),
+                    paddingTop = new StyleLength(new Length(2, LengthUnit.Pixel)),
+                },
+            };
+            objectColumn.Add(labelFilterSectionRoot);
+
+            // Available Labels
+            _availableLabelsContainer = new VisualElement
+            {
+                name = "available-labels-container",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    flexWrap = Wrap.Wrap,
+                    minHeight = 22,
+                    marginBottom = 3,
+                    paddingBottom = 2,
+                    paddingLeft = 2,
+                    paddingRight = 2,
+                    paddingTop = 2,
+                },
+            };
+            var availableRow = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    marginBottom = 2,
+                },
+            };
+            availableRow.Add(
+                new Label("Available:")
+                {
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Bold,
+                        marginRight = 5,
+                        minWidth = 60,
+                    },
+                }
+            );
+            availableRow.Add(_availableLabelsContainer);
+            labelFilterSectionRoot.Add(availableRow);
+
+            // AND Labels Container (initially hidden if empty)
+            var andRow = new VisualElement
+            {
+                name = "and-filter-row",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    marginBottom = 2,
+                    display = DisplayStyle.None,
+                },
+            };
+            andRow.Add(
+                new Label("AND:")
+                {
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Bold,
+                        marginRight = 5,
+                        minWidth = 60,
+                    },
+                }
+            );
+            _andLabelsContainer = new VisualElement
+            {
+                name = "and-labels-container",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    flexWrap = Wrap.Wrap,
+                    minHeight = 22,
+                    paddingBottom = 2,
+                    paddingLeft = 2,
+                    paddingRight = 2,
+                    paddingTop = 2,
+                    backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.3f),
+                },
+            };
+            andRow.Add(_andLabelsContainer);
+            labelFilterSectionRoot.Add(andRow);
+
+            // OR Labels Container (initially hidden if empty)
+            var orRow = new VisualElement
+            {
+                name = "or-filter-row",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    marginBottom = 2,
+                    display = DisplayStyle.None,
+                },
+            };
+            orRow.Add(
+                new Label("OR:")
+                {
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Bold,
+                        marginRight = 5,
+                        minWidth = 60,
+                    },
+                }
+            );
+            _orLabelsContainer = new VisualElement
+            {
+                name = "or-labels-container",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    flexWrap = Wrap.Wrap,
+                    minHeight = 22,
+                    paddingBottom = 2,
+                    paddingLeft = 2,
+                    paddingRight = 2,
+                    paddingTop = 2,
+                    backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.3f),
+                },
+            };
+            orRow.Add(_orLabelsContainer);
+            labelFilterSectionRoot.Add(orRow);
+
+            // Filter Status Label
+            _filterStatusLabel = new Label("")
+            {
+                name = "filter-status-label",
+                style =
+                {
+                    fontSize = 10,
+                    color = Color.gray,
+                    marginTop = 3,
+                    minHeight = 12,
+                },
+            };
+            labelFilterSectionRoot.Add(_filterStatusLabel);
+
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
                 name = "object-scrollview",
@@ -4102,6 +4290,408 @@ namespace WallstopStudios.DataVisualizer.Editor
                         .ExecuteLater(1);
                 }
             );
+        }
+
+        // --- Label Filtering Core Logic ---
+
+        /// <summary>
+        /// Called when the selected ScriptableObject type changes.
+        /// Discovers labels, loads/applies persisted filter config, and updates the UI.
+        /// </summary>
+        internal void UpdateLabelAreaAndFilter()
+        {
+            // Clear previous state
+            ClearLabelFilterUI();
+            _currentTypeLabelFilterConfig = null; // Ensure it's reset
+
+            if (_namespaceController.SelectedType == null || _selectedObjects == null)
+            {
+                _filterStatusLabel.text = "";
+                // Hide filter sections
+                _availableLabelsContainer.parent.style.display = DisplayStyle.None;
+                _andLabelsContainer.parent.style.display = DisplayStyle.None;
+                _orLabelsContainer.parent.style.display = DisplayStyle.None;
+                ApplyLabelFilter(); // Will show empty object list
+                return;
+            }
+
+            // 1. Discover unique labels for all objects of the current _selectedType
+            _currentUniqueLabelsForType.Clear();
+            var labelSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var obj in _selectedObjects)
+            { // _selectedObjects contains ALL for the type
+                if (obj == null)
+                    continue;
+                string[] labels = AssetDatabase.GetLabels(obj);
+                foreach (string label in labels)
+                {
+                    labelSet.Add(label);
+                }
+            }
+            _currentUniqueLabelsForType.AddRange(labelSet.OrderBy(l => l));
+
+            // 2. Load or create persisted filter configuration for this type
+            _currentTypeLabelFilterConfig = LoadOrCreateLabelFilterConfig(
+                _namespaceController.SelectedType
+            );
+
+            // 3. Reconcile persisted labels: Remove any that no longer exist in _currentUniqueLabelsForType
+            bool configChanged = false;
+            int removedAnd = _currentTypeLabelFilterConfig.AndLabels.RemoveAll(l =>
+                !_currentUniqueLabelsForType.Contains(l)
+            );
+            int removedOr = _currentTypeLabelFilterConfig.OrLabels.RemoveAll(l =>
+                !_currentUniqueLabelsForType.Contains(l)
+            );
+            if (removedAnd > 0 || removedOr > 0)
+                configChanged = true;
+
+            // If config changed due to reconciliation, save it
+            if (configChanged)
+                SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
+
+            // 4. Populate the UI containers (Available, AND, OR) with label pills
+            PopulateLabelPillContainers();
+
+            // 5. Apply the filter to the object list
+            ApplyLabelFilter();
+        }
+
+        private void ClearLabelFilterUI()
+        {
+            _availableLabelsContainer?.Clear();
+            _andLabelsContainer?.Clear();
+            _orLabelsContainer?.Clear();
+            _currentUniqueLabelsForType.Clear();
+            // _currentTypeLabelFilterConfig is reset by LoadOrCreate...
+        }
+
+        private List<string> GetCurrentlyAvailableLabels()
+        {
+            if (_currentTypeLabelFilterConfig == null)
+                return _currentUniqueLabelsForType.ToList();
+            return _currentUniqueLabelsForType
+                .Where(l =>
+                    !_currentTypeLabelFilterConfig.AndLabels.Contains(l)
+                    && !_currentTypeLabelFilterConfig.OrLabels.Contains(l)
+                )
+                .ToList();
+        }
+
+        private void PopulateLabelPillContainers()
+        {
+            PopulateSingleLabelContainer(
+                _availableLabelsContainer,
+                GetCurrentlyAvailableLabels(),
+                LabelFilterSection.Available
+            );
+            PopulateSingleLabelContainer(
+                _andLabelsContainer,
+                _currentTypeLabelFilterConfig.AndLabels,
+                LabelFilterSection.AND
+            );
+            PopulateSingleLabelContainer(
+                _orLabelsContainer,
+                _currentTypeLabelFilterConfig.OrLabels,
+                LabelFilterSection.OR
+            );
+
+            // Control visibility of AND/OR sections
+            bool hasAndFilters = _currentTypeLabelFilterConfig.AndLabels.Any();
+            bool hasOrFilters = _currentTypeLabelFilterConfig.OrLabels.Any();
+            _andLabelsContainer.parent.style.display = hasAndFilters
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
+            _orLabelsContainer.parent.style.display = hasOrFilters
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
+            _availableLabelsContainer.parent.style.display = GetCurrentlyAvailableLabels().Any()
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
+        }
+
+        private void PopulateSingleLabelContainer(
+            VisualElement container,
+            List<string> labels,
+            LabelFilterSection section
+        )
+        {
+            container.Clear();
+            if (labels == null)
+                return;
+            foreach (string labelText in labels.OrderBy(l => l))
+            { // Keep alphabetical
+                container.Add(CreateLabelPill(labelText, section));
+            }
+        }
+
+        private VisualElement CreateLabelPill(string labelText, LabelFilterSection currentSection)
+        {
+            var pill = new Button(() => OnLabelPillClicked(labelText, currentSection))
+            {
+                text = labelText,
+                name = $"label-pill-{labelText.Replace(" ", "-").ToLowerInvariant()}",
+                tooltip = $"Click to move '{labelText}'",
+            };
+            pill.AddToClassList("label-pill"); // For general styling
+            pill.style.backgroundColor = GetColorForLabel(labelText);
+            pill.style.color = IsColorDark(pill.style.backgroundColor.value)
+                ? Color.white
+                : Color.black;
+            // Common pill styles (adjust in USS)
+            pill.style.marginRight = 3;
+            pill.style.marginBottom = 3;
+            pill.style.paddingLeft = 6;
+            pill.style.paddingRight = 6;
+            pill.style.paddingTop = 1;
+            pill.style.paddingBottom = 1;
+            pill.style.height = 18;
+            pill.style.fontSize = 10;
+            pill.style.borderBottomWidth = 0;
+            pill.style.borderLeftWidth = 0;
+            pill.style.borderRightWidth = 0;
+            pill.style.borderTopWidth = 0;
+            pill.style.unityTextAlign = TextAnchor.MiddleCenter;
+            pill.style.borderBottomLeftRadius =
+                pill.style.borderBottomRightRadius =
+                pill.style.borderTopLeftRadius =
+                pill.style.borderTopRightRadius =
+                    3;
+            return pill;
+        }
+
+        private void OnLabelPillClicked(string labelText, LabelFilterSection currentSection)
+        {
+            if (_currentTypeLabelFilterConfig == null)
+                return;
+
+            // Remove from all lists first to avoid duplicates and handle moves cleanly
+            _currentTypeLabelFilterConfig.AndLabels.Remove(labelText);
+            _currentTypeLabelFilterConfig.OrLabels.Remove(labelText);
+
+            // Add to the next section in the cycle: Available -> AND -> OR -> Available
+            switch (currentSection)
+            {
+                case LabelFilterSection.Available:
+                    _currentTypeLabelFilterConfig.AndLabels.Add(labelText);
+                    break;
+                case LabelFilterSection.AND:
+                    _currentTypeLabelFilterConfig.OrLabels.Add(labelText);
+                    break;
+                case LabelFilterSection.OR:
+                    // Becomes available, so no add needed here, just removal from OR done above
+                    break;
+            }
+
+            SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
+            PopulateLabelPillContainers(); // Refresh label UI
+            ApplyLabelFilter(); // Re-filter objects
+        }
+
+        /// <summary>
+        /// Filters _selectedObjects into _filteredObjects based on current label config.
+        /// </summary>
+        private void ApplyLabelFilter()
+        {
+            if (_namespaceController.SelectedType == null || _selectedObjects == null)
+            { // Ensure type is selected
+                _filteredObjects.Clear();
+                _filterStatusLabel.text = "Select a type to see objects.";
+                BuildObjectsView(); // Rebuild with empty list
+                return;
+            }
+            if (_currentTypeLabelFilterConfig == null)
+            { // Should be loaded by UpdateLabelAreaAndFilter
+                _currentTypeLabelFilterConfig = LoadOrCreateLabelFilterConfig(
+                    _namespaceController.SelectedType
+                );
+            }
+
+            _filteredObjects.Clear();
+            var andLabels = _currentTypeLabelFilterConfig.AndLabels;
+            var orLabels = _currentTypeLabelFilterConfig.OrLabels;
+
+            bool noAndFilter = (andLabels == null || andLabels.Count == 0);
+            bool noOrFilter = (orLabels == null || orLabels.Count == 0);
+
+            if (noAndFilter && noOrFilter)
+            {
+                foreach (var selectedObject in _selectedObjects)
+                {
+                    _filteredObjects.Add(selectedObject);
+                }
+            }
+            else
+            {
+                foreach (var obj in _selectedObjects)
+                {
+                    if (obj == null)
+                        continue;
+                    string[] objLabelsArray = AssetDatabase.GetLabels(obj);
+                    var objLabelsSet = new HashSet<string>(
+                        objLabelsArray,
+                        StringComparer.OrdinalIgnoreCase
+                    );
+
+                    bool matchesAnd =
+                        noAndFilter
+                        || andLabels.All(filterLabel => objLabelsSet.Contains(filterLabel));
+                    bool matchesOr =
+                        noOrFilter
+                        || orLabels.Any(filterLabel => objLabelsSet.Contains(filterLabel));
+
+                    if (matchesAnd && matchesOr)
+                    {
+                        _filteredObjects.Add(obj);
+                    }
+                }
+            }
+
+            int totalCount = _selectedObjects.Count;
+            int shownCount = _filteredObjects.Count;
+            _filterStatusLabel.text =
+                $"Showing {shownCount} of {totalCount} object{(totalCount != 1 ? "s" : "")}"
+                + (
+                    shownCount < totalCount
+                        ? $" ({totalCount - shownCount} hidden by label filter)."
+                        : "."
+                );
+
+            BuildObjectsView(); // Rebuild the object list view with the new _filteredObjects
+        }
+
+        // --- Persistence Helpers ---
+        private TypeLabelFilterConfig LoadOrCreateLabelFilterConfig(Type type)
+        {
+            TypeLabelFilterConfig config = null;
+            PersistSettings(
+                settings =>
+                {
+                    bool dirty = false;
+                    if (settings.labelFilterConfigs == null)
+                    {
+                        settings.labelFilterConfigs = new List<TypeLabelFilterConfig>();
+                        dirty = true;
+                    }
+                    config = settings.labelFilterConfigs.Find(existingConfig =>
+                        string.Equals(
+                            existingConfig.TypeFullName,
+                            type.FullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (config == null)
+                    {
+                        config = new TypeLabelFilterConfig();
+                        config.TypeFullName = type.FullName;
+                        settings.labelFilterConfigs.Add(config);
+                        dirty = true;
+                    }
+                    return dirty;
+                },
+                userState =>
+                {
+                    bool dirty = false;
+                    if (userState.labelFilterConfigs == null)
+                    {
+                        userState.labelFilterConfigs = new List<TypeLabelFilterConfig>();
+                        dirty = true;
+                    }
+                    config = userState.labelFilterConfigs.Find(existingConfig =>
+                        string.Equals(
+                            existingConfig.TypeFullName,
+                            type.FullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (config == null)
+                    {
+                        config = new TypeLabelFilterConfig();
+                        config.TypeFullName = type.FullName;
+                        userState.labelFilterConfigs.Add(config);
+                        dirty = true;
+                    }
+                    return dirty;
+                }
+            );
+            return config;
+        }
+
+        private void SaveLabelFilterConfig(TypeLabelFilterConfig config)
+        {
+            PersistSettings(
+                settings =>
+                {
+                    settings.labelFilterConfigs ??= new List<TypeLabelFilterConfig>();
+                    TypeLabelFilterConfig existing = settings.labelFilterConfigs.Find(
+                        existingConfig =>
+                            string.Equals(
+                                existingConfig.TypeFullName,
+                                config.TypeFullName,
+                                StringComparison.Ordinal
+                            )
+                    );
+                    if (existing == null)
+                    {
+                        settings.labelFilterConfigs.Add(config);
+                    }
+                    else
+                    {
+                        settings.labelFilterConfigs.Remove(existing);
+                        settings.labelFilterConfigs.Add(config);
+                    }
+                    return true;
+                },
+                userState =>
+                {
+                    userState.labelFilterConfigs ??= new List<TypeLabelFilterConfig>();
+                    TypeLabelFilterConfig existing = userState.labelFilterConfigs.Find(
+                        existingConfig =>
+                            string.Equals(
+                                existingConfig.TypeFullName,
+                                config.TypeFullName,
+                                StringComparison.Ordinal
+                            )
+                    );
+                    if (existing == null)
+                    {
+                        userState.labelFilterConfigs.Add(config);
+                    }
+                    else
+                    {
+                        userState.labelFilterConfigs.Remove(existing);
+                        userState.labelFilterConfigs.Add(config);
+                    }
+                    return true;
+                }
+            );
+        }
+
+        // --- Color Helpers for Labels ---
+        private Color GetColorForLabel(string labelText)
+        {
+            if (string.IsNullOrEmpty(labelText))
+                return Color.gray;
+            if (_labelColorCache.TryGetValue(labelText, out Color color))
+                return color;
+
+            if (_nextColorIndex < _predefinedLabelColors.Count)
+            {
+                color = _predefinedLabelColors[_nextColorIndex++];
+            }
+            else
+            {
+                // Generate a consistent color from hash for additional labels
+                float hue = (Mathf.Abs(labelText.GetHashCode() % 256)) / 255f;
+                color = Color.HSVToRGB(hue, 0.65f, 0.90f); // Ensure good saturation/value
+            }
+            _labelColorCache[labelText] = color;
+            return color;
+        }
+
+        private bool IsColorDark(Color c)
+        {
+            return (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) < 0.5f; // Luminance check
         }
 
         private void BuildConfirmNamespaceAddPopoverContent(
@@ -4253,15 +4843,39 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (selectedType != null && _selectedObjects.Count == 0)
             {
                 _emptyObjectLabel.style.display = DisplayStyle.Flex;
-            }
-            else
-            {
-                _emptyObjectLabel.style.display = DisplayStyle.None;
+                return;
             }
 
-            for (int i = 0; i < _selectedObjects.Count; i++)
+            if (_filteredObjects == null || !_filteredObjects.Any())
             {
-                BuildObjectRow(_selectedObjects[i], i);
+                // If _selectedObjects has items, then filter is active and hiding all
+                if (_selectedObjects != null && _selectedObjects.Any())
+                {
+                    _objectListContainer.Add(
+                        new Label(
+                            $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' match the current label filter."
+                        )
+                        { /* styles */
+                        }
+                    );
+                }
+                else
+                {
+                    _objectListContainer.Add(
+                        new Label(
+                            $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' found."
+                        )
+                        { /* styles */
+                        }
+                    );
+                }
+                return;
+            }
+
+            _emptyObjectLabel.style.display = DisplayStyle.None;
+            for (int i = 0; i < _filteredObjects.Count; i++)
+            {
+                BuildObjectRow(_filteredObjects[i], i);
             }
         }
 

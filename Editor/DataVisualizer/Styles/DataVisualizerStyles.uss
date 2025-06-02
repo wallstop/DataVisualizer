@@ -866,3 +866,19 @@
     background-color: chocolate;
     border-color: white;
 }
+
+.label-pill {
+    margin-right: 4px;
+    margin-bottom: 4px;
+    padding: 2px 6px;
+    height: 18px;
+    font-size: 10px;
+    border-radius: 3px;
+    border-width: 0; /* Remove default button border */
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    min-width: 0; /* Allow to shrink if text is short */
+}
+.label-pill:hover {
+    opacity: 0.85; /* Slight feedback on hover */
+}
