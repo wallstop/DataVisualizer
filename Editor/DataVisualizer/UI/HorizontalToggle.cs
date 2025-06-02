@@ -234,9 +234,9 @@
             UpdateIndicatorPosition(false);
         }
 
-        public void SelectLeft(bool animate = true, bool notify = true)
+        public void SelectLeft(bool animate = true, bool notify = true, bool force = false)
         {
-            if (_isLeftSelected && notify)
+            if (!force && _isLeftSelected && notify)
                 return; // Already selected, do nothing if notify is true
             if (_isAnimating)
                 return;
@@ -251,9 +251,9 @@
             }
         }
 
-        public void SelectRight(bool animate = true, bool notify = true)
+        public void SelectRight(bool animate = true, bool notify = true, bool force = false)
         {
-            if (!_isLeftSelected && notify)
+            if (!force && !_isLeftSelected && notify)
                 return; // Already selected, do nothing if notify is true
             if (_isAnimating)
                 return;

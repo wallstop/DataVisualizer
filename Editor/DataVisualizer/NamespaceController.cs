@@ -145,10 +145,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             SaveNamespaceAndTypeSelectionState(dataVisualizer, namespaceKey, _selectedType);
             dataVisualizer.LoadObjectTypes(_selectedType);
             ScriptableObject objectToSelect = dataVisualizer.DetermineObjectToAutoSelect();
-            dataVisualizer.UpdateLabelAreaAndFilter();
+            dataVisualizer.BuildProcessorColumnView();
             dataVisualizer.BuildObjectsView();
             dataVisualizer.SelectObject(objectToSelect);
             dataVisualizer.UpdateCreateObjectButtonStyle();
+            dataVisualizer.UpdateLabelAreaAndFilter();
         }
 
         public static void RecalibrateVisualElements(VisualElement item, int offset = 0)

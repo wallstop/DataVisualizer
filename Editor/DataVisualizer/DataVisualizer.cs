@@ -1,5 +1,6 @@
 ﻿// ReSharper disable AccessToModifiedClosure
 // ReSharper disable AccessToDisposedClosure
+// ReSharper disable HeapView.CanAvoidClosure
 namespace WallstopStudios.DataVisualizer.Editor
 {
 #if UNITY_EDITOR
@@ -90,14 +91,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             Available = 1,
             AND = 2,
             OR = 3,
-        }
-
-        private enum LabelCombinationType
-        {
-            [Obsolete("Please use a valid value")]
-            None = 0,
-            And = 1,
-            Or = 2,
         }
 
         internal static DataVisualizer Instance;
@@ -202,16 +195,18 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Vector2 _popoverDragStartMousePos;
         private Vector2 _popoverDragStartPos;
 
+        private HorizontalToggle _andOrToggle;
+        private VisualElement _labelFilterSelectionRoot;
         private VisualElement _availableLabelsContainer;
         private VisualElement _andLabelsContainer;
         private VisualElement _orLabelsContainer;
-        private Label _filterStatusLabel; // To show "X of Y objects hidden"
+        private Label _filterStatusLabel;
 
-        private List<string> _currentUniqueLabelsForType = new List<string>(); // Discovered labels for current SO type
-        private TypeLabelFilterConfig _currentTypeLabelFilterConfig; // Active filter for current SO type
-        private List<ScriptableObject> _filteredObjects = new List<ScriptableObject>(); // Result of filtering _selectedObjects
-        private Dictionary<string, Color> _labelColorCache = new Dictionary<string, Color>();
-        private List<Color> _predefinedLabelColors = new List<Color>
+        private readonly List<string> _currentUniqueLabelsForType = new();
+        private TypeLabelFilterConfig _currentTypeLabelFilterConfig;
+        private readonly List<ScriptableObject> _filteredObjects = new();
+        private readonly Dictionary<string, Color> _labelColorCache = new();
+        private readonly List<Color> _predefinedLabelColors = new()
         {
             new Color(0.32f, 0.55f, 0.78f),
             new Color(0.90f, 0.42f, 0.32f),
@@ -222,27 +217,32 @@ namespace WallstopStudios.DataVisualizer.Editor
             new Color(0.30f, 0.65f, 0.65f),
             new Color(0.65f, 0.65f, 0.35f),
         };
-        private int _nextColorIndex = 0;
+        private int _nextColorIndex;
 
-        // Add these fields at the class level in DataVisualizer.cs
-        private VisualElement _inspectorLabelsSection; // Main container for this section
-        private VisualElement _inspectorCurrentLabelsContainer; // Holds the displayed label pills
-        private TextField _inspectorNewLabelInput; // Input field for new labels
-
-        // The "Add" button can be a local variable in BuildInspectorView if not needed elsewhere
+        private VisualElement _inspectorLabelsSection;
+        private VisualElement _inspectorCurrentLabelsContainer;
+        private TextField _inspectorNewLabelInput;
 
         private string _draggedLabelText;
         private LabelFilterSection _dragSourceSection;
-        private LabelCombinationType _labelCombinationType = LabelCombinationType.And;
-        private VisualElement _draggedLabelPillVisual; // The VE being dragged
 
         private VisualElement _inspectorLabelSuggestionsPopover;
-        private List<string> _projectUniqueLabelsCache = new List<string>();
-        private bool _isLabelCachePopulated = false; // To populate cache only when needed
-        private List<VisualElement> _currentLabelSuggestionItems = new List<VisualElement>();
+        private readonly List<string> _projectUniqueLabelsCache = new();
+        private bool _isLabelCachePopulated;
+        private readonly List<VisualElement> _currentLabelSuggestionItems = new();
         private int _labelSuggestionHighlightIndex = -1;
 
-        // USS Class for suggestion items (can reuse if styling is similar to other popovers)
+        private VisualElement _processorAreaElement;
+        private VisualElement _processorListContainer;
+        private Button _processorToggleCollapseButton;
+        private Label _processorHeaderLabel;
+        private readonly List<IDataProcessor> _allDataProcessors = new();
+        private readonly List<IDataProcessor> _compatibleDataProcessors = new();
+        private bool _isProcessorColumnContentCollapsed = true;
+
+        private const string PrefsProcessorColumnCollapsedKey =
+            PrefsPrefix + "ProcessorColumnCollapsed";
+
         private const string LabelSuggestionItemClass = "label-suggestion-item";
 
         private TextField _searchField;
@@ -268,8 +268,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private int _searchHighlightIndex = -1;
         private int _typePopoverHighlightIndex = -1;
         private string _lastTypeAddSearchTerm;
+#pragma warning disable CS0618 // Type or member is obsolete
         private FocusArea _lastActiveFocusArea = FocusArea.None;
         private DragType _activeDragType = DragType.None;
+#pragma warning restore CS0618 // Type or member is obsolete
         private object _draggedData;
         private VisualElement _inPlaceGhost;
         private int _lastGhostInsertIndex = -1;
@@ -347,6 +349,35 @@ namespace WallstopStudios.DataVisualizer.Editor
             _odinPropertyTree = null;
 #endif
             _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
+
+            _allDataProcessors.Clear();
+            IEnumerable<Type> processorTypes = TypeCache
+                .GetTypesDerivedFrom<IDataProcessor>()
+                .Where(t => !t.IsAbstract && !t.IsInterface && !t.IsGenericTypeDefinition);
+            foreach (Type type in processorTypes)
+            {
+                try
+                {
+                    if (Activator.CreateInstance(type) is IDataProcessor instance)
+                    {
+                        _allDataProcessors.Add(instance);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError(
+                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex.Message}"
+                    );
+                }
+            }
+            Debug.Log($"Discovered {_allDataProcessors.Count} Data Processors.");
+            // --- End Discovery ---
+
+            // Load processor column collapse state
+            _isProcessorColumnContentCollapsed = EditorPrefs.GetBool(
+                PrefsProcessorColumnCollapsedKey,
+                true
+            ); // Default to collapsed
 
             LoadScriptableObjectTypes();
             rootVisualElement.RegisterCallback<KeyDownEvent>(
@@ -1023,7 +1054,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _lastSavedOuterWidth = initialOuterWidth;
             _lastSavedInnerWidth = initialInnerWidth;
             _namespaceColumnElement = CreateNamespaceColumn();
-
+            _processorAreaElement = CreateProcessorColumn();
             _objectColumnElement = CreateObjectColumn();
             VisualElement inspectorColumn = CreateInspectorColumn();
 
@@ -1098,6 +1129,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             root.Add(_confirmNamespaceAddPopover);
 
             BuildNamespaceView();
+            BuildProcessorColumnView();
             BuildObjectsView();
             BuildInspectorView();
         }
@@ -1261,6 +1293,200 @@ namespace WallstopStudios.DataVisualizer.Editor
                     $"Failed to find Data Visualizer font (package root: '{packageRoot}')."
                 );
             }
+        }
+
+        // Add these methods to DataVisualizer.cs
+
+        private VisualElement CreateProcessorColumn()
+        {
+            _processorAreaElement = new VisualElement
+            {
+                name = "processor-column",
+                style =
+                {
+                    width = 180, // Initial fixed width, can be made resizable later
+                    minWidth = 30, // Minimum for collapsed state
+                    flexDirection = FlexDirection.Column, // Stack header and list vertically
+                    borderRightWidth = 1,
+                    borderRightColor = Color.gray,
+                    paddingLeft = 0,
+                    paddingBottom = 0,
+                    paddingRight = 0,
+                    paddingTop = 0,
+                },
+            };
+
+            // Header with Toggle Button
+            VisualElement header = new()
+            {
+                name = "processor-column-header",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    justifyContent = Justify.SpaceBetween,
+                    paddingLeft = 3,
+                    paddingBottom = 3,
+                    paddingRight = 3,
+                    paddingTop = 3,
+                    height = 24, // Consistent header height
+                    flexShrink = 0,
+                    borderBottomWidth = 1,
+                    borderBottomColor = Color.gray,
+                },
+            };
+            _processorHeaderLabel = new Label("Processors")
+            {
+                style = { unityFontStyleAndWeight = FontStyle.Bold },
+            };
+            _processorToggleCollapseButton = new Button(ToggleProcessorContentCollapse)
+            {
+                text = "V", /* Default */
+            };
+            _processorToggleCollapseButton.AddToClassList("icon-button"); // Small button style
+            _processorToggleCollapseButton.style.width = 20;
+            _processorToggleCollapseButton.style.height = 20;
+
+            header.Add(_processorHeaderLabel);
+            header.Add(_processorToggleCollapseButton);
+            _processorAreaElement.Add(header);
+
+            // ScrollView for processor list
+            ScrollView scrollView = new(ScrollViewMode.Vertical)
+            {
+                name = "processor-list-scrollview",
+                style = { flexGrow = 1 }, // Takes remaining space
+            };
+            _processorListContainer = new VisualElement { name = "processor-list-container" };
+            scrollView.Add(_processorListContainer);
+            _processorAreaElement.Add(scrollView);
+
+            return _processorAreaElement;
+        }
+
+        // Call this when _selectedType changes, or when collapse state toggles
+        internal void BuildProcessorColumnView()
+        {
+            if (_processorListContainer == null || _processorAreaElement == null)
+            {
+                return;
+            }
+
+            _processorListContainer.Clear();
+            _compatibleDataProcessors.Clear();
+
+            const string ArrowCollapsed = "►";
+            const string ArrowExpanded = "▼";
+
+            if (_namespaceController.SelectedType != null)
+            {
+                _compatibleDataProcessors.AddRange(
+                    _allDataProcessors.Where(p =>
+                        p.Accepts != null && p.Accepts.Contains(_namespaceController.SelectedType)
+                    )
+                );
+            }
+
+            if (_compatibleDataProcessors.Count == 0)
+            {
+                _processorAreaElement.style.display = DisplayStyle.None; // Hide whole column
+                // OR: Show column but with a "No processors" message
+                // _processorHeaderLabel.text = "Processors";
+                // _processorToggleCollapseButton.SetEnabled(false);
+                // _processorToggleCollapseButton.text = "-";
+                // _processorListContainer.Add(new Label("No processors for this type.") {style = {color = Color.gray, unityTextAlign = TextAnchor.MiddleCenter, marginTop = 10}});
+                // _processorListContainer.parent.style.display = DisplayStyle.Flex; // Ensure scrollview is visible
+                return;
+            }
+
+            // If we reach here, there are compatible processors
+            _processorAreaElement.style.display = DisplayStyle.Flex; // Ensure column is visible
+            _processorToggleCollapseButton.SetEnabled(true);
+
+            // Update toggle button and header text
+            if (_isProcessorColumnContentCollapsed)
+            {
+                _processorToggleCollapseButton.text = ArrowCollapsed;
+                _processorHeaderLabel.text = $"Processors ({_compatibleDataProcessors.Count})"; // Show count when collapsed
+                _processorListContainer.parent.style.display = DisplayStyle.None; // Hide ScrollView
+            }
+            else // Expanded
+            {
+                _processorToggleCollapseButton.text = ArrowExpanded;
+                _processorHeaderLabel.text = "Processors";
+                _processorListContainer.parent.style.display = DisplayStyle.Flex; // Show ScrollView
+
+                // Populate processor buttons
+                foreach (IDataProcessor processor in _compatibleDataProcessors)
+                {
+                    Button procButton = new(() => RunDataProcessor(processor))
+                    {
+                        text = processor.Name, // From IDataProcessor
+                        tooltip = processor.Description,
+                        style = { marginTop = 2, marginBottom = 2 }, // From IDataProcessor
+                    };
+                    _processorListContainer.Add(procButton);
+                }
+            }
+        }
+
+        private void ToggleProcessorContentCollapse()
+        {
+            _isProcessorColumnContentCollapsed = !_isProcessorColumnContentCollapsed;
+            EditorPrefs.SetBool(
+                PrefsProcessorColumnCollapsedKey,
+                _isProcessorColumnContentCollapsed
+            );
+            BuildProcessorColumnView(); // Rebuild to show/hide content
+        }
+
+        private void RunDataProcessor(IDataProcessor processor)
+        {
+            if (
+                processor == null
+                || _namespaceController.SelectedType == null
+                || _selectedObjects == null
+            )
+            {
+                return;
+            }
+
+            string message =
+                $"Run processor '{processor.Name}' on {_selectedObjects.Count} "
+                + $"object{(_selectedObjects.Count != 1 ? "s" : "")} "
+                + $"of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}'?";
+
+            // Use existing generic confirmation popover
+            BuildAndOpenConfirmationPopover(
+                message,
+                "Run",
+                () =>
+                { // OnConfirm action
+                    try
+                    {
+                        Debug.Log($"Running processor '{processor.Name}'...");
+                        processor.Process(_namespaceController.SelectedType, _selectedObjects); // Pass ALL selected objects for the type
+                        Debug.Log($"Processor '{processor.Name}' finished.");
+
+                        // Assume processor might have changed asset data
+                        AssetDatabase.SaveAssets(); // Save any changes
+                        AssetDatabase.Refresh(); // Refresh asset database
+                        ScheduleRefresh(); // Full refresh of DataVisualizer
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"Error running processor '{processor.Name}': {ex}");
+                        EditorUtility.DisplayDialog(
+                            "Processor Error",
+                            $"An error occurred while running '{processor.Name}':\n{ex.Message}",
+                            "OK"
+                        );
+                    }
+                },
+                _processorAreaElement.Q<Button>() // Trigger element for popover positioning (e.g., the run button itself or column header)
+            // This might need specific trigger later if run button is deep.
+            // For now, using any button in the column as placeholder.
+            );
         }
 
         private void HandleSearchKeyDown(KeyDownEvent evt)
@@ -1829,7 +2055,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private string EscapeRichText(string input)
+        private static string EscapeRichText(string input)
         {
             return string.IsNullOrWhiteSpace(input)
                 ? ""
@@ -4095,8 +4321,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             objectHeader.Add(_createObjectButton);
             objectColumn.Add(objectHeader);
 
-            // --- Label Filter UI Area ---
-            var labelFilterSectionRoot = new VisualElement
+            objectColumn.Add(_processorAreaElement);
+
+            _labelFilterSelectionRoot = new VisualElement
             {
                 name = "label-filter-section-root",
                 style =
@@ -4108,117 +4335,45 @@ namespace WallstopStudios.DataVisualizer.Editor
                     paddingTop = new StyleLength(new Length(2, LengthUnit.Pixel)),
                 },
             };
-            objectColumn.Add(labelFilterSectionRoot);
+            objectColumn.Add(_labelFilterSelectionRoot);
 
-            // Available Labels
-            _availableLabelsContainer = new VisualElement
+            _availableLabelsContainer = new VisualElement { name = "available-labels-container" };
+            _availableLabelsContainer.AddToClassList("label-pill-container");
+            VisualElement availableRow = new() { name = "available-row" };
+            availableRow.AddToClassList("label-row-container");
+            Label availableLabel = new("Available:")
             {
-                name = "available-labels-container",
                 style =
                 {
-                    flexDirection = FlexDirection.Row,
-                    flexWrap = Wrap.Wrap,
-                    minHeight = 22,
-                    paddingBottom = 4,
-                    paddingLeft = 4,
-                    paddingRight = 4,
-                    paddingTop = 4,
-                    width = new StyleLength(new Length(100, LengthUnit.Percent)),
-
-                    borderBottomColor = Color.white,
-                    borderTopColor = Color.white,
-                    borderLeftColor = Color.white,
-                    borderRightColor = Color.white,
-                    borderBottomWidth = 1,
-                    borderTopWidth = 1,
-                    borderLeftWidth = 1,
-                    borderRightWidth = 1,
-                    borderTopRightRadius = 6,
-                    borderTopLeftRadius = 6,
-                    borderBottomRightRadius = 6,
-                    borderBottomLeftRadius = 6,
+                    unityFontStyleAndWeight = FontStyle.Bold,
+                    marginRight = 5,
+                    minWidth = 60,
                 },
             };
-            var availableRow = new VisualElement
-            {
-                name = "available-row",
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    marginBottom = 2,
-                },
-            };
-            availableRow.Add(
-                new Label("Available:")
-                {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        marginRight = 5,
-                        minWidth = 60,
-                    },
-                }
-            );
+            availableLabel.AddToClassList("label-header");
+            availableRow.Add(availableLabel);
             availableRow.Add(_availableLabelsContainer);
-            labelFilterSectionRoot.Add(availableRow);
+            _labelFilterSelectionRoot.Add(availableRow);
 
-            // AND Labels Container (initially hidden if empty)
-            var andRow = new VisualElement
+            VisualElement andRow = new() { name = "and-filter-row" };
+            andRow.AddToClassList("label-row-container");
+            Label andLabel = new("AND:")
             {
-                name = "and-filter-row",
                 style =
                 {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    marginBottom = 2,
-                    display = DisplayStyle.None,
+                    unityFontStyleAndWeight = FontStyle.Bold,
+                    marginRight = 5,
+                    minWidth = 60,
                 },
             };
-            andRow.Add(
-                new Label("AND:")
-                {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        marginRight = 5,
-                        minWidth = 60,
-                    },
-                }
-            );
-            _andLabelsContainer = new VisualElement
-            {
-                name = "and-labels-container",
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    flexWrap = Wrap.Wrap,
-                    minHeight = 22,
-                    paddingBottom = 4,
-                    paddingLeft = 4,
-                    paddingRight = 4,
-                    paddingTop = 4,
-                    width = new StyleLength(new Length(100, LengthUnit.Percent)),
-
-                    borderBottomColor = Color.white,
-                    borderTopColor = Color.white,
-                    borderLeftColor = Color.white,
-                    borderRightColor = Color.white,
-                    borderBottomWidth = 1,
-                    borderTopWidth = 1,
-                    borderLeftWidth = 1,
-                    borderRightWidth = 1,
-                    borderTopRightRadius = 6,
-                    borderTopLeftRadius = 6,
-                    borderBottomRightRadius = 6,
-                    borderBottomLeftRadius = 6,
-                    backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.3f),
-                },
-            };
+            andLabel.AddToClassList("label-header");
+            andRow.Add(andLabel);
+            _andLabelsContainer = new VisualElement { name = "and-labels-container" };
+            _andLabelsContainer.AddToClassList("label-pill-container");
             andRow.Add(_andLabelsContainer);
-            labelFilterSectionRoot.Add(andRow);
+            _labelFilterSelectionRoot.Add(andRow);
 
-            var andOrToggle = new HorizontalToggle
+            _andOrToggle = new HorizontalToggle()
             {
                 name = "and-or-toggle",
                 LeftText = "AND",
@@ -4230,82 +4385,70 @@ namespace WallstopStudios.DataVisualizer.Editor
                     marginTop = 6,
                 },
             };
-            andOrToggle.OnLeftSelected += () =>
+            _andOrToggle.OnLeftSelected += () =>
             {
-                andOrToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
-                andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, false);
-                andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, true);
-                _labelCombinationType = LabelCombinationType.And;
-                UpdateLabelAreaAndFilter();
-            };
-            andOrToggle.OnRightSelected += () =>
-            {
-                andOrToggle.Indicator.style.backgroundColor = new Color(1f, 0.5f, 0.3137254902f);
-                andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, true);
-                andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, false);
-                _labelCombinationType = LabelCombinationType.Or;
-                UpdateLabelAreaAndFilter();
-            };
-            andOrToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
-            andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, true);
-            labelFilterSectionRoot.Add(andOrToggle);
-
-            // OR Labels Container (initially hidden if empty)
-            var orRow = new VisualElement
-            {
-                name = "or-filter-row",
-                style =
+                _andOrToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
+                _andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, false);
+                _andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, true);
+                if (
+                    _currentTypeLabelFilterConfig != null
+                    && _currentTypeLabelFilterConfig.combinationType != LabelCombinationType.And
+                )
                 {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    marginBottom = 2,
-                    display = DisplayStyle.None,
-                },
-            };
-            orRow.Add(
-                new Label("OR:")
-                {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        marginRight = 5,
-                        minWidth = 60,
-                    },
+                    _currentTypeLabelFilterConfig.combinationType = LabelCombinationType.And;
+                    SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
+                    UpdateLabelAreaAndFilter();
                 }
-            );
-            _orLabelsContainer = new VisualElement
+            };
+            _andOrToggle.OnRightSelected += () =>
             {
-                name = "or-labels-container",
+                _andOrToggle.Indicator.style.backgroundColor = new Color(1f, 0.5f, 0.3137254902f);
+                _andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, true);
+                _andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, false);
+                if (
+                    _currentTypeLabelFilterConfig != null
+                    && _currentTypeLabelFilterConfig.combinationType != LabelCombinationType.Or
+                )
+                {
+                    _currentTypeLabelFilterConfig.combinationType = LabelCombinationType.Or;
+                    SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
+                    UpdateLabelAreaAndFilter();
+                }
+            };
+            switch (_currentTypeLabelFilterConfig?.combinationType)
+            {
+                case LabelCombinationType.And:
+                {
+                    _andOrToggle.SelectLeft(force: true);
+                    break;
+                }
+                case LabelCombinationType.Or:
+                {
+                    _andOrToggle.SelectRight(force: true);
+                    break;
+                }
+            }
+            _labelFilterSelectionRoot.Add(_andOrToggle);
+
+            VisualElement orRow = new() { name = "or-filter-row" };
+            orRow.AddToClassList("label-row-container");
+            Label orLabel = new("OR:")
+            {
                 style =
                 {
-                    flexDirection = FlexDirection.Row,
-                    flexWrap = Wrap.Wrap,
-                    minHeight = 22,
-                    paddingBottom = 4,
-                    paddingLeft = 4,
-                    paddingRight = 4,
-                    paddingTop = 4,
-                    width = new StyleLength(new Length(100, LengthUnit.Percent)),
-
-                    borderBottomColor = Color.white,
-                    borderTopColor = Color.white,
-                    borderLeftColor = Color.white,
-                    borderRightColor = Color.white,
-                    borderBottomWidth = 1,
-                    borderTopWidth = 1,
-                    borderLeftWidth = 1,
-                    borderRightWidth = 1,
-                    borderTopRightRadius = 6,
-                    borderTopLeftRadius = 6,
-                    borderBottomRightRadius = 6,
-                    borderBottomLeftRadius = 6,
-                    backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.3f),
+                    unityFontStyleAndWeight = FontStyle.Bold,
+                    marginRight = 5,
+                    minWidth = 60,
                 },
             };
-            orRow.Add(_orLabelsContainer);
-            labelFilterSectionRoot.Add(orRow);
+            orLabel.AddToClassList("label-header");
+            orRow.Add(orLabel);
+            _orLabelsContainer = new VisualElement { name = "or-labels-container" };
+            _orLabelsContainer.AddToClassList("label-pill-container");
 
-            // Filter Status Label
+            orRow.Add(_orLabelsContainer);
+            _labelFilterSelectionRoot.Add(orRow);
+
             _filterStatusLabel = new Label("")
             {
                 name = "filter-status-label",
@@ -4317,14 +4460,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                     minHeight = 12,
                 },
             };
-            labelFilterSectionRoot.Add(_filterStatusLabel);
+            _labelFilterSelectionRoot.Add(_filterStatusLabel);
 
             SetupDropTarget(availableRow, LabelFilterSection.Available);
-
-            // Setup Drop Target for AND Labels Container
             SetupDropTarget(andRow, LabelFilterSection.AND);
-
-            // Setup Drop Target for OR Labels Container
             SetupDropTarget(orRow, LabelFilterSection.OR);
 
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
@@ -4418,22 +4557,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        // --- Label Filtering Core Logic ---
-
-        // In DataVisualizer.cs
-
         private void SetupDropTarget(VisualElement container, LabelFilterSection targetSection)
         {
             container.RegisterCallback<DragEnterEvent>(evt =>
             {
-                // Check if we're dragging the right type of data
                 string draggedText = DragAndDrop.GetGenericData("DraggedLabelText") as string;
-                if (!string.IsNullOrEmpty(draggedText))
+                if (!string.IsNullOrWhiteSpace(draggedText))
                 {
-                    // Optional: Check if drop is valid (e.g., not dropping into source section)
-                    // For now, allow dropping anywhere and let PerformDrop sort it out
                     DragAndDrop.visualMode = DragAndDropVisualMode.Move;
-                    container.AddToClassList("drop-target-hover"); // Add USS class for visual feedback
+                    container.AddToClassList("drop-target-hover");
                 }
                 evt.StopPropagation();
             });
@@ -4446,9 +4578,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             container.RegisterCallback<DragUpdatedEvent>(evt =>
             {
-                // Keep visual mode if data is still valid
                 string draggedText = DragAndDrop.GetGenericData("DraggedLabelText") as string;
-                if (!string.IsNullOrEmpty(draggedText))
+                if (!string.IsNullOrWhiteSpace(draggedText))
                 {
                     DragAndDrop.visualMode = DragAndDropVisualMode.Move;
                 }
@@ -4461,67 +4592,88 @@ namespace WallstopStudios.DataVisualizer.Editor
                 string sourceSectionString = DragAndDrop.GetGenericData("SourceSection") as string;
 
                 if (
-                    !string.IsNullOrEmpty(draggedLabelText)
-                    && !string.IsNullOrEmpty(sourceSectionString)
-                    && Enum.TryParse<LabelFilterSection>(
-                        sourceSectionString,
-                        out LabelFilterSection sourceSection
-                    )
+                    !string.IsNullOrWhiteSpace(draggedLabelText)
+                    && !string.IsNullOrWhiteSpace(sourceSectionString)
+                    && Enum.TryParse(sourceSectionString, out LabelFilterSection sourceSection)
                 )
                 {
-                    if (sourceSection == targetSection)
-                    {
-                        // DragAndDrop.AcceptDrag(); // Accept to finalize drag even if no change
-                        // evt.StopPropagation();
-                        // return;
-                        // Actually, if we allow dropping in same section, it effectively does nothing useful
-                        // unless we want to reorder *within* a section (not currently supported).
-                        // For now, let's just accept and let UI rebuild without actual data change.
-                    }
+                    DragAndDrop.AcceptDrag();
 
-                    DragAndDrop.AcceptDrag(); // Indicate the drop was handled
-
-                    // Update the filter configuration
+                    bool changed = false;
                     if (_currentTypeLabelFilterConfig != null)
                     {
-                        // Add to the target section
-                        if (targetSection == LabelFilterSection.AND)
+                        switch (targetSection)
                         {
-                            if (!_currentTypeLabelFilterConfig.AndLabels.Contains(draggedLabelText))
+                            case LabelFilterSection.AND:
                             {
-                                _currentTypeLabelFilterConfig.AndLabels.Add(draggedLabelText);
-                            }
+                                if (
+                                    !_currentTypeLabelFilterConfig.andLabels.Contains(
+                                        draggedLabelText
+                                    )
+                                )
+                                {
+                                    _currentTypeLabelFilterConfig.andLabels.Add(draggedLabelText);
+                                    changed = true;
+                                    if (sourceSection == LabelFilterSection.OR)
+                                    {
+                                        _currentTypeLabelFilterConfig.orLabels.Remove(
+                                            draggedLabelText
+                                        );
+                                    }
+                                }
 
-                            if (sourceSection == LabelFilterSection.OR)
+                                break;
+                            }
+                            case LabelFilterSection.OR:
                             {
-                                _currentTypeLabelFilterConfig.OrLabels.Remove(draggedLabelText);
+                                if (
+                                    !_currentTypeLabelFilterConfig.orLabels.Contains(
+                                        draggedLabelText
+                                    )
+                                )
+                                {
+                                    _currentTypeLabelFilterConfig.orLabels.Add(draggedLabelText);
+                                    changed = true;
+                                    if (sourceSection == LabelFilterSection.AND)
+                                    {
+                                        _currentTypeLabelFilterConfig.andLabels.Remove(
+                                            draggedLabelText
+                                        );
+                                    }
+                                }
+
+                                break;
+                            }
+                            case LabelFilterSection.Available:
+                            {
+                                switch (sourceSection)
+                                {
+                                    case LabelFilterSection.AND:
+                                    {
+                                        changed = _currentTypeLabelFilterConfig.andLabels.Remove(
+                                            draggedLabelText
+                                        );
+                                        break;
+                                    }
+                                    case LabelFilterSection.OR:
+                                    {
+                                        changed = _currentTypeLabelFilterConfig.orLabels.Remove(
+                                            draggedLabelText
+                                        );
+                                        break;
+                                    }
+                                }
+
+                                break;
                             }
                         }
-                        else if (targetSection == LabelFilterSection.OR)
+
+                        if (changed)
                         {
-                            if (!_currentTypeLabelFilterConfig.OrLabels.Contains(draggedLabelText))
-                            {
-                                _currentTypeLabelFilterConfig.OrLabels.Add(draggedLabelText);
-                            }
-
-                            if (sourceSection == LabelFilterSection.AND)
-                            {
-                                _currentTypeLabelFilterConfig.AndLabels.Remove(draggedLabelText);
-                            }
+                            SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
+                            PopulateLabelPillContainers();
+                            ApplyLabelFilter();
                         }
-                        // If targetSection is Available, it's already removed from AND/OR, so it becomes available.
-
-                        // Ensure distinctness
-                        _currentTypeLabelFilterConfig.AndLabels = _currentTypeLabelFilterConfig
-                            .AndLabels.Distinct()
-                            .ToList();
-                        _currentTypeLabelFilterConfig.OrLabels = _currentTypeLabelFilterConfig
-                            .OrLabels.Distinct()
-                            .ToList();
-
-                        SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
-                        PopulateLabelPillContainers(); // Refresh UI
-                        ApplyLabelFilter(); // Re-filter objects
                     }
                 }
                 else
@@ -4529,74 +4681,77 @@ namespace WallstopStudios.DataVisualizer.Editor
                     Debug.LogWarning("DragPerform: Invalid drag data received.");
                 }
 
-                // Reset drag state
                 _draggedLabelText = null;
-                _draggedLabelPillVisual = null;
-                container.RemoveFromClassList("drop-target-hover"); // Clean up style
+                container.RemoveFromClassList("drop-target-hover");
                 evt.StopPropagation();
             });
         }
 
-        /// <summary>
-        /// Called when the selected ScriptableObject type changes.
-        /// Discovers labels, loads/applies persisted filter config, and updates the UI.
-        /// </summary>
         internal void UpdateLabelAreaAndFilter()
         {
-            // Clear previous state
             ClearLabelFilterUI();
-            _currentTypeLabelFilterConfig = null; // Ensure it's reset
+            _currentTypeLabelFilterConfig = null;
 
             if (_namespaceController.SelectedType == null || _selectedObjects == null)
             {
-                _filterStatusLabel.text = "";
-                // Hide filter sections
-                _availableLabelsContainer.parent.style.display = DisplayStyle.None;
-                _andLabelsContainer.parent.style.display = DisplayStyle.None;
-                _orLabelsContainer.parent.style.display = DisplayStyle.None;
-                ApplyLabelFilter(); // Will show empty object list
+                if (_filterStatusLabel != null)
+                {
+                    _filterStatusLabel.text = "";
+                }
+
+                if (_labelFilterSelectionRoot != null)
+                {
+                    _labelFilterSelectionRoot.style.display = DisplayStyle.None;
+                }
+
+                ApplyLabelFilter();
                 return;
             }
 
-            // 1. Discover unique labels for all objects of the current _selectedType
             _currentUniqueLabelsForType.Clear();
-            var labelSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var obj in _selectedObjects)
-            { // _selectedObjects contains ALL for the type
+            SortedSet<string> labelSet = new(StringComparer.OrdinalIgnoreCase);
+            foreach (ScriptableObject obj in _selectedObjects)
+            {
                 if (obj == null)
+                {
                     continue;
+                }
+
                 string[] labels = AssetDatabase.GetLabels(obj);
                 foreach (string label in labels)
                 {
                     labelSet.Add(label);
                 }
             }
-            _currentUniqueLabelsForType.AddRange(labelSet.OrderBy(l => l));
 
-            // 2. Load or create persisted filter configuration for this type
+            foreach (string label in labelSet)
+            {
+                _currentUniqueLabelsForType.Add(label);
+            }
+
             _currentTypeLabelFilterConfig = LoadOrCreateLabelFilterConfig(
                 _namespaceController.SelectedType
             );
 
-            // 3. Reconcile persisted labels: Remove any that no longer exist in _currentUniqueLabelsForType
             bool configChanged = false;
-            int removedAnd = _currentTypeLabelFilterConfig.AndLabels.RemoveAll(l =>
-                !_currentUniqueLabelsForType.Contains(l)
+            int removedAnd = _currentTypeLabelFilterConfig.andLabels.RemoveAll(label =>
+                !_currentUniqueLabelsForType.Contains(label)
             );
-            int removedOr = _currentTypeLabelFilterConfig.OrLabels.RemoveAll(l =>
-                !_currentUniqueLabelsForType.Contains(l)
+            int removedOr = _currentTypeLabelFilterConfig.orLabels.RemoveAll(label =>
+                !_currentUniqueLabelsForType.Contains(label)
             );
+
             if (removedAnd > 0 || removedOr > 0)
+            {
                 configChanged = true;
+            }
 
-            // If config changed due to reconciliation, save it
             if (configChanged)
+            {
                 SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
+            }
 
-            // 4. Populate the UI containers (Available, AND, OR) with label pills
             PopulateLabelPillContainers();
-
-            // 5. Apply the filter to the object list
             ApplyLabelFilter();
         }
 
@@ -4606,18 +4761,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             _andLabelsContainer?.Clear();
             _orLabelsContainer?.Clear();
             _currentUniqueLabelsForType.Clear();
-            // _currentTypeLabelFilterConfig is reset by LoadOrCreate...
         }
 
         private List<string> GetCurrentlyAvailableLabels()
         {
             if (_currentTypeLabelFilterConfig == null)
+            {
                 return _currentUniqueLabelsForType.ToList();
+            }
+
             return _currentUniqueLabelsForType
                 .Where(l =>
                     !(
-                        _currentTypeLabelFilterConfig.AndLabels.Contains(l)
-                        && _currentTypeLabelFilterConfig.OrLabels.Contains(l)
+                        _currentTypeLabelFilterConfig.andLabels.Contains(l)
+                        && _currentTypeLabelFilterConfig.orLabels.Contains(l)
                     )
                 )
                 .ToList();
@@ -4625,45 +4782,28 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void PopulateLabelPillContainers()
         {
-            var availableLabels = GetCurrentlyAvailableLabels();
+            List<string> availableLabels = GetCurrentlyAvailableLabels();
             PopulateSingleLabelContainer(
                 _availableLabelsContainer,
-                GetCurrentlyAvailableLabels(),
+                availableLabels,
                 LabelFilterSection.Available
             );
             PopulateSingleLabelContainer(
                 _andLabelsContainer,
-                _currentTypeLabelFilterConfig.AndLabels,
+                _currentTypeLabelFilterConfig.andLabels,
                 LabelFilterSection.AND
             );
             PopulateSingleLabelContainer(
                 _orLabelsContainer,
-                _currentTypeLabelFilterConfig.OrLabels,
+                _currentTypeLabelFilterConfig.orLabels,
                 LabelFilterSection.OR
             );
 
-            // Control visibility of AND/OR sections
-            bool hasActiveFilters = true;
-            // bool hasActiveFilters =
-            //     (
-            //         _currentTypeLabelFilterConfig.AndLabels != null
-            //         && _currentTypeLabelFilterConfig.AndLabels.Any()
-            //     )
-            //     || (
-            //         _currentTypeLabelFilterConfig.OrLabels != null
-            //         && _currentTypeLabelFilterConfig.OrLabels.Any()
-            //     );
-
-            _andLabelsContainer.parent.style.display = hasActiveFilters
-                ? DisplayStyle.Flex
-                : DisplayStyle.None;
-            _orLabelsContainer.parent.style.display = hasActiveFilters
-                ? DisplayStyle.Flex
-                : DisplayStyle.None;
-            // Available labels visibility depends on whether there are any labels not in AND/OR
-            _availableLabelsContainer.parent.style.display = availableLabels.Any()
-                ? DisplayStyle.Flex
-                : DisplayStyle.None;
+            if (_labelFilterSelectionRoot != null)
+            {
+                _labelFilterSelectionRoot.style.display =
+                    availableLabels.Count != 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            }
         }
 
         private void PopulateSingleLabelContainer(
@@ -4672,181 +4812,121 @@ namespace WallstopStudios.DataVisualizer.Editor
             LabelFilterSection section
         )
         {
+            if (container == null)
+            {
+                return;
+            }
             container.Clear();
             if (labels == null)
+            {
                 return;
-            foreach (string labelText in labels.OrderBy(l => l))
-            { // Keep alphabetical
+            }
+
+            foreach (string labelText in labels.OrderBy(label => label))
+            {
                 container.Add(CreateLabelPill(labelText, section));
             }
         }
 
-        // Inside DataVisualizer.cs
         private VisualElement CreateLabelPill(string labelText, LabelFilterSection currentSection)
         {
-            // Main container for the pill (label + optional X button)
-            var pillContainer = new VisualElement
+            Color labelColor = GetColorForLabel(labelText);
+            VisualElement pillContainer = new()
             {
                 name = $"label-pill-container-{labelText.Replace(" ", "-").ToLowerInvariant()}",
-                style =
-                {
-                    flexDirection = FlexDirection.Row, // Arrange label and X button horizontally
-                    alignItems = Align.Center,
-                    marginRight = 3,
-                    paddingLeft = 6,
-                    paddingRight = 2, // Adjust padding for X button
-                    paddingTop = 1,
-                    paddingBottom = 1,
-                    borderBottomWidth = 0,
-                    borderTopWidth = 0,
-                    borderLeftWidth = 0,
-                    borderRightWidth = 0,
-                    borderTopLeftRadius = 3,
-                    borderTopRightRadius = 3,
-                    borderBottomLeftRadius = 3,
-                    borderBottomRightRadius = 3,
-                    backgroundColor = GetColorForLabel(labelText), // Color the whole pill container
-                },
+                style = { backgroundColor = labelColor },
+                userData = labelText,
             };
-            pillContainer.AddToClassList("label-pill-container"); // New base class for styling
-            pillContainer.userData = labelText; // Store label text for convenience
+            pillContainer.AddToClassList("label-pill");
 
-            // Label part of the pill
-            var labelElement = new Label(labelText)
+            Label labelElement = new(labelText)
             {
                 style =
                 {
-                    color = IsColorDark(pillContainer.style.backgroundColor.value)
-                        ? Color.white
-                        : Color.black,
+                    color = IsColorDark(labelColor) ? Color.white : Color.black,
                     marginRight =
                         currentSection == LabelFilterSection.AND
                         || currentSection == LabelFilterSection.OR
                             ? 2
-                            : 0, // Space before X
+                            : 0,
                 },
             };
-            labelElement.AddToClassList("label-pill-text"); // New class for styling text part
-            labelElement.pickingMode = PickingMode.Ignore; // Label itself shouldn't interfere with parent's drag
+            labelElement.AddToClassList("label-pill-text");
+            labelElement.pickingMode = PickingMode.Ignore;
             pillContainer.Add(labelElement);
 
             pillContainer.RegisterCallback<PointerDownEvent>(evt =>
             {
-                if (evt.button == 0) // Left click
+                if (evt.button == 0)
                 {
-                    // Prepare for drag
                     _draggedLabelText = labelText;
                     _dragSourceSection = currentSection;
-                    _draggedLabelPillVisual = pillContainer; // Store a reference to the visual being dragged
 
                     DragAndDrop.PrepareStartDrag();
-                    // Store data to be retrieved on drop
                     DragAndDrop.SetGenericData("DraggedLabelText", _draggedLabelText);
                     DragAndDrop.SetGenericData("SourceSection", _dragSourceSection.ToString());
-
-                    // Provide object references for visual feedback (optional, Unity might create a ghost)
-                    DragAndDrop.objectReferences = new UnityEngine.Object[] { }; // Empty for now
-
-                    // Start the drag
-                    // Debug.Log($"Starting drag for '{_draggedLabelText}' from {currentSection}");
-                    DragAndDrop.StartDrag(labelText); // Title of the drag operation
-
-                    // Change cursor while dragging (might be handled by OS/Unity)
-                    // pillContainer.style.cursor = CursorStyle.Grabbing;
-
-                    evt.StopPropagation(); // Consume the event to prevent other actions
+                    DragAndDrop.StartDrag(labelText);
+                    evt.StopPropagation();
                 }
             });
 
-            // Interaction depends on the section
-            if (currentSection == LabelFilterSection.Available)
+            switch (currentSection)
             {
-                pillContainer.tooltip = $"Drag '{labelText}' to an AND/OR filter section.";
-            }
-            else // AND or OR sections
-            {
-                // Add "X" button for removal
-                var removeButton = new Button(() => RemoveLabelFromFilter(labelText, currentSection)
-                )
+                case LabelFilterSection.Available:
                 {
-                    text = "x",
-                    name = $"remove-label-{labelText.Replace(" ", "-")}",
-                    tooltip = $"Remove '{labelText}' from filter",
-                };
-                removeButton.AddToClassList("label-pill-remove-button"); // New class for X button styling
-                removeButton.AddToClassList(StyleConstants.ClickableClass);
-                // Style the X button to be very small and discreet
-                removeButton.style.unityFontStyleAndWeight = FontStyle.Bold;
-                removeButton.style.fontSize = 16;
-                removeButton.style.paddingLeft = 2;
-                removeButton.style.paddingRight = 4;
-                removeButton.style.paddingTop = 2;
-                removeButton.style.paddingBottom = 2;
-                removeButton.style.backgroundColor = Color.clear;
-                removeButton.style.borderBottomWidth = 0;
-                removeButton.style.borderTopWidth = 0;
-                removeButton.style.borderLeftWidth = 0;
-                removeButton.style.borderRightWidth = 0;
-                removeButton.style.color = labelElement.style.color.value; // Match text color
-                pillContainer.Add(removeButton);
+                    pillContainer.tooltip = $"Drag '{labelText}' to an AND/OR filter section.";
+                    break;
+                }
+                case LabelFilterSection.AND:
+                case LabelFilterSection.OR:
+                {
+                    // Add "X" button for removal
+                    Button removeButton = new(() => RemoveLabelFromFilter(labelText, currentSection)
+                    )
+                    {
+                        text = "x",
+                        name = $"remove-label-{labelText.Replace(" ", "-")}",
+                        tooltip = $"Remove '{labelText}' from filter",
+                        style = { color = labelElement.style.color.value },
+                    };
+                    removeButton.AddToClassList("label-pill-remove-button");
+                    removeButton.AddToClassList(StyleConstants.ClickableClass);
+                    pillContainer.Add(removeButton);
+                    break;
+                }
+                default:
+                {
+                    throw new InvalidEnumArgumentException(
+                        nameof(currentSection),
+                        (int)currentSection,
+                        typeof(LabelFilterSection)
+                    );
+                }
             }
             return pillContainer;
         }
 
-        // Inside DataVisualizer.cs
-
-        // Called when clicking the main body of a label pill (or an "Available" pill)
-        private void OnLabelPillClicked(string labelText, LabelFilterSection currentSection)
-        {
-            if (_currentTypeLabelFilterConfig == null)
-                return;
-
-            // Remove from all lists first (safe)
-            _currentTypeLabelFilterConfig.AndLabels.Remove(labelText);
-            _currentTypeLabelFilterConfig.OrLabels.Remove(labelText);
-
-            // Add to the next section in the cycle
-            switch (currentSection)
-            {
-                case LabelFilterSection.Available: // Clicked "Available" -> Moves to "AND"
-                    _currentTypeLabelFilterConfig.AndLabels.Add(labelText);
-                    break;
-                case LabelFilterSection.AND: // Clicked "AND" (label part) -> Moves to "OR"
-                    _currentTypeLabelFilterConfig.OrLabels.Add(labelText);
-                    break;
-                case LabelFilterSection.OR: // Clicked "OR" (label part) -> Becomes "Available"
-                    // Removed from OR above, so it's now available by default
-                    break;
-            }
-
-            // Ensure distinctness and save
-            _currentTypeLabelFilterConfig.AndLabels = _currentTypeLabelFilterConfig
-                .AndLabels.Distinct()
-                .ToList();
-            _currentTypeLabelFilterConfig.OrLabels = _currentTypeLabelFilterConfig
-                .OrLabels.Distinct()
-                .ToList();
-
-            SaveLabelFilterConfig(_currentTypeLabelFilterConfig);
-            PopulateLabelPillContainers(); // Refresh label UI
-            ApplyLabelFilter(); // Re-filter objects
-        }
-
-        // Called by the 'X' button on label pills in AND or OR sections
         private void RemoveLabelFromFilter(string labelText, LabelFilterSection sectionItWasIn)
         {
             if (_currentTypeLabelFilterConfig == null)
+            {
                 return;
+            }
+
             bool changed = false;
 
-            // Remove from the specific list it was in
-            if (sectionItWasIn == LabelFilterSection.AND)
+            switch (sectionItWasIn)
             {
-                changed = _currentTypeLabelFilterConfig.AndLabels.Remove(labelText);
-            }
-            else if (sectionItWasIn == LabelFilterSection.OR)
-            {
-                changed = _currentTypeLabelFilterConfig.OrLabels.Remove(labelText);
+                case LabelFilterSection.AND:
+                {
+                    changed = _currentTypeLabelFilterConfig.andLabels.Remove(labelText);
+                    break;
+                }
+                case LabelFilterSection.OR:
+                {
+                    changed = _currentTypeLabelFilterConfig.orLabels.Remove(labelText);
+                    break;
+                }
             }
 
             if (changed)
@@ -4857,59 +4937,76 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        /// <summary>
-        /// Filters _selectedObjects into _filteredObjects based on current label config.
-        /// </summary>
         private void ApplyLabelFilter()
         {
             if (_namespaceController.SelectedType == null || _selectedObjects == null)
-            { // Ensure type is selected
+            {
                 _filteredObjects.Clear();
-                _filterStatusLabel.text = "Select a type to see objects.";
-                BuildObjectsView(); // Rebuild with empty list
+                if (_filterStatusLabel != null)
+                {
+                    _filterStatusLabel.text = "Select a type to see objects.";
+                }
+
+                BuildObjectsView();
                 return;
             }
             if (_currentTypeLabelFilterConfig == null)
-            { // Should be loaded by UpdateLabelAreaAndFilter
+            {
                 _currentTypeLabelFilterConfig = LoadOrCreateLabelFilterConfig(
                     _namespaceController.SelectedType
                 );
             }
 
+            switch (_currentTypeLabelFilterConfig.combinationType)
+            {
+                case LabelCombinationType.And:
+                {
+                    _andOrToggle?.SelectLeft(force: true);
+                    break;
+                }
+                case LabelCombinationType.Or:
+                {
+                    _andOrToggle?.SelectRight(force: true);
+                    break;
+                }
+            }
+
             _filteredObjects.Clear();
-            var andLabels = _currentTypeLabelFilterConfig.AndLabels;
-            var orLabels = _currentTypeLabelFilterConfig.OrLabels;
+            List<string> andLabels = _currentTypeLabelFilterConfig.andLabels;
+            List<string> orLabels = _currentTypeLabelFilterConfig.orLabels;
 
             bool noAndFilter = andLabels == null || andLabels.Count == 0;
             bool noOrFilter = orLabels == null || orLabels.Count == 0;
 
             if (noAndFilter && noOrFilter)
             {
-                foreach (var selectedObject in _selectedObjects)
+                foreach (ScriptableObject selectedObject in _selectedObjects)
                 {
                     _filteredObjects.Add(selectedObject);
                 }
             }
             else
             {
-                foreach (var obj in _selectedObjects)
+                foreach (ScriptableObject obj in _selectedObjects)
                 {
                     if (obj == null)
+                    {
                         continue;
+                    }
+
                     string[] objLabelsArray = AssetDatabase.GetLabels(obj);
-                    var objLabelsSet = new HashSet<string>(
-                        objLabelsArray,
-                        StringComparer.OrdinalIgnoreCase
-                    );
+                    HashSet<string> objLabelsSet = new(objLabelsArray, StringComparer.Ordinal);
 
                     bool matchesAnd =
                         noAndFilter
-                        || andLabels.All(filterLabel => objLabelsSet.Contains(filterLabel));
+                        || andLabels.TrueForAll(filterLabel => objLabelsSet.Contains(filterLabel));
                     bool matchesOr =
                         noOrFilter
-                        || orLabels.Any(filterLabel => objLabelsSet.Contains(filterLabel));
+                        || orLabels.Exists(filterLabel => objLabelsSet.Contains(filterLabel));
 
-                    switch (_labelCombinationType)
+                    switch (
+                        _currentTypeLabelFilterConfig?.combinationType ?? LabelCombinationType.And
+                    )
                     {
                         case LabelCombinationType.And:
                         {
@@ -4929,38 +5026,32 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                             break;
                         }
-                        default:
-                        {
-                            throw new InvalidEnumArgumentException(
-                                nameof(_labelCombinationType),
-                                (int)_labelCombinationType,
-                                typeof(LabelCombinationType)
-                            );
-                        }
                     }
                 }
             }
 
             int totalCount = _selectedObjects.Count;
             int shownCount = _filteredObjects.Count;
-            if (shownCount == totalCount)
+            if (_filterStatusLabel != null)
             {
-                _filterStatusLabel.style.display = DisplayStyle.None;
-            }
-            else
-            {
-                _filterStatusLabel.style.display = DisplayStyle.Flex;
-                int hidden = totalCount - shownCount;
-                _filterStatusLabel.text =
-                    hidden < 20 && hidden != totalCount
-                        ? $"<b><color=yellow>{hidden}</color></b> objects hidden by label filter."
-                        : $"<b><color=red>{hidden}</color></b> objects hidden by label filter.";
+                if (shownCount == totalCount)
+                {
+                    _filterStatusLabel.style.display = DisplayStyle.None;
+                }
+                else
+                {
+                    _filterStatusLabel.style.display = DisplayStyle.Flex;
+                    int hidden = totalCount - shownCount;
+                    _filterStatusLabel.text =
+                        hidden < 20 && hidden != totalCount
+                            ? $"<b><color=yellow>{hidden}</color></b> objects hidden by label filter."
+                            : $"<b><color=red>{hidden}</color></b> objects hidden by label filter.";
+                }
             }
 
-            BuildObjectsView(); // Rebuild the object list view with the new _filteredObjects
+            BuildObjectsView();
         }
 
-        // --- Persistence Helpers ---
         private TypeLabelFilterConfig LoadOrCreateLabelFilterConfig(Type type)
         {
             TypeLabelFilterConfig config = null;
@@ -4975,15 +5066,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                     config = settings.labelFilterConfigs.Find(existingConfig =>
                         string.Equals(
-                            existingConfig.TypeFullName,
+                            existingConfig.typeFullName,
                             type.FullName,
                             StringComparison.Ordinal
                         )
                     );
                     if (config == null)
                     {
-                        config = new TypeLabelFilterConfig();
-                        config.TypeFullName = type.FullName;
+                        config = new TypeLabelFilterConfig { typeFullName = type.FullName };
                         settings.labelFilterConfigs.Add(config);
                         dirty = true;
                     }
@@ -4999,15 +5089,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                     config = userState.labelFilterConfigs.Find(existingConfig =>
                         string.Equals(
-                            existingConfig.TypeFullName,
+                            existingConfig.typeFullName,
                             type.FullName,
                             StringComparison.Ordinal
                         )
                     );
                     if (config == null)
                     {
-                        config = new TypeLabelFilterConfig();
-                        config.TypeFullName = type.FullName;
+                        config = new TypeLabelFilterConfig { typeFullName = type.FullName };
                         userState.labelFilterConfigs.Add(config);
                         dirty = true;
                     }
@@ -5026,8 +5115,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     TypeLabelFilterConfig existing = settings.labelFilterConfigs.Find(
                         existingConfig =>
                             string.Equals(
-                                existingConfig.TypeFullName,
-                                config.TypeFullName,
+                                existingConfig.typeFullName,
+                                config.typeFullName,
                                 StringComparison.Ordinal
                             )
                     );
@@ -5048,8 +5137,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     TypeLabelFilterConfig existing = userState.labelFilterConfigs.Find(
                         existingConfig =>
                             string.Equals(
-                                existingConfig.TypeFullName,
-                                config.TypeFullName,
+                                existingConfig.typeFullName,
+                                config.typeFullName,
                                 StringComparison.Ordinal
                             )
                     );
@@ -5070,10 +5159,15 @@ namespace WallstopStudios.DataVisualizer.Editor
         // --- Color Helpers for Labels ---
         private Color GetColorForLabel(string labelText)
         {
-            if (string.IsNullOrEmpty(labelText))
+            if (string.IsNullOrWhiteSpace(labelText))
+            {
                 return Color.gray;
+            }
+
             if (_labelColorCache.TryGetValue(labelText, out Color color))
+            {
                 return color;
+            }
 
             if (_nextColorIndex < _predefinedLabelColors.Count)
             {
@@ -5253,7 +5347,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 // If _selectedObjects has items, then filter is active and hiding all
                 if (_selectedObjects != null && _selectedObjects.Any())
                 {
-                    var noMatchLabel = new Label(
+                    Label noMatchLabel = new(
                         $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' match the current label filter."
                     )
                     {
@@ -5264,7 +5358,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 else
                 {
-                    var noMatchLabel = new Label(
+                    Label noMatchLabel = new(
                         $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' found."
                     )
                     {
@@ -5573,71 +5667,58 @@ namespace WallstopStudios.DataVisualizer.Editor
                     Debug.LogError($"Error creating asset name display field: {ex}");
                 }
 
-                if (_selectedObject != null) // Only show if an object is selected
+                _inspectorLabelsSection = new VisualElement
                 {
-                    // Create the main container for this section if it doesn't exist or needs rebuilding
-                    _inspectorLabelsSection = new VisualElement
-                    {
-                        name = "inspector-labels-section",
-                    };
-                    _inspectorLabelsSection.style.marginTop = 5; // Space above the section
-                    _inspectorLabelsSection.style.marginBottom = 10; // Space below the section
+                    name = "inspector-labels-section",
+                    style = { marginTop = 5, marginBottom = 10 },
+                };
 
-                    var sectionHeader = new Label("Asset Labels:")
-                    {
-                        style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 3 },
-                    };
-                    _inspectorLabelsSection.Add(sectionHeader);
+                Label sectionHeader = new("Asset Labels:")
+                {
+                    style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 3 },
+                };
+                _inspectorLabelsSection.Add(sectionHeader);
 
-                    // Container for displaying current labels as interactive pills
-                    _inspectorCurrentLabelsContainer = new VisualElement
+                _inspectorCurrentLabelsContainer = new VisualElement
+                {
+                    name = "inspector-current-labels",
+                    style =
                     {
-                        name = "inspector-current-labels",
-                        style =
-                        {
-                            flexDirection = FlexDirection.Row, // Arrange pills horizontally
-                            flexWrap = Wrap.Wrap, // Allow pills to wrap to next line
-                            marginBottom = 5, // Space before the "add label" input
-                        },
-                    };
-                    _inspectorLabelsSection.Add(_inspectorCurrentLabelsContainer);
+                        flexDirection = FlexDirection.Row,
+                        flexWrap = Wrap.Wrap,
+                        marginBottom = 5,
+                    },
+                };
+                _inspectorLabelsSection.Add(_inspectorCurrentLabelsContainer);
 
-                    // Input area for adding new labels
-                    var addLabelRow = new VisualElement
+                VisualElement addLabelRow = new()
+                {
+                    style =
                     {
-                        style =
-                        {
-                            flexDirection = FlexDirection.Row,
-                            alignItems = Align.Center,
-                            position = Position.Relative,
-                        },
-                    };
-                    _inspectorNewLabelInput = new TextField
-                    {
-                        name = "inspector-new-label-input",
-                        style = { flexGrow = 1, marginRight = 5 },
-                    };
-                    // --- Setup for Suggestions ---
-                    _inspectorNewLabelInput.RegisterValueChangedCallback(evt =>
-                        UpdateLabelSuggestions(evt.newValue)
-                    );
-                    _inspectorNewLabelInput.RegisterCallback<FocusInEvent>(evt =>
-                        OnNewLabelInputFocus()
-                    );
-                    _inspectorNewLabelInput.RegisterCallback<KeyDownEvent>(
-                        HandleNewLabelInputKeyDown
-                    );
-                    // FocusOut is tricky; click-outside on popover is generally better
-                    _inspectorNewLabelInput.RegisterCallback<FocusOutEvent>(OnNewLabelInputBlur);
+                        flexDirection = FlexDirection.Row,
+                        alignItems = Align.Center,
+                        position = Position.Relative,
+                    },
+                };
+                _inspectorNewLabelInput = new TextField
+                {
+                    name = "inspector-new-label-input",
+                    style = { flexGrow = 1, marginRight = 5 },
+                };
+                _inspectorNewLabelInput.RegisterValueChangedCallback(evt =>
+                    UpdateLabelSuggestions(evt.newValue)
+                );
+                _inspectorNewLabelInput.RegisterCallback<FocusInEvent>(_ => OnNewLabelInputFocus());
+                _inspectorNewLabelInput.RegisterCallback<KeyDownEvent>(HandleNewLabelInputKeyDown);
+                _inspectorNewLabelInput.RegisterCallback<FocusOutEvent>(OnNewLabelInputBlur);
 
-                    addLabelRow.Add(_inspectorNewLabelInput);
-                    var addLabelButton = new Button(AddLabelToSelectedAsset) { text = "Add" };
-                    addLabelRow.Add(addLabelButton);
-                    _inspectorLabelsSection.Add(addLabelRow);
+                addLabelRow.Add(_inspectorNewLabelInput);
+                Button addLabelButton = new(AddLabelToSelectedAsset) { text = "Add" };
+                addLabelRow.Add(addLabelButton);
+                _inspectorLabelsSection.Add(addLabelRow);
 
-                    _inspectorContainer.Add(_inspectorLabelsSection);
-                    PopulateInspectorLabelsUI();
-                }
+                _inspectorContainer.Add(_inspectorLabelsSection);
+                PopulateInspectorLabelsUI();
             }
 
             // ReSharper disable once RedundantAssignment
@@ -5777,15 +5858,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             return null;
         }
 
-        // --- Logic for Inspector Label Suggestions ---
-
         private void OnNewLabelInputFocus()
         {
             if (!_isLabelCachePopulated)
             {
                 PopulateProjectUniqueLabelsCache();
             }
-            // Show suggestions if there's already text in the field
             if (!string.IsNullOrWhiteSpace(_inspectorNewLabelInput.value) && _isLabelCachePopulated)
             {
                 UpdateLabelSuggestions(_inspectorNewLabelInput.value);
@@ -5794,24 +5872,27 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnNewLabelInputBlur(FocusOutEvent evt)
         {
-            // If focus moves to an element within the suggestions popover, don't close.
-            VisualElement focusedElement = evt.relatedTarget as VisualElement;
-            if (_inspectorLabelSuggestionsPopover != null && focusedElement != null)
+            if (
+                _inspectorLabelSuggestionsPopover != null
+                && evt.relatedTarget is VisualElement focusedElement
+            )
             {
                 VisualElement current = focusedElement;
                 while (current != null)
                 {
                     if (current == _inspectorLabelSuggestionsPopover)
-                        return; // Focus moved to suggestions
+                    {
+                        return;
+                    }
+
                     current = current.parent;
                 }
             }
-            // Otherwise, close after a tiny delay if no suggestion was immediately clicked
             if (_activePopover == _inspectorLabelSuggestionsPopover)
             {
-                this.rootVisualElement.schedule.Execute(() =>
+                rootVisualElement
+                    .schedule.Execute(() =>
                     {
-                        // Only close if focus didn't go back to input or into popover
                         if (
                             _activePopover?.focusController?.focusedElement
                                 != _inspectorNewLabelInput
@@ -5825,44 +5906,51 @@ namespace WallstopStudios.DataVisualizer.Editor
                             CloseActivePopover();
                         }
                     })
-                    .ExecuteLater(100); // ms delay
+                    .ExecuteLater(100);
             }
         }
 
         private void PopulateProjectUniqueLabelsCache()
         {
-            if (_isLabelCachePopulated && _projectUniqueLabelsCache.Any())
-                return; // Avoid frequent rescans
+            if (_isLabelCachePopulated && _projectUniqueLabelsCache.Count > 0)
+            {
+                return;
+            }
 
-            Debug.Log("Populating project-wide unique labels cache...");
             _projectUniqueLabelsCache.Clear();
-            var allLabelsSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var dataObject in _allManagedObjectsCache)
+            SortedSet<string> allLabelsSet = new(StringComparer.Ordinal);
+            foreach (ScriptableObject dataObject in _allManagedObjectsCache)
             {
                 string[] labels = AssetDatabase.GetLabels(dataObject);
                 foreach (string label in labels)
                 {
                     if (!string.IsNullOrWhiteSpace(label))
+                    {
                         allLabelsSet.Add(label.Trim());
+                    }
                 }
             }
 
-            _projectUniqueLabelsCache.AddRange(allLabelsSet);
-            _projectUniqueLabelsCache.Sort();
+            foreach (string label in allLabelsSet)
+            {
+                _projectUniqueLabelsCache.Add(label);
+            }
             _isLabelCachePopulated = true;
-            Debug.Log(
-                $"Project unique labels cache populated with {_projectUniqueLabelsCache.Count} labels."
-            );
         }
 
         private void UpdateLabelSuggestions(string currentInput)
         {
             if (_inspectorLabelSuggestionsPopover == null)
+            {
                 return;
-            if (!_isLabelCachePopulated)
-                PopulateProjectUniqueLabelsCache(); // Ensure cache exists
+            }
 
-            if (_activePopover == null && _projectUniqueLabelsCache.Count != 0)
+            if (!_isLabelCachePopulated)
+            {
+                PopulateProjectUniqueLabelsCache();
+            }
+
+            if (_activePopover == null && _projectUniqueLabelsCache.Count > 0)
             {
                 OpenPopover(
                     _inspectorLabelSuggestionsPopover,
@@ -5873,57 +5961,55 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _currentLabelSuggestionItems.Clear();
             _labelSuggestionHighlightIndex = -1;
-            _inspectorLabelSuggestionsPopover.Clear(); // Clear previous suggestion VEs
+            _inspectorLabelSuggestionsPopover.Clear();
 
             if (string.IsNullOrWhiteSpace(currentInput))
             {
                 if (_activePopover == _inspectorLabelSuggestionsPopover)
+                {
                     CloseActivePopover();
+                }
                 return;
             }
 
-            string lowerInput = currentInput.ToLowerInvariant();
             string[] currentAssetLabelsArray =
                 _selectedObject != null
                     ? AssetDatabase.GetLabels(_selectedObject)
                     : Array.Empty<string>();
-            var currentAssetLabelsSet = new HashSet<string>(
+            HashSet<string> currentAssetLabelsSet = new(
                 currentAssetLabelsArray,
-                StringComparer.OrdinalIgnoreCase
+                StringComparer.Ordinal
             );
 
             List<string> suggestions = _projectUniqueLabelsCache
                 .Where(label =>
-                    label.ToLowerInvariant().Contains(lowerInput)
+                    label.Contains(currentInput, StringComparison.OrdinalIgnoreCase)
                     && !currentAssetLabelsSet.Contains(label)
-                ) // Don't suggest already applied labels
-                .Take(10) // Limit suggestions shown
+                )
+                .Take(10)
                 .ToList();
 
             if (suggestions.Count > 0)
             {
                 foreach (string suggestionText in suggestions)
                 {
-                    // Use CreateHighlightedLabel to show matches
-                    var suggestionItem = CreateHighlightedLabel(
+                    Label suggestionItem = CreateHighlightedLabel(
                         suggestionText,
                         new List<string> { currentInput },
                         LabelSuggestionItemClass
                     );
-                    suggestionItem.userData = suggestionText; // Store the raw suggestion text
-                    // Use PointerUp for clicks to avoid focus issues with TextField
+                    suggestionItem.userData = suggestionText;
                     suggestionItem.RegisterCallback<PointerUpEvent>(evt =>
                     {
                         if (evt.button == 0 && suggestionItem.userData is string clickedSuggestion)
                         {
                             _inspectorNewLabelInput.SetValueWithoutNotify(clickedSuggestion);
-                            _inspectorNewLabelInput.Focus(); // Bring focus back to input
-                            AddLabelToSelectedAsset(); // Attempt to add it
-                            CloseActivePopover(); // Close suggestions
+                            _inspectorNewLabelInput.Focus();
+                            AddLabelToSelectedAsset();
+                            CloseActivePopover();
                             evt.StopPropagation();
                         }
                     });
-                    // Add hover for visual feedback
                     suggestionItem.RegisterCallback<MouseEnterEvent>(evt =>
                         suggestionItem.style.backgroundColor = new Color(0.35f, 0.35f, 0.35f)
                     );
@@ -5933,31 +6019,16 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _inspectorLabelSuggestionsPopover.Add(suggestionItem);
                     _currentLabelSuggestionItems.Add(suggestionItem);
                 }
-
-                // // --- Open/Position the Suggestions Popover ---
-                // // Ensure the popover's width matches the input field's width
-                // _inspectorNewLabelInput
-                //     .schedule.Execute(() =>
-                //     { // Wait for input field layout
-                //         if (_inspectorNewLabelInput.panel != null)
-                //         { // Check if part of panel
-                //             _inspectorLabelSuggestionsPopover.style.width = _inspectorNewLabelInput
-                //                 .resolvedStyle
-                //                 .width;
-                //             OpenPopover(_inspectorLabelSuggestionsPopover, _inspectorNewLabelInput);
-                //             UpdateLabelSuggestionHighlight(); // Clear any previous keyboard highlight
-                //         }
-                //     })
-                //     .ExecuteLater(1);
             }
             else
             {
                 if (_activePopover == _inspectorLabelSuggestionsPopover)
+                {
                     CloseActivePopover();
+                }
             }
         }
 
-        // Handles keyboard for label suggestions text field
         private void HandleNewLabelInputKeyDown(KeyDownEvent evt)
         {
             if (
@@ -5965,10 +6036,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 || _currentLabelSuggestionItems.Count == 0
             )
             {
-                // If popover not for suggestions, or no suggestions, let TextField handle keys (except Enter for add)
-                if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
+                if (evt.keyCode is KeyCode.Return or KeyCode.KeypadEnter)
                 {
-                    AddLabelToSelectedAsset(); // Standard add on Enter
+                    AddLabelToSelectedAsset();
                     evt.PreventDefault();
                     evt.StopPropagation();
                 }
@@ -5979,19 +6049,30 @@ namespace WallstopStudios.DataVisualizer.Editor
             switch (evt.keyCode)
             {
                 case KeyCode.DownArrow:
+                {
                     _labelSuggestionHighlightIndex++;
                     if (_labelSuggestionHighlightIndex >= _currentLabelSuggestionItems.Count)
+                    {
                         _labelSuggestionHighlightIndex = 0;
+                    }
+
                     highlightChanged = true;
                     break;
+                }
                 case KeyCode.UpArrow:
+                {
                     _labelSuggestionHighlightIndex--;
                     if (_labelSuggestionHighlightIndex < 0)
+                    {
                         _labelSuggestionHighlightIndex = _currentLabelSuggestionItems.Count - 1;
+                    }
+
                     highlightChanged = true;
                     break;
+                }
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter:
+                {
                     if (
                         _labelSuggestionHighlightIndex >= 0
                         && _labelSuggestionHighlightIndex < _currentLabelSuggestionItems.Count
@@ -6003,77 +6084,85 @@ namespace WallstopStudios.DataVisualizer.Editor
                         )
                         {
                             _inspectorNewLabelInput.SetValueWithoutNotify(selectedSuggestion);
-                            AddLabelToSelectedAsset(); // Add selected suggestion
-                            CloseActivePopover(); // Close suggestions
+                            AddLabelToSelectedAsset();
+                            CloseActivePopover();
                         }
                     }
                     else
                     {
-                        // No suggestion highlighted, so treat Enter as confirming the typed text
                         AddLabelToSelectedAsset();
                         CloseActivePopover();
                     }
+
                     evt.PreventDefault();
                     evt.StopPropagation();
                     break;
+                }
                 case KeyCode.Escape:
-                    CloseActivePopover(); // Close suggestions on Escape
+                {
+                    CloseActivePopover();
                     evt.PreventDefault();
                     evt.StopPropagation();
                     break;
+                }
                 default:
-                    return; // Let other keys (text input) pass through
+                {
+                    return;
+                }
             }
 
             if (highlightChanged)
             {
                 UpdateLabelSuggestionHighlight();
                 evt.PreventDefault();
-                evt.StopPropagation(); // Stop arrow keys moving cursor in text field
+                evt.StopPropagation();
             }
         }
 
-        // Updates visual highlight for label suggestions
         private void UpdateLabelSuggestionHighlight()
         {
             if (_currentLabelSuggestionItems == null || _inspectorLabelSuggestionsPopover == null)
+            {
                 return;
-            var scrollView = _inspectorLabelSuggestionsPopover.Q<ScrollView>(); // Assuming it contains one
+            }
+
+            ScrollView scrollView = _inspectorLabelSuggestionsPopover.Q<ScrollView>();
 
             for (int i = 0; i < _currentLabelSuggestionItems.Count; i++)
             {
-                var item = _currentLabelSuggestionItems[i];
+                VisualElement item = _currentLabelSuggestionItems[i];
                 if (item == null)
+                {
                     continue;
-                bool shouldHighlight = (i == _labelSuggestionHighlightIndex);
-                item.EnableInClassList(PopoverHighlightClass, shouldHighlight); // Use generic highlight class
+                }
+
+                bool shouldHighlight = i == _labelSuggestionHighlightIndex;
+                item.EnableInClassList(PopoverHighlightClass, shouldHighlight);
                 if (shouldHighlight && scrollView != null)
                 {
                     item.schedule.Execute(() =>
                         {
                             if (item.panel != null)
+                            {
                                 scrollView.ScrollTo(item);
+                            }
                         })
                         .ExecuteLater(1);
                 }
             }
         }
 
-        /// <summary>
-        /// Populates the inspector's label area with pills for the currently selected object.
-        /// </summary>
         private void PopulateInspectorLabelsUI()
         {
-            // Ensure the container VE exists (it's created in BuildInspectorView)
-            // and an object is actually selected.
             if (_inspectorCurrentLabelsContainer == null || _selectedObject == null)
             {
-                _inspectorCurrentLabelsContainer?.Clear(); // Clear if no object or container missing
+                _inspectorCurrentLabelsContainer?.Clear();
                 return;
             }
-            _inspectorCurrentLabelsContainer.Clear(); // Clear previous pills
+            _inspectorCurrentLabelsContainer.Clear();
 
             string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
+            Array.Sort(currentLabels);
 
             if (currentLabels.Length == 0)
             {
@@ -6091,102 +6180,59 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            // Display labels alphabetically
-            foreach (string labelText in currentLabels.OrderBy(l => l))
+            foreach (string labelText in currentLabels)
             {
-                // Create a container for each pill (label text + remove button)
-                var pillContainer = new VisualElement
+                Color backgroundColor = GetColorForLabel(labelText);
+                VisualElement pillContainer = new()
                 {
                     name = $"inspector-label-pill-{labelText.Replace(" ", "-").ToLowerInvariant()}",
-                    style =
-                    {
-                        flexDirection = FlexDirection.Row, // Arrange text and 'x' side-by-side
-                        alignItems = Align.Center, // Vertically center text and 'x'
-                        marginRight = 4, // Spacing between pills
-                        marginBottom = 4, // Spacing for wrapped pills
-                        paddingLeft = 6,
-                        paddingRight = 2, // Less padding on right for the 'x' button
-                        paddingTop = 1,
-                        paddingBottom = 1,
-                        height = 18, // Consistent pill height
-                        borderTopRightRadius = 3, // Rounded corners
-                        borderBottomLeftRadius = 3,
-                        borderBottomRightRadius = 3,
-                        borderTopLeftRadius = 3,
-                        backgroundColor = GetColorForLabel(labelText), // Use your existing color helper
-                    },
+                    style = { backgroundColor = backgroundColor },
                 };
-                pillContainer.AddToClassList("label-pill-container"); // For potential shared USS styling
+                pillContainer.AddToClassList("label-pill-container");
 
-                // Label text part of the pill
-                var labelElement = new Label(labelText)
+                Label labelElement = new(labelText)
                 {
-                    style =
-                    {
-                        fontSize = 10,
-                        // Use existing helper to decide text color based on background
-                        color = IsColorDark(pillContainer.style.backgroundColor.value)
-                            ? Color.white
-                            : Color.black,
-                        marginRight = 2, // Small space before the 'x' button
-                    },
+                    style = { color = IsColorDark(backgroundColor) ? Color.white : Color.black },
                 };
                 labelElement.AddToClassList("label-pill-text");
                 pillContainer.Add(labelElement);
 
-                // "X" Remove Button for this label
-                var removeButton = new Button(() => RemoveLabelFromSelectedAsset(labelText))
+                Button removeButton = new(() => RemoveLabelFromSelectedAsset(labelText))
                 {
-                    text = "x", // Simple 'x' is common for remove
+                    text = "x",
                     tooltip = $"Remove label '{labelText}'",
                 };
-                removeButton.AddToClassList("label-pill-remove-button"); // For specific USS styling
-                // Minimal styling for the 'x' button to make it small and subtle
-                removeButton.style.fontSize = 8;
-                removeButton.style.height = 14;
-                removeButton.style.width = 14;
-                removeButton.style.paddingLeft = 0;
-                removeButton.style.paddingRight = 0;
-                removeButton.style.paddingTop = 0;
-                removeButton.style.paddingBottom = 0;
-                removeButton.style.marginLeft = 2;
-                removeButton.style.backgroundColor = Color.clear; // Transparent background
-                removeButton.style.borderLeftWidth = 0;
-                removeButton.style.borderRightWidth = 0;
-                removeButton.style.borderTopWidth = 0;
-                removeButton.style.borderBottomWidth = 0;
-                removeButton.style.color = labelElement.style.color.value; // Match text color for subtlety
+                removeButton.AddToClassList("label-pill-remove-button");
+                removeButton.style.color = labelElement.style.color.value;
                 pillContainer.Add(removeButton);
-
                 _inspectorCurrentLabelsContainer.Add(pillContainer);
             }
         }
 
-        /// <summary>
-        /// Called by the "Add Label" button or Enter key in the inspector's new label input field.
-        /// </summary>
         private void AddLabelToSelectedAsset()
         {
             if (_selectedObject == null || _inspectorNewLabelInput == null)
+            {
                 return;
+            }
 
             string newLabelText = _inspectorNewLabelInput.value?.Trim();
             if (string.IsNullOrWhiteSpace(newLabelText))
             {
-                // Debug.LogWarning("Label text cannot be empty.");
-                _inspectorNewLabelInput.SetValueWithoutNotify(""); // Clear input even if empty
+                _inspectorNewLabelInput.SetValueWithoutNotify("");
                 return;
             }
 
-            // Unity labels are case-sensitive when applying but often displayed mixed-case.
-            // It's generally good to prevent adding visually identical labels differing only by case,
-            // though AssetDatabase.SetLabels will treat them as distinct if case differs.
             string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
-            if (currentLabels.Any(l => l.Equals(newLabelText, StringComparison.Ordinal))) // Exact case match
+            if (
+                Array.Exists(
+                    currentLabels,
+                    label => label.Equals(newLabelText, StringComparison.Ordinal)
+                )
+            )
             {
-                // Debug.Log($"Label '{newLabelText}' already exists on asset '{_selectedObject.name}'.");
-                _inspectorNewLabelInput.SetValueWithoutNotify(""); // Clear input
-                _inspectorNewLabelInput.Focus(); // Keep focus to add another
+                _inspectorNewLabelInput.SetValueWithoutNotify("");
+                _inspectorNewLabelInput.Focus();
                 return;
             }
 
@@ -6196,16 +6242,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             try
             {
                 AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
-                EditorUtility.SetDirty(_selectedObject); // Mark asset dirty so changes are saved
-
-                // Debug.Log($"Added label '{newLabelText}' to asset '{_selectedObject.name}'");
-
-                _inspectorNewLabelInput.SetValueWithoutNotify(""); // Clear input field after successful add
-
-                PopulateInspectorLabelsUI(); // Refresh this inspector section's label display
-
-                // Refresh the object column's available labels and re-filter the list
-                // as a new unique label might have been introduced for the current type.
+                EditorUtility.SetDirty(_selectedObject);
+                _inspectorNewLabelInput.SetValueWithoutNotify("");
+                PopulateInspectorLabelsUI();
                 UpdateLabelAreaAndFilter();
             }
             catch (Exception ex)
@@ -6214,37 +6253,28 @@ namespace WallstopStudios.DataVisualizer.Editor
                     $"Error adding label '{newLabelText}' to asset '{_selectedObject.name}': {ex}"
                 );
             }
-            _inspectorNewLabelInput.Focus(); // Return focus for adding more labels easily
+            _inspectorNewLabelInput.Focus();
         }
 
-        /// <summary>
-        /// Called by the "X" button on a label pill in the Inspector.
-        /// </summary>
         private void RemoveLabelFromSelectedAsset(string labelToRemove)
         {
-            if (_selectedObject == null || string.IsNullOrEmpty(labelToRemove))
+            if (_selectedObject == null || string.IsNullOrWhiteSpace(labelToRemove))
+            {
                 return;
+            }
 
             string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
-            // Filter out the label to remove (case-sensitive for matching what's on the asset)
             List<string> updatedLabels = currentLabels
-                .Where(l => !l.Equals(labelToRemove, StringComparison.Ordinal))
+                .Where(label => !label.Equals(labelToRemove, StringComparison.Ordinal))
                 .ToList();
 
-            // Check if a label was actually found and thus removed
             if (updatedLabels.Count < currentLabels.Length)
             {
                 try
                 {
                     AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
                     EditorUtility.SetDirty(_selectedObject);
-
-                    // Debug.Log($"Removed label '{labelToRemove}' from asset '{_selectedObject.name}'");
-
-                    PopulateInspectorLabelsUI(); // Refresh this inspector section
-
-                    // The removed label might no longer be present on *any* object of this type.
-                    // UpdateLabelAreaAndFilter will re-discover available labels and adjust.
+                    PopulateInspectorLabelsUI();
                     UpdateLabelAreaAndFilter();
                 }
                 catch (Exception ex)
@@ -6253,10 +6283,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                         $"Error removing label '{labelToRemove}' from asset '{_selectedObject.name}': {ex}"
                     );
                 }
-            }
-            else
-            {
-                // Debug.LogWarning($"Label '{labelToRemove}' not found on asset '{_selectedObject.name}' for removal.");
             }
         }
 

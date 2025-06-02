@@ -867,134 +867,121 @@
     border-color: white;
 }
 
+
 .label-pill {
-    margin-right: 4px;
-    margin-bottom: 4px;
-    /*padding: 2px 6px;*/
-    /*height: 18px;*/
+    cursor: pan;
+    padding: 0 2px;
+    height: 22px;
+    margin: 2px;
+    flex-direction: row;
+    align-items: center;
+    border-width: 0;
     border-radius: 3px;
-    border-width: 0; /* Remove default button border */
-    -unity-font-style: bold;
     -unity-text-align: middle-center;
-    min-width: 0; /* Allow to shrink if text is short */
+    min-width: 0;
 }
+
 .label-pill:hover {
-    opacity: 0.85; /* Slight feedback on hover */
+    opacity: 0.85;
+}
+
+.label-pill-text {
 }
 
 .label-pill-container {
-    /* Base styling for the pill if any - background color is set in C# */
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-right: 4px;
+    min-height: 36px;
+    padding: 4px;
+    width: 100%;
+    border-color: white;
+    border-width: 1px;
+    border-radius: 6px;
 }
 
-.label-pill-text.clickable {
-    cursor: link;
+.label-header {
+    margin: 0 4px;
 }
+
+.label-row-container {
+    flex-direction: row;
+    align-items: center;
+    margin: 4px 0;
+}
+
 .label-pill-text.clickable:hover {
-    /* Optional: slightly change text color or add underline */
     opacity: 0.8;
 }
 
 .label-pill-remove-button {
-    /* Make X button subtle */
-    min-width: 14px;
-    background-color: transparent; /* Or very subtle hover */
+    font-size: 16px;
+    -unity-font-style: bold;
+    background-color: transparent;
     border-width: 0;
     padding: 0;
-    margin: 0;
-    align-self: center; /* Vertically align X */
+    margin: 0 4px 2px 1px;
+    align-self: center;
 }
+
 .label-pill-remove-button:hover {
-    background-color: rgba(255,255,255,0.2);
+    background-color: rgba(255, 255, 255, 0.2);
 }
 
 .drop-target-hover {
-    /* Example: A semi-transparent overlay or border change */
-    background-color: rgba(100, 149, 237, 0.2); /* Cornflower blue, semi-transparent */
-    out: 1px dashed cornflowerblue;
-    outline-offset: -1px;
+    background-color: rgba(100, 149, 237, 0.2);
 }
 
-/* Ensure label pill container can show grab cursor */
-.label-pill-container.clickable { /* If using a clickable class for general pills */
+.label-pill-container.clickable {
     cursor: move-arrow;
 }
-.label-pill-container:active { /* While dragging */
+
+.label-pill-container:active {
     cursor: slide-arrow;
 }
 
-/* HorizontalToggleStyle.uss */
-
 .horizontal-toggle {
-    min-height: 24px; /* Example height */
+    min-height: 24px;
     flex-direction: row;
     align-items: center;
-    width: 200px; /* Example width */
+    width: 200px;
 }
 
 .horizontal-toggle__container {
-    flex-grow: 1; /* Allow the container to fill the toggle's width */
+    flex-grow: 1;
     height: 100%;
-    flex-direction: row; /* Align items horizontally */
-    border-radius: 6px; /* Rounded corners for the main background */
-    overflow: hidden; /* Important for the indicator animation and rounded corners */
-    position: relative; /* For absolute positioning of the indicator */
+    border-color: white;
+    border-width: 1px;
+    flex-direction: row;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
 }
 
 .horizontal-toggle__label-container {
     flex-grow: 1;
-    flex-direction: row; /* Align labels horizontally */
+    flex-direction: row;
     height: 100%;
-    /* Make sure labels are on top of the indicator */
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
 }
 
-
 .horizontal-toggle__left-label,
 .horizontal-toggle__right-label {
-    flex-grow: 1; /* Each label takes half the space */
-    flex-basis: 0; /* Distribute space evenly */
-    justify-content: center; /* Center text horizontally */
-    align-items: center; /* Center text vertically */
+    flex-grow: 1;
+    flex-basis: 0;
+    justify-content: center;
+    align-items: center;
     align-content: center;
     align-self: center;
     -unity-text-align: middle-center;
 }
 
 .horizontal-toggle__indicator {
-    position: absolute; /* Positioned relative to the __container */
+    position: absolute;
     top: 0;
     height: 100%;
-    border-radius: 6px; /* Rounded corners for the indicator */
-    /* z-index: 0; // Already behind due to order of addition, but can be explicit */
-    /* Transition properties are handled by C# for position and width */
+    border-radius: 6px;
 }
-
-/* Example of changing the indicator's appearance when selected (optional, C# handles color) */
-.horizontal-toggle__indicator--selected {
-    /* You could add a border or shadow here if desired when "selected" animation completes */
-}
-
-
-/* --- Example: If you want to control colors purely from USS and not from C# properties --- */
-/*
-.horizontal-toggle__container {
-    background-color: #333333;
-}
-
-.horizontal-toggle__indicator {
-    background-color: #1A8CFF;
-}
-
-.horizontal-toggle__left-label,
-.horizontal-toggle__right-label {
-    color: #B3B3B3; // Unselected text color
-}
-
-.horizontal-toggle--left-selected .horizontal-toggle__left-label,
-.horizontal-toggle--right-selected .horizontal-toggle__right-label {
-    color: white; // Selected text color
-}
-*/
