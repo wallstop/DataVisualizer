@@ -236,6 +236,15 @@ namespace WallstopStudios.DataVisualizer.Editor
         private LabelCombinationType _labelCombinationType = LabelCombinationType.And;
         private VisualElement _draggedLabelPillVisual; // The VE being dragged
 
+        private VisualElement _inspectorLabelSuggestionsPopover;
+        private List<string> _projectUniqueLabelsCache = new List<string>();
+        private bool _isLabelCachePopulated = false; // To populate cache only when needed
+        private List<VisualElement> _currentLabelSuggestionItems = new List<VisualElement>();
+        private int _labelSuggestionHighlightIndex = -1;
+
+        // USS Class for suggestion items (can reuse if styling is similar to other popovers)
+        private const string LabelSuggestionItemClass = "label-suggestion-item";
+
         private TextField _searchField;
         private VisualElement _searchPopover;
         private bool _isSearchCachePopulated;
@@ -1061,6 +1070,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _typeAddPopover = new VisualElement { name = "type-add-popover" };
             _typeAddPopover.AddToClassList("type-add-popover");
+
+            _inspectorLabelSuggestionsPopover = CreatePopoverBase(
+                "inspector-label-suggestions-popover"
+            );
+            root.Add(_inspectorLabelSuggestionsPopover);
+            _inspectorLabelSuggestionsPopover.style.width = StyleKeyword.Auto;
 
             _typeAddSearchField = new TextField { name = "type-add-search-field" };
             _typeAddSearchField.AddToClassList("type-add-search-field");
@@ -2323,6 +2338,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _currentTypePopoverItems.Clear();
                 _typePopoverHighlightIndex = -1;
                 _typeAddSearchField?.SetValueWithoutNotify("");
+            }
+            else if (_activePopover == _inspectorLabelSuggestionsPopover)
+            {
+                _currentLabelSuggestionItems.Clear();
+                _labelSuggestionHighlightIndex = -1;
             }
 
             CloseNestedPopover();
@@ -5585,39 +5605,37 @@ namespace WallstopStudios.DataVisualizer.Editor
                     // Input area for adding new labels
                     var addLabelRow = new VisualElement
                     {
-                        style = { flexDirection = FlexDirection.Row, alignItems = Align.Center },
+                        style =
+                        {
+                            flexDirection = FlexDirection.Row,
+                            alignItems = Align.Center,
+                            position = Position.Relative,
+                        },
                     };
-
                     _inspectorNewLabelInput = new TextField
                     {
                         name = "inspector-new-label-input",
-                        style = { flexGrow = 1, marginRight = 5 }, // Take available width
+                        style = { flexGrow = 1, marginRight = 5 },
                     };
-                    _inspectorNewLabelInput.SetPlaceholderText("Type new label and press Enter...");
-                    // Handle Enter key to add label from TextField
-                    _inspectorNewLabelInput.RegisterCallback<KeyDownEvent>(evt =>
-                    {
-                        if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
-                        {
-                            AddLabelToSelectedAsset();
-                            evt.PreventDefault(); // Stop Enter from being processed further
-                            evt.StopPropagation();
-                        }
-                    });
-                    addLabelRow.Add(_inspectorNewLabelInput);
+                    // --- Setup for Suggestions ---
+                    _inspectorNewLabelInput.RegisterValueChangedCallback(evt =>
+                        UpdateLabelSuggestions(evt.newValue)
+                    );
+                    _inspectorNewLabelInput.RegisterCallback<FocusInEvent>(evt =>
+                        OnNewLabelInputFocus()
+                    );
+                    _inspectorNewLabelInput.RegisterCallback<KeyDownEvent>(
+                        HandleNewLabelInputKeyDown
+                    );
+                    // FocusOut is tricky; click-outside on popover is generally better
+                    _inspectorNewLabelInput.RegisterCallback<FocusOutEvent>(OnNewLabelInputBlur);
 
-                    // "Add" button for the new label input
-                    var inspectorAddLabelButton = new Button(AddLabelToSelectedAsset)
-                    {
-                        text = "Add",
-                    };
-                    addLabelRow.Add(inspectorAddLabelButton);
+                    addLabelRow.Add(_inspectorNewLabelInput);
+                    var addLabelButton = new Button(AddLabelToSelectedAsset) { text = "Add" };
+                    addLabelRow.Add(addLabelButton);
                     _inspectorLabelsSection.Add(addLabelRow);
 
-                    // Add the entire labels section to the main inspector container
                     _inspectorContainer.Add(_inspectorLabelsSection);
-
-                    // Populate the pills for the currently selected object's labels
                     PopulateInspectorLabelsUI();
                 }
             }
@@ -5757,6 +5775,288 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             return null;
+        }
+
+        // --- Logic for Inspector Label Suggestions ---
+
+        private void OnNewLabelInputFocus()
+        {
+            if (!_isLabelCachePopulated)
+            {
+                PopulateProjectUniqueLabelsCache();
+            }
+            // Show suggestions if there's already text in the field
+            if (!string.IsNullOrWhiteSpace(_inspectorNewLabelInput.value) && _isLabelCachePopulated)
+            {
+                UpdateLabelSuggestions(_inspectorNewLabelInput.value);
+            }
+        }
+
+        private void OnNewLabelInputBlur(FocusOutEvent evt)
+        {
+            // If focus moves to an element within the suggestions popover, don't close.
+            VisualElement focusedElement = evt.relatedTarget as VisualElement;
+            if (_inspectorLabelSuggestionsPopover != null && focusedElement != null)
+            {
+                VisualElement current = focusedElement;
+                while (current != null)
+                {
+                    if (current == _inspectorLabelSuggestionsPopover)
+                        return; // Focus moved to suggestions
+                    current = current.parent;
+                }
+            }
+            // Otherwise, close after a tiny delay if no suggestion was immediately clicked
+            if (_activePopover == _inspectorLabelSuggestionsPopover)
+            {
+                this.rootVisualElement.schedule.Execute(() =>
+                    {
+                        // Only close if focus didn't go back to input or into popover
+                        if (
+                            _activePopover?.focusController?.focusedElement
+                                != _inspectorNewLabelInput
+                            && (
+                                _activePopover?.focusController?.focusedElement as VisualElement
+                            )?.FindCommonAncestor(_inspectorLabelSuggestionsPopover)
+                                != _inspectorLabelSuggestionsPopover
+                            && _activePopover == _inspectorLabelSuggestionsPopover
+                        )
+                        {
+                            CloseActivePopover();
+                        }
+                    })
+                    .ExecuteLater(100); // ms delay
+            }
+        }
+
+        private void PopulateProjectUniqueLabelsCache()
+        {
+            if (_isLabelCachePopulated && _projectUniqueLabelsCache.Any())
+                return; // Avoid frequent rescans
+
+            Debug.Log("Populating project-wide unique labels cache...");
+            _projectUniqueLabelsCache.Clear();
+            var allLabelsSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var dataObject in _allManagedObjectsCache)
+            {
+                string[] labels = AssetDatabase.GetLabels(dataObject);
+                foreach (string label in labels)
+                {
+                    if (!string.IsNullOrWhiteSpace(label))
+                        allLabelsSet.Add(label.Trim());
+                }
+            }
+
+            _projectUniqueLabelsCache.AddRange(allLabelsSet);
+            _projectUniqueLabelsCache.Sort();
+            _isLabelCachePopulated = true;
+            Debug.Log(
+                $"Project unique labels cache populated with {_projectUniqueLabelsCache.Count} labels."
+            );
+        }
+
+        private void UpdateLabelSuggestions(string currentInput)
+        {
+            if (_inspectorLabelSuggestionsPopover == null)
+                return;
+            if (!_isLabelCachePopulated)
+                PopulateProjectUniqueLabelsCache(); // Ensure cache exists
+
+            if (_activePopover == null && _projectUniqueLabelsCache.Count != 0)
+            {
+                OpenPopover(
+                    _inspectorLabelSuggestionsPopover,
+                    _inspectorNewLabelInput,
+                    shouldFocus: false
+                );
+            }
+
+            _currentLabelSuggestionItems.Clear();
+            _labelSuggestionHighlightIndex = -1;
+            _inspectorLabelSuggestionsPopover.Clear(); // Clear previous suggestion VEs
+
+            if (string.IsNullOrWhiteSpace(currentInput))
+            {
+                if (_activePopover == _inspectorLabelSuggestionsPopover)
+                    CloseActivePopover();
+                return;
+            }
+
+            string lowerInput = currentInput.ToLowerInvariant();
+            string[] currentAssetLabelsArray =
+                _selectedObject != null
+                    ? AssetDatabase.GetLabels(_selectedObject)
+                    : Array.Empty<string>();
+            var currentAssetLabelsSet = new HashSet<string>(
+                currentAssetLabelsArray,
+                StringComparer.OrdinalIgnoreCase
+            );
+
+            List<string> suggestions = _projectUniqueLabelsCache
+                .Where(label =>
+                    label.ToLowerInvariant().Contains(lowerInput)
+                    && !currentAssetLabelsSet.Contains(label)
+                ) // Don't suggest already applied labels
+                .Take(10) // Limit suggestions shown
+                .ToList();
+
+            if (suggestions.Count > 0)
+            {
+                foreach (string suggestionText in suggestions)
+                {
+                    // Use CreateHighlightedLabel to show matches
+                    var suggestionItem = CreateHighlightedLabel(
+                        suggestionText,
+                        new List<string> { currentInput },
+                        LabelSuggestionItemClass
+                    );
+                    suggestionItem.userData = suggestionText; // Store the raw suggestion text
+                    // Use PointerUp for clicks to avoid focus issues with TextField
+                    suggestionItem.RegisterCallback<PointerUpEvent>(evt =>
+                    {
+                        if (evt.button == 0 && suggestionItem.userData is string clickedSuggestion)
+                        {
+                            _inspectorNewLabelInput.SetValueWithoutNotify(clickedSuggestion);
+                            _inspectorNewLabelInput.Focus(); // Bring focus back to input
+                            AddLabelToSelectedAsset(); // Attempt to add it
+                            CloseActivePopover(); // Close suggestions
+                            evt.StopPropagation();
+                        }
+                    });
+                    // Add hover for visual feedback
+                    suggestionItem.RegisterCallback<MouseEnterEvent>(evt =>
+                        suggestionItem.style.backgroundColor = new Color(0.35f, 0.35f, 0.35f)
+                    );
+                    suggestionItem.RegisterCallback<MouseLeaveEvent>(evt =>
+                        suggestionItem.style.backgroundColor = Color.clear
+                    );
+                    _inspectorLabelSuggestionsPopover.Add(suggestionItem);
+                    _currentLabelSuggestionItems.Add(suggestionItem);
+                }
+
+                // // --- Open/Position the Suggestions Popover ---
+                // // Ensure the popover's width matches the input field's width
+                // _inspectorNewLabelInput
+                //     .schedule.Execute(() =>
+                //     { // Wait for input field layout
+                //         if (_inspectorNewLabelInput.panel != null)
+                //         { // Check if part of panel
+                //             _inspectorLabelSuggestionsPopover.style.width = _inspectorNewLabelInput
+                //                 .resolvedStyle
+                //                 .width;
+                //             OpenPopover(_inspectorLabelSuggestionsPopover, _inspectorNewLabelInput);
+                //             UpdateLabelSuggestionHighlight(); // Clear any previous keyboard highlight
+                //         }
+                //     })
+                //     .ExecuteLater(1);
+            }
+            else
+            {
+                if (_activePopover == _inspectorLabelSuggestionsPopover)
+                    CloseActivePopover();
+            }
+        }
+
+        // Handles keyboard for label suggestions text field
+        private void HandleNewLabelInputKeyDown(KeyDownEvent evt)
+        {
+            if (
+                _activePopover != _inspectorLabelSuggestionsPopover
+                || _currentLabelSuggestionItems.Count == 0
+            )
+            {
+                // If popover not for suggestions, or no suggestions, let TextField handle keys (except Enter for add)
+                if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
+                {
+                    AddLabelToSelectedAsset(); // Standard add on Enter
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                }
+                return;
+            }
+
+            bool highlightChanged = false;
+            switch (evt.keyCode)
+            {
+                case KeyCode.DownArrow:
+                    _labelSuggestionHighlightIndex++;
+                    if (_labelSuggestionHighlightIndex >= _currentLabelSuggestionItems.Count)
+                        _labelSuggestionHighlightIndex = 0;
+                    highlightChanged = true;
+                    break;
+                case KeyCode.UpArrow:
+                    _labelSuggestionHighlightIndex--;
+                    if (_labelSuggestionHighlightIndex < 0)
+                        _labelSuggestionHighlightIndex = _currentLabelSuggestionItems.Count - 1;
+                    highlightChanged = true;
+                    break;
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                    if (
+                        _labelSuggestionHighlightIndex >= 0
+                        && _labelSuggestionHighlightIndex < _currentLabelSuggestionItems.Count
+                    )
+                    {
+                        if (
+                            _currentLabelSuggestionItems[_labelSuggestionHighlightIndex].userData
+                            is string selectedSuggestion
+                        )
+                        {
+                            _inspectorNewLabelInput.SetValueWithoutNotify(selectedSuggestion);
+                            AddLabelToSelectedAsset(); // Add selected suggestion
+                            CloseActivePopover(); // Close suggestions
+                        }
+                    }
+                    else
+                    {
+                        // No suggestion highlighted, so treat Enter as confirming the typed text
+                        AddLabelToSelectedAsset();
+                        CloseActivePopover();
+                    }
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    break;
+                case KeyCode.Escape:
+                    CloseActivePopover(); // Close suggestions on Escape
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    break;
+                default:
+                    return; // Let other keys (text input) pass through
+            }
+
+            if (highlightChanged)
+            {
+                UpdateLabelSuggestionHighlight();
+                evt.PreventDefault();
+                evt.StopPropagation(); // Stop arrow keys moving cursor in text field
+            }
+        }
+
+        // Updates visual highlight for label suggestions
+        private void UpdateLabelSuggestionHighlight()
+        {
+            if (_currentLabelSuggestionItems == null || _inspectorLabelSuggestionsPopover == null)
+                return;
+            var scrollView = _inspectorLabelSuggestionsPopover.Q<ScrollView>(); // Assuming it contains one
+
+            for (int i = 0; i < _currentLabelSuggestionItems.Count; i++)
+            {
+                var item = _currentLabelSuggestionItems[i];
+                if (item == null)
+                    continue;
+                bool shouldHighlight = (i == _labelSuggestionHighlightIndex);
+                item.EnableInClassList(PopoverHighlightClass, shouldHighlight); // Use generic highlight class
+                if (shouldHighlight && scrollView != null)
+                {
+                    item.schedule.Execute(() =>
+                        {
+                            if (item.panel != null)
+                                scrollView.ScrollTo(item);
+                        })
+                        .ExecuteLater(1);
+                }
+            }
         }
 
         /// <summary>
