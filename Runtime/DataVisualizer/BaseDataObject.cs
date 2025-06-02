@@ -147,7 +147,7 @@ namespace WallstopStudios.DataVisualizer
 
         private static string IncrementCloneSuffix(string input)
         {
-            if (string.IsNullOrEmpty(input))
+            if (string.IsNullOrWhiteSpace(input))
             {
                 return " (Clone)";
             }
@@ -162,15 +162,18 @@ namespace WallstopStudios.DataVisualizer
             string existingCloneSuffix = match.Groups[2].Value;
             string numberPart = match.Groups[3].Value;
 
-            if (string.IsNullOrEmpty(existingCloneSuffix))
+            if (string.IsNullOrWhiteSpace(existingCloneSuffix))
             {
                 return input + " (Clone)";
             }
 
-            if (string.IsNullOrEmpty(numberPart))
+            if (string.IsNullOrWhiteSpace(numberPart))
             {
-                return (string.IsNullOrEmpty(baseName) && input.Trim() == "(Clone)" ? "" : baseName)
-                    + " (Clone 1)";
+                return (
+                        string.IsNullOrWhiteSpace(baseName) && input.Trim() == "(Clone)"
+                            ? ""
+                            : baseName
+                    ) + " (Clone 1)";
             }
 
             if (!int.TryParse(numberPart, out int cloneNumber))
