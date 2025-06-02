@@ -4341,6 +4341,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _availableLabelsContainer.AddToClassList("label-pill-container");
             VisualElement availableRow = new() { name = "available-row" };
             availableRow.AddToClassList("label-row-container");
+            availableRow.AddToClassList("label-row-container--available");
             Label availableLabel = new("Labels:")
             {
                 style =
@@ -5673,20 +5674,21 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 Label sectionHeader = new("Asset Labels:")
                 {
-                    style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 3 },
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Bold,
+                        marginBottom = 4,
+                        marginLeft = 6,
+                    },
                 };
                 _inspectorLabelsSection.Add(sectionHeader);
 
                 _inspectorCurrentLabelsContainer = new VisualElement
                 {
                     name = "inspector-current-labels",
-                    style =
-                    {
-                        flexDirection = FlexDirection.Row,
-                        flexWrap = Wrap.Wrap,
-                        marginBottom = 5,
-                    },
+                    style = { marginRight = 6, marginLeft = 6 },
                 };
+                _inspectorCurrentLabelsContainer.AddToClassList("label-pill-container");
                 _inspectorLabelsSection.Add(_inspectorCurrentLabelsContainer);
 
                 VisualElement addLabelRow = new()
@@ -5701,7 +5703,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _inspectorNewLabelInput = new TextField
                 {
                     name = "inspector-new-label-input",
-                    style = { flexGrow = 1, marginRight = 5 },
+                    style =
+                    {
+                        flexGrow = 1,
+                        flexShrink = 1,
+                        marginTop = 6,
+                        marginRight = 6,
+                        marginLeft = 6,
+                    },
                 };
                 _inspectorNewLabelInput.RegisterValueChangedCallback(evt =>
                     UpdateLabelSuggestions(evt.newValue)
@@ -5712,6 +5721,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 addLabelRow.Add(_inspectorNewLabelInput);
                 Button addLabelButton = new(AddLabelToSelectedAsset) { text = "Add" };
+                addLabelButton.AddToClassList(StyleConstants.ClickableClass);
+                addLabelButton.AddToClassList("add-label-button");
                 addLabelRow.Add(addLabelButton);
                 _inspectorLabelsSection.Add(addLabelRow);
 
@@ -5908,9 +5919,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void PopulateProjectUniqueLabelsCache()
+        private void PopulateProjectUniqueLabelsCache(bool force = false)
         {
-            if (_isLabelCachePopulated && _projectUniqueLabelsCache.Count > 0)
+            if (!force && _isLabelCachePopulated && _projectUniqueLabelsCache.Count > 0)
             {
                 return;
             }
@@ -5961,15 +5972,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             _labelSuggestionHighlightIndex = -1;
             _inspectorLabelSuggestionsPopover.Clear();
 
-            if (string.IsNullOrWhiteSpace(currentInput))
-            {
-                if (_activePopover == _inspectorLabelSuggestionsPopover)
-                {
-                    CloseActivePopover();
-                }
-                return;
-            }
-
             string[] currentAssetLabelsArray =
                 _selectedObject != null
                     ? AssetDatabase.GetLabels(_selectedObject)
@@ -5981,8 +5983,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             List<string> suggestions = _projectUniqueLabelsCache
                 .Where(label =>
-                    label.Contains(currentInput, StringComparison.OrdinalIgnoreCase)
-                    && !currentAssetLabelsSet.Contains(label)
+                    string.IsNullOrWhiteSpace(currentInput)
+                    || (
+                        label.Contains(currentInput, StringComparison.OrdinalIgnoreCase)
+                        && !currentAssetLabelsSet.Contains(label)
+                    )
                 )
                 .Take(10)
                 .ToList();
@@ -6186,7 +6191,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     name = $"inspector-label-pill-{labelText.Replace(" ", "-").ToLowerInvariant()}",
                     style = { backgroundColor = backgroundColor },
                 };
-                pillContainer.AddToClassList("label-pill-container");
+                pillContainer.AddToClassList("label-pill");
 
                 Label labelElement = new(labelText)
                 {
@@ -6200,6 +6205,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     text = "x",
                     tooltip = $"Remove label '{labelText}'",
                 };
+                removeButton.AddToClassList(StyleConstants.ClickableClass);
                 removeButton.AddToClassList("label-pill-remove-button");
                 removeButton.style.color = labelElement.style.color.value;
                 pillContainer.Add(removeButton);
@@ -6241,6 +6247,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
                 EditorUtility.SetDirty(_selectedObject);
+                AssetDatabase.SaveAssets();
+                PopulateProjectUniqueLabelsCache();
                 _inspectorNewLabelInput.SetValueWithoutNotify("");
                 PopulateInspectorLabelsUI();
                 UpdateLabelAreaAndFilter();
@@ -6272,6 +6280,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
                     EditorUtility.SetDirty(_selectedObject);
+                    AssetDatabase.SaveAssets();
+                    PopulateProjectUniqueLabelsCache();
                     PopulateInspectorLabelsUI();
                     UpdateLabelAreaAndFilter();
                 }

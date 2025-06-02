@@ -867,6 +867,24 @@
     border-color: white;
 }
 
+.add-label-button {
+    min-height: 24px;
+    font-size: 16px;
+    -unity-font-style: bold;
+    background-color: darkgreen;
+    border-width: 0;
+    margin: 6px 8px 2px 0;
+    border-radius: 4px;
+    padding: 0 24px;
+    align-self: center;
+}
+
+.add-label-button:hover {
+    background-color: white;
+    color: darkgreen;
+    border-color: darkgreen;
+}
+
 .label-pill {
     cursor: pan;
     padding: 0 2px;
@@ -905,6 +923,10 @@
     margin: 4px 0;
 }
 
+.label-row-container--available {
+    margin-left: 5px;
+}
+
 .label-pill-remove-button {
     font-size: 16px;
     -unity-font-style: bold;
@@ -930,6 +952,7 @@
 .label-logical-grouping {
     background-color: rgba(0, 0, 0 0.3);
     padding: 6px 0;
+    margin: 0 4px;
     border-radius: 6px;
 }
 
@@ -973,6 +996,11 @@
     align-content: center;
     align-self: center;
     -unity-text-align: middle-center;
+}
+
+.horizontal-toggle__left-label.unselected:hover,
+.horizontal-toggle__right-label.unselected:hover {
+    -unity-font-style: bold;
 }
 
 .horizontal-toggle__indicator {
