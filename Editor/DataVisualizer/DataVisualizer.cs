@@ -4341,7 +4341,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _availableLabelsContainer.AddToClassList("label-pill-container");
             VisualElement availableRow = new() { name = "available-row" };
             availableRow.AddToClassList("label-row-container");
-            Label availableLabel = new("Available:")
+            Label availableLabel = new("Labels:")
             {
                 style =
                 {
@@ -4354,6 +4354,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             availableRow.Add(availableLabel);
             availableRow.Add(_availableLabelsContainer);
             _labelFilterSelectionRoot.Add(availableRow);
+
+            VisualElement logicalGrouping = new() { name = "label-logical-grouping" };
+            logicalGrouping.AddToClassList("label-logical-grouping");
+            _labelFilterSelectionRoot.Add(logicalGrouping);
 
             VisualElement andRow = new() { name = "and-filter-row" };
             andRow.AddToClassList("label-row-container");
@@ -4371,19 +4375,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             _andLabelsContainer = new VisualElement { name = "and-labels-container" };
             _andLabelsContainer.AddToClassList("label-pill-container");
             andRow.Add(_andLabelsContainer);
-            _labelFilterSelectionRoot.Add(andRow);
+            logicalGrouping.Add(andRow);
 
             _andOrToggle = new HorizontalToggle()
             {
                 name = "and-or-toggle",
-                LeftText = "AND",
-                RightText = "OR",
-                style =
-                {
-                    alignSelf = Align.Center,
-                    marginBottom = 6,
-                    marginTop = 6,
-                },
+                LeftText = "AND &&",
+                RightText = "OR ||",
             };
             _andOrToggle.OnLeftSelected += () =>
             {
@@ -4428,7 +4426,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     break;
                 }
             }
-            _labelFilterSelectionRoot.Add(_andOrToggle);
+            logicalGrouping.Add(_andOrToggle);
 
             VisualElement orRow = new() { name = "or-filter-row" };
             orRow.AddToClassList("label-row-container");
@@ -4447,7 +4445,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _orLabelsContainer.AddToClassList("label-pill-container");
 
             orRow.Add(_orLabelsContainer);
-            _labelFilterSelectionRoot.Add(orRow);
+            logicalGrouping.Add(orRow);
 
             _filterStatusLabel = new Label("")
             {
@@ -4462,9 +4460,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             _labelFilterSelectionRoot.Add(_filterStatusLabel);
 
-            SetupDropTarget(availableRow, LabelFilterSection.Available);
-            SetupDropTarget(andRow, LabelFilterSection.AND);
-            SetupDropTarget(orRow, LabelFilterSection.OR);
+            SetupDropTarget(_availableLabelsContainer, LabelFilterSection.Available);
+            SetupDropTarget(_andLabelsContainer, LabelFilterSection.AND);
+            SetupDropTarget(_orLabelsContainer, LabelFilterSection.OR);
 
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
