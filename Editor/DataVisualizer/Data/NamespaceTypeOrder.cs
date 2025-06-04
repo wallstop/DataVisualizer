@@ -2,6 +2,7 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
 
     [Serializable]
     public sealed class NamespaceTypeOrder
@@ -13,8 +14,8 @@
         {
             return new NamespaceTypeOrder
             {
-                namespaceKey = namespaceKey,
-                typeNames = new List<string>(typeNames),
+                namespaceKey = namespaceKey ?? string.Empty,
+                typeNames = typeNames?.ToList() ?? new List<string>(),
             };
         }
     }

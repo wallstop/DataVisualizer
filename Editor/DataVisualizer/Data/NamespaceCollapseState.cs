@@ -12,7 +12,7 @@
         {
             return new NamespaceCollapseState
             {
-                namespaceKey = namespaceKey,
+                namespaceKey = namespaceKey ?? string.Empty,
                 isCollapsed = isCollapsed,
             };
         }

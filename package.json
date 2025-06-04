@@ -1,6 +1,6 @@
 {
   "name": "com.wallstop-studios.data-visualizer",
-  "version": "0.0.35-rc05.1",
+  "version": "0.0.35-rc05.2",
   "displayName": "Data Visualizer",
   "description": "Data Management UI for Unity's Scriptable Objects",
   "dependencies": {},
@@ -28,6 +28,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   }
 }
+
 
 
 

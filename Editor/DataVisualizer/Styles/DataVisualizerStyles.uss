@@ -1096,3 +1096,43 @@
     height: 100%;
     border-radius: 6px;
 }
+
+.object-page-controller {
+    background-color: rgb(33, 33, 33);
+    flex-direction: row;
+    justify-content: center;
+}
+
+.current-page-field {
+    background-color: rgba(128, 128, 128, 0.5);
+    border-radius: 4px;
+    padding: 2px 16px;
+}
+
+.current-page-field > #unity-text-input {
+    border-width: 0;
+    padding: 0;
+}
+
+.current-page-field .unity-text-element {
+    background-color: rgba(128, 128, 128, 0.5);
+    padding: 0;
+}
+
+.max-page-field {
+    background-color: rgba(128, 128, 128, 0.5);
+    border-radius: 4px;
+    padding: 2px 16px;
+}
+
+.max-page-field > #unity-text-input {
+    --unity-selection-color: transparent;
+    color: black;
+    border-width: 0;
+    padding: 0;
+}
+
+.max-page-field .unity-text-element {
+    background-color: rgba(128, 128, 128, 0.5);
+    padding: 0;
+}

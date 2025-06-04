@@ -12,8 +12,8 @@
         {
             return new LastObjectSelectionEntry
             {
-                typeFullName = typeFullName,
-                objectGuid = objectGuid,
+                typeFullName = typeFullName ?? string.Empty,
+                objectGuid = objectGuid ?? string.Empty,
             };
         }
     }

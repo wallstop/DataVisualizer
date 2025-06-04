@@ -2,10 +2,12 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
 
     [Serializable]
     public sealed class TypeObjectOrder
     {
+        public int page;
         public string TypeFullName = string.Empty;
         public List<string> ObjectGuids = new();
 
@@ -13,8 +15,9 @@
         {
             return new TypeObjectOrder
             {
-                TypeFullName = TypeFullName,
-                ObjectGuids = new List<string>(ObjectGuids),
+                page = page,
+                TypeFullName = TypeFullName ?? string.Empty,
+                ObjectGuids = ObjectGuids?.ToList() ?? new List<string>(),
             };
         }
     }

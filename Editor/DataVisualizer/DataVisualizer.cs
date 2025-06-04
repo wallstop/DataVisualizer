@@ -27,6 +27,7 @@ namespace WallstopStudios.DataVisualizer.Editor
     using UnityEngine.UIElements;
     using Utilities;
     using Helper;
+    using NUnit.Framework;
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
 
@@ -66,6 +67,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const int MaxSearchResults = 25;
         private const float DefaultOuterSplitWidth = 200f;
         private const float DefaultInnerSplitWidth = 250f;
+        private const int MaxObjectsPerPage = 100;
 
         private enum DragType
         {
@@ -186,6 +188,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _selectedNamespaceElement;
 
         private VisualElement _namespaceListContainer;
+        private VisualElement _objectPageController;
+        private Button _previousPageButton;
+        private Button _nextPageButton;
+        private IntegerField _currentPageField;
+        private IntegerField _maxPageField;
         private VisualElement _objectListContainer;
         private VisualElement _inspectorContainer;
         private ScrollView _objectScrollView;
@@ -4610,6 +4617,60 @@ namespace WallstopStudios.DataVisualizer.Editor
             SetupDropTarget(_andLabelsContainer, LabelFilterSection.AND);
             SetupDropTarget(_orLabelsContainer, LabelFilterSection.OR);
 
+            _objectPageController = new VisualElement
+            {
+                name = "object-page-controller",
+                style = { display = DisplayStyle.None },
+            };
+            _objectPageController.AddToClassList("object-page-controller");
+            _previousPageButton = new Button(() =>
+            {
+                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
+                if (currentPage <= 0)
+                {
+                    return;
+                }
+
+                SetCurrentPage(_namespaceController.SelectedType, currentPage - 1);
+                BuildObjectsView();
+            }) { text = "←" };  
+            _previousPageButton.AddToClassList("go-button-disabled");
+            
+            _currentPageField = new IntegerField();
+            _currentPageField.AddToClassList("current-page-field");
+            _currentPageField.RegisterValueChangedCallback(evt =>
+            {
+                int newValue = evt.newValue;
+                newValue = Mathf.Clamp(newValue, 0, _filteredObjects.Count / MaxObjectsPerPage);
+                if (newValue != evt.newValue)
+                {
+                    _currentPageField.SetValueWithoutNotify(newValue);
+                }
+
+                SetCurrentPage(_namespaceController.SelectedType, newValue);
+                BuildObjectsView();
+            });
+            _maxPageField = new IntegerField() { isReadOnly = true };
+            _maxPageField.AddToClassList("max-page-field");
+            _nextPageButton = new Button(() =>
+            {
+                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
+                if (_filteredObjects.Count /MaxObjectsPerPage <= currentPage)
+                {
+                    return;
+                }
+
+                SetCurrentPage(_namespaceController.SelectedType, currentPage + 1);
+                BuildObjectsView();
+            }) { text = "→" };
+            _nextPageButton.AddToClassList("go-button-disabled");
+            _objectPageController.Add(_previousPageButton);
+            _objectPageController.Add(_currentPageField);
+            _objectPageController.Add(_maxPageField);
+            _objectPageController.Add(_nextPageButton);
+
+            objectColumn.Add(_objectPageController);
+
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
                 name = "object-scrollview",
@@ -5743,9 +5804,42 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            for (int i = 0; i < _filteredObjects.Count; i++)
+            if (_filteredObjects.Count <=  MaxObjectsPerPage)
+            {    
+                if (_objectPageController != null)
+                {
+                    _objectPageController.style.display = DisplayStyle.None;
+                }
+                for (int i = 0; i < _filteredObjects.Count; i++)
+                {
+                    BuildObjectRow(_filteredObjects[i], i);
+                }
+            }
+            else
             {
-                BuildObjectRow(_filteredObjects[i], i);
+                if (_objectPageController != null)
+                {
+                    _objectPageController.style.display = DisplayStyle.Flex;
+                }
+
+                _maxPageField.value = _filteredObjects.Count / MaxObjectsPerPage;
+                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
+                currentPage = Mathf.Clamp(currentPage, 0, _filteredObjects.Count / MaxObjectsPerPage);
+                _currentPageField.SetValueWithoutNotify(currentPage);
+
+                _previousPageButton.EnableInClassList("go-button-disabled", currentPage <= 0);
+                _previousPageButton.EnableInClassList(StyleConstants.ActionButtonClass, 0 < currentPage);
+                _previousPageButton.EnableInClassList("go-button", 0 < currentPage);
+                
+                _nextPageButton.EnableInClassList("go-button-disabled", _maxPageField.value <= currentPage);
+                _nextPageButton.EnableInClassList(StyleConstants.ActionButtonClass, currentPage < _maxPageField.value);
+                _nextPageButton.EnableInClassList("go-button", currentPage < _maxPageField.value);
+                
+                int max = Mathf.Min((currentPage + 1) * MaxObjectsPerPage, _filteredObjects.Count);
+                for (int i = currentPage * MaxObjectsPerPage; i < max; i++)
+                {
+                    BuildObjectRow(_filteredObjects[i], i);
+                }
             }
         }
 
@@ -5779,12 +5873,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Button goUpButton = new(() =>
             {
-                _objectListContainer.Remove(objectItemRow);
-                _objectListContainer.Insert(1, objectItemRow);
-                foreach (VisualElement child in _objectListContainer.Children())
-                {
-                    NamespaceController.RecalibrateVisualElements(child, offset: 1);
-                }
+                _filteredObjects.Remove(dataObject);
+                _filteredObjects.Insert(0, dataObject);
+                _filteredObjects.Remove(dataObject);
+                _filteredObjects.Insert(0, dataObject);
+                UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+                BuildObjectsView();
             })
             {
                 name = "go-up-button",
@@ -5805,12 +5899,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Button goDownButton = new(() =>
             {
-                _objectListContainer.Remove(objectItemRow);
-                _objectListContainer.Insert(_objectListContainer.childCount, objectItemRow);
-                foreach (VisualElement child in _objectListContainer.Children())
-                {
-                    NamespaceController.RecalibrateVisualElements(child, offset: 1);
-                }
+                _selectedObjects.Remove(dataObject);
+                _selectedObjects.Add(dataObject);
+                _filteredObjects.Remove(dataObject);
+                _filteredObjects.Add(dataObject);
+                UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+                BuildObjectsView();
             })
             {
                 name = "go-down-button",
@@ -6910,7 +7004,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _selectedObjects.Clear();
             _objectVisualElementMap.Clear();
 
-            List<string> customGuidOrder = GetObjectOrderForType(type.FullName);
+            List<string> customGuidOrder = GetObjectOrderForType(type);
             Dictionary<string, ScriptableObject> objectsByGuid = new();
             string[] assetGuids = AssetDatabase.FindAssets($"t:{type.Name}");
             foreach (string assetGuid in assetGuids)
@@ -6956,8 +7050,15 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             List<ScriptableObject> remainingObjects = objectsByGuid.Values.ToList();
             remainingObjects.Sort(
-                (a, b) => string.Compare(a.name, b.name, StringComparison.OrdinalIgnoreCase)
-            );
+                (a, b) =>
+                {
+                    int comparison = string.Compare(a.name, b.name, StringComparison.OrdinalIgnoreCase);
+                    if (comparison != 0)
+                    {
+                        return comparison;
+                    }
+                    return string.Compare(AssetDatabase.GetAssetPath(a), AssetDatabase.GetAssetPath(b), StringComparison.OrdinalIgnoreCase);
+                });
             sortedObjects.AddRange(remainingObjects);
 
             _selectedObjects.Clear();
@@ -8011,9 +8112,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 : UserState.lastSelectedNamespaceKey;
         }
 
-        private List<string> GetObjectOrderForType(string typeFullName)
+        private List<string> GetObjectOrderForType(Type type)
         {
-            if (string.IsNullOrWhiteSpace(typeFullName))
+            if (type == null)
             {
                 return new List<string>();
             }
@@ -8023,17 +8124,83 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (settings.persistStateInSettingsAsset)
             {
                 TypeObjectOrder entry = settings.objectOrders?.Find(o =>
-                    string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
+                    string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
                 );
                 return entry?.ObjectGuids?.ToList() ?? new List<string>();
             }
             else
             {
                 TypeObjectOrder entry = UserState.objectOrders?.Find(o =>
-                    string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
+                    string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
                 );
                 return entry?.ObjectGuids?.ToList() ?? new List<string>();
             }
+        }
+
+        private int GetCurrentPage(Type type)
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                TypeObjectOrder entry = settings.objectOrders?.Find(o =>
+                    string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
+                );
+                return entry?.page ?? 0;
+            }
+            else
+            {
+                TypeObjectOrder entry = UserState.objectOrders?.Find(o =>
+                    string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
+                );
+                return entry?.page ?? 0;
+            }
+        }
+
+        private void SetCurrentPage(Type type, int page)
+        {
+            PersistSettings(settings =>
+            {
+                bool dirty = false;
+                TypeObjectOrder entry = settings.objectOrders?.Find(o =>
+                    string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
+                );
+                if (entry == null)
+                {
+                    entry = new TypeObjectOrder();
+                    settings.objectOrders ??= new List<TypeObjectOrder>();
+                    settings.objectOrders.Add(entry);
+                    dirty = true;
+                }
+
+                if (page != entry.page)
+                {
+                    dirty = true;
+                    entry.page = page;
+                }
+
+                return dirty;
+            }, userState =>
+            {
+                bool dirty = false;
+                TypeObjectOrder entry = userState.objectOrders?.Find(o =>
+                    string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
+                );
+                if (entry == null)
+                {
+                    entry = new TypeObjectOrder();
+                    userState.objectOrders ??= new List<TypeObjectOrder>();
+                    userState.objectOrders.Add(entry);
+                    dirty = true;
+                }
+
+                if (page != entry.page)
+                {
+                    dirty = true;
+                    entry.page = page;
+                }
+
+                return dirty;
+            });
         }
 
         private void SetObjectOrderForType(string typeFullName, List<string> objectGuids)
