@@ -59,6 +59,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string SearchResultItemClass = "search-result-item";
         private const string SearchResultHighlightClass = "search-result-item--highlighted";
         private const string PopoverHighlightClass = "popover-item--highlighted";
+        private const string LabelSuggestionItemClass = "label-suggestion-item";
 
         private const string SearchPlaceholder = "Search...";
 
@@ -253,11 +254,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Label _processorHeaderLabel;
         private readonly List<IDataProcessor> _allDataProcessors = new();
         private readonly List<IDataProcessor> _compatibleDataProcessors = new();
-
-        private const string PrefsProcessorColumnCollapsedKey =
-            PrefsPrefix + "ProcessorColumnCollapsed";
-
-        private const string LabelSuggestionItemClass = "label-suggestion-item";
 
         private TextField _searchField;
         private VisualElement _searchPopover;
@@ -463,7 +459,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 #endif
         }
 
-        internal void PopulateSearchCache()
+        private void PopulateSearchCache()
         {
             _allManagedObjectsCache.Clear();
 
@@ -2195,12 +2191,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return null;
             }
 
-            if (!objType.IsValueType)
+            if (!objType.IsValueType && !visited.Add(obj))
             {
-                if (!visited.Add(obj))
-                {
-                    return null;
-                }
+                return null;
             }
 
             try
@@ -3846,6 +3839,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     .Where(IsLoadableType)
                     .Where(type => !currentlyManagedTypes.Contains(type))
                     .Distinct()
+                    .OrderBy(type => type.Name)
                     .ToList();
 
                 bool stateChanged = false;
@@ -6382,10 +6376,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                             evt.StopPropagation();
                         }
                     });
-                    suggestionItem.RegisterCallback<MouseEnterEvent>(evt =>
+                    suggestionItem.RegisterCallback<MouseEnterEvent>(_ =>
                         suggestionItem.style.backgroundColor = new Color(0.35f, 0.35f, 0.35f)
                     );
-                    suggestionItem.RegisterCallback<MouseLeaveEvent>(evt =>
+                    suggestionItem.RegisterCallback<MouseLeaveEvent>(_ =>
                         suggestionItem.style.backgroundColor = Color.clear
                     );
                     _inspectorLabelSuggestionsPopover.Add(suggestionItem);
@@ -7036,7 +7030,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .ToList();
         }
 
-        internal static bool IsLoadableType(Type type)
+        private static bool IsLoadableType(Type type)
         {
             bool allowed =
                 type != typeof(ScriptableObject)
@@ -7052,24 +7046,33 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return false;
             }
 
-            ScriptableObject instance = CreateInstance(type);
             try
             {
-                using SerializedObject serializedObject = new(instance);
-                using SerializedProperty scriptProperty = serializedObject.FindProperty("m_Script");
-                if (scriptProperty == null)
+                ScriptableObject instance = CreateInstance(type);
+                try
                 {
-                    return false;
-                }
+                    using SerializedObject serializedObject = new(instance);
+                    using SerializedProperty scriptProperty = serializedObject.FindProperty(
+                        "m_Script"
+                    );
+                    if (scriptProperty == null)
+                    {
+                        return false;
+                    }
 
-                return scriptProperty.objectReferenceValue != null;
-            }
-            finally
-            {
-                if (instance != null)
-                {
-                    DestroyImmediate(instance);
+                    return scriptProperty.objectReferenceValue != null;
                 }
+                finally
+                {
+                    if (instance != null)
+                    {
+                        DestroyImmediate(instance);
+                    }
+                }
+            }
+            catch
+            {
+                return false;
             }
         }
 
