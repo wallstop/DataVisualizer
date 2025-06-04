@@ -1099,6 +1099,7 @@
 
 .object-page-controller {
     background-color: rgb(33, 33, 33);
+    padding-top: 6px;
     flex-direction: row;
     justify-content: center;
 }
