@@ -196,10 +196,12 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Vector2 _popoverDragStartMousePos;
         private Vector2 _popoverDragStartPos;
 
-        private Label _collapseToggle;
+        private Label _labelCollapseToggle;
         private Label _labels;
+        private Label _labelAdvancedCollapseToggle;
         private HorizontalToggle _andOrToggle;
         private VisualElement _labelFilterSelectionRoot;
+        private VisualElement _logicalGrouping;
         private VisualElement _availableLabelsContainer;
         private VisualElement _andLabelsContainer;
         private VisualElement _orLabelsContainer;
@@ -459,11 +461,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal void PopulateSearchCache()
         {
             _allManagedObjectsCache.Clear();
-            List<Type> managedTypes = _scriptableObjectTypes
-                .SelectMany(tuple => tuple.Value)
-                .ToList();
+
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
-            foreach (Type type in managedTypes)
+            foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
             {
                 string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
                 foreach (string guid in guids)
@@ -4283,10 +4283,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             VisualElement collapseRow = new();
             collapseRow.AddToClassList("collapse-row");
-            _collapseToggle = new Label();
-            _collapseToggle.AddToClassList(StyleConstants.ClickableClass);
-            _collapseToggle.AddToClassList("collapse-toggle");
-            _collapseToggle.RegisterCallback<PointerDownEvent>(evt =>
+            _labelCollapseToggle = new Label();
+            _labelCollapseToggle.AddToClassList(StyleConstants.ClickableClass);
+            _labelCollapseToggle.AddToClassList("collapse-toggle");
+            _labelCollapseToggle.RegisterCallback<PointerDownEvent>(evt =>
             {
                 if (evt.button != 0)
                 {
@@ -4301,7 +4301,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ToggleLabelsCollapsed(!config.isCollapsed);
                 evt.StopPropagation();
             });
-            collapseRow.Add(_collapseToggle);
+            collapseRow.Add(_labelCollapseToggle);
 
             _labels = new Label("Labels");
             _labels.AddToClassList("labels-label");
@@ -4324,10 +4324,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             availableRow.Add(_availableLabelsContainer);
             _labelFilterSelectionRoot.Add(availableRow);
 
-            VisualElement logicalGrouping = new() { name = "label-logical-grouping" };
-            logicalGrouping.AddToClassList("label-logical-grouping");
-            _labelFilterSelectionRoot.Add(logicalGrouping);
-
             VisualElement andRow = new() { name = "and-filter-row" };
             andRow.AddToClassList("label-row-container");
             Label andLabel = new("AND:")
@@ -4344,7 +4340,36 @@ namespace WallstopStudios.DataVisualizer.Editor
             _andLabelsContainer = new VisualElement { name = "and-labels-container" };
             _andLabelsContainer.AddToClassList("label-pill-container");
             andRow.Add(_andLabelsContainer);
-            logicalGrouping.Add(andRow);
+            VisualElement advancedRow = new();
+            advancedRow.AddToClassList("advanced-row");
+
+            _labelAdvancedCollapseToggle = new Label();
+            _labelAdvancedCollapseToggle.AddToClassList(StyleConstants.ClickableClass);
+            _labelAdvancedCollapseToggle.AddToClassList("collapse-toggle");
+            _labelAdvancedCollapseToggle.AddToClassList("advanced");
+            _labelAdvancedCollapseToggle.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                config = CurrentTypeLabelFilterConfig;
+                if (config == null)
+                {
+                    return;
+                }
+
+                ToggleLabelsAdvancedCollapsed(!config.isAdvancedCollapsed);
+                evt.StopPropagation();
+            });
+            advancedRow.Add(_labelAdvancedCollapseToggle);
+
+            Label advanced = new("Advanced");
+            advanced.AddToClassList("advanced-label");
+            advancedRow.Add(advanced);
+            _labelFilterSelectionRoot.Add(advancedRow);
+            _labelFilterSelectionRoot.Add(andRow);
 
             _andOrToggle = new HorizontalToggle()
             {
@@ -4357,7 +4382,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _andOrToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
                 _andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, false);
                 _andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, true);
-                TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+                config = CurrentTypeLabelFilterConfig;
                 if (config != null && config.combinationType != LabelCombinationType.And)
                 {
                     config.combinationType = LabelCombinationType.And;
@@ -4370,7 +4395,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _andOrToggle.Indicator.style.backgroundColor = new Color(1f, 0.5f, 0.3137254902f);
                 _andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, true);
                 _andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, false);
-                TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+                config = CurrentTypeLabelFilterConfig;
                 if (config != null && config.combinationType != LabelCombinationType.Or)
                 {
                     config.combinationType = LabelCombinationType.Or;
@@ -4391,7 +4416,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                     break;
                 }
             }
-            logicalGrouping.Add(_andOrToggle);
+
+            _logicalGrouping = new VisualElement { name = "label-logical-grouping" };
+            _logicalGrouping.AddToClassList("label-logical-grouping");
+            _labelFilterSelectionRoot.Add(_logicalGrouping);
+            _logicalGrouping.Add(_andOrToggle);
 
             VisualElement orRow = new() { name = "or-filter-row" };
             orRow.AddToClassList("label-row-container");
@@ -4410,7 +4439,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _orLabelsContainer.AddToClassList("label-pill-container");
 
             orRow.Add(_orLabelsContainer);
-            logicalGrouping.Add(orRow);
+            _logicalGrouping.Add(orRow);
 
             _filterStatusLabel = new Label("")
             {
@@ -4442,6 +4471,53 @@ namespace WallstopStudios.DataVisualizer.Editor
             return objectColumn;
         }
 
+        private bool CanCollapseAdvancedLabelConfiguration()
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                return true;
+            }
+
+            return _andOrToggle.IsLeftSelected && config.orLabels.Count == 0;
+        }
+
+        private void ToggleLabelsAdvancedCollapsed(bool isCollapsed)
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (
+                config != null
+                && config.isAdvancedCollapsed != isCollapsed
+                && (!isCollapsed || CanCollapseAdvancedLabelConfiguration())
+            )
+            {
+                config.isAdvancedCollapsed = isCollapsed;
+                SaveLabelFilterConfig(config);
+            }
+
+            UpdateAdvancedClickableState();
+            if (_logicalGrouping != null)
+            {
+                _logicalGrouping.style.display =
+                    config?.isAdvancedCollapsed ?? true ? DisplayStyle.None : DisplayStyle.Flex;
+            }
+        }
+
+        private void UpdateAdvancedClickableState()
+        {
+            if (_labelAdvancedCollapseToggle != null)
+            {
+                _labelAdvancedCollapseToggle.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    CanCollapseAdvancedLabelConfiguration()
+                );
+                _labelAdvancedCollapseToggle.text =
+                    CurrentTypeLabelFilterConfig?.isAdvancedCollapsed ?? true
+                        ? StyleConstants.ArrowCollapsed
+                        : StyleConstants.ArrowExpanded;
+            }
+        }
+
         private void ToggleLabelsCollapsed(bool isCollapsed)
         {
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
@@ -4451,9 +4527,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 SaveLabelFilterConfig(config);
             }
 
-            if (_collapseToggle != null)
+            if (_labelCollapseToggle != null)
             {
-                _collapseToggle.text = isCollapsed
+                _labelCollapseToggle.text = isCollapsed
                     ? StyleConstants.ArrowCollapsed
                     : StyleConstants.ArrowExpanded;
             }
@@ -4712,7 +4788,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
             if (config == null)
             {
-                ;
                 return;
             }
 
@@ -4737,6 +4812,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             PopulateLabelPillContainers();
             ApplyLabelFilter();
             ToggleLabelsCollapsed(CurrentTypeLabelFilterConfig?.isCollapsed == true);
+            ToggleLabelsAdvancedCollapsed(
+                CurrentTypeLabelFilterConfig?.isAdvancedCollapsed == true
+            );
         }
 
         private void ClearLabelFilterUI()
@@ -4928,113 +5006,119 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void ApplyLabelFilter()
         {
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (
-                config == null
-                || _namespaceController.SelectedType == null
-                || _selectedObjects == null
-            )
+            try
             {
+                if (
+                    config == null
+                    || _namespaceController.SelectedType == null
+                    || _selectedObjects == null
+                )
+                {
+                    _filteredObjects.Clear();
+                    if (_filterStatusLabel != null)
+                    {
+                        _filterStatusLabel.text = "Select a type to see objects.";
+                    }
+                    return;
+                }
+
+                switch (config.combinationType)
+                {
+                    case LabelCombinationType.And:
+                    {
+                        _andOrToggle?.SelectLeft(force: true);
+                        break;
+                    }
+                    case LabelCombinationType.Or:
+                    {
+                        _andOrToggle?.SelectRight(force: true);
+                        break;
+                    }
+                }
+
                 _filteredObjects.Clear();
-                if (_filterStatusLabel != null)
-                {
-                    _filterStatusLabel.text = "Select a type to see objects.";
-                }
+                List<string> andLabels = config.andLabels;
+                List<string> orLabels = config.orLabels;
 
-                BuildObjectsView();
-                return;
-            }
+                bool noAndFilter = andLabels == null || andLabels.Count == 0;
+                bool noOrFilter = orLabels == null || orLabels.Count == 0;
 
-            switch (config.combinationType)
-            {
-                case LabelCombinationType.And:
+                if (noAndFilter && noOrFilter)
                 {
-                    _andOrToggle?.SelectLeft(force: true);
-                    break;
-                }
-                case LabelCombinationType.Or:
-                {
-                    _andOrToggle?.SelectRight(force: true);
-                    break;
-                }
-            }
-
-            _filteredObjects.Clear();
-            List<string> andLabels = config.andLabels;
-            List<string> orLabels = config.orLabels;
-
-            bool noAndFilter = andLabels == null || andLabels.Count == 0;
-            bool noOrFilter = orLabels == null || orLabels.Count == 0;
-
-            if (noAndFilter && noOrFilter)
-            {
-                foreach (ScriptableObject selectedObject in _selectedObjects)
-                {
-                    _filteredObjects.Add(selectedObject);
-                }
-            }
-            else
-            {
-                foreach (ScriptableObject obj in _selectedObjects)
-                {
-                    if (obj == null)
+                    foreach (ScriptableObject selectedObject in _selectedObjects)
                     {
-                        continue;
+                        _filteredObjects.Add(selectedObject);
                     }
-
-                    string[] objLabelsArray = AssetDatabase.GetLabels(obj);
-                    HashSet<string> objLabelsSet = new(objLabelsArray, StringComparer.Ordinal);
-
-                    bool matchesAnd =
-                        noAndFilter
-                        || andLabels.TrueForAll(filterLabel => objLabelsSet.Contains(filterLabel));
-                    bool matchesOr =
-                        noOrFilter
-                        || orLabels.Exists(filterLabel => objLabelsSet.Contains(filterLabel));
-
-                    switch (config.combinationType)
-                    {
-                        case LabelCombinationType.And:
-                        {
-                            if (matchesAnd && matchesOr)
-                            {
-                                _filteredObjects.Add(obj);
-                            }
-
-                            break;
-                        }
-                        case LabelCombinationType.Or:
-                        {
-                            if (matchesAnd || matchesOr)
-                            {
-                                _filteredObjects.Add(obj);
-                            }
-
-                            break;
-                        }
-                    }
-                }
-            }
-
-            int totalCount = _selectedObjects.Count;
-            int shownCount = _filteredObjects.Count;
-            if (_filterStatusLabel != null)
-            {
-                if (shownCount == totalCount)
-                {
-                    _filterStatusLabel.style.display = DisplayStyle.None;
                 }
                 else
                 {
-                    _filterStatusLabel.style.display = DisplayStyle.Flex;
-                    int hidden = totalCount - shownCount;
-                    _filterStatusLabel.text =
-                        hidden < 20 && hidden != totalCount
-                            ? $"<b><color=yellow>{hidden}</color></b> objects hidden by label filter."
-                            : $"<b><color=red>{hidden}</color></b> objects hidden by label filter.";
+                    HashSet<string> uniqueLabels = new(StringComparer.Ordinal);
+                    Predicate<string> labelMatch = uniqueLabels.Contains;
+                    foreach (ScriptableObject obj in _selectedObjects)
+                    {
+                        if (obj == null)
+                        {
+                            continue;
+                        }
+
+                        string[] labels = AssetDatabase.GetLabels(obj);
+                        uniqueLabels.Clear();
+                        foreach (string label in labels)
+                        {
+                            uniqueLabels.Add(label);
+                        }
+
+                        bool matchesAnd = noAndFilter || andLabels.TrueForAll(labelMatch);
+                        bool matchesOr = noOrFilter || orLabels.Exists(labelMatch);
+
+                        switch (config.combinationType)
+                        {
+                            case LabelCombinationType.And:
+                            {
+                                if (matchesAnd && matchesOr)
+                                {
+                                    _filteredObjects.Add(obj);
+                                }
+
+                                break;
+                            }
+                            case LabelCombinationType.Or:
+                            {
+                                if (matchesAnd || matchesOr)
+                                {
+                                    _filteredObjects.Add(obj);
+                                }
+
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                int totalCount = _selectedObjects.Count;
+                int shownCount = _filteredObjects.Count;
+                if (_filterStatusLabel != null)
+                {
+                    if (shownCount == totalCount)
+                    {
+                        _filterStatusLabel.style.display = DisplayStyle.None;
+                    }
+                    else
+                    {
+                        _filterStatusLabel.style.display = DisplayStyle.Flex;
+                        int hidden = totalCount - shownCount;
+                        _filterStatusLabel.text =
+                            hidden < 20 && hidden != totalCount
+                                ? $"<b><color=yellow>{hidden}</color></b> objects hidden by label filter."
+                                : $"<b><color=red>{hidden}</color></b> objects hidden by label filter.";
+                    }
                 }
             }
-
-            BuildObjectsView();
+            finally
+            {
+                UpdateAdvancedClickableState();
+                BuildObjectsView();
+            }
         }
 
         private TypeLabelFilterConfig LoadOrCreateLabelFilterConfig(Type type)

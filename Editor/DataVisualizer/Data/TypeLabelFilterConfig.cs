@@ -30,11 +30,14 @@
 
         public bool isCollapsed;
 
+        public bool isAdvancedCollapsed = true;
+
         public TypeLabelFilterConfig Clone()
         {
             return new TypeLabelFilterConfig
             {
                 isCollapsed = isCollapsed,
+                isAdvancedCollapsed = isAdvancedCollapsed,
                 combinationType = combinationType,
                 typeFullName = typeFullName ?? string.Empty,
                 andLabels = andLabels?.ToList() ?? new List<string>(),
