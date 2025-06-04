@@ -211,6 +211,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _orLabelsContainer;
         private Label _filterStatusLabel;
 
+        private HorizontalToggle _processorLogicToggle;
+
         private readonly List<string> _currentUniqueLabelsForType = new();
 
         private readonly List<ScriptableObject> _filteredObjects = new();
@@ -1332,6 +1334,77 @@ namespace WallstopStudios.DataVisualizer.Editor
             header.Add(_processorHeaderLabel);
             _processorAreaElement.Add(header);
 
+            ProcessorState state = CurrentProcessorState;
+
+            VisualElement processorArea = new()
+            {
+                style = { flexDirection = FlexDirection.Column },
+            };
+            processorArea.AddToClassList("processor-area");
+            _processorLogicToggle = new HorizontalToggle()
+            {
+                name = "processor-logic-toggle",
+                LeftText = "ALL",
+                RightText = "FILTERED",
+            };
+            _processorLogicToggle.AddToClassList("processor");
+            _processorLogicToggle.OnLeftSelected += () =>
+            {
+                _processorLogicToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
+                _processorLogicToggle.LeftLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    false
+                );
+                _processorLogicToggle.RightLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    true
+                );
+                state = CurrentProcessorState;
+                if (state != null && state.logic != ProcessorLogic.All)
+                {
+                    state.logic = ProcessorLogic.All;
+                    SaveProcessorState(state);
+                }
+            };
+            _processorLogicToggle.OnRightSelected += () =>
+            {
+                _processorLogicToggle.Indicator.style.backgroundColor = new Color(
+                    1f,
+                    0.5f,
+                    0.3137254902f
+                );
+                _processorLogicToggle.LeftLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    true
+                );
+                _processorLogicToggle.RightLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    false
+                );
+                ProcessorState state = CurrentProcessorState;
+                if (state != null && state.logic != ProcessorLogic.Filtered)
+                {
+                    state.logic = ProcessorLogic.Filtered;
+                    SaveProcessorState(state);
+                }
+            };
+
+            switch (state?.logic)
+            {
+                case ProcessorLogic.All:
+                {
+                    _processorLogicToggle.SelectLeft(force: true);
+                    break;
+                }
+                case ProcessorLogic.Filtered:
+                {
+                    _processorLogicToggle.SelectRight(force: true);
+                    break;
+                }
+            }
+
+            processorArea.Add(_processorLogicToggle);
+
             ScrollView scrollView = new(ScrollViewMode.Vertical)
             {
                 name = "processor-list-scrollview",
@@ -1339,7 +1412,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             scrollView.AddToClassList("processor-list-scrollview");
             _processorListContainer = new VisualElement { name = "processor-list-container" };
             scrollView.Add(_processorListContainer);
-            _processorAreaElement.Add(scrollView);
+            processorArea.Add(scrollView);
+            _processorAreaElement.Add(processorArea);
 
             return _processorAreaElement;
         }
@@ -4386,6 +4460,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 LeftText = "AND &&",
                 RightText = "OR ||",
             };
+            _andOrToggle.AddToClassList("label");
             _andOrToggle.OnLeftSelected += () =>
             {
                 _andOrToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
@@ -4412,7 +4487,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     UpdateLabelAreaAndFilter();
                 }
             };
-            switch (CurrentTypeLabelFilterConfig?.combinationType)
+            switch (config?.combinationType ?? LabelCombinationType.And)
             {
                 case LabelCombinationType.And:
                 {
@@ -5258,6 +5333,56 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             );
             return state;
+        }
+
+        private void SaveProcessorState(ProcessorState state)
+        {
+            PersistSettings(
+                settings =>
+                {
+                    settings.processorStates ??= new List<ProcessorState>();
+                    ProcessorState existing = settings.processorStates.Find(existingState =>
+                        string.Equals(
+                            existingState.typeFullName,
+                            state.typeFullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (existing == null)
+                    {
+                        settings.processorStates.Add(state);
+                    }
+                    else
+                    {
+                        settings.processorStates.Remove(existing);
+                        settings.processorStates.Add(state);
+                    }
+
+                    return true;
+                },
+                userState =>
+                {
+                    userState.processorStates ??= new List<ProcessorState>();
+                    ProcessorState existing = userState.processorStates.Find(existingState =>
+                        string.Equals(
+                            existingState.typeFullName,
+                            state.typeFullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (existing == null)
+                    {
+                        userState.processorStates.Add(state);
+                    }
+                    else
+                    {
+                        userState.processorStates.Remove(existing);
+                        userState.processorStates.Add(state);
+                    }
+
+                    return true;
+                }
+            );
         }
 
         private void SaveLabelFilterConfig(TypeLabelFilterConfig config)

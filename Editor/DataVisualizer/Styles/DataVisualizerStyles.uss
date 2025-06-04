@@ -1012,8 +1012,7 @@
 
 .processor-list-scrollview {
     flex-grow: 1;
-    padding-top: 6px;
-    padding-bottom: 6px;
+    padding: 0;
     border-bottom-width: 1px;
     border-bottom-color: rgba(128, 128, 128, 0.5);
 }
