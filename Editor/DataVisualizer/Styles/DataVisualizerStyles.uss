@@ -912,7 +912,7 @@
 
 .label-pill {
     cursor: pan;
-    padding: 0 2px;
+    padding: 0 4px;
     height: 22px;
     margin: 2px;
     flex-direction: row;
@@ -993,10 +993,33 @@
     border-radius: 6px;
 }
 
+.processor-button {
+    margin: 2px 4px;
+    padding: 0 4px;
+    border-radius: 3px;
+    -unity-text-align: middle-center;
+}
+
 .processor-column {
     flex-direction: column;
     border-right-width: 1px;
     padding: 0;
+}
+
+.processor-list-container {
+    border-color: rgba(128, 128, 128, 0.5);
+    background-color: rgb(56, 56, 56);
+    border-width: 1px;
+    border-radius: 6px;
+    min-width: 100px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 4px 0;
+    margin: 4px 6px;
+}
+
+.processor-area {
+    background-color: rgb(33, 33, 33);
 }
 
 .processor-column-header {
@@ -1006,6 +1029,7 @@
     padding: 0;
     flex-shrink: 0;
     padding-bottom: 6px;
+    background-color: rgb(33, 33, 33);
     border-bottom-width: 1px;
     border-bottom-color: rgba(128, 128, 128, 0.5);
 }
@@ -1025,6 +1049,11 @@
     flex-direction: row;
     width: 200px;
 }
+
+.processor > .horizontal-toggle__container {
+    height: 100%;
+}
+
 
 .horizontal-toggle__container {
     flex-grow: 1;

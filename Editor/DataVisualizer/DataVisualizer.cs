@@ -91,6 +91,18 @@ namespace WallstopStudios.DataVisualizer.Editor
             OR = 3,
         }
 
+        private static readonly Color[] PredefinedLabelColors =
+        {
+            new Color(0.32f, 0.55f, 0.78f),
+            new Color(0.90f, 0.42f, 0.32f),
+            new Color(0.45f, 0.70f, 0.40f),
+            new Color(0.82f, 0.60f, 0.28f),
+            new Color(0.50f, 0.48f, 0.70f),
+            new Color(0.75f, 0.45f, 0.60f),
+            new Color(0.30f, 0.65f, 0.65f),
+            new Color(0.65f, 0.65f, 0.35f),
+        };
+
         internal static DataVisualizer Instance;
 
         private static readonly StringBuilder CachedStringBuilder = new();
@@ -212,22 +224,13 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Label _filterStatusLabel;
 
         private HorizontalToggle _processorLogicToggle;
+        private VisualElement _processorArea;
 
         private readonly List<string> _currentUniqueLabelsForType = new();
 
         private readonly List<ScriptableObject> _filteredObjects = new();
-        private readonly Dictionary<string, Color> _labelColorCache = new();
-        private readonly List<Color> _predefinedLabelColors = new()
-        {
-            new Color(0.32f, 0.55f, 0.78f),
-            new Color(0.90f, 0.42f, 0.32f),
-            new Color(0.45f, 0.70f, 0.40f),
-            new Color(0.82f, 0.60f, 0.28f),
-            new Color(0.50f, 0.48f, 0.70f),
-            new Color(0.75f, 0.45f, 0.60f),
-            new Color(0.30f, 0.65f, 0.65f),
-            new Color(0.65f, 0.65f, 0.35f),
-        };
+        private readonly Dictionary<string, Color> _textColorCache = new();
+
         private int _nextColorIndex;
 
         private VisualElement _inspectorLabelsSection;
@@ -246,10 +249,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _processorAreaElement;
         private VisualElement _processorListContainer;
         private Label _processorToggleCollapseButton;
+        private VisualElement _processorHeader;
         private Label _processorHeaderLabel;
         private readonly List<IDataProcessor> _allDataProcessors = new();
         private readonly List<IDataProcessor> _compatibleDataProcessors = new();
-        private bool _isProcessorColumnContentCollapsed = true;
 
         private const string PrefsProcessorColumnCollapsedKey =
             PrefsPrefix + "ProcessorColumnCollapsed";
@@ -381,14 +384,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     );
                 }
             }
-            Debug.Log($"Discovered {_allDataProcessors.Count} Data Processors.");
-            // --- End Discovery ---
 
-            // Load processor column collapse state
-            _isProcessorColumnContentCollapsed = EditorPrefs.GetBool(
-                PrefsProcessorColumnCollapsedKey,
-                true
-            ); // Default to collapsed
+            _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
 
             LoadScriptableObjectTypes();
             rootVisualElement.RegisterCallback<KeyDownEvent>(
@@ -969,6 +966,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _namespaceController.SelectType(this, selectedType);
             }
             UpdateCreateObjectButtonStyle();
+            BuildProcessorColumnView();
             UpdateLabelAreaAndFilter();
         }
 
@@ -1065,7 +1063,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _lastSavedOuterWidth = initialOuterWidth;
             _lastSavedInnerWidth = initialInnerWidth;
             _namespaceColumnElement = CreateNamespaceColumn();
-            _processorAreaElement = CreateProcessorColumn();
+            CreateProcessorColumn();
             _objectColumnElement = CreateObjectColumn();
             VisualElement inspectorColumn = CreateInspectorColumn();
 
@@ -1306,13 +1304,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private VisualElement CreateProcessorColumn()
+        private void CreateProcessorColumn()
         {
             _processorAreaElement = new VisualElement { name = "processor-column" };
             _processorAreaElement.AddToClassList("processor-column");
 
-            VisualElement header = new() { name = "processor-column-header" };
-            header.AddToClassList("processor-column-header");
+            _processorHeader = new VisualElement { name = "processor-column-header" };
+            _processorHeader.AddToClassList("processor-column-header");
             _processorHeaderLabel = new Label("Processors")
             {
                 style = { unityFontStyleAndWeight = FontStyle.Bold },
@@ -1330,17 +1328,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ToggleProcessorContentCollapse();
             });
 
-            header.Add(_processorToggleCollapseButton);
-            header.Add(_processorHeaderLabel);
-            _processorAreaElement.Add(header);
+            _processorHeader.Add(_processorToggleCollapseButton);
+            _processorHeader.Add(_processorHeaderLabel);
+            _processorAreaElement.Add(_processorHeader);
 
             ProcessorState state = CurrentProcessorState;
 
-            VisualElement processorArea = new()
-            {
-                style = { flexDirection = FlexDirection.Column },
-            };
-            processorArea.AddToClassList("processor-area");
+            _processorArea = new VisualElement { style = { flexDirection = FlexDirection.Column } };
+            _processorArea.AddToClassList("processor-area");
             _processorLogicToggle = new HorizontalToggle()
             {
                 name = "processor-logic-toggle",
@@ -1381,7 +1376,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     StyleConstants.ClickableClass,
                     false
                 );
-                ProcessorState state = CurrentProcessorState;
+                state = CurrentProcessorState;
                 if (state != null && state.logic != ProcessorLogic.Filtered)
                 {
                     state.logic = ProcessorLogic.Filtered;
@@ -1389,7 +1384,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             };
 
-            switch (state?.logic)
+            switch (state?.logic ?? ProcessorLogic.All)
             {
                 case ProcessorLogic.All:
                 {
@@ -1403,7 +1398,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            processorArea.Add(_processorLogicToggle);
+            _processorArea.Add(_processorLogicToggle);
 
             ScrollView scrollView = new(ScrollViewMode.Vertical)
             {
@@ -1411,11 +1406,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             scrollView.AddToClassList("processor-list-scrollview");
             _processorListContainer = new VisualElement { name = "processor-list-container" };
+            _processorListContainer.AddToClassList("processor-list-container");
             scrollView.Add(_processorListContainer);
-            processorArea.Add(scrollView);
-            _processorAreaElement.Add(processorArea);
-
-            return _processorAreaElement;
+            _processorArea.Add(scrollView);
+            _processorAreaElement.Add(_processorArea);
         }
 
         internal void BuildProcessorColumnView()
@@ -1446,56 +1440,130 @@ namespace WallstopStudios.DataVisualizer.Editor
             _processorAreaElement.style.display = DisplayStyle.Flex;
             _processorToggleCollapseButton.SetEnabled(true);
 
-            if (_isProcessorColumnContentCollapsed)
+            ProcessorState state = CurrentProcessorState;
+
+            switch (state?.logic ?? ProcessorLogic.All)
+            {
+                case ProcessorLogic.All:
+                {
+                    _processorLogicToggle.SelectLeft(force: true);
+                    break;
+                }
+                case ProcessorLogic.Filtered:
+                {
+                    _processorLogicToggle.SelectRight(force: true);
+                    break;
+                }
+            }
+
+            bool isCollapsed = state?.isCollapsed == true;
+            if (isCollapsed)
             {
                 _processorToggleCollapseButton.text = StyleConstants.ArrowCollapsed;
-                _processorHeaderLabel.text = $"Processors ({_compatibleDataProcessors.Count})";
-                _processorListContainer.parent.style.display = DisplayStyle.None;
+                _processorHeaderLabel.text =
+                    $"Processors (<b><color=yellow>{_compatibleDataProcessors.Count}</color></b>)";
+                if (_processorArea != null)
+                {
+                    _processorArea.style.display = DisplayStyle.None;
+                }
+
+                if (_processorHeader != null)
+                {
+                    _processorHeader.style.borderBottomWidth = 1;
+                }
             }
             else
             {
                 _processorToggleCollapseButton.text = StyleConstants.ArrowExpanded;
                 _processorHeaderLabel.text = "Processors";
-                _processorListContainer.parent.style.display = DisplayStyle.Flex;
+                if (_processorArea != null)
+                {
+                    _processorArea.style.display = DisplayStyle.Flex;
+                }
+                if (_processorHeader != null)
+                {
+                    _processorHeader.style.borderBottomWidth = 0;
+                }
 
                 foreach (IDataProcessor processor in _compatibleDataProcessors)
                 {
-                    Button procButton = new(() => RunDataProcessor(processor))
+                    string processorName = processor.Name;
+                    if (!_textColorCache.TryGetValue(processorName, out Color color))
                     {
-                        text = processor.Name,
+                        color = GenerateColorForText(processorName);
+                        _textColorCache[processorName] = color;
+                    }
+
+                    Label processorButton = new(processorName)
+                    {
                         tooltip = processor.Description,
-                        style = { marginTop = 2, marginBottom = 2 },
+                        style = { backgroundColor = color, color = Color.white },
                     };
-                    _processorListContainer.Add(procButton);
+                    processorButton.AddToClassList("processor-button");
+                    processorButton.AddToClassList(StyleConstants.ClickableClass);
+
+                    IDataProcessor localProcessor = processor;
+                    processorButton.RegisterCallback<PointerDownEvent>(evt =>
+                    {
+                        if (evt.button != 0)
+                        {
+                            return;
+                        }
+
+                        RunDataProcessor(processorButton, localProcessor);
+                    });
+                    _processorListContainer.Add(processorButton);
                 }
             }
         }
 
         private void ToggleProcessorContentCollapse()
         {
-            _isProcessorColumnContentCollapsed = !_isProcessorColumnContentCollapsed;
-            EditorPrefs.SetBool(
-                PrefsProcessorColumnCollapsedKey,
-                _isProcessorColumnContentCollapsed
-            );
+            ProcessorState state = CurrentProcessorState;
+            if (state != null)
+            {
+                state.isCollapsed = !state.isCollapsed;
+                SaveProcessorState(state);
+            }
             BuildProcessorColumnView();
         }
 
-        private void RunDataProcessor(IDataProcessor processor)
+        private void RunDataProcessor(VisualElement context, IDataProcessor processor)
         {
-            if (
-                processor == null
-                || _namespaceController.SelectedType == null
-                || _selectedObjects == null
-            )
+            ProcessorState state = CurrentProcessorState;
+            if (processor == null || _namespaceController.SelectedType == null || state == null)
             {
                 return;
             }
 
+            ScriptableObject[] toProcess;
+
+            switch (state.logic)
+            {
+                case ProcessorLogic.All:
+                {
+                    toProcess = _selectedObjects.ToArray();
+                    break;
+                }
+                case ProcessorLogic.Filtered:
+                {
+                    toProcess = _filteredObjects.ToArray();
+                    break;
+                }
+                default:
+                {
+                    throw new InvalidEnumArgumentException(
+                        nameof(state.logic),
+                        (int)state.logic,
+                        typeof(ProcessorLogic)
+                    );
+                }
+            }
+
             string message =
-                $"Run processor '{processor.Name}' on {_selectedObjects.Count} "
-                + $"object{(_selectedObjects.Count != 1 ? "s" : "")} "
-                + $"of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}'?";
+                $"Run processor '{processor.Name}' on <b><color={context.style.backgroundColor.value.ToHex()}>{toProcess.Length}</color></b> "
+                + $"object{(toProcess.Length != 1 ? "s" : "")} "
+                + $"of type '<b><color=yellow>{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}</color></b>'?";
 
             BuildAndOpenConfirmationPopover(
                 message,
@@ -1504,10 +1572,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     try
                     {
-                        Debug.Log($"Running processor '{processor.Name}'...");
-                        processor.Process(_namespaceController.SelectedType, _selectedObjects);
-                        Debug.Log($"Processor '{processor.Name}' finished.");
-
+                        processor.Process(_namespaceController.SelectedType, toProcess);
                         AssetDatabase.SaveAssets();
                         AssetDatabase.Refresh();
                         ScheduleRefresh();
@@ -1522,7 +1587,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         );
                     }
                 },
-                _processorAreaElement.Q<Button>()
+                context
             );
         }
 
@@ -4835,7 +4900,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal void UpdateLabelAreaAndFilter()
         {
             ClearLabelFilterUI();
-            if (_namespaceController.SelectedType == null || _selectedObjects == null)
+            if (_namespaceController.SelectedType == null)
             {
                 if (_filterStatusLabel != null)
                 {
@@ -5106,11 +5171,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
             try
             {
-                if (
-                    config == null
-                    || _namespaceController.SelectedType == null
-                    || _selectedObjects == null
-                )
+                if (config == null || _namespaceController.SelectedType == null)
                 {
                     _filteredObjects.Clear();
                     if (_filterStatusLabel != null)
@@ -5293,9 +5354,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                         settings.processorStates = new List<ProcessorState>();
                         dirty = true;
                     }
-                    state = settings.processorStates.Find(existingConfig =>
+                    state = settings.processorStates.Find(existingState =>
                         string.Equals(
-                            existingConfig.typeFullName,
+                            existingState.typeFullName,
                             type.FullName,
                             StringComparison.Ordinal
                         )
@@ -5316,9 +5377,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                         userState.processorStates = new List<ProcessorState>();
                         dirty = true;
                     }
-                    state = userState.processorStates.Find(existingConfig =>
+                    state = userState.processorStates.Find(existingState =>
                         string.Equals(
-                            existingConfig.typeFullName,
+                            existingState.typeFullName,
                             type.FullName,
                             StringComparison.Ordinal
                         )
@@ -5435,7 +5496,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        // --- Color Helpers for Labels ---
         private Color GetColorForLabel(string labelText)
         {
             if (string.IsNullOrWhiteSpace(labelText))
@@ -5443,23 +5503,23 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return Color.gray;
             }
 
-            if (_labelColorCache.TryGetValue(labelText, out Color color))
+            if (_textColorCache.TryGetValue(labelText, out Color color))
             {
                 return color;
             }
 
-            if (_nextColorIndex < _predefinedLabelColors.Count)
-            {
-                color = _predefinedLabelColors[_nextColorIndex++];
-            }
-            else
-            {
-                // Generate a consistent color from hash for additional labels
-                float hue = Mathf.Abs(labelText.GetHashCode() % 256) / 255f;
-                color = Color.HSVToRGB(hue, 0.65f, 0.90f); // Ensure good saturation/value
-            }
-            _labelColorCache[labelText] = color;
+            color =
+                _nextColorIndex < PredefinedLabelColors.Length
+                    ? PredefinedLabelColors[_nextColorIndex++]
+                    : GenerateColorForText(labelText);
+            _textColorCache[labelText] = color;
             return color;
+        }
+
+        private static Color GenerateColorForText(string text)
+        {
+            float hue = Mathf.Abs(text.GetHashCode() % 256) / 255f;
+            return Color.HSVToRGB(hue, 0.65f, 0.90f);
         }
 
         private static bool IsColorDark(Color c)
@@ -6696,7 +6756,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal ScriptableObject DetermineObjectToAutoSelect()
         {
             Type selectedType = _namespaceController.SelectedType;
-            if (selectedType == null || _selectedObjects == null || _selectedObjects.Count == 0)
+            if (selectedType == null || _selectedObjects.Count == 0)
             {
                 return null;
             }

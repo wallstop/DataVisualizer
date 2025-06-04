@@ -2,6 +2,7 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using UnityEngine;
 
     public interface IDataProcessor
@@ -12,7 +13,10 @@
 
         IEnumerable<Type> Accepts { get; }
 
-        int WillEffect(Type type, IEnumerable<ScriptableObject> objects);
+        int WillEffect(Type type, IEnumerable<ScriptableObject> objects)
+        {
+            return objects.Count();
+        }
 
         void Process(Type type, IEnumerable<ScriptableObject> objects);
     }
