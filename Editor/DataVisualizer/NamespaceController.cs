@@ -149,7 +149,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             dataVisualizer.BuildObjectsView();
             dataVisualizer.SelectObject(objectToSelect);
             dataVisualizer.UpdateCreateObjectButtonStyle();
-            dataVisualizer.BuildProcessorColumnView();
             dataVisualizer.UpdateLabelAreaAndFilter();
         }
 
