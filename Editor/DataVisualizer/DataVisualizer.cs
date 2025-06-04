@@ -2985,6 +2985,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 DataVisualizerSettings localSettings = Settings;
                 localSettings.persistStateInSettingsAsset = newModeIsSettingsAsset;
                 MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset);
+                localSettings.MarkDirty();
                 AssetDatabase.SaveAssets();
                 if (!newModeIsSettingsAsset)
                 {
