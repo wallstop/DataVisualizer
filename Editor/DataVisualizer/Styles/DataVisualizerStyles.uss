@@ -620,9 +620,8 @@
 
 .type-selection-list-item:hover {
     color: black;
-    background-color: lightgreen;
+    background-color: rgb(89, 89, 89);
 }
-
 
 .type-selection-list-item--disabled {
     opacity: 0.5;
@@ -680,12 +679,12 @@
 }
 
 .search-result-item:hover {
-    background-color: lightgreen;
+    background-color: rgb(89, 89, 89);
     color: black;
 }
 
 .search-result-item--highlighted {
-    background-color: lightgreen;
+    background-color: rgb(89, 89, 89);
     color: black;
 }
 
@@ -730,8 +729,7 @@
 }
 
 .popover-item--highlighted {
-
-    background-color: lightgreen;
+    background-color: rgb(89, 89, 89);
     color: black;
 }
 
@@ -1057,7 +1055,7 @@
 
 .horizontal-toggle__container {
     flex-grow: 1;
-    height: 34px;
+    height: 100%;
     border-color: rgba(128, 128, 128, 0.5);
     border-width: 1px;
     flex-direction: row;

@@ -229,7 +229,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private readonly List<string> _currentUniqueLabelsForType = new();
 
         private readonly List<ScriptableObject> _filteredObjects = new();
-        private readonly Dictionary<string, Color> _textColorCache = new();
+        private readonly Dictionary<string, Color> _textColorCache = new(StringComparer.Ordinal);
 
         private int _nextColorIndex;
 
@@ -422,6 +422,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 Instance = null;
             }
+
+            _isLabelCachePopulated = false;
             _selectedElement = null;
             _selectedObject = null;
             _scriptableObjectTypes.Clear();
@@ -1384,7 +1386,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             };
 
-            switch (state?.logic ?? ProcessorLogic.All)
+            switch (state?.logic ?? ProcessorLogic.Filtered)
             {
                 case ProcessorLogic.All:
                 {
@@ -1442,7 +1444,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             ProcessorState state = CurrentProcessorState;
 
-            switch (state?.logic ?? ProcessorLogic.All)
+            switch (state?.logic ?? ProcessorLogic.Filtered)
             {
                 case ProcessorLogic.All:
                 {
@@ -2694,6 +2696,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleGlobalKeyDown(KeyDownEvent evt)
         {
+            if (_activePopover == _inspectorLabelSuggestionsPopover)
+            {
+                HandleNewLabelInputKeyDown(evt);
+                return;
+            }
+
             VisualElement activePopover = _activeNestedPopover ?? _activePopover;
             if (activePopover != null && activePopover.style.display == DisplayStyle.Flex)
             {
@@ -4429,7 +4437,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
 
-            _labelCollapseRow = new();
+            _labelCollapseRow = new VisualElement();
             _labelCollapseRow.AddToClassList("collapse-row");
             _labelCollapseToggle = new Label();
             _labelCollapseToggle.AddToClassList(StyleConstants.ClickableClass);
@@ -4631,6 +4639,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             return _andOrToggle.IsLeftSelected && config.orLabels.Count == 0;
         }
 
+        private bool CanCollapseLabels()
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                return true;
+            }
+
+            return config.andLabels.Count == 0 && config.orLabels.Count == 0;
+        }
+
         private void ToggleLabelsAdvancedCollapsed(bool isCollapsed)
         {
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
@@ -4671,34 +4690,53 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private void UpdateLabelsCollapsedClickableState()
+        {
+            if (_labelCollapseToggle != null)
+            {
+                _labelCollapseToggle.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    CanCollapseLabels()
+                );
+
+                bool isCollapsed = CurrentTypeLabelFilterConfig?.isCollapsed ?? true;
+                _labelCollapseToggle.text = isCollapsed
+                    ? StyleConstants.ArrowCollapsed
+                    : StyleConstants.ArrowExpanded;
+
+                _labelCollapseToggle.tooltip =
+                    isCollapsed ? "Explore label filtering logic"
+                    : CanCollapseAdvancedLabelConfiguration() ? "Hide label filtering logic"
+                    : "Can not un-collapse due to populated label configuration";
+            }
+        }
+
         private void ToggleLabelsCollapsed(bool isCollapsed)
         {
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (config != null && config.isCollapsed != isCollapsed)
+            if (
+                config != null
+                && config.isCollapsed != isCollapsed
+                && (!isCollapsed || CanCollapseLabels())
+            )
             {
                 config.isCollapsed = isCollapsed;
                 SaveLabelFilterConfig(config);
             }
 
-            if (_labelCollapseToggle != null)
-            {
-                _labelCollapseToggle.text = isCollapsed
-                    ? StyleConstants.ArrowCollapsed
-                    : StyleConstants.ArrowExpanded;
-            }
-
+            UpdateLabelsCollapsedClickableState();
             if (_labels != null)
             {
-                _labels.text = isCollapsed
-                    ? $"Labels (<b><color=yellow>{_currentUniqueLabelsForType.Count}</color></b> hidden)"
-                    : "Labels";
+                _labels.text =
+                    config?.isCollapsed ?? true
+                        ? $"Labels (<b><color=yellow>{_currentUniqueLabelsForType.Count}</color></b>)"
+                        : "Labels";
             }
 
             if (_labelFilterSelectionRoot != null)
             {
-                _labelFilterSelectionRoot.style.display = isCollapsed
-                    ? DisplayStyle.None
-                    : DisplayStyle.Flex;
+                _labelFilterSelectionRoot.style.display =
+                    config?.isCollapsed ?? true ? DisplayStyle.None : DisplayStyle.Flex;
             }
         }
 
@@ -5275,6 +5313,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             finally
             {
+                UpdateLabelsCollapsedClickableState();
                 UpdateAdvancedClickableState();
                 BuildObjectsView();
             }
@@ -6209,14 +6248,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnNewLabelInputFocus()
         {
-            if (!_isLabelCachePopulated)
-            {
-                PopulateProjectUniqueLabelsCache();
-            }
-            if (!string.IsNullOrWhiteSpace(_inspectorNewLabelInput.value) && _isLabelCachePopulated)
-            {
-                UpdateLabelSuggestions(_inspectorNewLabelInput.value);
-            }
+            PopulateProjectUniqueLabelsCache();
+            UpdateLabelSuggestions(_inspectorNewLabelInput.value);
         }
 
         private void OnNewLabelInputBlur(FocusOutEvent evt)
@@ -6295,11 +6328,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            if (!_isLabelCachePopulated)
-            {
-                PopulateProjectUniqueLabelsCache();
-            }
-
+            PopulateProjectUniqueLabelsCache();
             if (_activePopover == null && _projectUniqueLabelsCache.Count > 0)
             {
                 OpenPopover(
@@ -6322,18 +6351,17 @@ namespace WallstopStudios.DataVisualizer.Editor
                 StringComparer.Ordinal
             );
 
-            List<string> suggestions = _projectUniqueLabelsCache
+            string[] suggestions = _projectUniqueLabelsCache
                 .Where(label =>
-                    string.IsNullOrWhiteSpace(currentInput)
-                    || (
-                        label.Contains(currentInput, StringComparison.OrdinalIgnoreCase)
-                        && !currentAssetLabelsSet.Contains(label)
-                    )
+                    (
+                        string.IsNullOrWhiteSpace(currentInput)
+                        || label.Contains(currentInput, StringComparison.OrdinalIgnoreCase)
+                    ) && !currentAssetLabelsSet.Contains(label)
                 )
                 .Take(10)
-                .ToList();
+                .ToArray();
 
-            if (suggestions.Count > 0)
+            if (suggestions.Length > 0)
             {
                 foreach (string suggestionText in suggestions)
                 {
@@ -6587,7 +6615,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
                 EditorUtility.SetDirty(_selectedObject);
                 AssetDatabase.SaveAssets();
-                PopulateProjectUniqueLabelsCache();
+                PopulateProjectUniqueLabelsCache(force: true);
                 _inspectorNewLabelInput.SetValueWithoutNotify("");
                 PopulateInspectorLabelsUI();
                 UpdateLabelAreaAndFilter();
@@ -6609,18 +6637,18 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
-            List<string> updatedLabels = currentLabels
+            string[] updatedLabels = currentLabels
                 .Where(label => !label.Equals(labelToRemove, StringComparison.Ordinal))
-                .ToList();
+                .ToArray();
 
-            if (updatedLabels.Count < currentLabels.Length)
+            if (updatedLabels.Length != currentLabels.Length)
             {
                 try
                 {
-                    AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
+                    AssetDatabase.SetLabels(_selectedObject, updatedLabels);
                     EditorUtility.SetDirty(_selectedObject);
                     AssetDatabase.SaveAssets();
-                    PopulateProjectUniqueLabelsCache();
+                    PopulateProjectUniqueLabelsCache(force: true);
                     PopulateInspectorLabelsUI();
                     UpdateLabelAreaAndFilter();
                 }

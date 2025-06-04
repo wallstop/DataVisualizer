@@ -15,7 +15,7 @@
     {
         public string typeFullName = string.Empty;
         public bool isCollapsed = true;
-        public ProcessorLogic logic = ProcessorLogic.All;
+        public ProcessorLogic logic = ProcessorLogic.Filtered;
 
         public ProcessorState Clone()
         {
