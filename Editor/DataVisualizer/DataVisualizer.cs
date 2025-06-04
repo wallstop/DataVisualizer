@@ -196,6 +196,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Vector2 _popoverDragStartMousePos;
         private Vector2 _popoverDragStartPos;
 
+        private VisualElement _labelCollapseRow;
         private Label _labelCollapseToggle;
         private Label _labels;
         private Label _labelAdvancedCollapseToggle;
@@ -4281,8 +4282,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
 
-            VisualElement collapseRow = new();
-            collapseRow.AddToClassList("collapse-row");
+            _labelCollapseRow = new();
+            _labelCollapseRow.AddToClassList("collapse-row");
             _labelCollapseToggle = new Label();
             _labelCollapseToggle.AddToClassList(StyleConstants.ClickableClass);
             _labelCollapseToggle.AddToClassList("collapse-toggle");
@@ -4301,12 +4302,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ToggleLabelsCollapsed(!config.isCollapsed);
                 evt.StopPropagation();
             });
-            collapseRow.Add(_labelCollapseToggle);
+            _labelCollapseRow.Add(_labelCollapseToggle);
 
             _labels = new Label("Labels");
             _labels.AddToClassList("labels-label");
-            collapseRow.Add(_labels);
-            objectColumn.Add(collapseRow);
+            _labelCollapseRow.Add(_labels);
+            objectColumn.Add(_labelCollapseRow);
 
             _labelFilterSelectionRoot = new VisualElement { name = "label-filter-section-root" };
             _labelFilterSelectionRoot.AddToClassList("label-filter-section-root");
@@ -4511,10 +4512,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                     StyleConstants.ClickableClass,
                     CanCollapseAdvancedLabelConfiguration()
                 );
-                _labelAdvancedCollapseToggle.text =
-                    CurrentTypeLabelFilterConfig?.isAdvancedCollapsed ?? true
-                        ? StyleConstants.ArrowCollapsed
-                        : StyleConstants.ArrowExpanded;
+                bool isCollapsed = CurrentTypeLabelFilterConfig?.isAdvancedCollapsed ?? true;
+                _labelAdvancedCollapseToggle.text = isCollapsed
+                    ? StyleConstants.ArrowCollapsed
+                    : StyleConstants.ArrowExpanded;
+                _labelAdvancedCollapseToggle.tooltip =
+                    isCollapsed ? "Explore advanced boolean label logic"
+                    : CanCollapseAdvancedLabelConfiguration() ? "Hide advanced boolean logic"
+                    : "Can not un-collapse due to either OR toggle or OR labels";
             }
         }
 
@@ -4759,6 +4764,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _labelFilterSelectionRoot.parent.style.display = DisplayStyle.None;
                 }
 
+                if (_labelCollapseRow != null)
+                {
+                    _labelCollapseRow.style.display = DisplayStyle.None;
+                }
+
                 ApplyLabelFilter();
                 return;
             }
@@ -4867,6 +4877,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (_labelFilterSelectionRoot is { parent: not null })
             {
                 _labelFilterSelectionRoot.parent.style.display =
+                    availableLabels.Count != 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+            if (_labelCollapseRow != null)
+            {
+                _labelCollapseRow.style.display =
                     availableLabels.Count != 0 ? DisplayStyle.Flex : DisplayStyle.None;
             }
         }
@@ -6267,6 +6282,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     style = { backgroundColor = backgroundColor },
                 };
                 pillContainer.AddToClassList("label-pill");
+                pillContainer.AddToClassList("non-draggable");
 
                 Label labelElement = new(labelText) { style = { color = Color.white } };
                 labelElement.AddToClassList("label-pill-text");

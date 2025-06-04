@@ -925,6 +925,10 @@
     min-width: 0;
 }
 
+.label-pill.non-draggable {
+    cursor: arrow;
+}
+
 .label-pill-container {
     flex-direction: row;
     flex-wrap: wrap;
@@ -969,6 +973,7 @@
 }
 
 .collapse-toggle.advanced {
+    height: 21px;
     margin-top: 0;
     -unity-font-style: normal;
 }
