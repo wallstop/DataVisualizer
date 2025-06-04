@@ -21,7 +21,7 @@
         {
             return new ProcessorState
             {
-                typeFullName = typeFullName,
+                typeFullName = typeFullName ?? string.Empty,
                 isCollapsed = isCollapsed,
                 logic = logic,
             };
