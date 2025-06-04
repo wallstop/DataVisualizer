@@ -38,7 +38,12 @@
             {
                 isCollapsed = isCollapsed,
                 isAdvancedCollapsed = isAdvancedCollapsed,
-                combinationType = combinationType,
+#pragma warning disable CS0618 // Type or member is obsolete
+                combinationType =
+                    combinationType == LabelCombinationType.None
+                        ? LabelCombinationType.And
+                        : combinationType,
+#pragma warning restore CS0618 // Type or member is obsolete
                 typeFullName = typeFullName ?? string.Empty,
                 andLabels = andLabels?.ToList() ?? new List<string>(),
                 orLabels = orLabels?.ToList() ?? new List<string>(),

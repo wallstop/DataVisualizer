@@ -23,7 +23,9 @@
             {
                 typeFullName = typeFullName ?? string.Empty,
                 isCollapsed = isCollapsed,
-                logic = logic,
+#pragma warning disable CS0618 // Type or member is obsolete
+                logic = logic == ProcessorLogic.None ? ProcessorLogic.Filtered : logic,
+#pragma warning restore CS0618 // Type or member is obsolete
             };
         }
     }
