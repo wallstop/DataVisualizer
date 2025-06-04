@@ -72,6 +72,10 @@
         [ReadOnly]
         internal List<TypeLabelFilterConfig> labelFilterConfigs = new();
 
+        [SerializeField]
+        [ReadOnly]
+        internal List<ProcessorState> processorStates = new();
+
         private void OnValidate()
         {
             if (Application.isEditor && !Application.isPlaying)
@@ -119,6 +123,7 @@
             labelFilterConfigs =
                 userState.labelFilterConfigs?.Select(config => config.Clone()).ToList()
                 ?? new List<TypeLabelFilterConfig>();
+            processorStates = userState.processorStates?.Select(state => state.Clone()).ToList();
             MarkDirty();
         }
 

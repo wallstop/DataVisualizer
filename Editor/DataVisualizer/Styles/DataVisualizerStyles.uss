@@ -41,10 +41,6 @@
     -unity-font-style: bold;
 }
 
-.icon-button {
-
-}
-
 .popover {
     margin-top: 2px;
     position: absolute;
@@ -897,6 +893,8 @@
 }
 
 .collapse-toggle {
+    height: 22px;
+    width: 22px;
     -unity-font-style: bold;
     align-self: flex-start;
     margin-left: 6px;
@@ -935,7 +933,7 @@
     margin-right: 4px;
     min-height: 36px;
     padding: 4px;
-    border-color: white;
+    border-color: rgba(128, 128, 128, 0.5);
     border-width: 1px;
     border-radius: 6px;
     min-width: 100px;
@@ -973,7 +971,6 @@
 }
 
 .collapse-toggle.advanced {
-    height: 21px;
     margin-top: 0;
     -unity-font-style: normal;
 }
@@ -1005,12 +1002,12 @@
 .processor-column-header {
     flex-direction: row;
     align-items: center;
-    justify-content: space-between;
-    padding: 3px;
+    justify-content: flex-start;
+    padding: 0;
     flex-shrink: 0;
     padding-bottom: 6px;
     border-bottom-width: 1px;
-    border-bottom-color: white;
+    border-bottom-color: rgba(128, 128, 128, 0.5);
 }
 
 .processor-list-scrollview {
@@ -1018,7 +1015,7 @@
     padding-top: 6px;
     padding-bottom: 6px;
     border-bottom-width: 1px;
-    border-bottom-color: white;
+    border-bottom-color: rgba(128, 128, 128, 0.5);
 }
 
 .horizontal-toggle {
@@ -1033,7 +1030,7 @@
 .horizontal-toggle__container {
     flex-grow: 1;
     height: 34px;
-    border-color: white;
+    border-color: rgba(128, 128, 128, 0.5);
     border-width: 1px;
     flex-direction: row;
     border-radius: 6px;

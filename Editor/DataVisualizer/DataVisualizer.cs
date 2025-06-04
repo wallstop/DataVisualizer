@@ -128,6 +128,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         private TypeLabelFilterConfig CurrentTypeLabelFilterConfig =>
             LoadOrCreateLabelFilterConfig(_namespaceController.SelectedType);
 
+        private ProcessorState CurrentProcessorState =>
+            LoadOrCreateProcessorState(_namespaceController.SelectedType);
+
         private int HiddenNamespaces
         {
 #pragma warning disable CS0618 // Type or member is obsolete
@@ -240,7 +243,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private VisualElement _processorAreaElement;
         private VisualElement _processorListContainer;
-        private Button _processorToggleCollapseButton;
+        private Label _processorToggleCollapseButton;
         private Label _processorHeaderLabel;
         private readonly List<IDataProcessor> _allDataProcessors = new();
         private readonly List<IDataProcessor> _compatibleDataProcessors = new();
@@ -1312,16 +1315,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 style = { unityFontStyleAndWeight = FontStyle.Bold },
             };
-            _processorToggleCollapseButton = new Button(ToggleProcessorContentCollapse)
+            _processorToggleCollapseButton = new Label();
+            _processorToggleCollapseButton.AddToClassList("collapse-toggle");
+            _processorToggleCollapseButton.AddToClassList(StyleConstants.ClickableClass);
+            _processorToggleCollapseButton.RegisterCallback<PointerDownEvent>(evt =>
             {
-                text = "V",
-            };
-            _processorToggleCollapseButton.AddToClassList("icon-button");
-            _processorToggleCollapseButton.style.width = 20;
-            _processorToggleCollapseButton.style.height = 20;
+                if (evt.button != 0)
+                {
+                    return;
+                }
 
-            header.Add(_processorHeaderLabel);
+                ToggleProcessorContentCollapse();
+            });
+
             header.Add(_processorToggleCollapseButton);
+            header.Add(_processorHeaderLabel);
             _processorAreaElement.Add(header);
 
             ScrollView scrollView = new(ScrollViewMode.Vertical)
@@ -5192,6 +5200,64 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             );
             return config;
+        }
+
+        private ProcessorState LoadOrCreateProcessorState(Type type)
+        {
+            if (type == null)
+            {
+                return null;
+            }
+            ProcessorState state = null;
+            PersistSettings(
+                settings =>
+                {
+                    bool dirty = false;
+                    if (settings.processorStates == null)
+                    {
+                        settings.processorStates = new List<ProcessorState>();
+                        dirty = true;
+                    }
+                    state = settings.processorStates.Find(existingConfig =>
+                        string.Equals(
+                            existingConfig.typeFullName,
+                            type.FullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (state == null)
+                    {
+                        state = new ProcessorState { typeFullName = type.FullName };
+                        settings.processorStates.Add(state);
+                        dirty = true;
+                    }
+                    return dirty;
+                },
+                userState =>
+                {
+                    bool dirty = false;
+                    if (userState.processorStates == null)
+                    {
+                        userState.processorStates = new List<ProcessorState>();
+                        dirty = true;
+                    }
+                    state = userState.processorStates.Find(existingConfig =>
+                        string.Equals(
+                            existingConfig.typeFullName,
+                            type.FullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (state == null)
+                    {
+                        state = new ProcessorState { typeFullName = type.FullName };
+                        userState.processorStates.Add(state);
+                        dirty = true;
+                    }
+                    return dirty;
+                }
+            );
+            return state;
         }
 
         private void SaveLabelFilterConfig(TypeLabelFilterConfig config)
