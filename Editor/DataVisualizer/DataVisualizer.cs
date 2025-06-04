@@ -1,5 +1,6 @@
 ﻿// ReSharper disable AccessToModifiedClosure
 // ReSharper disable AccessToDisposedClosure
+// ReSharper disable HeapView.CanAvoidClosure
 namespace WallstopStudios.DataVisualizer.Editor
 {
 #if UNITY_EDITOR
@@ -58,6 +59,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string SearchResultItemClass = "search-result-item";
         private const string SearchResultHighlightClass = "search-result-item--highlighted";
         private const string PopoverHighlightClass = "popover-item--highlighted";
+        private const string LabelSuggestionItemClass = "label-suggestion-item";
 
         private const string SearchPlaceholder = "Search...";
 
@@ -80,6 +82,27 @@ namespace WallstopStudios.DataVisualizer.Editor
             AddTypePopover = 2,
             SearchResultsPopover = 3,
         }
+
+        private enum LabelFilterSection
+        {
+            [Obsolete("Please use a valid value")]
+            None = 0,
+            Available = 1,
+            AND = 2,
+            OR = 3,
+        }
+
+        private static readonly Color[] PredefinedLabelColors =
+        {
+            new Color(0.32f, 0.55f, 0.78f),
+            new Color(0.90f, 0.42f, 0.32f),
+            new Color(0.45f, 0.70f, 0.40f),
+            new Color(0.82f, 0.60f, 0.28f),
+            new Color(0.50f, 0.48f, 0.70f),
+            new Color(0.75f, 0.45f, 0.60f),
+            new Color(0.30f, 0.65f, 0.65f),
+            new Color(0.65f, 0.65f, 0.35f),
+        };
 
         internal static DataVisualizer Instance;
 
@@ -115,6 +138,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private TypeLabelFilterConfig CurrentTypeLabelFilterConfig =>
+            LoadOrCreateLabelFilterConfig(_namespaceController.SelectedType);
+
+        private ProcessorState CurrentProcessorState =>
+            LoadOrCreateProcessorState(_namespaceController.SelectedType);
+
         private int HiddenNamespaces
         {
 #pragma warning disable CS0618 // Type or member is obsolete
@@ -125,9 +154,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (_namespaceColumnLabel != null)
                 {
                     _namespaceColumnLabel.text =
-                        value <= 0
-                            ? "Namespaces"
-                            : $"Namespaces (<b><color=yellow>{value}</color></b> hidden)";
+                        value <= 0 ? "Namespaces"
+                        : value <= 15 ? $"Namespaces (<b><color=yellow>{value}</color></b> hidden)"
+                        : $"Namespaces (<b><color=red>{value}</color></b> hidden)";
                 }
             }
 #pragma warning restore CS0618 // Type or member is obsolete
@@ -183,6 +212,49 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Vector2 _popoverDragStartMousePos;
         private Vector2 _popoverDragStartPos;
 
+        private VisualElement _labelCollapseRow;
+        private Label _labelCollapseToggle;
+        private Label _labels;
+        private Label _labelAdvancedCollapseToggle;
+        private HorizontalToggle _andOrToggle;
+        private VisualElement _labelFilterSelectionRoot;
+        private VisualElement _logicalGrouping;
+        private VisualElement _availableLabelsContainer;
+        private VisualElement _andLabelsContainer;
+        private VisualElement _orLabelsContainer;
+        private Label _filterStatusLabel;
+
+        private HorizontalToggle _processorLogicToggle;
+        private VisualElement _processorArea;
+
+        private readonly List<string> _currentUniqueLabelsForType = new();
+
+        private readonly List<ScriptableObject> _filteredObjects = new();
+        private readonly Dictionary<string, Color> _textColorCache = new(StringComparer.Ordinal);
+
+        private int _nextColorIndex;
+
+        private VisualElement _inspectorLabelsSection;
+        private VisualElement _inspectorCurrentLabelsContainer;
+        private TextField _inspectorNewLabelInput;
+
+        private string _draggedLabelText;
+        private LabelFilterSection _dragSourceSection;
+
+        private VisualElement _inspectorLabelSuggestionsPopover;
+        private readonly List<string> _projectUniqueLabelsCache = new();
+        private bool _isLabelCachePopulated;
+        private readonly List<VisualElement> _currentLabelSuggestionItems = new();
+        private int _labelSuggestionHighlightIndex = -1;
+
+        private VisualElement _processorAreaElement;
+        private VisualElement _processorListContainer;
+        private Label _processorToggleCollapseButton;
+        private VisualElement _processorHeader;
+        private Label _processorHeaderLabel;
+        private readonly List<IDataProcessor> _allDataProcessors = new();
+        private readonly List<IDataProcessor> _compatibleDataProcessors = new();
+
         private TextField _searchField;
         private VisualElement _searchPopover;
         private bool _isSearchCachePopulated;
@@ -206,8 +278,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private int _searchHighlightIndex = -1;
         private int _typePopoverHighlightIndex = -1;
         private string _lastTypeAddSearchTerm;
+#pragma warning disable CS0618 // Type or member is obsolete
         private FocusArea _lastActiveFocusArea = FocusArea.None;
         private DragType _activeDragType = DragType.None;
+#pragma warning restore CS0618 // Type or member is obsolete
         private object _draggedData;
         private VisualElement _inPlaceGhost;
         private int _lastGhostInsertIndex = -1;
@@ -274,6 +348,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnEnable()
         {
+            _nextColorIndex = 0;
             Instance = this;
             _isSearchCachePopulated = false;
             _objectVisualElementMap.Clear();
@@ -284,6 +359,29 @@ namespace WallstopStudios.DataVisualizer.Editor
             _odinPropertyTree = null;
 #endif
             _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
+
+            _allDataProcessors.Clear();
+            IEnumerable<Type> processorTypes = TypeCache
+                .GetTypesDerivedFrom<IDataProcessor>()
+                .Where(t => !t.IsAbstract && !t.IsInterface && !t.IsGenericTypeDefinition);
+            foreach (Type type in processorTypes)
+            {
+                try
+                {
+                    if (Activator.CreateInstance(type) is IDataProcessor instance)
+                    {
+                        _allDataProcessors.Add(instance);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError(
+                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex.Message}"
+                    );
+                }
+            }
+
+            _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
 
             LoadScriptableObjectTypes();
             rootVisualElement.RegisterCallback<KeyDownEvent>(
@@ -320,6 +418,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 Instance = null;
             }
+
+            _isLabelCachePopulated = false;
             _selectedElement = null;
             _selectedObject = null;
             _scriptableObjectTypes.Clear();
@@ -359,14 +459,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 #endif
         }
 
-        internal void PopulateSearchCache()
+        private void PopulateSearchCache()
         {
             _allManagedObjectsCache.Clear();
-            List<Type> managedTypes = _scriptableObjectTypes
-                .SelectMany(tuple => tuple.Value)
-                .ToList();
+
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
-            foreach (Type type in managedTypes)
+            foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
             {
                 string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
                 foreach (string guid in guids)
@@ -865,6 +963,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _namespaceController.SelectType(this, selectedType);
             }
+            UpdateCreateObjectButtonStyle();
+            BuildProcessorColumnView();
+            UpdateLabelAreaAndFilter();
         }
 
         private VisualElement FindTypeElement(Type targetType)
@@ -960,7 +1061,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _lastSavedOuterWidth = initialOuterWidth;
             _lastSavedInnerWidth = initialInnerWidth;
             _namespaceColumnElement = CreateNamespaceColumn();
-
+            CreateProcessorColumn();
             _objectColumnElement = CreateObjectColumn();
             VisualElement inspectorColumn = CreateInspectorColumn();
 
@@ -1008,6 +1109,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             _typeAddPopover = new VisualElement { name = "type-add-popover" };
             _typeAddPopover.AddToClassList("type-add-popover");
 
+            _inspectorLabelSuggestionsPopover = CreatePopoverBase(
+                "inspector-label-suggestions-popover"
+            );
+            root.Add(_inspectorLabelSuggestionsPopover);
+            _inspectorLabelSuggestionsPopover.style.width = StyleKeyword.Auto;
+
             _typeAddSearchField = new TextField { name = "type-add-search-field" };
             _typeAddSearchField.AddToClassList("type-add-search-field");
             _typeAddSearchField.SetPlaceholderText(SearchPlaceholder);
@@ -1029,6 +1136,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             root.Add(_confirmNamespaceAddPopover);
 
             BuildNamespaceView();
+            BuildProcessorColumnView();
             BuildObjectsView();
             BuildInspectorView();
         }
@@ -1192,6 +1300,293 @@ namespace WallstopStudios.DataVisualizer.Editor
                     $"Failed to find Data Visualizer font (package root: '{packageRoot}')."
                 );
             }
+        }
+
+        private void CreateProcessorColumn()
+        {
+            _processorAreaElement = new VisualElement { name = "processor-column" };
+            _processorAreaElement.AddToClassList("processor-column");
+
+            _processorHeader = new VisualElement { name = "processor-column-header" };
+            _processorHeader.AddToClassList("processor-column-header");
+            _processorHeaderLabel = new Label("Processors")
+            {
+                style = { unityFontStyleAndWeight = FontStyle.Bold },
+            };
+            _processorToggleCollapseButton = new Label();
+            _processorToggleCollapseButton.AddToClassList("collapse-toggle");
+            _processorToggleCollapseButton.AddToClassList(StyleConstants.ClickableClass);
+            _processorToggleCollapseButton.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                ToggleProcessorContentCollapse();
+            });
+
+            _processorHeader.Add(_processorToggleCollapseButton);
+            _processorHeader.Add(_processorHeaderLabel);
+            _processorAreaElement.Add(_processorHeader);
+
+            ProcessorState state = CurrentProcessorState;
+
+            _processorArea = new VisualElement { style = { flexDirection = FlexDirection.Column } };
+            _processorArea.AddToClassList("processor-area");
+            _processorLogicToggle = new HorizontalToggle()
+            {
+                name = "processor-logic-toggle",
+                LeftText = "ALL",
+                RightText = "FILTERED",
+            };
+            _processorLogicToggle.AddToClassList("processor");
+            _processorLogicToggle.OnLeftSelected += () =>
+            {
+                _processorLogicToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
+                _processorLogicToggle.LeftLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    false
+                );
+                _processorLogicToggle.RightLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    true
+                );
+                state = CurrentProcessorState;
+                if (state != null && state.logic != ProcessorLogic.All)
+                {
+                    state.logic = ProcessorLogic.All;
+                    SaveProcessorState(state);
+                }
+            };
+            _processorLogicToggle.OnRightSelected += () =>
+            {
+                _processorLogicToggle.Indicator.style.backgroundColor = new Color(
+                    1f,
+                    0.5f,
+                    0.3137254902f
+                );
+                _processorLogicToggle.LeftLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    true
+                );
+                _processorLogicToggle.RightLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    false
+                );
+                state = CurrentProcessorState;
+                if (state != null && state.logic != ProcessorLogic.Filtered)
+                {
+                    state.logic = ProcessorLogic.Filtered;
+                    SaveProcessorState(state);
+                }
+            };
+
+            switch (state?.logic ?? ProcessorLogic.Filtered)
+            {
+                case ProcessorLogic.All:
+                {
+                    _processorLogicToggle.SelectLeft(force: true);
+                    break;
+                }
+                case ProcessorLogic.Filtered:
+                {
+                    _processorLogicToggle.SelectRight(force: true);
+                    break;
+                }
+            }
+
+            _processorArea.Add(_processorLogicToggle);
+
+            ScrollView scrollView = new(ScrollViewMode.Vertical)
+            {
+                name = "processor-list-scrollview",
+            };
+            scrollView.AddToClassList("processor-list-scrollview");
+            _processorListContainer = new VisualElement { name = "processor-list-container" };
+            _processorListContainer.AddToClassList("processor-list-container");
+            scrollView.Add(_processorListContainer);
+            _processorArea.Add(scrollView);
+            _processorAreaElement.Add(_processorArea);
+        }
+
+        internal void BuildProcessorColumnView()
+        {
+            if (_processorListContainer == null || _processorAreaElement == null)
+            {
+                return;
+            }
+
+            _processorListContainer.Clear();
+            _compatibleDataProcessors.Clear();
+
+            if (_namespaceController.SelectedType != null)
+            {
+                _compatibleDataProcessors.AddRange(
+                    _allDataProcessors.Where(p =>
+                        p.Accepts != null && p.Accepts.Contains(_namespaceController.SelectedType)
+                    )
+                );
+            }
+
+            if (_compatibleDataProcessors.Count == 0)
+            {
+                _processorAreaElement.style.display = DisplayStyle.None;
+                return;
+            }
+
+            _processorAreaElement.style.display = DisplayStyle.Flex;
+            _processorToggleCollapseButton.SetEnabled(true);
+
+            ProcessorState state = CurrentProcessorState;
+
+            switch (state?.logic ?? ProcessorLogic.Filtered)
+            {
+                case ProcessorLogic.All:
+                {
+                    _processorLogicToggle.SelectLeft(force: true);
+                    break;
+                }
+                case ProcessorLogic.Filtered:
+                {
+                    _processorLogicToggle.SelectRight(force: true);
+                    break;
+                }
+            }
+
+            bool isCollapsed = state?.isCollapsed == true;
+            if (isCollapsed)
+            {
+                _processorToggleCollapseButton.text = StyleConstants.ArrowCollapsed;
+                _processorHeaderLabel.text =
+                    $"Processors (<b><color=yellow>{_compatibleDataProcessors.Count}</color></b>)";
+                if (_processorArea != null)
+                {
+                    _processorArea.style.display = DisplayStyle.None;
+                }
+
+                if (_processorHeader != null)
+                {
+                    _processorHeader.style.borderBottomWidth = 1;
+                }
+            }
+            else
+            {
+                _processorToggleCollapseButton.text = StyleConstants.ArrowExpanded;
+                _processorHeaderLabel.text = "Processors";
+                if (_processorArea != null)
+                {
+                    _processorArea.style.display = DisplayStyle.Flex;
+                }
+                if (_processorHeader != null)
+                {
+                    _processorHeader.style.borderBottomWidth = 0;
+                }
+
+                foreach (IDataProcessor processor in _compatibleDataProcessors)
+                {
+                    string processorName = processor.Name;
+                    if (!_textColorCache.TryGetValue(processorName, out Color color))
+                    {
+                        color = GenerateColorForText(processorName);
+                        _textColorCache[processorName] = color;
+                    }
+
+                    Label processorButton = new(processorName)
+                    {
+                        tooltip = processor.Description,
+                        style = { backgroundColor = color, color = Color.white },
+                    };
+                    processorButton.AddToClassList("processor-button");
+                    processorButton.AddToClassList(StyleConstants.ClickableClass);
+
+                    IDataProcessor localProcessor = processor;
+                    processorButton.RegisterCallback<PointerDownEvent>(evt =>
+                    {
+                        if (evt.button != 0)
+                        {
+                            return;
+                        }
+
+                        RunDataProcessor(processorButton, localProcessor);
+                    });
+                    _processorListContainer.Add(processorButton);
+                }
+            }
+        }
+
+        private void ToggleProcessorContentCollapse()
+        {
+            ProcessorState state = CurrentProcessorState;
+            if (state != null)
+            {
+                state.isCollapsed = !state.isCollapsed;
+                SaveProcessorState(state);
+            }
+            BuildProcessorColumnView();
+        }
+
+        private void RunDataProcessor(VisualElement context, IDataProcessor processor)
+        {
+            ProcessorState state = CurrentProcessorState;
+            if (processor == null || _namespaceController.SelectedType == null || state == null)
+            {
+                return;
+            }
+
+            ScriptableObject[] toProcess;
+
+            switch (state.logic)
+            {
+                case ProcessorLogic.All:
+                {
+                    toProcess = _selectedObjects.ToArray();
+                    break;
+                }
+                case ProcessorLogic.Filtered:
+                {
+                    toProcess = _filteredObjects.ToArray();
+                    break;
+                }
+                default:
+                {
+                    throw new InvalidEnumArgumentException(
+                        nameof(state.logic),
+                        (int)state.logic,
+                        typeof(ProcessorLogic)
+                    );
+                }
+            }
+
+            string message =
+                $"Run processor '{processor.Name}' on <b><color={context.style.backgroundColor.value.ToHex()}>{toProcess.Length}</color></b> "
+                + $"object{(toProcess.Length != 1 ? "s" : "")} "
+                + $"of type '<b><color=yellow>{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}</color></b>'?";
+
+            BuildAndOpenConfirmationPopover(
+                message,
+                "Run",
+                () =>
+                {
+                    try
+                    {
+                        processor.Process(_namespaceController.SelectedType, toProcess);
+                        AssetDatabase.SaveAssets();
+                        AssetDatabase.Refresh();
+                        ScheduleRefresh();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"Error running processor '{processor.Name}': {ex}");
+                        EditorUtility.DisplayDialog(
+                            "Processor Error",
+                            $"An error occurred while running '{processor.Name}':\n{ex.Message}",
+                            "OK"
+                        );
+                    }
+                },
+                context
+            );
         }
 
         private void HandleSearchKeyDown(KeyDownEvent evt)
@@ -1760,7 +2155,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private string EscapeRichText(string input)
+        private static string EscapeRichText(string input)
         {
             return string.IsNullOrWhiteSpace(input)
                 ? ""
@@ -1796,12 +2191,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return null;
             }
 
-            if (!objType.IsValueType)
+            if (!objType.IsValueType && !visited.Add(obj))
             {
-                if (!visited.Add(obj))
-                {
-                    return null;
-                }
+                return null;
             }
 
             try
@@ -2123,7 +2515,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             else
             {
+#pragma warning disable CS0618 // Type or member is obsolete
                 _lastActiveFocusArea = FocusArea.None;
+#pragma warning restore CS0618 // Type or member is obsolete
             }
 
             _popoverContext = context;
@@ -2270,6 +2664,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _typePopoverHighlightIndex = -1;
                 _typeAddSearchField?.SetValueWithoutNotify("");
             }
+            else if (_activePopover == _inspectorLabelSuggestionsPopover)
+            {
+                _currentLabelSuggestionItems.Clear();
+                _labelSuggestionHighlightIndex = -1;
+            }
 
             CloseNestedPopover();
 
@@ -2290,6 +2689,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleGlobalKeyDown(KeyDownEvent evt)
         {
+            if (_activePopover == _inspectorLabelSuggestionsPopover)
+            {
+                HandleNewLabelInputKeyDown(evt);
+                return;
+            }
+
             VisualElement activePopover = _activeNestedPopover ?? _activePopover;
             if (activePopover != null && activePopover.style.display == DisplayStyle.Flex)
             {
@@ -2942,7 +3347,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             string directory = Settings.DataFolderPath;
-            string typedDirectory = Path.Combine(directory, (type.FullName ?? type.Name).Replace(".", Path.DirectorySeparatorChar.ToString())).SanitizePath();
+            string typedDirectory = Path.Combine(
+                    directory,
+                    (type.FullName ?? type.Name).Replace(
+                        ".",
+                        Path.DirectorySeparatorChar.ToString()
+                    )
+                )
+                .SanitizePath();
             DirectoryHelper.EnsureDirectoryExists(typedDirectory);
 
             string proposedName = $"{newName}.asset";
@@ -3427,6 +3839,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     .Where(IsLoadableType)
                     .Where(type => !currentlyManagedTypes.Contains(type))
                     .Distinct()
+                    .OrderBy(type => type.Name)
                     .ToList();
 
                 bool stateChanged = false;
@@ -4013,6 +4426,189 @@ namespace WallstopStudios.DataVisualizer.Editor
             UpdateCreateObjectButtonStyle();
             objectHeader.Add(_createObjectButton);
             objectColumn.Add(objectHeader);
+
+            objectColumn.Add(_processorAreaElement);
+
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+
+            _labelCollapseRow = new VisualElement();
+            _labelCollapseRow.AddToClassList("collapse-row");
+            _labelCollapseToggle = new Label();
+            _labelCollapseToggle.AddToClassList(StyleConstants.ClickableClass);
+            _labelCollapseToggle.AddToClassList("collapse-toggle");
+            _labelCollapseToggle.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+                config = CurrentTypeLabelFilterConfig;
+                if (config == null)
+                {
+                    return;
+                }
+
+                ToggleLabelsCollapsed(!config.isCollapsed);
+                evt.StopPropagation();
+            });
+            _labelCollapseRow.Add(_labelCollapseToggle);
+
+            _labels = new Label("Labels");
+            _labels.AddToClassList("labels-label");
+            _labelCollapseRow.Add(_labels);
+            objectColumn.Add(_labelCollapseRow);
+
+            _labelFilterSelectionRoot = new VisualElement { name = "label-filter-section-root" };
+            _labelFilterSelectionRoot.AddToClassList("label-filter-section-root");
+
+            VisualElement labelContainerContainer = new() { name = "label-container-container" };
+            labelContainerContainer.AddToClassList("label-container-container");
+            objectColumn.Add(labelContainerContainer);
+            labelContainerContainer.Add(_labelFilterSelectionRoot);
+
+            _availableLabelsContainer = new VisualElement { name = "available-labels-container" };
+            _availableLabelsContainer.AddToClassList("label-pill-container");
+            VisualElement availableRow = new() { name = "available-row" };
+            availableRow.AddToClassList("label-row-container");
+            availableRow.AddToClassList("label-row-container--available");
+            availableRow.Add(_availableLabelsContainer);
+            _labelFilterSelectionRoot.Add(availableRow);
+
+            VisualElement andRow = new() { name = "and-filter-row" };
+            andRow.AddToClassList("label-row-container");
+            Label andLabel = new("AND:")
+            {
+                style =
+                {
+                    unityFontStyleAndWeight = FontStyle.Bold,
+                    marginRight = 5,
+                    minWidth = 60,
+                },
+            };
+            andLabel.AddToClassList("label-header");
+            andRow.Add(andLabel);
+            _andLabelsContainer = new VisualElement { name = "and-labels-container" };
+            _andLabelsContainer.AddToClassList("label-pill-container");
+            andRow.Add(_andLabelsContainer);
+            VisualElement advancedRow = new();
+            advancedRow.AddToClassList("advanced-row");
+
+            _labelAdvancedCollapseToggle = new Label();
+            _labelAdvancedCollapseToggle.AddToClassList(StyleConstants.ClickableClass);
+            _labelAdvancedCollapseToggle.AddToClassList("collapse-toggle");
+            _labelAdvancedCollapseToggle.AddToClassList("advanced");
+            _labelAdvancedCollapseToggle.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                config = CurrentTypeLabelFilterConfig;
+                if (config == null)
+                {
+                    return;
+                }
+
+                ToggleLabelsAdvancedCollapsed(!config.isAdvancedCollapsed);
+                evt.StopPropagation();
+            });
+            advancedRow.Add(_labelAdvancedCollapseToggle);
+
+            Label advanced = new("Advanced");
+            advanced.AddToClassList("advanced-label");
+            advancedRow.Add(advanced);
+            _labelFilterSelectionRoot.Add(advancedRow);
+            _labelFilterSelectionRoot.Add(andRow);
+
+            _andOrToggle = new HorizontalToggle()
+            {
+                name = "and-or-toggle",
+                LeftText = "AND &&",
+                RightText = "OR ||",
+            };
+            _andOrToggle.AddToClassList("label");
+            _andOrToggle.OnLeftSelected += () =>
+            {
+                _andOrToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
+                _andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, false);
+                _andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, true);
+                config = CurrentTypeLabelFilterConfig;
+                if (config != null && config.combinationType != LabelCombinationType.And)
+                {
+                    config.combinationType = LabelCombinationType.And;
+                    SaveLabelFilterConfig(config);
+                    UpdateLabelAreaAndFilter();
+                }
+            };
+            _andOrToggle.OnRightSelected += () =>
+            {
+                _andOrToggle.Indicator.style.backgroundColor = new Color(1f, 0.5f, 0.3137254902f);
+                _andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, true);
+                _andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, false);
+                config = CurrentTypeLabelFilterConfig;
+                if (config != null && config.combinationType != LabelCombinationType.Or)
+                {
+                    config.combinationType = LabelCombinationType.Or;
+                    SaveLabelFilterConfig(config);
+                    UpdateLabelAreaAndFilter();
+                }
+            };
+            switch (config?.combinationType ?? LabelCombinationType.And)
+            {
+                case LabelCombinationType.And:
+                {
+                    _andOrToggle.SelectLeft(force: true);
+                    break;
+                }
+                case LabelCombinationType.Or:
+                {
+                    _andOrToggle.SelectRight(force: true);
+                    break;
+                }
+            }
+
+            _logicalGrouping = new VisualElement { name = "label-logical-grouping" };
+            _logicalGrouping.AddToClassList("label-logical-grouping");
+            _labelFilterSelectionRoot.Add(_logicalGrouping);
+            _logicalGrouping.Add(_andOrToggle);
+
+            VisualElement orRow = new() { name = "or-filter-row" };
+            orRow.AddToClassList("label-row-container");
+            Label orLabel = new("OR:")
+            {
+                style =
+                {
+                    unityFontStyleAndWeight = FontStyle.Bold,
+                    marginRight = 5,
+                    minWidth = 60,
+                },
+            };
+            orLabel.AddToClassList("label-header");
+            orRow.Add(orLabel);
+            _orLabelsContainer = new VisualElement { name = "or-labels-container" };
+            _orLabelsContainer.AddToClassList("label-pill-container");
+
+            orRow.Add(_orLabelsContainer);
+            _logicalGrouping.Add(orRow);
+
+            _filterStatusLabel = new Label("")
+            {
+                name = "filter-status-label",
+                style =
+                {
+                    color = Color.gray,
+                    alignSelf = Align.Center,
+                    marginTop = 3,
+                    minHeight = 12,
+                },
+            };
+            _labelFilterSelectionRoot.Add(_filterStatusLabel);
+
+            SetupDropTarget(_availableLabelsContainer, LabelFilterSection.Available);
+            SetupDropTarget(_andLabelsContainer, LabelFilterSection.AND);
+            SetupDropTarget(_orLabelsContainer, LabelFilterSection.OR);
+
             _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
                 name = "object-scrollview",
@@ -4021,7 +4617,121 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectListContainer = new VisualElement { name = "object-list" };
             _objectScrollView.Add(_objectListContainer);
             objectColumn.Add(_objectScrollView);
+            UpdateCreateObjectButtonStyle();
+            UpdateLabelAreaAndFilter();
             return objectColumn;
+        }
+
+        private bool CanCollapseAdvancedLabelConfiguration()
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                return true;
+            }
+
+            return _andOrToggle.IsLeftSelected && config.orLabels.Count == 0;
+        }
+
+        private bool CanCollapseLabels()
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                return true;
+            }
+
+            return config.andLabels.Count == 0 && config.orLabels.Count == 0;
+        }
+
+        private void ToggleLabelsAdvancedCollapsed(bool isCollapsed)
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (
+                config != null
+                && config.isAdvancedCollapsed != isCollapsed
+                && (!isCollapsed || CanCollapseAdvancedLabelConfiguration())
+            )
+            {
+                config.isAdvancedCollapsed = isCollapsed;
+                SaveLabelFilterConfig(config);
+            }
+
+            UpdateAdvancedClickableState();
+            if (_logicalGrouping != null)
+            {
+                _logicalGrouping.style.display =
+                    config?.isAdvancedCollapsed ?? true ? DisplayStyle.None : DisplayStyle.Flex;
+            }
+        }
+
+        private void UpdateAdvancedClickableState()
+        {
+            if (_labelAdvancedCollapseToggle != null)
+            {
+                _labelAdvancedCollapseToggle.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    CanCollapseAdvancedLabelConfiguration()
+                );
+                bool isCollapsed = CurrentTypeLabelFilterConfig?.isAdvancedCollapsed ?? true;
+                _labelAdvancedCollapseToggle.text = isCollapsed
+                    ? StyleConstants.ArrowCollapsed
+                    : StyleConstants.ArrowExpanded;
+                _labelAdvancedCollapseToggle.tooltip =
+                    isCollapsed ? "Explore advanced boolean label logic"
+                    : CanCollapseAdvancedLabelConfiguration() ? "Hide advanced boolean logic"
+                    : "Can not un-collapse due to either OR toggle or OR labels";
+            }
+        }
+
+        private void UpdateLabelsCollapsedClickableState()
+        {
+            if (_labelCollapseToggle != null)
+            {
+                _labelCollapseToggle.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    CanCollapseLabels()
+                );
+
+                bool isCollapsed = CurrentTypeLabelFilterConfig?.isCollapsed ?? true;
+                _labelCollapseToggle.text = isCollapsed
+                    ? StyleConstants.ArrowCollapsed
+                    : StyleConstants.ArrowExpanded;
+
+                _labelCollapseToggle.tooltip =
+                    isCollapsed ? "Explore label filtering logic"
+                    : CanCollapseAdvancedLabelConfiguration() ? "Hide label filtering logic"
+                    : "Can not un-collapse due to populated label configuration";
+            }
+        }
+
+        private void ToggleLabelsCollapsed(bool isCollapsed)
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (
+                config != null
+                && config.isCollapsed != isCollapsed
+                && (!isCollapsed || CanCollapseLabels())
+            )
+            {
+                config.isCollapsed = isCollapsed;
+                SaveLabelFilterConfig(config);
+            }
+
+            UpdateLabelsCollapsedClickableState();
+            if (_labels != null)
+            {
+                _labels.text =
+                    config?.isCollapsed ?? true
+                        ? $"Labels (<b><color=yellow>{_currentUniqueLabelsForType.Count}</color></b>)"
+                        : "Labels";
+            }
+
+            if (_labelFilterSelectionRoot != null)
+            {
+                _labelFilterSelectionRoot.style.display =
+                    config?.isCollapsed ?? true ? DisplayStyle.None : DisplayStyle.Flex;
+            }
         }
 
         private VisualElement CreateInspectorColumn()
@@ -4102,6 +4812,752 @@ namespace WallstopStudios.DataVisualizer.Editor
                         .ExecuteLater(1);
                 }
             );
+        }
+
+        private void SetupDropTarget(VisualElement container, LabelFilterSection targetSection)
+        {
+            container.RegisterCallback<DragEnterEvent>(evt =>
+            {
+                string draggedText = DragAndDrop.GetGenericData("DraggedLabelText") as string;
+                if (!string.IsNullOrWhiteSpace(draggedText))
+                {
+                    DragAndDrop.visualMode = DragAndDropVisualMode.Move;
+                    container.AddToClassList("drop-target-hover");
+                }
+                evt.StopPropagation();
+            });
+
+            container.RegisterCallback<DragLeaveEvent>(evt =>
+            {
+                container.RemoveFromClassList("drop-target-hover");
+                evt.StopPropagation();
+            });
+
+            container.RegisterCallback<DragUpdatedEvent>(evt =>
+            {
+                string draggedText = DragAndDrop.GetGenericData("DraggedLabelText") as string;
+                if (!string.IsNullOrWhiteSpace(draggedText))
+                {
+                    DragAndDrop.visualMode = DragAndDropVisualMode.Move;
+                }
+                evt.StopPropagation();
+            });
+
+            container.RegisterCallback<DragPerformEvent>(evt =>
+            {
+                string draggedLabelText = DragAndDrop.GetGenericData("DraggedLabelText") as string;
+                string sourceSectionString = DragAndDrop.GetGenericData("SourceSection") as string;
+
+                if (
+                    !string.IsNullOrWhiteSpace(draggedLabelText)
+                    && !string.IsNullOrWhiteSpace(sourceSectionString)
+                    && Enum.TryParse(sourceSectionString, out LabelFilterSection sourceSection)
+                )
+                {
+                    DragAndDrop.AcceptDrag();
+
+                    bool changed = false;
+                    TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+                    if (config != null)
+                    {
+                        switch (targetSection)
+                        {
+                            case LabelFilterSection.AND:
+                            {
+                                if (!config.andLabels.Contains(draggedLabelText))
+                                {
+                                    config.andLabels.Add(draggedLabelText);
+                                    changed = true;
+                                    if (sourceSection == LabelFilterSection.OR)
+                                    {
+                                        config.orLabels.Remove(draggedLabelText);
+                                    }
+                                }
+
+                                break;
+                            }
+                            case LabelFilterSection.OR:
+                            {
+                                if (!config.orLabels.Contains(draggedLabelText))
+                                {
+                                    config.orLabels.Add(draggedLabelText);
+                                    changed = true;
+                                    if (sourceSection == LabelFilterSection.AND)
+                                    {
+                                        config.andLabels.Remove(draggedLabelText);
+                                    }
+                                }
+
+                                break;
+                            }
+                            case LabelFilterSection.Available:
+                            {
+                                switch (sourceSection)
+                                {
+                                    case LabelFilterSection.AND:
+                                    {
+                                        changed = config.andLabels.Remove(draggedLabelText);
+                                        break;
+                                    }
+                                    case LabelFilterSection.OR:
+                                    {
+                                        changed = config.orLabels.Remove(draggedLabelText);
+                                        break;
+                                    }
+                                }
+
+                                break;
+                            }
+                        }
+
+                        if (changed)
+                        {
+                            SaveLabelFilterConfig(config);
+                            PopulateLabelPillContainers();
+                            ApplyLabelFilter();
+                        }
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning("DragPerform: Invalid drag data received.");
+                }
+
+                _draggedLabelText = null;
+                container.RemoveFromClassList("drop-target-hover");
+                evt.StopPropagation();
+            });
+        }
+
+        internal void UpdateLabelAreaAndFilter()
+        {
+            ClearLabelFilterUI();
+            if (_namespaceController.SelectedType == null)
+            {
+                if (_filterStatusLabel != null)
+                {
+                    _filterStatusLabel.text = "";
+                }
+
+                if (_labelFilterSelectionRoot is { parent: not null })
+                {
+                    _labelFilterSelectionRoot.parent.style.display = DisplayStyle.None;
+                }
+
+                if (_labelCollapseRow != null)
+                {
+                    _labelCollapseRow.style.display = DisplayStyle.None;
+                }
+
+                ApplyLabelFilter();
+                return;
+            }
+
+            _currentUniqueLabelsForType.Clear();
+            HashSet<string> labelSet = new(StringComparer.OrdinalIgnoreCase);
+            foreach (ScriptableObject obj in _selectedObjects)
+            {
+                if (obj == null)
+                {
+                    continue;
+                }
+
+                string[] labels = AssetDatabase.GetLabels(obj);
+                foreach (string label in labels)
+                {
+                    labelSet.Add(label);
+                }
+            }
+
+            foreach (string label in labelSet)
+            {
+                _currentUniqueLabelsForType.Add(label);
+            }
+            _currentUniqueLabelsForType.Sort();
+
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                return;
+            }
+
+            bool configChanged = false;
+            int removedAnd = config.andLabels.RemoveAll(label =>
+                !_currentUniqueLabelsForType.Contains(label)
+            );
+            int removedOr = config.orLabels.RemoveAll(label =>
+                !_currentUniqueLabelsForType.Contains(label)
+            );
+
+            if (removedAnd > 0 || removedOr > 0)
+            {
+                configChanged = true;
+            }
+
+            if (configChanged)
+            {
+                SaveLabelFilterConfig(config);
+            }
+
+            PopulateLabelPillContainers();
+            ApplyLabelFilter();
+            ToggleLabelsCollapsed(CurrentTypeLabelFilterConfig?.isCollapsed == true);
+            ToggleLabelsAdvancedCollapsed(
+                CurrentTypeLabelFilterConfig?.isAdvancedCollapsed == true
+            );
+        }
+
+        private void ClearLabelFilterUI()
+        {
+            _availableLabelsContainer?.Clear();
+            _andLabelsContainer?.Clear();
+            _orLabelsContainer?.Clear();
+            _currentUniqueLabelsForType.Clear();
+        }
+
+        private List<string> GetCurrentlyAvailableLabels()
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                return _currentUniqueLabelsForType.ToList();
+            }
+
+            return _currentUniqueLabelsForType
+                .Where(label =>
+                    !(config.andLabels.Contains(label) && config.orLabels.Contains(label))
+                )
+                .ToList();
+        }
+
+        private void PopulateLabelPillContainers()
+        {
+            List<string> availableLabels = GetCurrentlyAvailableLabels();
+
+            PopulateSingleLabelContainer(
+                _availableLabelsContainer,
+                availableLabels,
+                LabelFilterSection.Available
+            );
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config != null)
+            {
+                PopulateSingleLabelContainer(
+                    _andLabelsContainer,
+                    config.andLabels,
+                    LabelFilterSection.AND
+                );
+                PopulateSingleLabelContainer(
+                    _orLabelsContainer,
+                    config.orLabels,
+                    LabelFilterSection.OR
+                );
+            }
+
+            if (_labelFilterSelectionRoot is { parent: not null })
+            {
+                _labelFilterSelectionRoot.parent.style.display =
+                    availableLabels.Count != 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+            if (_labelCollapseRow != null)
+            {
+                _labelCollapseRow.style.display =
+                    availableLabels.Count != 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+        }
+
+        private void PopulateSingleLabelContainer(
+            VisualElement container,
+            List<string> labels,
+            LabelFilterSection section
+        )
+        {
+            if (container == null)
+            {
+                return;
+            }
+            container.Clear();
+            if (labels == null)
+            {
+                return;
+            }
+
+            foreach (string labelText in labels.OrderBy(label => label))
+            {
+                container.Add(CreateLabelPill(labelText, section));
+            }
+        }
+
+        private VisualElement CreateLabelPill(string labelText, LabelFilterSection currentSection)
+        {
+            Color labelColor = GetColorForLabel(labelText);
+            VisualElement pillContainer = new()
+            {
+                name = $"label-pill-container-{labelText.Replace(" ", "-").ToLowerInvariant()}",
+                style = { backgroundColor = labelColor },
+                userData = labelText,
+            };
+            pillContainer.AddToClassList("label-pill");
+
+            Label labelElement = new(labelText)
+            {
+                style =
+                {
+                    color = Color.white,
+                    marginRight =
+                        currentSection == LabelFilterSection.AND
+                        || currentSection == LabelFilterSection.OR
+                            ? 2
+                            : 0,
+                },
+            };
+            labelElement.AddToClassList("label-pill-text");
+            labelElement.pickingMode = PickingMode.Ignore;
+            pillContainer.Add(labelElement);
+
+            pillContainer.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button == 0)
+                {
+                    _draggedLabelText = labelText;
+                    _dragSourceSection = currentSection;
+
+                    DragAndDrop.PrepareStartDrag();
+                    DragAndDrop.SetGenericData("DraggedLabelText", _draggedLabelText);
+                    DragAndDrop.SetGenericData("SourceSection", _dragSourceSection.ToString());
+                    DragAndDrop.StartDrag(labelText);
+                    evt.StopPropagation();
+                }
+            });
+
+            switch (currentSection)
+            {
+                case LabelFilterSection.Available:
+                {
+                    pillContainer.tooltip = $"Drag '{labelText}' to an AND/OR filter section.";
+                    break;
+                }
+                case LabelFilterSection.AND:
+                case LabelFilterSection.OR:
+                {
+                    // Add "X" button for removal
+                    Button removeButton = new(() => RemoveLabelFromFilter(labelText, currentSection)
+                    )
+                    {
+                        text = "x",
+                        name = $"remove-label-{labelText.Replace(" ", "-")}",
+                        tooltip = $"Remove '{labelText}' from filter",
+                        style = { color = labelElement.style.color.value },
+                    };
+                    removeButton.AddToClassList("label-pill-remove-button");
+                    removeButton.AddToClassList(StyleConstants.ClickableClass);
+                    pillContainer.Add(removeButton);
+                    break;
+                }
+                default:
+                {
+                    throw new InvalidEnumArgumentException(
+                        nameof(currentSection),
+                        (int)currentSection,
+                        typeof(LabelFilterSection)
+                    );
+                }
+            }
+            return pillContainer;
+        }
+
+        private void RemoveLabelFromFilter(string labelText, LabelFilterSection sectionItWasIn)
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                return;
+            }
+
+            bool changed = false;
+
+            switch (sectionItWasIn)
+            {
+                case LabelFilterSection.AND:
+                {
+                    changed = config.andLabels.Remove(labelText);
+                    break;
+                }
+                case LabelFilterSection.OR:
+                {
+                    changed = config.orLabels.Remove(labelText);
+                    break;
+                }
+            }
+
+            if (changed)
+            {
+                SaveLabelFilterConfig(config);
+                PopulateLabelPillContainers();
+                ApplyLabelFilter();
+            }
+        }
+
+        private void ApplyLabelFilter()
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            try
+            {
+                if (config == null || _namespaceController.SelectedType == null)
+                {
+                    _filteredObjects.Clear();
+                    if (_filterStatusLabel != null)
+                    {
+                        _filterStatusLabel.text = "Select a type to see objects.";
+                    }
+                    return;
+                }
+
+                switch (config.combinationType)
+                {
+                    case LabelCombinationType.And:
+                    {
+                        _andOrToggle?.SelectLeft(force: true);
+                        break;
+                    }
+                    case LabelCombinationType.Or:
+                    {
+                        _andOrToggle?.SelectRight(force: true);
+                        break;
+                    }
+                }
+
+                _filteredObjects.Clear();
+                List<string> andLabels = config.andLabels;
+                List<string> orLabels = config.orLabels;
+
+                bool noAndFilter = andLabels == null || andLabels.Count == 0;
+                bool noOrFilter = orLabels == null || orLabels.Count == 0;
+
+                if (noAndFilter && noOrFilter)
+                {
+                    foreach (ScriptableObject selectedObject in _selectedObjects)
+                    {
+                        _filteredObjects.Add(selectedObject);
+                    }
+                }
+                else
+                {
+                    HashSet<string> uniqueLabels = new(StringComparer.Ordinal);
+                    Predicate<string> labelMatch = uniqueLabels.Contains;
+                    foreach (ScriptableObject obj in _selectedObjects)
+                    {
+                        if (obj == null)
+                        {
+                            continue;
+                        }
+
+                        string[] labels = AssetDatabase.GetLabels(obj);
+                        uniqueLabels.Clear();
+                        foreach (string label in labels)
+                        {
+                            uniqueLabels.Add(label);
+                        }
+
+                        bool matchesAnd = noAndFilter || andLabels.TrueForAll(labelMatch);
+                        bool matchesOr = noOrFilter || orLabels.Exists(labelMatch);
+
+                        switch (config.combinationType)
+                        {
+                            case LabelCombinationType.And:
+                            {
+                                if (matchesAnd && matchesOr)
+                                {
+                                    _filteredObjects.Add(obj);
+                                }
+
+                                break;
+                            }
+                            case LabelCombinationType.Or:
+                            {
+                                if (matchesAnd || matchesOr)
+                                {
+                                    _filteredObjects.Add(obj);
+                                }
+
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                int totalCount = _selectedObjects.Count;
+                int shownCount = _filteredObjects.Count;
+                if (_filterStatusLabel != null)
+                {
+                    if (shownCount == totalCount)
+                    {
+                        _filterStatusLabel.style.display = DisplayStyle.None;
+                    }
+                    else
+                    {
+                        _filterStatusLabel.style.display = DisplayStyle.Flex;
+                        int hidden = totalCount - shownCount;
+                        _filterStatusLabel.text =
+                            hidden < 20 && hidden != totalCount
+                                ? $"<b><color=yellow>{hidden}</color></b> objects hidden by label filter."
+                                : $"<b><color=red>{hidden}</color></b> objects hidden by label filter.";
+                    }
+                }
+            }
+            finally
+            {
+                UpdateLabelsCollapsedClickableState();
+                UpdateAdvancedClickableState();
+                BuildObjectsView();
+            }
+        }
+
+        private TypeLabelFilterConfig LoadOrCreateLabelFilterConfig(Type type)
+        {
+            if (type == null)
+            {
+                return null;
+            }
+            TypeLabelFilterConfig config = null;
+            PersistSettings(
+                settings =>
+                {
+                    bool dirty = false;
+                    if (settings.labelFilterConfigs == null)
+                    {
+                        settings.labelFilterConfigs = new List<TypeLabelFilterConfig>();
+                        dirty = true;
+                    }
+                    config = settings.labelFilterConfigs.Find(existingConfig =>
+                        string.Equals(
+                            existingConfig.typeFullName,
+                            type.FullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (config == null)
+                    {
+                        config = new TypeLabelFilterConfig { typeFullName = type.FullName };
+                        settings.labelFilterConfigs.Add(config);
+                        dirty = true;
+                    }
+                    return dirty;
+                },
+                userState =>
+                {
+                    bool dirty = false;
+                    if (userState.labelFilterConfigs == null)
+                    {
+                        userState.labelFilterConfigs = new List<TypeLabelFilterConfig>();
+                        dirty = true;
+                    }
+                    config = userState.labelFilterConfigs.Find(existingConfig =>
+                        string.Equals(
+                            existingConfig.typeFullName,
+                            type.FullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (config == null)
+                    {
+                        config = new TypeLabelFilterConfig { typeFullName = type.FullName };
+                        userState.labelFilterConfigs.Add(config);
+                        dirty = true;
+                    }
+                    return dirty;
+                }
+            );
+            return config;
+        }
+
+        private ProcessorState LoadOrCreateProcessorState(Type type)
+        {
+            if (type == null)
+            {
+                return null;
+            }
+            ProcessorState state = null;
+            PersistSettings(
+                settings =>
+                {
+                    bool dirty = false;
+                    if (settings.processorStates == null)
+                    {
+                        settings.processorStates = new List<ProcessorState>();
+                        dirty = true;
+                    }
+                    state = settings.processorStates.Find(existingState =>
+                        string.Equals(
+                            existingState.typeFullName,
+                            type.FullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (state == null)
+                    {
+                        state = new ProcessorState { typeFullName = type.FullName };
+                        settings.processorStates.Add(state);
+                        dirty = true;
+                    }
+                    return dirty;
+                },
+                userState =>
+                {
+                    bool dirty = false;
+                    if (userState.processorStates == null)
+                    {
+                        userState.processorStates = new List<ProcessorState>();
+                        dirty = true;
+                    }
+                    state = userState.processorStates.Find(existingState =>
+                        string.Equals(
+                            existingState.typeFullName,
+                            type.FullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (state == null)
+                    {
+                        state = new ProcessorState { typeFullName = type.FullName };
+                        userState.processorStates.Add(state);
+                        dirty = true;
+                    }
+                    return dirty;
+                }
+            );
+            return state;
+        }
+
+        private void SaveProcessorState(ProcessorState state)
+        {
+            PersistSettings(
+                settings =>
+                {
+                    settings.processorStates ??= new List<ProcessorState>();
+                    ProcessorState existing = settings.processorStates.Find(existingState =>
+                        string.Equals(
+                            existingState.typeFullName,
+                            state.typeFullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (existing == null)
+                    {
+                        settings.processorStates.Add(state);
+                    }
+                    else
+                    {
+                        settings.processorStates.Remove(existing);
+                        settings.processorStates.Add(state);
+                    }
+
+                    return true;
+                },
+                userState =>
+                {
+                    userState.processorStates ??= new List<ProcessorState>();
+                    ProcessorState existing = userState.processorStates.Find(existingState =>
+                        string.Equals(
+                            existingState.typeFullName,
+                            state.typeFullName,
+                            StringComparison.Ordinal
+                        )
+                    );
+                    if (existing == null)
+                    {
+                        userState.processorStates.Add(state);
+                    }
+                    else
+                    {
+                        userState.processorStates.Remove(existing);
+                        userState.processorStates.Add(state);
+                    }
+
+                    return true;
+                }
+            );
+        }
+
+        private void SaveLabelFilterConfig(TypeLabelFilterConfig config)
+        {
+            PersistSettings(
+                settings =>
+                {
+                    settings.labelFilterConfigs ??= new List<TypeLabelFilterConfig>();
+                    TypeLabelFilterConfig existing = settings.labelFilterConfigs.Find(
+                        existingConfig =>
+                            string.Equals(
+                                existingConfig.typeFullName,
+                                config.typeFullName,
+                                StringComparison.Ordinal
+                            )
+                    );
+                    if (existing == null)
+                    {
+                        settings.labelFilterConfigs.Add(config);
+                    }
+                    else
+                    {
+                        settings.labelFilterConfigs.Remove(existing);
+                        settings.labelFilterConfigs.Add(config);
+                    }
+                    return true;
+                },
+                userState =>
+                {
+                    userState.labelFilterConfigs ??= new List<TypeLabelFilterConfig>();
+                    TypeLabelFilterConfig existing = userState.labelFilterConfigs.Find(
+                        existingConfig =>
+                            string.Equals(
+                                existingConfig.typeFullName,
+                                config.typeFullName,
+                                StringComparison.Ordinal
+                            )
+                    );
+                    if (existing == null)
+                    {
+                        userState.labelFilterConfigs.Add(config);
+                    }
+                    else
+                    {
+                        userState.labelFilterConfigs.Remove(existing);
+                        userState.labelFilterConfigs.Add(config);
+                    }
+                    return true;
+                }
+            );
+        }
+
+        private Color GetColorForLabel(string labelText)
+        {
+            if (string.IsNullOrWhiteSpace(labelText))
+            {
+                return Color.gray;
+            }
+
+            if (_textColorCache.TryGetValue(labelText, out Color color))
+            {
+                return color;
+            }
+
+            color =
+                _nextColorIndex < PredefinedLabelColors.Length
+                    ? PredefinedLabelColors[_nextColorIndex++]
+                    : GenerateColorForText(labelText);
+            _textColorCache[labelText] = color;
+            return color;
+        }
+
+        private static Color GenerateColorForText(string text)
+        {
+            float hue = Mathf.Abs(text.GetHashCode() % 256) / 255f;
+            return Color.HSVToRGB(hue, 0.65f, 0.90f);
+        }
+
+        private static bool IsColorDark(Color c)
+        {
+            return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b < 0.5f; // Luminance check
         }
 
         private void BuildConfirmNamespaceAddPopoverContent(
@@ -4247,21 +5703,48 @@ namespace WallstopStudios.DataVisualizer.Editor
             )
             {
                 name = "empty-object-list-label",
+                style = { alignSelf = Align.Center },
             };
             _emptyObjectLabel.AddToClassList("empty-object-list-label");
             _objectListContainer.Add(_emptyObjectLabel);
             if (selectedType != null && _selectedObjects.Count == 0)
             {
                 _emptyObjectLabel.style.display = DisplayStyle.Flex;
-            }
-            else
-            {
-                _emptyObjectLabel.style.display = DisplayStyle.None;
+                return;
             }
 
-            for (int i = 0; i < _selectedObjects.Count; i++)
+            _emptyObjectLabel.style.display = DisplayStyle.None;
+            if (_filteredObjects == null || !_filteredObjects.Any())
             {
-                BuildObjectRow(_selectedObjects[i], i);
+                // If _selectedObjects has items, then filter is active and hiding all
+                if (_selectedObjects != null && _selectedObjects.Any())
+                {
+                    Label noMatchLabel = new(
+                        $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' match the current label filter."
+                    )
+                    {
+                        style = { alignSelf = Align.Center },
+                    };
+                    noMatchLabel.AddToClassList("empty-object-list-label");
+                    _objectListContainer.Add(noMatchLabel);
+                }
+                else
+                {
+                    Label noMatchLabel = new(
+                        $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' found."
+                    )
+                    {
+                        style = { alignSelf = Align.Center },
+                    };
+                    noMatchLabel.AddToClassList("empty-object-list-label");
+                    _objectListContainer.Add(noMatchLabel);
+                }
+                return;
+            }
+
+            for (int i = 0; i < _filteredObjects.Count; i++)
+            {
+                BuildObjectRow(_filteredObjects[i], i);
             }
         }
 
@@ -4333,7 +5816,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 text = "↓",
                 tooltip = $"Move {dataObjectName} to bottom",
             };
-            if (_selectedObjects.Count == 1 || index == _selectedObjects.Count - 1)
+            if (_filteredObjects.Count == 1 || index == _filteredObjects.Count - 1)
             {
                 goDownButton.AddToClassList("go-button-disabled");
             }
@@ -4555,6 +6038,69 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     Debug.LogError($"Error creating asset name display field: {ex}");
                 }
+
+                _inspectorLabelsSection = new VisualElement
+                {
+                    name = "inspector-labels-section",
+                    style = { marginTop = 5, marginBottom = 10 },
+                };
+
+                Label sectionHeader = new("Asset Labels:")
+                {
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Bold,
+                        marginBottom = 4,
+                        marginLeft = 6,
+                    },
+                };
+                _inspectorLabelsSection.Add(sectionHeader);
+
+                _inspectorCurrentLabelsContainer = new VisualElement
+                {
+                    name = "inspector-current-labels",
+                    style = { marginRight = 6, marginLeft = 6 },
+                };
+                _inspectorCurrentLabelsContainer.AddToClassList("label-pill-container");
+                _inspectorLabelsSection.Add(_inspectorCurrentLabelsContainer);
+
+                VisualElement addLabelRow = new()
+                {
+                    style =
+                    {
+                        flexDirection = FlexDirection.Row,
+                        alignItems = Align.Center,
+                        position = Position.Relative,
+                    },
+                };
+                _inspectorNewLabelInput = new TextField
+                {
+                    name = "inspector-new-label-input",
+                    style =
+                    {
+                        flexGrow = 1,
+                        flexShrink = 1,
+                        marginTop = 6,
+                        marginRight = 6,
+                        marginLeft = 6,
+                    },
+                };
+                _inspectorNewLabelInput.RegisterValueChangedCallback(evt =>
+                    UpdateLabelSuggestions(evt.newValue)
+                );
+                _inspectorNewLabelInput.RegisterCallback<FocusInEvent>(_ => OnNewLabelInputFocus());
+                _inspectorNewLabelInput.RegisterCallback<KeyDownEvent>(HandleNewLabelInputKeyDown);
+                _inspectorNewLabelInput.RegisterCallback<FocusOutEvent>(OnNewLabelInputBlur);
+
+                addLabelRow.Add(_inspectorNewLabelInput);
+                Button addLabelButton = new(AddLabelToSelectedAsset) { text = "Add" };
+                addLabelButton.AddToClassList(StyleConstants.ClickableClass);
+                addLabelButton.AddToClassList("add-label-button");
+                addLabelRow.Add(addLabelButton);
+                _inspectorLabelsSection.Add(addLabelRow);
+
+                _inspectorContainer.Add(_inspectorLabelsSection);
+                PopulateInspectorLabelsUI();
             }
 
             // ReSharper disable once RedundantAssignment
@@ -4694,6 +6240,421 @@ namespace WallstopStudios.DataVisualizer.Editor
             return null;
         }
 
+        private void OnNewLabelInputFocus()
+        {
+            PopulateProjectUniqueLabelsCache();
+            UpdateLabelSuggestions(_inspectorNewLabelInput.value);
+        }
+
+        private void OnNewLabelInputBlur(FocusOutEvent evt)
+        {
+            if (
+                _inspectorLabelSuggestionsPopover != null
+                && evt.relatedTarget is VisualElement focusedElement
+            )
+            {
+                VisualElement current = focusedElement;
+                while (current != null)
+                {
+                    if (current == _inspectorLabelSuggestionsPopover)
+                    {
+                        return;
+                    }
+
+                    current = current.parent;
+                }
+            }
+            if (_activePopover == _inspectorLabelSuggestionsPopover)
+            {
+                rootVisualElement
+                    .schedule.Execute(() =>
+                    {
+                        if (
+                            _activePopover?.focusController?.focusedElement
+                                != _inspectorNewLabelInput
+                            && (
+                                _activePopover?.focusController?.focusedElement as VisualElement
+                            )?.FindCommonAncestor(_inspectorLabelSuggestionsPopover)
+                                != _inspectorLabelSuggestionsPopover
+                            && _activePopover == _inspectorLabelSuggestionsPopover
+                        )
+                        {
+                            CloseActivePopover();
+                        }
+                    })
+                    .ExecuteLater(100);
+            }
+        }
+
+        private void PopulateProjectUniqueLabelsCache(bool force = false)
+        {
+            if (!force && _isLabelCachePopulated && _projectUniqueLabelsCache.Count > 0)
+            {
+                return;
+            }
+
+            _projectUniqueLabelsCache.Clear();
+            HashSet<string> allLabelsSet = new(StringComparer.Ordinal);
+            foreach (ScriptableObject dataObject in _allManagedObjectsCache)
+            {
+                string[] labels = AssetDatabase.GetLabels(dataObject);
+                foreach (string label in labels)
+                {
+                    if (!string.IsNullOrWhiteSpace(label))
+                    {
+                        allLabelsSet.Add(label.Trim());
+                    }
+                }
+            }
+
+            foreach (string label in allLabelsSet)
+            {
+                _projectUniqueLabelsCache.Add(label);
+            }
+            _projectUniqueLabelsCache.Sort();
+            _isLabelCachePopulated = true;
+        }
+
+        private void UpdateLabelSuggestions(string currentInput)
+        {
+            if (_inspectorLabelSuggestionsPopover == null)
+            {
+                return;
+            }
+
+            PopulateProjectUniqueLabelsCache();
+            if (_activePopover == null && _projectUniqueLabelsCache.Count > 0)
+            {
+                OpenPopover(
+                    _inspectorLabelSuggestionsPopover,
+                    _inspectorNewLabelInput,
+                    shouldFocus: false
+                );
+            }
+
+            _currentLabelSuggestionItems.Clear();
+            _labelSuggestionHighlightIndex = -1;
+            _inspectorLabelSuggestionsPopover.Clear();
+
+            string[] currentAssetLabelsArray =
+                _selectedObject != null
+                    ? AssetDatabase.GetLabels(_selectedObject)
+                    : Array.Empty<string>();
+            HashSet<string> currentAssetLabelsSet = new(
+                currentAssetLabelsArray,
+                StringComparer.Ordinal
+            );
+
+            string[] suggestions = _projectUniqueLabelsCache
+                .Where(label =>
+                    (
+                        string.IsNullOrWhiteSpace(currentInput)
+                        || label.Contains(currentInput, StringComparison.OrdinalIgnoreCase)
+                    ) && !currentAssetLabelsSet.Contains(label)
+                )
+                .Take(10)
+                .ToArray();
+
+            if (suggestions.Length > 0)
+            {
+                foreach (string suggestionText in suggestions)
+                {
+                    Label suggestionItem = CreateHighlightedLabel(
+                        suggestionText,
+                        new List<string> { currentInput },
+                        LabelSuggestionItemClass
+                    );
+                    suggestionItem.userData = suggestionText;
+                    suggestionItem.RegisterCallback<PointerUpEvent>(evt =>
+                    {
+                        if (evt.button == 0 && suggestionItem.userData is string clickedSuggestion)
+                        {
+                            _inspectorNewLabelInput.SetValueWithoutNotify(clickedSuggestion);
+                            _inspectorNewLabelInput.Focus();
+                            AddLabelToSelectedAsset();
+                            CloseActivePopover();
+                            evt.StopPropagation();
+                        }
+                    });
+                    suggestionItem.RegisterCallback<MouseEnterEvent>(_ =>
+                        suggestionItem.style.backgroundColor = new Color(0.35f, 0.35f, 0.35f)
+                    );
+                    suggestionItem.RegisterCallback<MouseLeaveEvent>(_ =>
+                        suggestionItem.style.backgroundColor = Color.clear
+                    );
+                    _inspectorLabelSuggestionsPopover.Add(suggestionItem);
+                    _currentLabelSuggestionItems.Add(suggestionItem);
+                }
+            }
+            else
+            {
+                if (_activePopover == _inspectorLabelSuggestionsPopover)
+                {
+                    CloseActivePopover();
+                }
+            }
+        }
+
+        private void HandleNewLabelInputKeyDown(KeyDownEvent evt)
+        {
+            if (
+                _activePopover != _inspectorLabelSuggestionsPopover
+                || _currentLabelSuggestionItems.Count == 0
+            )
+            {
+                if (evt.keyCode is KeyCode.Return or KeyCode.KeypadEnter)
+                {
+                    AddLabelToSelectedAsset();
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                }
+                return;
+            }
+
+            bool highlightChanged = false;
+            switch (evt.keyCode)
+            {
+                case KeyCode.DownArrow:
+                {
+                    _labelSuggestionHighlightIndex++;
+                    if (_labelSuggestionHighlightIndex >= _currentLabelSuggestionItems.Count)
+                    {
+                        _labelSuggestionHighlightIndex = 0;
+                    }
+
+                    highlightChanged = true;
+                    break;
+                }
+                case KeyCode.UpArrow:
+                {
+                    _labelSuggestionHighlightIndex--;
+                    if (_labelSuggestionHighlightIndex < 0)
+                    {
+                        _labelSuggestionHighlightIndex = _currentLabelSuggestionItems.Count - 1;
+                    }
+
+                    highlightChanged = true;
+                    break;
+                }
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                {
+                    if (
+                        _labelSuggestionHighlightIndex >= 0
+                        && _labelSuggestionHighlightIndex < _currentLabelSuggestionItems.Count
+                    )
+                    {
+                        if (
+                            _currentLabelSuggestionItems[_labelSuggestionHighlightIndex].userData
+                            is string selectedSuggestion
+                        )
+                        {
+                            _inspectorNewLabelInput.SetValueWithoutNotify(selectedSuggestion);
+                            AddLabelToSelectedAsset();
+                            CloseActivePopover();
+                        }
+                    }
+                    else
+                    {
+                        AddLabelToSelectedAsset();
+                        CloseActivePopover();
+                    }
+
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    break;
+                }
+                case KeyCode.Escape:
+                {
+                    CloseActivePopover();
+                    evt.PreventDefault();
+                    evt.StopPropagation();
+                    break;
+                }
+                default:
+                {
+                    return;
+                }
+            }
+
+            if (highlightChanged)
+            {
+                UpdateLabelSuggestionHighlight();
+                evt.PreventDefault();
+                evt.StopPropagation();
+            }
+        }
+
+        private void UpdateLabelSuggestionHighlight()
+        {
+            if (_currentLabelSuggestionItems == null || _inspectorLabelSuggestionsPopover == null)
+            {
+                return;
+            }
+
+            ScrollView scrollView = _inspectorLabelSuggestionsPopover.Q<ScrollView>();
+
+            for (int i = 0; i < _currentLabelSuggestionItems.Count; i++)
+            {
+                VisualElement item = _currentLabelSuggestionItems[i];
+                if (item == null)
+                {
+                    continue;
+                }
+
+                bool shouldHighlight = i == _labelSuggestionHighlightIndex;
+                item.EnableInClassList(PopoverHighlightClass, shouldHighlight);
+                if (shouldHighlight && scrollView != null)
+                {
+                    item.schedule.Execute(() =>
+                        {
+                            if (item.panel != null)
+                            {
+                                scrollView.ScrollTo(item);
+                            }
+                        })
+                        .ExecuteLater(1);
+                }
+            }
+        }
+
+        private void PopulateInspectorLabelsUI()
+        {
+            if (_inspectorCurrentLabelsContainer == null || _selectedObject == null)
+            {
+                _inspectorCurrentLabelsContainer?.Clear();
+                return;
+            }
+            _inspectorCurrentLabelsContainer.Clear();
+
+            string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
+            Array.Sort(currentLabels);
+
+            if (currentLabels.Length == 0)
+            {
+                _inspectorCurrentLabelsContainer.Add(
+                    new Label("No labels assigned.")
+                    {
+                        style =
+                        {
+                            color = Color.gray,
+                            fontSize = 10,
+                            unityFontStyleAndWeight = FontStyle.Italic,
+                        },
+                    }
+                );
+                return;
+            }
+
+            foreach (string labelText in currentLabels)
+            {
+                Color backgroundColor = GetColorForLabel(labelText);
+                VisualElement pillContainer = new()
+                {
+                    name = $"inspector-label-pill-{labelText.Replace(" ", "-").ToLowerInvariant()}",
+                    style = { backgroundColor = backgroundColor },
+                };
+                pillContainer.AddToClassList("label-pill");
+                pillContainer.AddToClassList("non-draggable");
+
+                Label labelElement = new(labelText) { style = { color = Color.white } };
+                labelElement.AddToClassList("label-pill-text");
+                pillContainer.Add(labelElement);
+
+                Button removeButton = new(() => RemoveLabelFromSelectedAsset(labelText))
+                {
+                    text = "x",
+                    tooltip = $"Remove label '{labelText}'",
+                };
+                removeButton.AddToClassList(StyleConstants.ClickableClass);
+                removeButton.AddToClassList("label-pill-remove-button");
+                removeButton.style.color = labelElement.style.color.value;
+                pillContainer.Add(removeButton);
+                _inspectorCurrentLabelsContainer.Add(pillContainer);
+            }
+        }
+
+        private void AddLabelToSelectedAsset()
+        {
+            if (_selectedObject == null || _inspectorNewLabelInput == null)
+            {
+                return;
+            }
+
+            string newLabelText = _inspectorNewLabelInput.value?.Trim();
+            if (string.IsNullOrWhiteSpace(newLabelText))
+            {
+                _inspectorNewLabelInput.SetValueWithoutNotify("");
+                return;
+            }
+
+            string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
+            if (
+                Array.Exists(
+                    currentLabels,
+                    label => label.Equals(newLabelText, StringComparison.Ordinal)
+                )
+            )
+            {
+                _inspectorNewLabelInput.SetValueWithoutNotify("");
+                _inspectorNewLabelInput.Focus();
+                return;
+            }
+
+            List<string> updatedLabels = currentLabels.ToList();
+            updatedLabels.Add(newLabelText);
+
+            try
+            {
+                AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
+                EditorUtility.SetDirty(_selectedObject);
+                AssetDatabase.SaveAssets();
+                PopulateProjectUniqueLabelsCache(force: true);
+                _inspectorNewLabelInput.SetValueWithoutNotify("");
+                PopulateInspectorLabelsUI();
+                UpdateLabelAreaAndFilter();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(
+                    $"Error adding label '{newLabelText}' to asset '{_selectedObject.name}': {ex}"
+                );
+            }
+            _inspectorNewLabelInput.Focus();
+        }
+
+        private void RemoveLabelFromSelectedAsset(string labelToRemove)
+        {
+            if (_selectedObject == null || string.IsNullOrWhiteSpace(labelToRemove))
+            {
+                return;
+            }
+
+            string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
+            string[] updatedLabels = currentLabels
+                .Where(label => !label.Equals(labelToRemove, StringComparison.Ordinal))
+                .ToArray();
+
+            if (updatedLabels.Length != currentLabels.Length)
+            {
+                try
+                {
+                    AssetDatabase.SetLabels(_selectedObject, updatedLabels);
+                    EditorUtility.SetDirty(_selectedObject);
+                    AssetDatabase.SaveAssets();
+                    PopulateProjectUniqueLabelsCache(force: true);
+                    PopulateInspectorLabelsUI();
+                    UpdateLabelAreaAndFilter();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError(
+                        $"Error removing label '{labelToRemove}' from asset '{_selectedObject.name}': {ex}"
+                    );
+                }
+            }
+        }
+
         private void CloneObject(ScriptableObject originalObject)
         {
             if (originalObject == null)
@@ -4817,7 +6778,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal ScriptableObject DetermineObjectToAutoSelect()
         {
             Type selectedType = _namespaceController.SelectedType;
-            if (selectedType == null || _selectedObjects == null || _selectedObjects.Count == 0)
+            if (selectedType == null || _selectedObjects.Count == 0)
             {
                 return null;
             }
@@ -5069,7 +7030,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .ToList();
         }
 
-        internal static bool IsLoadableType(Type type)
+        private static bool IsLoadableType(Type type)
         {
             bool allowed =
                 type != typeof(ScriptableObject)
@@ -5085,24 +7046,33 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return false;
             }
 
-            ScriptableObject instance = CreateInstance(type);
             try
             {
-                using SerializedObject serializedObject = new(instance);
-                using SerializedProperty scriptProperty = serializedObject.FindProperty("m_Script");
-                if (scriptProperty == null)
+                ScriptableObject instance = CreateInstance(type);
+                try
                 {
-                    return false;
-                }
+                    using SerializedObject serializedObject = new(instance);
+                    using SerializedProperty scriptProperty = serializedObject.FindProperty(
+                        "m_Script"
+                    );
+                    if (scriptProperty == null)
+                    {
+                        return false;
+                    }
 
-                return scriptProperty.objectReferenceValue != null;
-            }
-            finally
-            {
-                if (instance != null)
-                {
-                    DestroyImmediate(instance);
+                    return scriptProperty.objectReferenceValue != null;
                 }
+                finally
+                {
+                    if (instance != null)
+                    {
+                        DestroyImmediate(instance);
+                    }
+                }
+            }
+            catch
+            {
+                return false;
             }
         }
 

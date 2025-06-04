@@ -18,6 +18,8 @@
 
         public List<TypeObjectOrder> objectOrders = new();
         public List<string> managedTypeNames = new();
+        public List<TypeLabelFilterConfig> labelFilterConfigs = new();
+        public List<ProcessorState> processorStates = new();
 
         public void HydrateFrom(DataVisualizerSettings settings)
         {
@@ -42,6 +44,12 @@
                 settings.objectOrders?.Select(order => order.Clone()).ToList()
                 ?? new List<TypeObjectOrder>();
             managedTypeNames = settings.managedTypeNames?.ToList() ?? new List<string>();
+            labelFilterConfigs =
+                settings.labelFilterConfigs?.Select(config => config.Clone()).ToList()
+                ?? new List<TypeLabelFilterConfig>();
+            processorStates =
+                settings.processorStates?.Select(state => state.Clone()).ToList()
+                ?? new List<ProcessorState>();
         }
 
         public List<string> GetOrCreateObjectOrderList(string typeFullName)

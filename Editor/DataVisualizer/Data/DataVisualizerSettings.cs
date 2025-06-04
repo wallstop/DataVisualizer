@@ -29,7 +29,7 @@
         [Tooltip(
             "If true, window state (selection, order, collapse) is saved in a special ScriptableObject. If false, state is saved within this settings asset file."
         )]
-        public bool persistStateInSettingsAsset = true;
+        public bool persistStateInSettingsAsset;
 
         [Tooltip("If true, when selecting an Object, it will be selected in the Inspector.")]
         public bool selectActiveObject;
@@ -67,6 +67,14 @@
         [SerializeField]
         [ReadOnly]
         internal List<string> managedTypeNames = new();
+
+        [SerializeField]
+        [ReadOnly]
+        internal List<TypeLabelFilterConfig> labelFilterConfigs = new();
+
+        [SerializeField]
+        [ReadOnly]
+        internal List<ProcessorState> processorStates = new();
 
         private void OnValidate()
         {
@@ -112,6 +120,12 @@
                 userState.objectOrders?.Select(order => order.Clone()).ToList()
                 ?? new List<TypeObjectOrder>();
             managedTypeNames = userState.managedTypeNames?.ToList() ?? new List<string>();
+            labelFilterConfigs =
+                userState.labelFilterConfigs?.Select(config => config.Clone()).ToList()
+                ?? new List<TypeLabelFilterConfig>();
+            processorStates =
+                userState.processorStates?.Select(state => state.Clone()).ToList()
+                ?? new List<ProcessorState>();
             MarkDirty();
         }
 

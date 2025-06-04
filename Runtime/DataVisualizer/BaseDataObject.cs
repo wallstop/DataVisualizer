@@ -43,9 +43,48 @@ namespace WallstopStudios.DataVisualizer
                 string title = _title;
                 return string.IsNullOrWhiteSpace(title) ? name : title;
             }
+            set
+            {
+                if (string.Equals(_title, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    _title = string.Empty;
+                }
+                else
+                {
+                    _title = value;
+                }
+#if UNITY_EDITOR
+                EditorUtility.SetDirty(this);
+#endif
+            }
         }
 
-        public virtual string Description => _description;
+        public virtual string Description
+        {
+            get { return _description; }
+            set
+            {
+                if (string.Equals(_description, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    _description = string.Empty;
+                }
+                else
+                {
+                    _description = value;
+                }
+#if UNITY_EDITOR
+                EditorUtility.SetDirty(this);
+#endif
+            }
+        }
 
         [Header("Base Data")]
         [FormerlySerializedAs("initialGuid")]
