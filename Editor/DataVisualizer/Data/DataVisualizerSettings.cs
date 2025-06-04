@@ -123,7 +123,9 @@
             labelFilterConfigs =
                 userState.labelFilterConfigs?.Select(config => config.Clone()).ToList()
                 ?? new List<TypeLabelFilterConfig>();
-            processorStates = userState.processorStates?.Select(state => state.Clone()).ToList();
+            processorStates =
+                userState.processorStates?.Select(state => state.Clone()).ToList()
+                ?? new List<ProcessorState>();
             MarkDirty();
         }
 
