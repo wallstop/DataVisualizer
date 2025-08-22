@@ -5208,7 +5208,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case LabelFilterSection.OR:
                 {
                     // Add "X" button for removal
-                    Button removeButton = new(() => RemoveLabelFromFilter(labelText, currentSection)
+                    Button removeButton = new(() =>
+                        RemoveLabelFromFilter(labelText, currentSection)
                     )
                     {
                         text = "x",
@@ -6271,7 +6272,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     if (_odinInspectorContainer == null)
                     {
-                        _odinInspectorContainer = new IMGUIContainer(() => _odinPropertyTree?.Draw()
+                        _odinInspectorContainer = new IMGUIContainer(() =>
+                            _odinPropertyTree?.Draw()
                         )
                         {
                             name = "odin-inspector",
