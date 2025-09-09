@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.UI
+namespace WallstopStudios.DataVisualizer.Editor.UI
 {
     using System;
     using UnityEngine;

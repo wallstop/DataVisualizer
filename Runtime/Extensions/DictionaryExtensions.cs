@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.DataVisualizer.Extensions
+namespace WallstopStudios.DataVisualizer.Extensions
 {
     using System;
     using System.Collections.Concurrent;

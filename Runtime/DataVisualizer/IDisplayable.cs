@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.DataVisualizer
+namespace WallstopStudios.DataVisualizer
 {
     public interface IDisplayable
     {

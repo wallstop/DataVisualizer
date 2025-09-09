@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.DataVisualizer.Helper
+namespace WallstopStudios.DataVisualizer.Helper
 {
     using System;
     using System.IO;

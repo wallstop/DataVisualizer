@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.DataVisualizer
+namespace WallstopStudios.DataVisualizer
 {
     using System;
     using System.Collections.Generic;

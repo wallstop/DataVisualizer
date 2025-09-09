@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.Utilities
+namespace WallstopStudios.DataVisualizer.Editor.Utilities
 {
 #if UNITY_EDITOR
     using System;

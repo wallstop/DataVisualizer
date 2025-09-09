@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.Extensions
+namespace WallstopStudios.DataVisualizer.Editor.Extensions
 {
     using UnityEngine;
 

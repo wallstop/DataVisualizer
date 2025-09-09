@@ -1,4 +1,4 @@
-﻿// ReSharper disable AccessToModifiedClosure
+// ReSharper disable AccessToModifiedClosure
 // ReSharper disable AccessToDisposedClosure
 // ReSharper disable HeapView.CanAvoidClosure
 namespace WallstopStudios.DataVisualizer.Editor

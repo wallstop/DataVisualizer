@@ -1,4 +1,4 @@
-﻿// ReSharper disable AccessToModifiedClosure
+// ReSharper disable AccessToModifiedClosure
 namespace WallstopStudios.DataVisualizer.Editor
 {
     using System;

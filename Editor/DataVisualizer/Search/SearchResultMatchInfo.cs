@@ -1,4 +1,4 @@
-﻿namespace WallstopStudios.DataVisualizer.Editor.Search
+namespace WallstopStudios.DataVisualizer.Editor.Search
 {
     using System;
     using System.Collections.Generic;
