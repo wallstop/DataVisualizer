@@ -13,7 +13,7 @@ namespace WallstopStudios.DataVisualizer.Editor
     using System.Text;
     using System.Text.RegularExpressions;
     using Data;
-    using Extensions;
+    using WallstopStudios.DataVisualizer.Editor.Extensions;
     using Search;
 #if ODIN_INSPECTOR
     using Sirenix.OdinInspector;
@@ -7662,7 +7662,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     if (displayedIndex >= 0)
                     {
                         _objectListView.SetSelectionWithoutNotify(new int[] { displayedIndex });
-                        _objectListView.ScrollTo(_displayedObjects[displayedIndex]);
+                        _objectListView.ScrollToItem(displayedIndex);
                     }
                     else
                     {

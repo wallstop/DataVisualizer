@@ -556,12 +556,24 @@
 .delete-button {
     border-color: rgb(230, 102, 102);
     color: rgb(230, 102, 102);
+    width: 25px;
+    height: 25px;
+    min-width: 25px;
+    min-height: 25px;
+    justify-content: center;
+    align-items: center;
     padding: 1px 6px;
 }
 
 .clone-button {
     border-color: rgb(102, 179, 102);
     color: rgb(102, 179, 102);
+    width: 25px;
+    height: 25px;
+    min-width: 25px;
+    min-height: 25px;
+    justify-content: center;
+    align-items: center;
     padding-left: 2px;
     padding-right: 2px;
     padding-bottom: 2px;
@@ -570,15 +582,27 @@
 .move-button {
     border-color: goldenrod;
     color: goldenrod;
+    width: 25px;
+    height: 25px;
+    min-width: 25px;
+    min-height: 25px;
+    justify-content: center;
+    align-items: center;
     padding: 3px;
     padding-bottom: 4px;
 }
 
 .rename-button {
-    padding: 1px 6px;
     background-color: transparent;
     border-color: rgb(51, 153, 230);
     color: rgb(51, 153, 230);
+    width: 25px;
+    height: 25px;
+    min-width: 25px;
+    min-height: 25px;
+    justify-content: center;
+    align-items: center;
+    padding: 1px 6px;
 }
 
 .namespace-group-item--empty {
