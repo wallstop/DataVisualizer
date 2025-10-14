@@ -429,6 +429,24 @@
     background-color: rgba(0, 0, 0, 0.4);
 }
 
+#object-list {
+    flex-grow: 1;
+}
+
+#object-list .unity-scroll-view__content-and-vertical-scroll-container {
+    padding: 6px;
+    background-color: rgba(0, 0, 0, 0.4);
+    border-radius: 6px;
+}
+
+#object-list .unity-list-view__item {
+    margin-bottom: 4px;
+}
+
+#object-list .unity-list-view__item:last-child {
+    margin-bottom: 0;
+}
+
 .namespace-scrollview {
     flex-grow: 1;
 }

@@ -340,6 +340,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             DataVisualizer window = GetWindow<DataVisualizer>("Data Visualizer");
             window.titleContent = new GUIContent("Data Visualizer");
+            window.minSize = new Vector2(960f, 540f);
 
             bool initialSizeApplied = EditorPrefs.GetBool(PrefsInitialSizeAppliedKey, false);
             if (initialSizeApplied)
@@ -3825,6 +3826,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     borderRightWidth = 1,
                     borderRightColor = Color.gray,
                     height = Length.Percent(100),
+                    minWidth = 280,
+                    flexShrink = 0,
                 },
             };
 
@@ -4570,6 +4573,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     borderRightColor = Color.gray,
                     flexDirection = FlexDirection.Column,
                     height = Length.Percent(100),
+                    minWidth = 320,
+                    flexShrink = 0,
                 },
             };
 
@@ -4853,6 +4858,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 selectionType = SelectionType.Single,
                 virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight,
             };
+            _objectListView.AddToClassList("object-list");
             _objectListView.itemsSource = _displayedObjects;
             _objectListView.selectionChanged += OnObjectListSelectionChanged;
             _objectListView.unbindItem += UnbindObjectRow;
@@ -4996,7 +5002,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement inspectorColumn = new()
             {
                 name = "inspector-column",
-                style = { flexGrow = 1, height = Length.Percent(100) },
+                style =
+                {
+                    flexGrow = 1,
+                    height = Length.Percent(100),
+                    minWidth = 360,
+                    flexShrink = 0,
+                },
             };
             _inspectorScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
