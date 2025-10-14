@@ -102,9 +102,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             ScriptableObject so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
             if (
                 so != null
-                && (
-                    relevantTypes.Contains(so.GetType())
-                    || (so is DataVisualizerSettings))
+                && (relevantTypes.Contains(so.GetType()) || (so is DataVisualizerSettings))
             )
             {
                 return true;

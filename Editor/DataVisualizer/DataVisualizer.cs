@@ -62,6 +62,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string PopoverHighlightClass = "popover-item--highlighted";
         private const string LabelSuggestionItemClass = "label-suggestion-item";
 
+        private const string RowComponentsProperty =
+            "WallstopStudios.DataVisualizer.ObjectRowComponents";
+
         private const string SearchPlaceholder = "Search...";
 
         private const int MaxSearchResults = 25;
@@ -179,6 +182,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private readonly List<ScriptableObject> _selectedObjects = new();
         private readonly AssetIndex _assetIndex = new();
         private readonly List<string> _allManagedObjectGuids = new();
+        private readonly List<ScriptableObject> _displayedObjects = new();
         private bool _assetIndexNeedsFullRebuild = true;
         private readonly List<VisualElement> _currentSearchResultItems = new();
         private readonly List<VisualElement> _currentTypePopoverItems = new();
@@ -197,7 +201,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private IntegerField _maxPageField;
         private VisualElement _objectListContainer;
         private VisualElement _inspectorContainer;
-        private ScrollView _objectScrollView;
+        private ListView _objectListView;
         private ScrollView _inspectorScrollView;
 
         private TwoPaneSplitView _outerSplitView;
@@ -299,6 +303,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _dragGhost;
         internal bool _isDragging;
         private SerializedObject _currentInspectorScriptableObject;
+
+        private bool _isUpdatingListSelection;
 
         private string _userStateFilePath;
 
@@ -1771,11 +1777,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         if (
                             _currentSearchResultItems[_searchHighlightIndex].userData
-                            is ScriptableObject selectedObject
+                            is AssetIndex.AssetMetadata selectedMetadata
                         )
                         {
-                            NavigateToObject(selectedObject);
-                            _searchField.value = string.Empty;
+                            ScriptableObject selectedObject = selectedMetadata.LoadAsset();
+                            if (selectedObject != null)
+                            {
+                                NavigateToObject(selectedObject);
+                                _searchField.value = string.Empty;
+                            }
                         }
 
                         evt.PreventDefault();
@@ -3744,7 +3754,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             int index = _selectedObjects.IndexOf(objectToDelete);
             _selectedObjects.Remove(objectToDelete);
             _selectedObjects.RemoveAll(obj => obj == null);
-            _objectVisualElementMap.Remove(objectToDelete, out VisualElement visualElement);
+            _objectVisualElementMap.Remove(objectToDelete);
             int targetIndex = _selectedObject == objectToDelete ? Mathf.Max(0, index - 1) : 0;
 
             bool deleted = AssetDatabase.DeleteAsset(path);
@@ -3752,15 +3762,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 Debug.Log($"Asset '{path}' deleted successfully.");
                 AssetDatabase.Refresh();
-                VisualElement parent = visualElement?.parent;
-                visualElement?.RemoveFromHierarchy();
-                if (parent != null)
-                {
-                    foreach (VisualElement child in parent.Children())
-                    {
-                        NamespaceController.RecalibrateVisualElements(child, offset: 1);
-                    }
-                }
+                BuildObjectsView();
                 if (targetIndex < _selectedObjects.Count)
                 {
                     SelectObject(_selectedObjects[targetIndex]);
@@ -4839,14 +4841,39 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             objectColumn.Add(_objectPageController);
 
-            _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
+            _objectListView = new ListView(
+                _displayedObjects,
+                itemHeight: 36,
+                makeItem: MakeObjectRow,
+                bindItem: BindObjectRow
+            )
             {
-                name = "object-scrollview",
+                name = "object-list",
+                style = { flexGrow = 1 },
+                selectionType = SelectionType.Single,
+                virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight,
             };
-            _objectScrollView.AddToClassList("object-scrollview");
-            _objectListContainer = new VisualElement { name = "object-list" };
-            _objectScrollView.Add(_objectListContainer);
-            objectColumn.Add(_objectScrollView);
+            _objectListView.itemsSource = _displayedObjects;
+            _objectListView.selectionChanged += OnObjectListSelectionChanged;
+            _objectListView.unbindItem += UnbindObjectRow;
+            objectColumn.Add(_objectListView);
+            _objectListContainer = _objectListView.contentContainer;
+
+            _emptyObjectLabel = new Label("")
+            {
+                name = "empty-object-list-label",
+                style =
+                {
+                    alignSelf = Align.Center,
+                    unityTextAlign = TextAnchor.MiddleCenter,
+                    display = DisplayStyle.None,
+                    whiteSpace = WhiteSpace.Normal,
+                    paddingTop = 8,
+                    paddingBottom = 8,
+                },
+            };
+            _emptyObjectLabel.AddToClassList("empty-object-list-label");
+            objectColumn.Add(_emptyObjectLabel);
             UpdateCreateObjectButtonStyle();
             UpdateLabelAreaAndFilter();
             return objectColumn;
@@ -5475,7 +5502,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 else
                 {
-                    HashSet<string> uniqueLabels = new(StringComparer.Ordinal);
+                    using PooledResource<HashSet<string>> labelSetLease =
+                        Buffers<string>.HashSet.Get(out HashSet<string> uniqueLabels);
                     Predicate<string> labelMatch = uniqueLabels.Contains;
                     foreach (ScriptableObject obj in _selectedObjects)
                     {
@@ -5923,61 +5951,87 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal void BuildObjectsView()
         {
             _selectedObjects.RemoveAll(obj => obj == null);
-            if (_objectListContainer == null)
+            if (_objectListView == null)
             {
                 return;
             }
 
-            _objectListContainer.Clear();
-            _objectVisualElementMap.Clear();
-            _objectScrollView.scrollOffset = Vector2.zero;
-
             Type selectedType = _namespaceController.SelectedType;
-            _emptyObjectLabel = new Label(
-                $"No objects of type '{selectedType?.Name}' found.\nUse the '+' button above to create one."
-            )
+
+            if (selectedType == null)
             {
-                name = "empty-object-list-label",
-                style = { alignSelf = Align.Center },
-            };
-            _emptyObjectLabel.AddToClassList("empty-object-list-label");
-            _objectListContainer.Add(_emptyObjectLabel);
-            if (selectedType != null && _selectedObjects.Count == 0)
-            {
-                _emptyObjectLabel.style.display = DisplayStyle.Flex;
+                _displayedObjects.Clear();
+                _objectListView.RefreshItems();
+                if (_objectPageController != null)
+                {
+                    _objectPageController.style.display = DisplayStyle.None;
+                }
+
+                if (_emptyObjectLabel != null)
+                {
+                    _emptyObjectLabel.text = "Select a type to see objects.";
+                    _emptyObjectLabel.style.display = DisplayStyle.Flex;
+                }
+
+                _objectListView.style.display = DisplayStyle.None;
                 return;
             }
 
             ApplyLabelFilter(buildObjectsView: false);
 
-            _emptyObjectLabel.style.display = DisplayStyle.None;
-            if (_filteredObjects.Count == 0)
+            if (_emptyObjectLabel != null)
             {
-                // If _selectedObjects has items, then filter is active and hiding all
-                if (_selectedObjects.Count > 0)
+                _emptyObjectLabel.style.display = DisplayStyle.None;
+            }
+
+            if (_selectedObjects.Count == 0)
+            {
+                _displayedObjects.Clear();
+                _objectListView.RefreshItems();
+                _objectListView.style.display = DisplayStyle.None;
+                if (_emptyObjectLabel != null)
                 {
-                    Label noMatchLabel = new(
-                        $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' match the current label filter."
-                    )
-                    {
-                        style = { alignSelf = Align.Center },
-                    };
-                    noMatchLabel.AddToClassList("empty-object-list-label");
-                    _objectListContainer.Add(noMatchLabel);
+                    _emptyObjectLabel.text =
+                        $"No objects of type '{selectedType.Name}' found.\nUse the '+' button above to create one.";
+                    _emptyObjectLabel.style.display = DisplayStyle.Flex;
                 }
-                else
+
+                if (_objectPageController != null)
                 {
-                    Label noMatchLabel = new(
-                        $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' found."
-                    )
-                    {
-                        style = { alignSelf = Align.Center },
-                    };
-                    noMatchLabel.AddToClassList("empty-object-list-label");
-                    _objectListContainer.Add(noMatchLabel);
+                    _objectPageController.style.display = DisplayStyle.None;
                 }
                 return;
             }
+
+            if (_filteredObjects.Count == 0)
+            {
+                _displayedObjects.Clear();
+                _objectListView.RefreshItems();
+                _objectListView.style.display = DisplayStyle.None;
+                if (_emptyObjectLabel != null)
+                {
+                    string typeDisplay = NamespaceController.GetTypeDisplayName(selectedType);
+                    string message =
+                        _selectedObjects.Count > 0
+                            ? $"No objects of type '{typeDisplay}' match the current label filter."
+                            : $"No objects of type '{typeDisplay}' found.";
+                    _emptyObjectLabel.text = message;
+                    _emptyObjectLabel.style.display = DisplayStyle.Flex;
+                }
+
+                if (_objectPageController != null)
+                {
+                    _objectPageController.style.display = DisplayStyle.None;
+                }
+                return;
+            }
+
+            _objectListView.style.display = DisplayStyle.Flex;
+            if (_emptyObjectLabel != null)
+            {
+                _emptyObjectLabel.style.display = DisplayStyle.None;
+            }
+            _objectVisualElementMap.Clear();
 
             if (_filteredObjects.Count <= MaxObjectsPerPage)
             {
@@ -5985,10 +6039,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     _objectPageController.style.display = DisplayStyle.None;
                 }
-                for (int i = 0; i < _filteredObjects.Count; i++)
-                {
-                    BuildObjectRow(_filteredObjects[i], i);
-                }
+
+                _displayedObjects.Clear();
+                _displayedObjects.AddRange(_filteredObjects);
             }
             else
             {
@@ -6023,100 +6076,85 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
                 _nextPageButton.EnableInClassList("go-button", currentPage < _maxPageField.value);
 
-                int max = Mathf.Min((currentPage + 1) * MaxObjectsPerPage, _filteredObjects.Count);
-                for (int i = currentPage * MaxObjectsPerPage; i < max; i++)
+                int startIndex = currentPage * MaxObjectsPerPage;
+                int endIndex = Mathf.Min(startIndex + MaxObjectsPerPage, _filteredObjects.Count);
+
+                _displayedObjects.Clear();
+                for (int i = startIndex; i < endIndex; i++)
                 {
-                    BuildObjectRow(_filteredObjects[i], i);
+                    _displayedObjects.Add(_filteredObjects[i]);
                 }
+            }
+
+            _objectListView.RefreshItems();
+
+            if (_selectedObject != null)
+            {
+                int displayedIndex = _displayedObjects.IndexOf(_selectedObject);
+                _isUpdatingListSelection = true;
+                if (displayedIndex >= 0)
+                {
+                    _objectListView.SetSelectionWithoutNotify(new int[] { displayedIndex });
+                }
+                else
+                {
+                    _objectListView.ClearSelection();
+                }
+                _isUpdatingListSelection = false;
+            }
+            else
+            {
+                _isUpdatingListSelection = true;
+                _objectListView.ClearSelection();
+                _isUpdatingListSelection = false;
             }
         }
 
-        private void BuildObjectRow(ScriptableObject dataObject, int index)
+        private sealed class ObjectRowComponents
         {
-            if (dataObject == null)
-            {
-                return;
-            }
+            public VisualElement Root { get; set; }
+            public Button MoveUpButton { get; set; }
+            public Button MoveDownButton { get; set; }
+            public VisualElement ContentArea { get; set; }
+            public Label TitleLabel { get; set; }
+            public VisualElement ActionsArea { get; set; }
+            public Button CloneButton { get; set; }
+            public Button RenameButton { get; set; }
+            public Button MoveButton { get; set; }
+            public Button DeleteButton { get; set; }
+        }
 
-            string dataObjectName;
-            if (dataObject is IDisplayable displayable)
+        private VisualElement MakeObjectRow()
+        {
+            VisualElement row = new()
             {
-                dataObjectName = displayable.Title;
-            }
-            else
-            {
-                dataObjectName = dataObject.name;
-            }
-
-            VisualElement objectItemRow = new()
-            {
-                name = $"object-item-row-{dataObject.GetInstanceID()}",
+                name = "object-item-row",
+                pickingMode = PickingMode.Position,
+                focusable = true,
             };
-            objectItemRow.AddToClassList(ObjectItemClass);
-            objectItemRow.AddToClassList(StyleConstants.ClickableClass);
-            objectItemRow.style.flexDirection = FlexDirection.Row;
-            objectItemRow.style.alignItems = Align.Center;
-            objectItemRow.userData = dataObject;
-            objectItemRow.RegisterCallback<PointerDownEvent>(OnObjectPointerDown);
+            row.AddToClassList(ObjectItemClass);
+            row.AddToClassList(StyleConstants.ClickableClass);
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
 
-            Button goUpButton = new(() =>
-            {
-                _filteredObjects.Remove(dataObject);
-                _filteredObjects.Insert(0, dataObject);
-                _filteredObjects.Remove(dataObject);
-                _filteredObjects.Insert(0, dataObject);
-                UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
-                BuildObjectsView();
-            })
-            {
-                name = "go-up-button",
-                text = "↑",
-                tooltip = $"Move {dataObjectName} to top",
-            };
-            if (_selectedObjects.Count == 1 || index == 0)
-            {
-                goUpButton.AddToClassList("go-button-disabled");
-            }
-            else
-            {
-                goUpButton.AddToClassList(StyleConstants.ActionButtonClass);
-                goUpButton.AddToClassList("go-button");
-            }
+            Button moveUpButton = new();
+            moveUpButton.name = "go-up-button";
+            moveUpButton.text = "↑";
+            moveUpButton.clicked += () => HandleMoveToTop(moveUpButton);
+            row.Add(moveUpButton);
 
-            objectItemRow.Add(goUpButton);
-
-            Button goDownButton = new(() =>
-            {
-                _selectedObjects.Remove(dataObject);
-                _selectedObjects.Add(dataObject);
-                _filteredObjects.Remove(dataObject);
-                _filteredObjects.Add(dataObject);
-                UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
-                BuildObjectsView();
-            })
-            {
-                name = "go-down-button",
-                text = "↓",
-                tooltip = $"Move {dataObjectName} to bottom",
-            };
-            if (_filteredObjects.Count == 1 || index == _filteredObjects.Count - 1)
-            {
-                goDownButton.AddToClassList("go-button-disabled");
-            }
-            else
-            {
-                goDownButton.AddToClassList(StyleConstants.ActionButtonClass);
-                goDownButton.AddToClassList("go-button");
-            }
-
-            objectItemRow.Add(goDownButton);
+            Button moveDownButton = new();
+            moveDownButton.name = "go-down-button";
+            moveDownButton.text = "↓";
+            moveDownButton.clicked += () => HandleMoveToBottom(moveDownButton);
+            row.Add(moveDownButton);
 
             VisualElement contentArea = new() { name = "content" };
             contentArea.AddToClassList(ObjectItemContentClass);
             contentArea.AddToClassList(StyleConstants.ClickableClass);
-            objectItemRow.Add(contentArea);
+            row.Add(contentArea);
 
-            Label titleLabel = new(dataObjectName) { name = "object-item-label" };
+            Label titleLabel = new() { name = "object-item-label" };
             titleLabel.AddToClassList("object-item__label");
             titleLabel.AddToClassList(StyleConstants.ClickableClass);
             contentArea.Add(titleLabel);
@@ -6132,130 +6170,308 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
             actionsArea.AddToClassList(ObjectItemActionsClass);
-            objectItemRow.Add(actionsArea);
+            row.Add(actionsArea);
 
-            Button cloneButton = new(() => CloneObject(dataObject))
-            {
-                text = "++",
-                tooltip = "Clone Object",
-            };
+            Button cloneButton = new();
+            cloneButton.text = "++";
+            cloneButton.tooltip = "Clone Object";
+            cloneButton.clicked += () => HandleCloneButton(cloneButton);
             cloneButton.AddToClassList(StyleConstants.ActionButtonClass);
             cloneButton.AddToClassList("clone-button");
             actionsArea.Add(cloneButton);
 
-            Button renameButton = null;
-            renameButton = new Button(() => OpenRenamePopover(titleLabel, renameButton, dataObject))
-            {
-                text = "@",
-                tooltip = "Rename Object",
-            };
+            Button renameButton = new();
+            renameButton.text = "@";
+            renameButton.tooltip = "Rename Object";
+            renameButton.clicked += () => HandleRenameButton(renameButton);
             renameButton.AddToClassList(StyleConstants.ActionButtonClass);
             renameButton.AddToClassList("rename-button");
             actionsArea.Add(renameButton);
 
-            Button moveButton = new(() =>
-            {
-                if (dataObject == null)
-                {
-                    return;
-                }
-
-                string assetPath = AssetDatabase.GetAssetPath(dataObject);
-                string startDirectory = Path.GetDirectoryName(assetPath) ?? string.Empty;
-                string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
-                    title: "Select New Location (Must be inside Assets)",
-                    folder: startDirectory,
-                    defaultName: ""
-                );
-
-                if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
-                {
-                    return;
-                }
-
-                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
-
-                string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
-
-                if (
-                    !selectedAbsolutePath.StartsWith(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                    EditorUtility.DisplayDialog(
-                        "Invalid Folder",
-                        "The selected folder must be inside the project's 'Assets' directory.",
-                        "OK"
-                    );
-                    return;
-                }
-
-                string relativePath;
-                if (
-                    selectedAbsolutePath.Equals(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    relativePath = "Assets";
-                }
-                else
-                {
-                    relativePath =
-                        "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-                    relativePath = relativePath.Replace("//", "/");
-                }
-
-                string targetPath = $"{relativePath}/{dataObject.name}.asset";
-                if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    // Ignore same path operation
-                    return;
-                }
-
-                string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
-                AssetDatabase.SaveAssets();
-                if (!string.IsNullOrWhiteSpace(errorMessage))
-                {
-                    Debug.LogError(
-                        $"Error moving asset {dataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}"
-                    );
-                    EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
-                }
-                else
-                {
-                    RefreshMetadataForObject(dataObject);
-                }
-            })
-            {
-                text = "➔",
-                tooltip = "Move Object",
-            };
+            Button moveButton = new();
+            moveButton.text = "➔";
+            moveButton.tooltip = "Move Object";
+            moveButton.clicked += () => HandleMoveButton(moveButton);
             moveButton.AddToClassList(StyleConstants.ActionButtonClass);
             moveButton.AddToClassList("move-button");
             actionsArea.Add(moveButton);
 
-            Button deleteButton = null;
-            deleteButton = new Button(() => OpenConfirmDeletePopover(deleteButton, dataObject))
-            {
-                text = "X",
-                tooltip = "Delete Object",
-            };
+            Button deleteButton = new();
+            deleteButton.text = "X";
+            deleteButton.tooltip = "Delete Object";
+            deleteButton.clicked += () => HandleDeleteButton(deleteButton);
             deleteButton.AddToClassList(StyleConstants.ActionButtonClass);
             deleteButton.AddToClassList("delete-button");
             actionsArea.Add(deleteButton);
 
-            _objectVisualElementMap[dataObject] = objectItemRow;
-            _objectListContainer.Add(objectItemRow);
+            row.RegisterCallback<PointerDownEvent>(OnObjectPointerDown);
+            row.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
+            row.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
+            row.RegisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
 
-            if (_selectedObject == dataObject)
+            ObjectRowComponents components = new()
             {
-                objectItemRow.AddToClassList(StyleConstants.SelectedClass);
-                _selectedElement = objectItemRow;
+                Root = row,
+                MoveUpButton = moveUpButton,
+                MoveDownButton = moveDownButton,
+                ContentArea = contentArea,
+                TitleLabel = titleLabel,
+                ActionsArea = actionsArea,
+                CloneButton = cloneButton,
+                RenameButton = renameButton,
+                MoveButton = moveButton,
+                DeleteButton = deleteButton,
+            };
+
+            row.SetProperty(RowComponentsProperty, components);
+            cloneButton.SetProperty(RowComponentsProperty, components);
+            renameButton.SetProperty(RowComponentsProperty, components);
+            moveButton.SetProperty(RowComponentsProperty, components);
+            deleteButton.SetProperty(RowComponentsProperty, components);
+
+            return row;
+        }
+
+        private void BindObjectRow(VisualElement element, int index)
+        {
+            ScriptableObject dataObject =
+                index >= 0 && index < _displayedObjects.Count ? _displayedObjects[index] : null;
+
+            if (element.userData is ScriptableObject previous && previous != dataObject)
+            {
+                _objectVisualElementMap.Remove(previous);
+            }
+
+            element.userData = dataObject;
+
+            if (element.GetProperty(RowComponentsProperty) is not ObjectRowComponents components)
+            {
+                return;
+            }
+
+            components.MoveUpButton.userData = dataObject;
+            components.MoveDownButton.userData = dataObject;
+            components.CloneButton.userData = dataObject;
+            components.RenameButton.userData = dataObject;
+            components.MoveButton.userData = dataObject;
+            components.DeleteButton.userData = dataObject;
+
+            bool hasData = dataObject != null;
+            string displayName = string.Empty;
+            if (hasData)
+            {
+                displayName = dataObject is IDisplayable displayable
+                    ? displayable.Title
+                    : dataObject.name;
+                components.TitleLabel.text = displayName;
+                _objectVisualElementMap[dataObject] = element;
+                element.name = $"object-item-row-{dataObject.GetInstanceID()}";
+            }
+            else
+            {
+                components.TitleLabel.text = string.Empty;
+                element.name = $"object-item-row-empty-{index}";
+            }
+
+            components.CloneButton.tooltip = "Clone Object";
+            components.RenameButton.tooltip = "Rename Object";
+            components.MoveButton.tooltip = hasData ? $"Move {displayName}" : "Move Object";
+            components.DeleteButton.tooltip = hasData ? $"Delete {displayName}" : "Delete Object";
+            components.MoveUpButton.tooltip = hasData ? $"Move {displayName} to top" : string.Empty;
+            components.MoveDownButton.tooltip = hasData
+                ? $"Move {displayName} to bottom"
+                : string.Empty;
+
+            UpdateGoButtonState(components.MoveUpButton, hasData && index > 0);
+            UpdateGoButtonState(
+                components.MoveDownButton,
+                hasData && index < _displayedObjects.Count - 1
+            );
+
+            bool isSelected = hasData && ReferenceEquals(dataObject, _selectedObject);
+            element.EnableInClassList(StyleConstants.SelectedClass, isSelected);
+            foreach (VisualElement child in element.IterateChildrenRecursively())
+            {
+                child.EnableInClassList(StyleConstants.ClickableClass, !isSelected);
+            }
+        }
+
+        private void UnbindObjectRow(VisualElement element, int index)
+        {
+            if (element.userData is ScriptableObject dataObject)
+            {
+                _objectVisualElementMap.Remove(dataObject);
+            }
+
+            element.userData = null;
+
+            if (element.GetProperty(RowComponentsProperty) is ObjectRowComponents components)
+            {
+                components.MoveUpButton.userData = null;
+                components.MoveDownButton.userData = null;
+                components.CloneButton.userData = null;
+                components.RenameButton.userData = null;
+                components.MoveButton.userData = null;
+                components.DeleteButton.userData = null;
+            }
+        }
+
+        private void OnObjectListSelectionChanged(IEnumerable<object> selectedItems)
+        {
+            if (_isUpdatingListSelection)
+            {
+                return;
+            }
+
+            ScriptableObject selected = selectedItems?.OfType<ScriptableObject>().FirstOrDefault();
+            if (
+                !ReferenceEquals(selected, _selectedObject)
+                || (selected == null && _selectedObject != null)
+            )
+            {
+                SelectObject(selected);
+            }
+        }
+
+        private ScrollView GetObjectListScrollView()
+        {
+            return _objectListView?.Q<ScrollView>();
+        }
+
+        private static void UpdateGoButtonState(Button button, bool enabled)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.EnableInClassList("go-button-disabled", !enabled);
+            button.EnableInClassList(StyleConstants.ActionButtonClass, enabled);
+            button.EnableInClassList("go-button", enabled);
+        }
+
+        private void HandleMoveToTop(Button button)
+        {
+            if (button?.userData is not ScriptableObject dataObject)
+            {
+                return;
+            }
+
+            _filteredObjects.Remove(dataObject);
+            _filteredObjects.Insert(0, dataObject);
+            _filteredObjects.Remove(dataObject);
+            _filteredObjects.Insert(0, dataObject);
+            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+            BuildObjectsView();
+        }
+
+        private void HandleMoveToBottom(Button button)
+        {
+            if (button?.userData is not ScriptableObject dataObject)
+            {
+                return;
+            }
+
+            _selectedObjects.Remove(dataObject);
+            _selectedObjects.Add(dataObject);
+            _filteredObjects.Remove(dataObject);
+            _filteredObjects.Add(dataObject);
+            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+            BuildObjectsView();
+        }
+
+        private void HandleCloneButton(Button button)
+        {
+            if (button?.userData is ScriptableObject dataObject)
+            {
+                CloneObject(dataObject);
+            }
+        }
+
+        private void HandleRenameButton(Button button)
+        {
+            if (
+                button?.userData is ScriptableObject dataObject
+                && button.GetProperty(RowComponentsProperty) is ObjectRowComponents components
+            )
+            {
+                OpenRenamePopover(components.TitleLabel, button, dataObject);
+            }
+        }
+
+        private void HandleMoveButton(Button button)
+        {
+            if (button?.userData is not ScriptableObject dataObject)
+            {
+                return;
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(dataObject);
+            string startDirectory = Path.GetDirectoryName(assetPath) ?? string.Empty;
+            string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
+                title: "Select New Location (Must be inside Assets)",
+                folder: startDirectory,
+                defaultName: string.Empty
+            );
+
+            if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
+            {
+                return;
+            }
+
+            selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
+            string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
+
+            if (
+                !selectedAbsolutePath.StartsWith(
+                    projectAssetsPath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                Debug.LogError("Selected folder must be inside the project's Assets folder.");
+                EditorUtility.DisplayDialog(
+                    "Invalid Folder",
+                    "The selected folder must be inside the project's 'Assets' directory.",
+                    "OK"
+                );
+                return;
+            }
+
+            string relativePath = selectedAbsolutePath.Equals(
+                projectAssetsPath,
+                StringComparison.OrdinalIgnoreCase
+            )
+                ? "Assets"
+                : "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+            relativePath = relativePath.Replace("//", "/");
+
+            string targetPath = $"{relativePath}/{dataObject.name}.asset";
+            if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
+            AssetDatabase.SaveAssets();
+            if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                Debug.LogError(
+                    $"Error moving asset {dataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}"
+                );
+                EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
+            }
+            else
+            {
+                RefreshMetadataForObject(dataObject);
+            }
+        }
+
+        private void HandleDeleteButton(Button button)
+        {
+            if (button?.userData is ScriptableObject dataObject)
+            {
+                OpenConfirmDeletePopover(button, dataObject);
             }
         }
 
@@ -6582,7 +6798,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _projectUniqueLabelsCache.Clear();
-            HashSet<string> allLabelsSet = new(StringComparer.Ordinal);
+            using PooledResource<HashSet<string>> allLabelsLease = Buffers<string>.HashSet.Get(
+                out HashSet<string> allLabelsSet
+            );
             foreach (AssetIndex.AssetMetadata metadata in _assetIndex.AllMetadata())
             {
                 if (metadata.Labels == null || metadata.Labels.Length == 0)
@@ -7163,47 +7381,15 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void RefreshSelectedElementVisuals(ScriptableObject dataObject)
         {
-            if (
-                dataObject == null
-                || !_objectVisualElementMap.TryGetValue(dataObject, out VisualElement visualElement)
-            )
+            if (dataObject == null || _objectListView == null)
             {
                 return;
             }
 
-            UpdateObjectTitleRepresentation(dataObject, visualElement);
-        }
-
-        private static void UpdateObjectTitleRepresentation(
-            ScriptableObject dataObject,
-            VisualElement element
-        )
-        {
-            if (dataObject == null || element == null)
+            int index = _displayedObjects.IndexOf(dataObject);
+            if (index >= 0)
             {
-                return;
-            }
-
-            Label titleLabel = element.Q<Label>(className: "object-item__label");
-            if (titleLabel == null)
-            {
-                Debug.LogError("Could not find title label within object item element.");
-                return;
-            }
-
-            string currentTitle;
-            if (dataObject is IDisplayable displayable)
-            {
-                currentTitle = displayable.Title;
-            }
-            else
-            {
-                currentTitle = dataObject.name;
-            }
-
-            if (titleLabel.text != currentTitle)
-            {
-                titleLabel.text = currentTitle;
+                _objectListView.RefreshItem(index);
             }
         }
 
@@ -7463,8 +7649,34 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 child.EnableInClassList(StyleConstants.ClickableClass, true);
             }
+
             _selectedObject = dataObject;
             _selectedElement = null;
+
+            if (_objectListView != null)
+            {
+                _isUpdatingListSelection = true;
+                if (_selectedObject != null)
+                {
+                    int displayedIndex = _displayedObjects.IndexOf(_selectedObject);
+                    if (displayedIndex >= 0)
+                    {
+                        _objectListView.SetSelectionWithoutNotify(new int[] { displayedIndex });
+                        _objectListView.ScrollTo(_displayedObjects[displayedIndex]);
+                    }
+                    else
+                    {
+                        _objectListView.ClearSelection();
+                    }
+                }
+                else
+                {
+                    _objectListView.ClearSelection();
+                }
+                _isUpdatingListSelection = false;
+                _objectListView.RefreshItems();
+            }
+
             if (
                 _selectedObject != null
                 && _objectVisualElementMap.TryGetValue(
@@ -7485,23 +7697,31 @@ namespace WallstopStudios.DataVisualizer.Editor
                     Selection.activeObject = _selectedObject;
                 }
 
-                Rect targetElementWorldBound = newSelectedElement.worldBound;
-                Rect scrollViewContentViewportWorldBound = _objectScrollView
-                    .contentViewport
-                    .worldBound;
-                bool isElementInView = targetElementWorldBound.Overlaps(
-                    scrollViewContentViewportWorldBound
-                );
-
-                if (!isElementInView)
+                ScrollView listScrollView = GetObjectListScrollView();
+                if (listScrollView != null)
                 {
-                    _objectScrollView
-                        .schedule.Execute(() =>
-                        {
-                            _objectScrollView?.ScrollTo(_selectedElement);
-                        })
-                        .ExecuteLater(1);
+                    Rect targetElementWorldBound = newSelectedElement.worldBound;
+                    Rect scrollViewContentViewportWorldBound = listScrollView
+                        .contentViewport
+                        .worldBound;
+                    bool isElementInView = targetElementWorldBound.Overlaps(
+                        scrollViewContentViewportWorldBound
+                    );
+
+                    if (!isElementInView)
+                    {
+                        listScrollView
+                            .schedule.Execute(() =>
+                            {
+                                listScrollView.ScrollTo(_selectedElement);
+                            })
+                            .ExecuteLater(1);
+                    }
                 }
+            }
+            else if (Settings.selectActiveObject && _selectedObject != null)
+            {
+                Selection.activeObject = _selectedObject;
             }
 
             try
@@ -7541,7 +7761,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     })
                     .ExecuteLater(1);
             }
-            // Backup trigger, we have some delay issues
+
             BuildInspectorView();
         }
 
