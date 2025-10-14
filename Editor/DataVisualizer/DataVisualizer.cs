@@ -27,6 +27,7 @@ namespace WallstopStudios.DataVisualizer.Editor
     using UnityEngine.UIElements;
     using Utilities;
     using Helper;
+    using Helper.Pooling;
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
 
@@ -176,7 +177,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         private int _hiddenNamespaces;
 
         private readonly List<ScriptableObject> _selectedObjects = new();
-        private readonly List<ScriptableObject> _allManagedObjectsCache = new();
+        private readonly AssetIndex _assetIndex = new();
+        private readonly List<string> _allManagedObjectGuids = new();
+        private bool _assetIndexNeedsFullRebuild = true;
         private readonly List<VisualElement> _currentSearchResultItems = new();
         private readonly List<VisualElement> _currentTypePopoverItems = new();
 
@@ -431,7 +434,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _scriptableObjectTypes.Clear();
             _namespaceOrder.Clear();
             _namespaceController.Clear();
-            _allManagedObjectsCache.Clear();
+            _allManagedObjectGuids.Clear();
             _currentSearchResultItems.Clear();
             _currentTypePopoverItems.Clear();
             _isSearchCachePopulated = false;
@@ -465,53 +468,62 @@ namespace WallstopStudios.DataVisualizer.Editor
 #endif
         }
 
-        private void PopulateSearchCache()
+        private void PopulateSearchCache(bool forceRebuild = false)
         {
-            _allManagedObjectsCache.Clear();
-
-            HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
-            foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
+            if (forceRebuild || _assetIndexNeedsFullRebuild)
             {
-                string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
-                foreach (string guid in guids)
-                {
-                    if (!uniqueGuids.Add(guid))
-                    {
-                        continue;
-                    }
+                IEnumerable<Type> allTypes = _scriptableObjectTypes
+                    .SelectMany(entry => entry.Value)
+                    .Where(type => type != null)
+                    .Distinct();
 
-                    string path = AssetDatabase.GUIDToAssetPath(guid);
-                    if (!string.IsNullOrWhiteSpace(path))
-                    {
-                        ScriptableObject obj =
-                            AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
-
-                        if (obj != null && obj.GetType() == type)
-                        {
-                            _allManagedObjectsCache.Add(obj);
-                        }
-                    }
-                }
+                _assetIndex.Rebuild(allTypes);
+                _assetIndexNeedsFullRebuild = false;
             }
 
-            _allManagedObjectsCache.Sort(
-                (a, b) =>
+            RebuildManagedObjectGuidCache();
+            _isSearchCachePopulated = true;
+        }
+
+        private void RebuildManagedObjectGuidCache()
+        {
+            _allManagedObjectGuids.Clear();
+
+            using PooledResource<List<AssetIndex.AssetMetadata>> metadataBuffer =
+                Buffers<AssetIndex.AssetMetadata>.GetList(
+                    0,
+                    out List<AssetIndex.AssetMetadata> metadata
+                );
+            metadata.AddRange(_assetIndex.AllMetadata());
+
+            metadata.Sort(
+                (lhs, rhs) =>
                 {
-                    int comparison = string.Compare(a.name, b.name, StringComparison.Ordinal);
-                    if (comparison != 0)
+                    int nameComparison = string.Compare(
+                        lhs.DisplayName,
+                        rhs.DisplayName,
+                        StringComparison.Ordinal
+                    );
+                    if (nameComparison != 0)
                     {
-                        return comparison;
+                        return nameComparison;
                     }
 
                     return string.Compare(
-                        a.GetType().FullName,
-                        b.GetType().FullName,
+                        lhs.TypeFullName,
+                        rhs.TypeFullName,
                         StringComparison.Ordinal
                     );
                 }
             );
 
-            _isSearchCachePopulated = true;
+            foreach (AssetIndex.AssetMetadata entry in metadata)
+            {
+                if (!string.IsNullOrWhiteSpace(entry.Guid))
+                {
+                    _allManagedObjectGuids.Add(entry.Guid);
+                }
+            }
         }
 
         public static void SignalRefresh()
@@ -532,6 +544,119 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _needsRefresh = true;
             rootVisualElement.schedule.Execute(RefreshAllViews).ExecuteLater(1);
+        }
+
+        internal void HandleAssetsChanged(
+            IReadOnlyList<string> importedAssets,
+            IReadOnlyList<string> deletedAssets,
+            IReadOnlyList<string> movedAssets,
+            IReadOnlyList<string> movedFromAssetPaths
+        )
+        {
+            bool indexUpdated = false;
+
+            if (importedAssets != null)
+            {
+                foreach (string path in importedAssets)
+                {
+                    string guid = AssetDatabase.AssetPathToGUID(path);
+                    if (string.IsNullOrWhiteSpace(guid))
+                    {
+                        continue;
+                    }
+
+                    _assetIndex.RefreshGuid(guid);
+                    indexUpdated = true;
+                }
+            }
+
+            if (movedAssets != null)
+            {
+                foreach (string path in movedAssets)
+                {
+                    string guid = AssetDatabase.AssetPathToGUID(path);
+                    if (string.IsNullOrWhiteSpace(guid))
+                    {
+                        continue;
+                    }
+
+                    _assetIndex.RefreshGuid(guid);
+                    indexUpdated = true;
+                }
+            }
+
+            if (movedFromAssetPaths != null)
+            {
+                foreach (string path in movedFromAssetPaths)
+                {
+                    if (
+                        _assetIndex.TryGetMetadataByPath(
+                            path,
+                            out AssetIndex.AssetMetadata metadata
+                        )
+                    )
+                    {
+                        _assetIndex.Remove(metadata.Guid);
+                        indexUpdated = true;
+                    }
+                }
+            }
+
+            if (deletedAssets != null)
+            {
+                foreach (string path in deletedAssets)
+                {
+                    if (
+                        _assetIndex.TryGetMetadataByPath(
+                            path,
+                            out AssetIndex.AssetMetadata metadata
+                        )
+                    )
+                    {
+                        _assetIndex.Remove(metadata.Guid);
+                        indexUpdated = true;
+                    }
+                }
+            }
+
+            if (!indexUpdated)
+            {
+                return;
+            }
+
+            RebuildManagedObjectGuidCache();
+            _isSearchCachePopulated = true;
+            ScheduleRefresh();
+        }
+
+        private void RefreshMetadataForObject(ScriptableObject obj)
+        {
+            if (obj == null)
+            {
+                return;
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(obj);
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                return;
+            }
+
+            string guid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                return;
+            }
+
+            _assetIndex.RefreshGuid(guid);
+            RebuildManagedObjectGuidCache();
+            _isSearchCachePopulated = true;
+            _isLabelCachePopulated = false;
+        }
+
+        internal bool TryGetMetadataForPath(string assetPath, out AssetIndex.AssetMetadata metadata)
+        {
+            return _assetIndex.TryGetMetadataByPath(assetPath, out metadata);
         }
 
         private void SyncNamespaceAndTypeOrders()
@@ -1801,21 +1926,26 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            List<(ScriptableObject refernce, SearchResultMatchInfo match)> results = new();
-            foreach (ScriptableObject obj in _allManagedObjectsCache)
+            List<(AssetIndex.AssetMetadata metadata, SearchResultMatchInfo match)> results = new();
+            foreach (string guid in _allManagedObjectGuids)
             {
-                if (obj == null)
+                if (string.IsNullOrWhiteSpace(guid))
                 {
                     continue;
                 }
 
-                SearchResultMatchInfo matchInfo = CheckMatch(obj, searchTerms);
+                if (!_assetIndex.TryGetMetadata(guid, out AssetIndex.AssetMetadata metadata))
+                {
+                    continue;
+                }
+
+                SearchResultMatchInfo matchInfo = CheckMatch(metadata, searchTerms);
                 if (!matchInfo.isMatch)
                 {
                     continue;
                 }
 
-                results.Add((obj, matchInfo));
+                results.Add((metadata, matchInfo));
                 if (results.Count >= MaxSearchResults)
                 {
                     break;
@@ -1841,10 +1971,19 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (results.Count > 0)
             {
                 _searchPopover.style.maxHeight = StyleKeyword.Null;
-                foreach ((ScriptableObject resultObj, SearchResultMatchInfo resultInfo) in results)
+                foreach (
+                    (
+                        AssetIndex.AssetMetadata resultMetadata,
+                        SearchResultMatchInfo resultInfo
+                    ) in results
+                )
                 {
                     List<string> termsMatchingThisObject = resultInfo.AllMatchedTerms.ToList();
-                    VisualElement resultItem = new() { name = "result-item", userData = resultObj };
+                    VisualElement resultItem = new()
+                    {
+                        name = "result-item",
+                        userData = resultMetadata,
+                    };
                     resultItem.AddToClassList(SearchResultItemClass);
                     resultItem.AddToClassList(StyleConstants.ClickableClass);
                     resultItem.style.flexDirection = FlexDirection.Column;
@@ -1862,13 +2001,19 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         if (
                             evt.button != 0
-                            || resultItem.userData is not ScriptableObject clickedObj
+                            || resultItem.userData is not AssetIndex.AssetMetadata clickedMetadata
                         )
                         {
                             return;
                         }
 
-                        NavigateToObject(clickedObj);
+                        ScriptableObject asset = clickedMetadata.LoadAsset();
+                        if (asset == null)
+                        {
+                            return;
+                        }
+
+                        NavigateToObject(asset);
                         _searchField.value = string.Empty;
                         evt.StopPropagation();
                     });
@@ -1884,7 +2029,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     mainInfoRow.AddToClassList(StyleConstants.ClickableClass);
 
                     Label nameLabel = CreateHighlightedLabel(
-                        resultObj.name,
+                        resultMetadata.DisplayName,
                         termsMatchingThisObject,
                         "result-name-label",
                         bindToContextHovers: true,
@@ -1895,7 +2040,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     nameLabel.AddToClassList(StyleConstants.ClickableClass);
 
                     Label typeLabel = CreateHighlightedLabel(
-                        resultObj.GetType().Name,
+                        resultMetadata.AssetType?.Name,
                         termsMatchingThisObject,
                         "result-type-label",
                         bindToContextHovers: true,
@@ -1968,27 +2113,36 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private SearchResultMatchInfo CheckMatch(ScriptableObject obj, string[] lowerSearchTerms)
+        private SearchResultMatchInfo CheckMatch(
+            AssetIndex.AssetMetadata metadata,
+            string[] lowerSearchTerms
+        )
         {
             SearchResultMatchInfo resultInfo = new();
-            if (obj == null || lowerSearchTerms == null || lowerSearchTerms.Length == 0)
+            if (metadata == null || lowerSearchTerms == null || lowerSearchTerms.Length == 0)
             {
                 return resultInfo;
             }
 
-            string objectName = obj.name;
-            string typeName = obj.GetType().Name;
-            string assetPath = AssetDatabase.GetAssetPath(obj);
-            string guid = string.IsNullOrWhiteSpace(assetPath)
-                ? string.Empty
-                : AssetDatabase.AssetPathToGUID(assetPath);
+            string objectName = metadata.DisplayName ?? string.Empty;
+            string typeName = metadata.AssetType?.Name ?? string.Empty;
+            string guid = metadata.Guid ?? string.Empty;
+            ScriptableObject loadedAsset = null;
 
             foreach (string term in lowerSearchTerms)
             {
+                if (string.IsNullOrWhiteSpace(term))
+                {
+                    continue;
+                }
+
                 bool termMatchedThisLoop = false;
                 List<MatchDetail> detailsForThisTerm = new();
 
-                if (objectName.Contains(term, StringComparison.OrdinalIgnoreCase))
+                if (
+                    !string.IsNullOrEmpty(objectName)
+                    && objectName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                )
                 {
                     detailsForThisTerm.Add(
                         new MatchDetail(term)
@@ -2000,7 +2154,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                     termMatchedThisLoop = true;
                 }
 
-                if (typeName.Contains(term, StringComparison.OrdinalIgnoreCase))
+                if (
+                    !string.IsNullOrEmpty(typeName)
+                    && typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                )
                 {
                     detailsForThisTerm.Add(
                         new MatchDetail(term)
@@ -2025,18 +2182,22 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (!termMatchedThisLoop)
                 {
-                    MatchDetail reflectedMatch = SearchStringProperties(
-                        obj,
-                        term,
-                        0,
-                        2,
-                        new HashSet<object>()
-                    );
-                    if (reflectedMatch != null)
+                    loadedAsset ??= metadata.LoadAsset();
+                    if (loadedAsset != null)
                     {
-                        reflectedMatch.matchedTerms.Add(term);
-                        detailsForThisTerm.Add(reflectedMatch);
-                        termMatchedThisLoop = true;
+                        MatchDetail reflectedMatch = SearchStringProperties(
+                            loadedAsset,
+                            term,
+                            0,
+                            2,
+                            new HashSet<object>()
+                        );
+                        if (reflectedMatch != null)
+                        {
+                            reflectedMatch.matchedTerms.Add(term);
+                            detailsForThisTerm.Add(reflectedMatch);
+                            termMatchedThisLoop = true;
+                        }
                     }
                 }
 
@@ -3390,6 +3551,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             AssetDatabase.CreateAsset(instance, uniquePath);
             AssetDatabase.SaveAssets();
             creatable?.AfterCreate();
+            RefreshMetadataForObject(instance);
 
             CloseActivePopover();
             if (type == _namespaceController.SelectedType)
@@ -3466,6 +3628,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 AssetDatabase.SaveAssets();
                 renamable?.AfterRename(newName);
                 Debug.Log($"Asset renamed successfully to: {newName}");
+                RefreshMetadataForObject(original);
                 CloseActivePopover();
                 if (_selectedObject == original && _assetNameTextField != null)
                 {
@@ -6063,6 +6226,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                     );
                     EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
                 }
+                else
+                {
+                    RefreshMetadataForObject(dataObject);
+                }
             })
             {
                 text = "➔",
@@ -6416,10 +6583,14 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _projectUniqueLabelsCache.Clear();
             HashSet<string> allLabelsSet = new(StringComparer.Ordinal);
-            foreach (ScriptableObject dataObject in _allManagedObjectsCache)
+            foreach (AssetIndex.AssetMetadata metadata in _assetIndex.AllMetadata())
             {
-                string[] labels = AssetDatabase.GetLabels(dataObject);
-                foreach (string label in labels)
+                if (metadata.Labels == null || metadata.Labels.Length == 0)
+                {
+                    continue;
+                }
+
+                foreach (string label in metadata.Labels)
                 {
                     if (!string.IsNullOrWhiteSpace(label))
                     {
@@ -6733,6 +6904,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
                 EditorUtility.SetDirty(_selectedObject);
                 AssetDatabase.SaveAssets();
+                RefreshMetadataForObject(_selectedObject);
                 PopulateProjectUniqueLabelsCache(force: true);
                 _inspectorNewLabelInput.SetValueWithoutNotify("");
                 PopulateInspectorLabelsUI();
@@ -6766,6 +6938,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     AssetDatabase.SetLabels(_selectedObject, updatedLabels);
                     EditorUtility.SetDirty(_selectedObject);
                     AssetDatabase.SaveAssets();
+                    RefreshMetadataForObject(_selectedObject);
                     PopulateProjectUniqueLabelsCache(force: true);
                     PopulateInspectorLabelsUI();
                     UpdateLabelAreaAndFilter();
@@ -6864,6 +7037,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
                 if (cloneAsset != null)
                 {
+                    RefreshMetadataForObject(cloneAsset);
                     if (cloneAsset is IDuplicable cloneDataObject)
                     {
                         cloneDataObject.AfterClone(originalObject);
@@ -7044,70 +7218,92 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectVisualElementMap.Clear();
 
             List<string> customGuidOrder = GetObjectOrderForType(type);
-            Dictionary<string, ScriptableObject> objectsByGuid = new();
-            string[] assetGuids = AssetDatabase.FindAssets($"t:{type.Name}");
-            foreach (string assetGuid in assetGuids)
+            Dictionary<string, ScriptableObject> objectsByGuid = new(
+                StringComparer.OrdinalIgnoreCase
+            );
+            IReadOnlyList<string> indexedGuids = _assetIndex.GetGuidsForType(type);
+            if (indexedGuids.Count == 0)
             {
-                string assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
-                if (string.IsNullOrWhiteSpace(assetPath))
+                _assetIndex.RefreshType(type);
+                indexedGuids = _assetIndex.GetGuidsForType(type);
+            }
+            foreach (string guid in indexedGuids)
+            {
+                if (!_assetIndex.TryGetMetadata(guid, out AssetIndex.AssetMetadata metadata))
                 {
                     continue;
                 }
 
-                ScriptableObject asset =
-                    AssetDatabase.LoadMainAssetAtPath(assetPath) as ScriptableObject;
-                if (asset == null || asset.GetType() != type)
+                ScriptableObject asset = metadata.LoadAsset();
+                if (asset == null)
                 {
                     continue;
                 }
 
-                if (!string.IsNullOrWhiteSpace(assetGuid))
-                {
-                    objectsByGuid[assetGuid] = asset;
-                }
+                objectsByGuid[guid] = asset;
             }
 
             List<ScriptableObject> sortedObjects = new();
 
             foreach (string guid in customGuidOrder)
             {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (string.IsNullOrWhiteSpace(path))
+                if (objectsByGuid.TryGetValue(guid, out ScriptableObject orderedObject))
                 {
-                    continue;
+                    sortedObjects.Add(orderedObject);
+                    objectsByGuid.Remove(guid);
                 }
-
-                ScriptableObject dataObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
-                if (dataObject == null || dataObject.GetType() != type)
-                {
-                    continue;
-                }
-
-                sortedObjects.Add(dataObject);
-                objectsByGuid.Remove(guid);
             }
 
-            List<ScriptableObject> remainingObjects = objectsByGuid.Values.ToList();
-            remainingObjects.Sort(
-                (a, b) =>
-                {
-                    int comparison = string.Compare(
-                        a.name,
-                        b.name,
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                    if (comparison != 0)
+            if (objectsByGuid.Count > 0)
+            {
+                List<KeyValuePair<string, ScriptableObject>> remainingObjects = objectsByGuid
+                    .Select(entry => entry)
+                    .ToList();
+                remainingObjects.Sort(
+                    (lhs, rhs) =>
                     {
-                        return comparison;
+                        string leftName = lhs.Value != null ? lhs.Value.name : string.Empty;
+                        string rightName = rhs.Value != null ? rhs.Value.name : string.Empty;
+                        int comparison = string.Compare(
+                            leftName,
+                            rightName,
+                            StringComparison.OrdinalIgnoreCase
+                        );
+                        if (comparison != 0)
+                        {
+                            return comparison;
+                        }
+
+                        if (
+                            _assetIndex.TryGetMetadata(
+                                lhs.Key,
+                                out AssetIndex.AssetMetadata leftMetadata
+                            )
+                            && _assetIndex.TryGetMetadata(
+                                rhs.Key,
+                                out AssetIndex.AssetMetadata rightMetadata
+                            )
+                        )
+                        {
+                            return string.Compare(
+                                leftMetadata.Path,
+                                rightMetadata.Path,
+                                StringComparison.OrdinalIgnoreCase
+                            );
+                        }
+
+                        return string.Compare(lhs.Key, rhs.Key, StringComparison.OrdinalIgnoreCase);
                     }
-                    return string.Compare(
-                        AssetDatabase.GetAssetPath(a),
-                        AssetDatabase.GetAssetPath(b),
-                        StringComparison.OrdinalIgnoreCase
-                    );
+                );
+
+                foreach (KeyValuePair<string, ScriptableObject> entry in remainingObjects)
+                {
+                    if (entry.Value != null)
+                    {
+                        sortedObjects.Add(entry.Value);
+                    }
                 }
-            );
-            sortedObjects.AddRange(remainingObjects);
+            }
 
             _selectedObjects.Clear();
             _selectedObjects.AddRange(sortedObjects);
@@ -7171,6 +7367,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _scriptableObjectTypes[key] = types;
                 _namespaceOrder[key] = i;
             }
+
+            _assetIndexNeedsFullRebuild = true;
         }
 
         private List<Type> LoadRelevantScriptableObjectTypes()

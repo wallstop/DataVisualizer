@@ -17,11 +17,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             string[] movedFromAssetPaths
         )
         {
-            if (deletedAssets.Length <= 0)
-            {
-                return;
-            }
-
             DataVisualizer window = DataVisualizer.Instance;
             if (window == null)
             {
@@ -31,9 +26,68 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             HashSet<Type> relevantTypes = window
                 ._scriptableObjectTypes.SelectMany(x => x.Value)
                 .ToHashSet();
-            if (deletedAssets.Any(asset => IsRelevantAsset(relevantTypes, asset)))
+
+            IReadOnlyList<string> filteredImported = Filter(importedAssets);
+            IReadOnlyList<string> filteredDeleted = Filter(deletedAssets);
+            IReadOnlyList<string> filteredMoved = Filter(movedAssets);
+            IReadOnlyList<string> filteredMovedFrom = Filter(movedFromAssetPaths);
+
+            if (
+                filteredImported.Count == 0
+                && filteredDeleted.Count == 0
+                && filteredMoved.Count == 0
+                && filteredMovedFrom.Count == 0
+            )
             {
-                EditorApplication.delayCall += DataVisualizer.SignalRefresh;
+                return;
+            }
+
+            EditorApplication.delayCall += Forward;
+            return;
+
+            void Forward()
+            {
+                window.HandleAssetsChanged(
+                    filteredImported,
+                    filteredDeleted,
+                    filteredMoved,
+                    filteredMovedFrom
+                );
+            }
+
+            IReadOnlyList<string> Filter(IReadOnlyList<string> source)
+            {
+                if (source == null || source.Count == 0)
+                {
+                    return Array.Empty<string>();
+                }
+
+                List<string> relevant = null;
+                foreach (string path in source)
+                {
+                    if (IsPathRelevant(path))
+                    {
+                        relevant ??= new List<string>();
+                        relevant.Add(path);
+                    }
+                }
+
+                if (relevant != null)
+                {
+                    return relevant;
+                }
+
+                return Array.Empty<string>();
+            }
+
+            bool IsPathRelevant(string path)
+            {
+                if (IsRelevantAsset(relevantTypes, path))
+                {
+                    return true;
+                }
+
+                return window.TryGetMetadataForPath(path, out _);
             }
         }
 
@@ -50,8 +104,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
                 so != null
                 && (
                     relevantTypes.Contains(so.GetType())
-                    || typeof(DataVisualizerSettings).IsAssignableFrom(so.GetType())
-                )
+                    || (so is DataVisualizerSettings))
             )
             {
                 return true;
