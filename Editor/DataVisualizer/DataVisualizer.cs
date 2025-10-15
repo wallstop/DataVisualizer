@@ -354,17 +354,12 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal ObjectListController _objectListController;
         internal Services.ObjectSelectionService _objectSelectionService;
         internal Services.ObjectCommandService _objectCommandService;
+        private Services.ObjectCommands.ObjectCommandDispatcher _objectCommandDispatcher;
         internal LabelPanelController _labelPanelController;
         internal Services.LabelService _labelService;
         private IDisposable _typeSelectedSubscription;
         private IDisposable _namespaceRemovalConfirmedSubscription;
         private IDisposable _typeRemovalConfirmedSubscription;
-        private IDisposable _objectMoveToTopSubscription;
-        private IDisposable _objectMoveToBottomSubscription;
-        private IDisposable _objectCloneSubscription;
-        private IDisposable _objectRenameSubscription;
-        private IDisposable _objectMoveSubscription;
-        private IDisposable _objectDeleteSubscription;
         private IDisposable _namespaceReorderSubscription;
         private IDisposable _typeReorderSubscription;
 
@@ -452,18 +447,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             _namespaceRemovalConfirmedSubscription = null;
             _typeRemovalConfirmedSubscription?.Dispose();
             _typeRemovalConfirmedSubscription = null;
-            _objectMoveToTopSubscription?.Dispose();
-            _objectMoveToTopSubscription = null;
-            _objectMoveToBottomSubscription?.Dispose();
-            _objectMoveToBottomSubscription = null;
-            _objectCloneSubscription?.Dispose();
-            _objectCloneSubscription = null;
-            _objectRenameSubscription?.Dispose();
-            _objectRenameSubscription = null;
-            _objectMoveSubscription?.Dispose();
-            _objectMoveSubscription = null;
-            _objectDeleteSubscription?.Dispose();
-            _objectDeleteSubscription = null;
             EnsureTypeSelectedSubscription();
             EnsureRemovalSubscriptions();
             EnsureObjectCommandSubscriptions();
@@ -575,6 +558,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _isSearchCachePopulated = false;
             CloseActivePopover();
             CancelDrag();
+            _objectCommandDispatcher?.Dispose();
+            _objectCommandDispatcher = null;
             _saveWidthsTask?.Pause();
             if (!Settings.persistStateInSettingsAsset && _userStateDirty)
             {
@@ -3814,7 +3799,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void ExecuteMoveObject(Button button, ScriptableObject dataObject)
+        internal void ExecuteMoveObject(Button button, ScriptableObject dataObject)
         {
             if (button == null || dataObject == null)
             {
@@ -5987,7 +5972,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-
         private void EnsureNamespacePanelController()
         {
             if (_namespacePanelController != null)
@@ -6064,83 +6048,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _objectMoveToTopSubscription ??= _eventHub.Subscribe<ObjectMoveToTopRequestedEvent>(HandleObjectMoveToTopRequested);
-            _objectMoveToBottomSubscription ??= _eventHub.Subscribe<ObjectMoveToBottomRequestedEvent>(HandleObjectMoveToBottomRequested);
-            _objectCloneSubscription ??= _eventHub.Subscribe<ObjectCloneRequestedEvent>(HandleObjectCloneRequested);
-            _objectRenameSubscription ??= _eventHub.Subscribe<ObjectRenameRequestedEvent>(HandleObjectRenameRequested);
-            _objectMoveSubscription ??= _eventHub.Subscribe<ObjectMoveRequestedEvent>(HandleObjectMoveRequested);
-            _objectDeleteSubscription ??= _eventHub.Subscribe<ObjectDeleteRequestedEvent>(HandleObjectDeleteRequested);
-            _namespaceReorderSubscription ??= _eventHub.Subscribe<NamespaceReorderRequestedEvent>(HandleNamespaceReorderRequested);
-            _typeReorderSubscription ??= _eventHub.Subscribe<TypeReorderRequestedEvent>(HandleTypeReorderRequested);
-        }
-
-        private void HandleObjectMoveToTopRequested(ObjectMoveToTopRequestedEvent evt)
-        {
-            ScriptableObject dataObject = evt?.DataObject;
-            if (dataObject == null)
+            if (_namespaceReorderSubscription == null)
             {
-                return;
+                _namespaceReorderSubscription = _eventHub.Subscribe<NamespaceReorderRequestedEvent>(HandleNamespaceReorderRequested);
             }
 
-            _filteredObjects.Remove(dataObject);
-            _filteredObjects.Insert(0, dataObject);
-            _selectedObjects.Remove(dataObject);
-            _selectedObjects.Insert(0, dataObject);
-            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
-            BuildObjectsView();
-        }
-
-        private void HandleObjectMoveToBottomRequested(ObjectMoveToBottomRequestedEvent evt)
-        {
-            ScriptableObject dataObject = evt?.DataObject;
-            if (dataObject == null)
+            if (_typeReorderSubscription == null)
             {
-                return;
+                _typeReorderSubscription = _eventHub.Subscribe<TypeReorderRequestedEvent>(HandleTypeReorderRequested);
             }
 
-            _selectedObjects.Remove(dataObject);
-            _selectedObjects.Add(dataObject);
-            _filteredObjects.Remove(dataObject);
-            _filteredObjects.Add(dataObject);
-            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
-            BuildObjectsView();
-        }
-
-        private void HandleObjectCloneRequested(ObjectCloneRequestedEvent evt)
-        {
-            ScriptableObject dataObject = evt?.DataObject;
-            if (dataObject == null)
+            if (_objectCommandDispatcher == null)
             {
-                return;
+                _objectCommandDispatcher = new Services.ObjectCommands.ObjectCommandDispatcher(this, _eventHub);
             }
-
-            CloneObject(dataObject);
-        }
-
-        private void HandleObjectRenameRequested(ObjectRenameRequestedEvent evt)
-        {
-            if (evt?.Trigger == null || evt.DataObject == null)
-            {
-                return;
-            }
-
-            object property = evt.Trigger.GetProperty(RowComponentsProperty);
-            if (property is not ObjectRowComponents components)
-            {
-                return;
-            }
-
-            OpenRenamePopover(components.TitleLabel, evt.Trigger, evt.DataObject);
-        }
-
-        private void HandleObjectMoveRequested(ObjectMoveRequestedEvent evt)
-        {
-            if (evt?.Trigger == null || evt.DataObject == null)
-            {
-                return;
-            }
-
-            ExecuteMoveObject(evt.Trigger, evt.DataObject);
         }
 
         private void HandleNamespaceReorderRequested(NamespaceReorderRequestedEvent evt)
@@ -6210,16 +6131,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             UpdateAndSaveTypeOrder(evt.NamespaceKey, types);
             SyncNamespaceChanges();
-        }
-
-        private void HandleObjectDeleteRequested(ObjectDeleteRequestedEvent evt)
-        {
-            if (evt?.Trigger == null || evt.DataObject == null)
-            {
-                return;
-            }
-
-            OpenConfirmDeletePopover(evt.Trigger, evt.DataObject);
         }
 
         private bool RemoveManagedType(Type type)
