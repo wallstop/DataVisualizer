@@ -170,16 +170,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 CollectionAssert.AreEqual(new[] { itemTwo, itemThree, itemOne }, selected);
                 Assert.AreEqual(1, listView.selectedIndex);
 
-                MethodInfo makeRowMethod = typeof(DataVisualizer)
-                    .GetMethod(
-                        "MakeObjectRow",
-                        BindingFlags.Instance | BindingFlags.NonPublic
-                    );
-                MethodInfo bindRowMethod = typeof(DataVisualizer)
-                    .GetMethod(
-                        "BindObjectRow",
-                        BindingFlags.Instance | BindingFlags.NonPublic
-                    );
+                MethodInfo makeRowMethod = typeof(DataVisualizer).GetMethod(
+                    "MakeObjectRow",
+                    BindingFlags.Instance | BindingFlags.NonPublic
+                );
+                MethodInfo bindRowMethod = typeof(DataVisualizer).GetMethod(
+                    "BindObjectRow",
+                    BindingFlags.Instance | BindingFlags.NonPublic
+                );
 
                 List<string> titles = new List<string>();
                 for (int index = 0; index < displayed.Count; index++)

@@ -28,6 +28,9 @@ namespace WallstopStudios.DataVisualizer.Editor
     using Utilities;
     using Helper;
     using Helper.Pooling;
+    using Controllers;
+    using Services;
+    using State;
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
 
@@ -135,7 +138,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 #pragma warning disable CS0618 // Type or member is obsolete
                 if (_settings == null)
                 {
-                    _settings = LoadOrCreateSettings();
+                    EnsureUserStateRepository();
+                    _settings = _userStateRepository?.LoadSettings() ?? LoadOrCreateSettings();
                 }
 
                 return _settings;
@@ -331,9 +335,22 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal IVisualElementScheduledItem _odinRepaintSchedule;
 #endif
 
+        internal readonly VisualizerSessionState _sessionState = new();
+
+        internal VisualizerSessionState SessionState => _sessionState;
+
+        internal IUserStateRepository _userStateRepository;
+
+        internal NamespacePanelController _namespacePanelController;
+
         public DataVisualizer()
         {
             _namespaceController = new NamespaceController(_scriptableObjectTypes, _namespaceOrder);
+            _namespacePanelController = new NamespacePanelController(
+                this,
+                _namespaceController,
+                _sessionState
+            );
         }
 
         [MenuItem("Tools/Wallstop Studios/Data Visualizer")]
@@ -376,6 +393,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             _odinPropertyTree = null;
 #endif
             _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
+            EnsureUserStateRepository();
+            _namespacePanelController ??= new NamespacePanelController(
+                this,
+                _namespaceController,
+                _sessionState
+            );
 
             _allDataProcessors.Clear();
             IEnumerable<Type> processorTypes = TypeCache
@@ -399,6 +422,23 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
+
+            string restoredNamespaceKey = GetLastSelectedNamespaceKey();
+            if (!string.IsNullOrWhiteSpace(restoredNamespaceKey))
+            {
+                _sessionState.Selection.SetSelectedNamespace(restoredNamespaceKey);
+            }
+
+            string restoredTypeName = GetLastSelectedTypeName();
+            if (!string.IsNullOrWhiteSpace(restoredTypeName))
+            {
+                _sessionState.Selection.SetSelectedType(restoredTypeName);
+                string restoredObjectGuid = GetLastSelectedObjectGuidForType(restoredTypeName);
+                if (!string.IsNullOrWhiteSpace(restoredObjectGuid))
+                {
+                    _sessionState.Selection.SetPrimarySelectedObject(restoredObjectGuid);
+                }
+            }
 
             LoadScriptableObjectTypes();
             rootVisualElement.RegisterCallback<KeyDownEvent>(
@@ -707,15 +747,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             DataVisualizerSettings settings = Settings;
             if (settings.persistStateInSettingsAsset)
             {
-                if (settingsApplier(settings))
+                if (settingsApplier != null && settingsApplier(settings))
                 {
-                    settings.MarkDirty();
-                    AssetDatabase.SaveAssets();
+                    EnsureUserStateRepository();
+                    _userStateRepository.SaveSettings(settings);
                 }
             }
-            else if (userStateApplier(UserState))
+            else
             {
-                MarkUserStateDirty();
+                DataVisualizerUserState userState = UserState;
+                if (userStateApplier != null && userStateApplier(userState))
+                {
+                    _userStateDirty = true;
+                    SaveUserStateToFile();
+                }
             }
         }
 
@@ -5958,7 +6003,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void BuildNamespaceView()
         {
-            _namespaceController.Build(this, ref _namespaceListContainer);
+            _namespacePanelController.BuildNamespaceView();
         }
 
         internal void BuildObjectsView()
@@ -7799,6 +7844,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             _selectedObject = dataObject;
             _selectedElement = null;
 
+            string selectedObjectGuid = GetGuidForObject(dataObject);
+            _sessionState.Selection.SetPrimarySelectedObject(selectedObjectGuid);
+            string selectedTypeFullName = dataObject != null ? dataObject.GetType().FullName : null;
+            _sessionState.Selection.SetSelectedType(selectedTypeFullName);
+            UpdateSessionSelectedObjects(dataObject);
+
             if (_objectListView != null)
             {
                 _isUpdatingListSelection = true;
@@ -7864,14 +7915,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (_selectedObject != null)
                 {
                     string typeName = _selectedObject.GetType().FullName;
-                    string assetPath = AssetDatabase.GetAssetPath(_selectedObject);
-                    string objectGuid = null;
-                    if (!string.IsNullOrWhiteSpace(assetPath))
-                    {
-                        objectGuid = AssetDatabase.AssetPathToGUID(assetPath);
-                    }
-
-                    SetLastSelectedObjectGuidForType(typeName, objectGuid);
+                    SetLastSelectedObjectGuidForType(typeName, selectedObjectGuid);
                 }
             }
             catch (Exception e)
@@ -7898,6 +7942,79 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             BuildInspectorView();
+        }
+
+        private void UpdateSessionSelectedObjects(ScriptableObject primarySelection)
+        {
+            List<string> selectedGuids = new List<string>();
+            bool primaryFound = false;
+
+            foreach (ScriptableObject candidate in _selectedObjects)
+            {
+                string candidateGuid = GetGuidForObject(candidate);
+                if (string.IsNullOrWhiteSpace(candidateGuid))
+                {
+                    continue;
+                }
+
+                if (ReferenceEquals(candidate, primarySelection))
+                {
+                    primaryFound = true;
+                }
+
+                selectedGuids.Add(candidateGuid);
+            }
+
+            if (!primaryFound)
+            {
+                string primaryGuid = GetGuidForObject(primarySelection);
+                if (!string.IsNullOrWhiteSpace(primaryGuid))
+                {
+                    selectedGuids.Insert(0, primaryGuid);
+                }
+            }
+
+            _sessionState.Selection.SetSelectedObjects(selectedGuids);
+        }
+
+        private static string GetGuidForObject(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return null;
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(dataObject);
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                return null;
+            }
+
+            string guid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                return null;
+            }
+
+            return guid;
+        }
+
+        private void EnsureUserStateRepository()
+        {
+            if (_userStateRepository != null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_userStateFilePath))
+            {
+                _userStateFilePath = Path.Combine(
+                    Application.persistentDataPath,
+                    UserStateFileName
+                );
+            }
+
+            _userStateRepository = new DefaultUserStateRepository(_userStateFilePath);
         }
 
         internal void UpdateCreateObjectButtonStyle()
@@ -8652,48 +8769,21 @@ namespace WallstopStudios.DataVisualizer.Editor
         [Obsolete("Should not be used internally except by UserState")]
         internal void LoadUserStateFromFile()
         {
-            if (File.Exists(_userStateFilePath))
-            {
-                try
-                {
-                    string json = File.ReadAllText(_userStateFilePath);
-                    _userState = JsonUtility.FromJson<DataVisualizerUserState>(json);
-                    if (_userState == null)
-                    {
-                        Debug.LogWarning(
-                            $"User state file '{_userStateFilePath}' was empty or invalid. Creating new state."
-                        );
-                        _userState = new DataVisualizerUserState();
-                    }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError(
-                        $"Error loading user state from '{_userStateFilePath}': {e}. Using default state."
-                    );
-                    _userState = new DataVisualizerUserState();
-                }
-            }
-            else
-            {
-                _userState = new DataVisualizerUserState();
-            }
-
+            EnsureUserStateRepository();
+            _userState = _userStateRepository?.LoadUserState() ?? new DataVisualizerUserState();
             _userStateDirty = false;
         }
 
         internal void SaveUserStateToFile()
         {
-            try
+            EnsureUserStateRepository();
+            if (_userState == null)
             {
-                string json = JsonUtility.ToJson(UserState, true);
-                File.WriteAllText(_userStateFilePath, json);
-                _userStateDirty = false;
+                return;
             }
-            catch (Exception e)
-            {
-                Debug.LogError($"Error saving user state to '{_userStateFilePath}': {e}");
-            }
+
+            _userStateRepository.SaveUserState(_userState);
+            _userStateDirty = false;
         }
 
         internal void MarkUserStateDirty()
@@ -8771,10 +8861,19 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal string GetLastSelectedNamespaceKey()
         {
+            string sessionValue = _sessionState.Selection.SelectedNamespaceKey;
+            if (!string.IsNullOrWhiteSpace(sessionValue))
+            {
+                return sessionValue;
+            }
+
             DataVisualizerSettings settings = Settings;
-            return settings.persistStateInSettingsAsset
-                ? settings.lastSelectedNamespaceKey
-                : UserState.lastSelectedNamespaceKey;
+            if (settings.persistStateInSettingsAsset)
+            {
+                return settings.lastSelectedNamespaceKey;
+            }
+
+            return UserState.lastSelectedNamespaceKey;
         }
 
         internal List<string> GetObjectOrderForType(Type type)
@@ -8908,10 +9007,19 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal string GetLastSelectedTypeName()
         {
+            string sessionValue = _sessionState.Selection.SelectedTypeFullName;
+            if (!string.IsNullOrWhiteSpace(sessionValue))
+            {
+                return sessionValue;
+            }
+
             DataVisualizerSettings settings = Settings;
-            return settings.persistStateInSettingsAsset
-                ? settings.lastSelectedTypeName
-                : UserState.lastSelectedTypeName;
+            if (settings.persistStateInSettingsAsset)
+            {
+                return settings.lastSelectedTypeName;
+            }
+
+            return UserState.lastSelectedTypeName;
         }
 
         internal string GetLastSelectedObjectGuidForType(string typeName)
@@ -8919,6 +9027,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (string.IsNullOrWhiteSpace(typeName))
             {
                 return null;
+            }
+
+            if (
+                string.Equals(
+                    _sessionState.Selection.SelectedTypeFullName,
+                    typeName,
+                    StringComparison.Ordinal
+                )
+            )
+            {
+                string sessionGuid = _sessionState.Selection.PrimarySelectedObjectGuid;
+                if (!string.IsNullOrWhiteSpace(sessionGuid))
+                {
+                    return sessionGuid;
+                }
             }
 
             DataVisualizerSettings settings = Settings;

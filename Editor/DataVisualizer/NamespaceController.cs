@@ -6,6 +6,7 @@ namespace WallstopStudios.DataVisualizer.Editor
     using System.Linq;
     using Data;
     using Helper;
+    using State;
     using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
@@ -558,6 +559,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return;
                 }
 
+                dataVisualizer.SessionState.Selection.SetSelectedNamespace(namespaceKey);
                 SetLastSelectedNamespaceKey(dataVisualizer, namespaceKey);
                 string typeFullName = type?.FullName;
                 if (string.IsNullOrWhiteSpace(typeFullName))
@@ -565,6 +567,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return;
                 }
 
+                dataVisualizer.SessionState.Selection.SetSelectedType(typeFullName);
                 SetLastSelectedTypeName(dataVisualizer, typeFullName);
             }
             catch (Exception e)
@@ -678,13 +681,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                 : StyleConstants.ArrowExpanded;
             typesContainer.style.display = collapsed ? DisplayStyle.None : DisplayStyle.Flex;
 
-            if (!saveState)
+            string namespaceKey = typesContainer.parent?.userData as string;
+            if (string.IsNullOrWhiteSpace(namespaceKey))
             {
                 return;
             }
 
-            string namespaceKey = typesContainer.parent?.userData as string;
-            if (string.IsNullOrWhiteSpace(namespaceKey))
+            dataVisualizer.SessionState.Selection.SetNamespaceCollapsed(namespaceKey, collapsed);
+
+            if (!saveState)
             {
                 return;
             }
@@ -702,6 +707,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            dataVisualizer.SessionState.Selection.SetNamespaceCollapsed(namespaceKey, isCollapsed);
             dataVisualizer.PersistSettings(
                 settings =>
                 {
@@ -737,6 +743,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (string.IsNullOrWhiteSpace(namespaceKey))
             {
                 return false;
+            }
+
+            VisualizerSessionState.SelectionState selection = dataVisualizer
+                .SessionState
+                ?.Selection;
+            if (selection != null && selection.CollapsedNamespaces.Contains(namespaceKey))
+            {
+                return true;
             }
 
             DataVisualizerSettings settings = dataVisualizer.Settings;
