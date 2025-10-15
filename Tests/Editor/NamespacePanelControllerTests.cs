@@ -38,10 +38,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
 
             public void SaveUserState(DataVisualizerUserState userState) { }
 
-            public bool ShouldPersistStateInSettingsAsset()
-            {
-                return Settings != null && Settings.persistStateInSettingsAsset;
-            }
         }
 
         [Test]

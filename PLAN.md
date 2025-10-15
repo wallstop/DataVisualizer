@@ -32,15 +32,15 @@
 4. Freeze public API by exporting current assembly public surface (via `dotnet` reflection or Unity API analyzer) to track changes and update `package.json` intentionally when necessary.
 
 ### Priority 1 – Core Abstractions and Infrastructure
-1. Introduce `VisualizerSessionState` (selection, pagination, highlighted indices, popover status) as a serializable record under `Editor/DataVisualizer/State/`. Replace scattered fields in `DataVisualizer` with this state container.
-2. Wrap persistence logic in `IUserStateRepository` with two implementations: `SettingsAssetStateRepository` and `JsonUserStateRepository`. `DataVisualizer` asks the repository to load/save; persistence code no longer leaks into controllers.
-3. Extract `AssetIndex` responsibilities behind `IDataAssetService`, which exposes typed queries (`GetTypeMetadata`, `Rebuild`, `RefreshGuid`, `EnumerateLabels`). Ensure service batches index rebuilds and exposes change events.
-4. Build `DataVisualizerDependencies` (factory or simple struct) to gather services and share them via dependency injection when constructing controllers.
-5. Update `DataVisualizer` to use the new services/state container while still driving existing UI to guarantee behavior parity.
+1. [x] Introduce `VisualizerSessionState` (selection, pagination, highlighted indices, popover status) as a serializable record under `Editor/DataVisualizer/State/`. Replace scattered fields in `DataVisualizer` with this state container.
+2. [x] Wrap persistence logic in `IUserStateRepository` with two implementations: `SettingsAssetStateRepository` and `JsonUserStateRepository`. `DataVisualizer` asks the repository to load/save; persistence code no longer leaks into controllers.
+3. [x] Extract `AssetIndex` responsibilities behind `IDataAssetService`, which exposes typed queries (`GetTypeMetadata`, `Rebuild`, `RefreshGuid`, `EnumerateLabels`). Ensure service batches index rebuilds and exposes change events.
+4. [x] Build `DataVisualizerDependencies` (factory or simple struct) to gather services and share them via dependency injection when constructing controllers.
+5. [x] Update `DataVisualizer` to use the new services/state container while still driving existing UI to guarantee behavior parity.
 
 ### Priority 2 – Namespace and Type Pane
-1. Create `NamespacePanelController` with ownership of namespace list visual elements, selection handling, reordering, and collapse state. Inject `IDataAssetService`, `IUserStateRepository`, and `VisualizerSessionState`.
-2. Move namespace-specific persistence into the controller, raising `TypeSelectionChanged` events via the event hub instead of calling `DataVisualizer` methods directly.
+1. [x] Create `NamespacePanelController` with ownership of namespace list visual elements, selection handling, reordering, and collapse state. Inject `IDataAssetService`, `IUserStateRepository`, and `VisualizerSessionState`.
+2. [~] Move namespace-specific persistence into the controller, raising `TypeSelectionChanged` events via the event hub instead of calling `DataVisualizer` methods directly.
 3. Simplify `NamespaceController` by either rewriting it atop the new architecture or replacing it with `NamespacePanelController`. Remove direct access to `DataVisualizer` internals (`_scriptableObjectTypes`, `_namespaceOrder`).
 4. Ensure namespace rebuilds diff against cached state to minimize UI churn, keeping performance characteristics.
 

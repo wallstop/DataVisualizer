@@ -28,6 +28,8 @@ namespace WallstopStudios.DataVisualizer.Editor
     using Utilities;
     using Helper;
     using Helper.Pooling;
+    using Infrastructure;
+    using Events;
     using Controllers;
     using Services;
     using State;
@@ -180,15 +182,17 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
             new();
 
+        internal DataVisualizerDependencies _dependencies;
+        internal DataVisualizerEventHub _eventHub;
+
         [Obsolete("Use HiddenNamespaces property instead")]
         internal int _hiddenNamespaces;
 
         internal readonly List<ScriptableObject> _selectedObjects = new();
-        internal readonly AssetIndex _assetIndex = new();
+        internal IDataAssetService _assetService;
         internal readonly List<string> _allManagedObjectGuids = new();
         internal readonly List<ScriptableObject> _displayedObjects = new();
         internal int _currentDisplayStartIndex;
-        internal bool _assetIndexNeedsFullRebuild = true;
         internal readonly List<VisualElement> _currentSearchResultItems = new();
         internal readonly List<VisualElement> _currentTypePopoverItems = new();
 
@@ -347,15 +351,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal Services.ObjectCommandService _objectCommandService;
         internal LabelPanelController _labelPanelController;
         internal Services.LabelService _labelService;
+        private IDisposable _typeSelectedSubscription;
 
         public DataVisualizer()
         {
             _namespaceController = new NamespaceController(_scriptableObjectTypes, _namespaceOrder);
-            _namespacePanelController = new NamespacePanelController(
-                this,
-                _namespaceController,
-                _sessionState
-            );
             _objectSelectionService = new Services.ObjectSelectionService(_sessionState);
             _objectListController = new ObjectListController(
                 this,
@@ -407,12 +407,31 @@ namespace WallstopStudios.DataVisualizer.Editor
             _odinPropertyTree = null;
 #endif
             _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
-            EnsureUserStateRepository();
-            _namespacePanelController ??= new NamespacePanelController(
-                this,
-                _namespaceController,
-                _sessionState
-            );
+            if (_dependencies == null
+                || !string.Equals(
+                    _dependencies.UserStateFilePath,
+                    _userStateFilePath,
+                    StringComparison.Ordinal
+                ))
+            {
+                _dependencies = new DataVisualizerDependencies(_userStateFilePath, _sessionState);
+            }
+            else
+            {
+                bool persistInSettingsAsset = _dependencies.Settings != null
+                    && _dependencies.Settings.persistStateInSettingsAsset;
+                _dependencies.UpdatePersistenceStrategy(persistInSettingsAsset, _userStateFilePath);
+            }
+
+            _assetService = _dependencies.AssetService;
+            _eventHub = _dependencies.EventHub;
+            _userStateRepository = _dependencies.UserStateRepository;
+            _settings = _dependencies.Settings;
+            _userState = _dependencies.UserState;
+            _typeSelectedSubscription?.Dispose();
+            _typeSelectedSubscription = null;
+            EnsureTypeSelectedSubscription();
+            EnsureNamespacePanelController();
             _objectSelectionService ??= new Services.ObjectSelectionService(_sessionState);
             _objectListController ??= new ObjectListController(
                 this,
@@ -499,6 +518,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 Instance = null;
             }
 
+            _namespacePanelController?.Dispose();
+            _namespacePanelController = null;
+            _typeSelectedSubscription?.Dispose();
+            _typeSelectedSubscription = null;
             _isLabelCachePopulated = false;
             _selectedElement = null;
             _selectedObject = null;
@@ -541,15 +564,18 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void PopulateSearchCache(bool forceRebuild = false)
         {
-            if (forceRebuild || _assetIndexNeedsFullRebuild)
-            {
-                IEnumerable<Type> allTypes = _scriptableObjectTypes
-                    .SelectMany(entry => entry.Value)
-                    .Where(type => type != null)
-                    .Distinct();
+            IEnumerable<Type> allTypes = _scriptableObjectTypes
+                .SelectMany(entry => entry.Value)
+                .Where(type => type != null)
+                .Distinct();
 
-                _assetIndex.Rebuild(allTypes);
-                _assetIndexNeedsFullRebuild = false;
+            if (_assetService != null)
+            {
+                _assetService.ConfigureTrackedTypes(allTypes);
+                if (forceRebuild)
+                {
+                    _assetService.ForceRebuild();
+                }
             }
 
             RebuildManagedObjectGuidCache();
@@ -560,12 +586,14 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             _allManagedObjectGuids.Clear();
 
-            using PooledResource<List<AssetIndex.AssetMetadata>> metadataBuffer =
-                Buffers<AssetIndex.AssetMetadata>.GetList(
-                    0,
-                    out List<AssetIndex.AssetMetadata> metadata
-                );
-            metadata.AddRange(_assetIndex.AllMetadata());
+            if (_assetService == null)
+            {
+                return;
+            }
+
+            using PooledResource<List<DataAssetMetadata>> metadataBuffer =
+                Buffers<DataAssetMetadata>.GetList(0, out List<DataAssetMetadata> metadata);
+            metadata.AddRange(_assetService.GetAllAssets() ?? Array.Empty<DataAssetMetadata>());
 
             metadata.Sort(
                 (lhs, rhs) =>
@@ -588,7 +616,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             );
 
-            foreach (AssetIndex.AssetMetadata entry in metadata)
+            foreach (DataAssetMetadata entry in metadata)
             {
                 if (!string.IsNullOrWhiteSpace(entry.Guid))
                 {
@@ -624,6 +652,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             IReadOnlyList<string> movedFromAssetPaths
         )
         {
+            if (_assetService == null)
+            {
+                return;
+            }
+
             bool indexUpdated = false;
 
             if (importedAssets != null)
@@ -636,7 +669,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         continue;
                     }
 
-                    _assetIndex.RefreshGuid(guid);
+                    _assetService.RefreshAsset(guid);
                     indexUpdated = true;
                 }
             }
@@ -651,7 +684,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         continue;
                     }
 
-                    _assetIndex.RefreshGuid(guid);
+                    _assetService.RefreshAsset(guid);
                     indexUpdated = true;
                 }
             }
@@ -660,14 +693,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 foreach (string path in movedFromAssetPaths)
                 {
-                    if (
-                        _assetIndex.TryGetMetadataByPath(
-                            path,
-                            out AssetIndex.AssetMetadata metadata
-                        )
-                    )
+                    if (_assetService.TryGetAssetByPath(path, out DataAssetMetadata metadata))
                     {
-                        _assetIndex.Remove(metadata.Guid);
+                        _assetService.RemoveAsset(metadata.Guid);
                         indexUpdated = true;
                     }
                 }
@@ -677,14 +705,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 foreach (string path in deletedAssets)
                 {
-                    if (
-                        _assetIndex.TryGetMetadataByPath(
-                            path,
-                            out AssetIndex.AssetMetadata metadata
-                        )
-                    )
+                    if (_assetService.TryGetAssetByPath(path, out DataAssetMetadata metadata))
                     {
-                        _assetIndex.Remove(metadata.Guid);
+                        _assetService.RemoveAsset(metadata.Guid);
                         indexUpdated = true;
                     }
                 }
@@ -719,15 +742,24 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _assetIndex.RefreshGuid(guid);
+            if (_assetService != null)
+            {
+                _assetService.RefreshAsset(guid);
+            }
             RebuildManagedObjectGuidCache();
             _isSearchCachePopulated = true;
             _isLabelCachePopulated = false;
         }
 
-        internal bool TryGetMetadataForPath(string assetPath, out AssetIndex.AssetMetadata metadata)
+        internal bool TryGetMetadataForPath(string assetPath, out DataAssetMetadata metadata)
         {
-            return _assetIndex.TryGetMetadataByPath(assetPath, out metadata);
+            metadata = null;
+            if (_assetService == null)
+            {
+                return false;
+            }
+
+            return _assetService.TryGetAssetByPath(assetPath, out metadata);
         }
 
         internal void SyncNamespaceAndTypeOrders()
@@ -1847,7 +1879,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         if (
                             _currentSearchResultItems[_searchHighlightIndex].userData
-                            is AssetIndex.AssetMetadata selectedMetadata
+                            is DataAssetMetadata selectedMetadata
                         )
                         {
                             ScriptableObject selectedObject = selectedMetadata.LoadAsset();
@@ -2006,7 +2038,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            List<(AssetIndex.AssetMetadata metadata, SearchResultMatchInfo match)> results = new();
+            if (_assetService == null)
+            {
+                CloseActivePopover();
+                return;
+            }
+
+            List<(DataAssetMetadata metadata, SearchResultMatchInfo match)> results = new List<(DataAssetMetadata metadata, SearchResultMatchInfo match)>();
             foreach (string guid in _allManagedObjectGuids)
             {
                 if (string.IsNullOrWhiteSpace(guid))
@@ -2014,7 +2052,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     continue;
                 }
 
-                if (!_assetIndex.TryGetMetadata(guid, out AssetIndex.AssetMetadata metadata))
+                if (!_assetService.TryGetAssetByGuid(guid, out DataAssetMetadata metadata))
                 {
                     continue;
                 }
@@ -2053,7 +2091,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _searchPopover.style.maxHeight = StyleKeyword.Null;
                 foreach (
                     (
-                        AssetIndex.AssetMetadata resultMetadata,
+                        DataAssetMetadata resultMetadata,
                         SearchResultMatchInfo resultInfo
                     ) in results
                 )
@@ -2081,7 +2119,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         if (
                             evt.button != 0
-                            || resultItem.userData is not AssetIndex.AssetMetadata clickedMetadata
+                            || resultItem.userData is not DataAssetMetadata clickedMetadata
                         )
                         {
                             return;
@@ -2194,7 +2232,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         }
 
         internal SearchResultMatchInfo CheckMatch(
-            AssetIndex.AssetMetadata metadata,
+            DataAssetMetadata metadata,
             string[] lowerSearchTerms
         )
         {
@@ -5728,12 +5766,89 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void BuildNamespaceView()
         {
+            EnsureNamespacePanelController();
             _namespacePanelController.BuildNamespaceView();
         }
 
         internal void BuildObjectsView()
         {
             _objectListController.BuildObjectsView();
+        }
+
+        private void HandleTypeSelectedEvent(TypeSelectedEvent evt)
+        {
+            if (evt == null)
+            {
+                return;
+            }
+
+            Type selectedType = evt.SelectedType;
+            if (selectedType == null)
+            {
+                SelectObject(null);
+                return;
+            }
+
+            LoadObjectTypes(selectedType);
+            ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
+            BuildProcessorColumnView();
+            BuildObjectsView();
+            SelectObject(objectToSelect);
+            UpdateCreateObjectButtonStyle();
+            UpdateLabelAreaAndFilter();
+        }
+
+
+        private void EnsureNamespacePanelController()
+        {
+            if (_namespacePanelController != null)
+            {
+                return;
+            }
+
+            _eventHub ??= new DataVisualizerEventHub();
+
+            if (_userStateRepository == null)
+            {
+                EnsureUserStateRepository();
+                if (_userStateRepository == null)
+                {
+                    if (string.IsNullOrWhiteSpace(_userStateFilePath))
+                    {
+                        _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
+                    }
+
+                    _userStateRepository = new JsonUserStateRepository(_userStateFilePath);
+                }
+            }
+
+            _assetService ??= new DataAssetService();
+
+            EnsureTypeSelectedSubscription();
+
+            _namespacePanelController = new NamespacePanelController(
+                this,
+                _namespaceController,
+                _sessionState,
+                _assetService,
+                _userStateRepository,
+                _eventHub
+            );
+        }
+
+        private void EnsureTypeSelectedSubscription()
+        {
+            if (_eventHub == null)
+            {
+                return;
+            }
+
+            if (_typeSelectedSubscription != null)
+            {
+                return;
+            }
+
+            _typeSelectedSubscription = _eventHub.Subscribe<TypeSelectedEvent>(HandleTypeSelectedEvent);
         }
 
         internal sealed class ObjectRowComponents
@@ -6375,21 +6490,30 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _projectUniqueLabelsCache.Clear();
+            if (_assetService == null)
+            {
+                return;
+            }
+
             using PooledResource<HashSet<string>> allLabelsLease = Buffers<string>.HashSet.Get(
                 out HashSet<string> allLabelsSet
             );
-            foreach (AssetIndex.AssetMetadata metadata in _assetIndex.AllMetadata())
+            IEnumerable<DataAssetMetadata> allAssets = _assetService.GetAllAssets();
+            if (allAssets != null)
             {
-                if (metadata.Labels == null || metadata.Labels.Length == 0)
+                foreach (DataAssetMetadata metadata in allAssets)
                 {
-                    continue;
-                }
-
-                foreach (string label in metadata.Labels)
-                {
-                    if (!string.IsNullOrWhiteSpace(label))
+                    if (metadata.Labels == null || metadata.Labels.Count == 0)
                     {
-                        allLabelsSet.Add(label.Trim());
+                        continue;
+                    }
+
+                    foreach (string label in metadata.Labels)
+                    {
+                        if (!string.IsNullOrWhiteSpace(label))
+                        {
+                            allLabelsSet.Add(label.Trim());
+                        }
                     }
                 }
             }
@@ -6980,19 +7104,24 @@ namespace WallstopStudios.DataVisualizer.Editor
             _selectedObjects.Clear();
             _objectVisualElementMap.Clear();
 
+            if (_assetService == null)
+            {
+                return;
+            }
+
             List<string> customGuidOrder = GetObjectOrderForType(type);
-            Dictionary<string, ScriptableObject> objectsByGuid = new(
+            Dictionary<string, ScriptableObject> objectsByGuid = new Dictionary<string, ScriptableObject>(
                 StringComparer.OrdinalIgnoreCase
             );
-            IReadOnlyList<string> indexedGuids = _assetIndex.GetGuidsForType(type);
+            IReadOnlyList<string> indexedGuids = _assetService.GetGuidsForType(type);
             if (indexedGuids.Count == 0)
             {
-                _assetIndex.RefreshType(type);
-                indexedGuids = _assetIndex.GetGuidsForType(type);
+                _assetService.RefreshType(type);
+                indexedGuids = _assetService.GetGuidsForType(type);
             }
             foreach (string guid in indexedGuids)
             {
-                if (!_assetIndex.TryGetMetadata(guid, out AssetIndex.AssetMetadata metadata))
+                if (!_assetService.TryGetAssetByGuid(guid, out DataAssetMetadata metadata))
                 {
                     continue;
                 }
@@ -7038,13 +7167,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                         }
 
                         if (
-                            _assetIndex.TryGetMetadata(
+                            _assetService != null
+                            && _assetService.TryGetAssetByGuid(
                                 lhs.Key,
-                                out AssetIndex.AssetMetadata leftMetadata
+                                out DataAssetMetadata leftMetadata
                             )
-                            && _assetIndex.TryGetMetadata(
+                            && _assetService.TryGetAssetByGuid(
                                 rhs.Key,
-                                out AssetIndex.AssetMetadata rightMetadata
+                                out DataAssetMetadata rightMetadata
                             )
                         )
                         {
@@ -7133,7 +7263,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _namespaceOrder[key] = i;
             }
 
-            _assetIndexNeedsFullRebuild = true;
+            if (_assetService != null)
+            {
+                _assetService.MarkDirty();
+            }
         }
 
         internal List<Type> LoadRelevantScriptableObjectTypes()
@@ -7373,7 +7506,23 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             }
 
-            _userStateRepository = new DefaultUserStateRepository(_userStateFilePath);
+            DataVisualizerSettings existingSettings = _settings;
+            if (existingSettings == null)
+            {
+                existingSettings = DataVisualizer.LoadOrCreateSettings();
+                _settings = existingSettings;
+            }
+
+            if (existingSettings != null && existingSettings.persistStateInSettingsAsset)
+            {
+                _userStateRepository = new SettingsAssetStateRepository();
+            }
+            else
+            {
+                _userStateRepository = new JsonUserStateRepository(_userStateFilePath);
+            }
+
+            _settings = _userStateRepository.LoadSettings();
         }
 
         private void EnsureLabelSubsystems()

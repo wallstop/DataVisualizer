@@ -11,7 +11,5 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
         void SaveSettings(DataVisualizerSettings settings);
 
         void SaveUserState(DataVisualizerUserState userState);
-
-        bool ShouldPersistStateInSettingsAsset();
     }
 }

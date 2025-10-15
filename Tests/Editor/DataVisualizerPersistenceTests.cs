@@ -46,10 +46,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 SaveUserStateCallCount++;
             }
 
-            public bool ShouldPersistStateInSettingsAsset()
-            {
-                return Settings != null && Settings.persistStateInSettingsAsset;
-            }
         }
 
         [Test]
