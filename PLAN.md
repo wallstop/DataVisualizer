@@ -27,9 +27,9 @@
 
 ### Priority 0 – Safeguards and Baseline
 1. Document feature inventory and critical user journeys (type selection, object creation, label editing, processor execution, search, drag reorder) with before screenshots or recordings.
-2. Expand editor test scaffolding to open the window in isolation and simulate interactions. Stub `AssetDatabase` with test assets to capture current behavior for regression detection.
-3. Profile representative workflows to capture GC allocations and latency; store metrics to verify improvements (drag reorder, search, namespace collapse toggles).
-4. Freeze public API by exporting current assembly public surface (via `dotnet` reflection or Unity API analyzer) to track changes and update `package.json` intentionally when necessary.
+2. [x] Expand editor test scaffolding to open the window in isolation and simulate interactions. Stub `AssetDatabase` with test assets to capture current behavior for regression detection.
+3. [x] Profile representative workflows to capture GC allocations and latency; store metrics to verify improvements (drag reorder, search, namespace collapse toggles).
+4. [x] Freeze public API by exporting current assembly public surface (via `dotnet` reflection or Unity API analyzer) to track changes and update `package.json` intentionally when necessary.
 
 ### Priority 1 – Core Abstractions and Infrastructure
 1. [x] Introduce `VisualizerSessionState` (selection, pagination, highlighted indices, popover status) as a serializable record under `Editor/DataVisualizer/State/`. Replace scattered fields in `DataVisualizer` with this state container.

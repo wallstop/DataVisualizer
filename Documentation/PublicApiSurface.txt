@@ -1,0 +1,432 @@
+File: Editor/DataVisualizer/Controllers/LabelPanelController.cs
+  Method: BuildLabelPanel
+  Method: ToggleLabelsCollapsed
+  Method: ToggleLabelsAdvancedCollapsed
+  Method: CanCollapseLabels
+  Method: CanCollapseAdvancedConfiguration
+  Method: UpdateLabelsCollapsedState
+  Method: UpdateAdvancedCollapsedState
+  Method: UpdateLabelsCollapsedClickableState
+  Method: UpdateAdvancedClickableState
+  Method: GetCurrentlyAvailableLabels
+  Method: PopulateLabelPillContainers
+  Method: PopulateSingleLabelContainer
+  Method: CreateLabelPill
+
+File: Editor/DataVisualizer/Controllers/NamespacePanelController.cs
+  Method: Dispose
+  Method: BuildNamespaceView
+  Method: ToggleNamespaceCollapse
+  Method: SelectType
+
+File: Editor/DataVisualizer/Controllers/ObjectListController.cs
+  Method: BuildObjectsView
+  Method: HandlePreviousPageRequested
+  Method: HandleNextPageRequested
+  Method: HandleCurrentPageChanged
+  Method: HandleSelectionChanged
+
+File: Editor/DataVisualizer/Data/AssetIndex.cs
+  Property: Guid
+  Property: Path
+  Property: AssetType
+  Property: TypeFullName
+  Property: DisplayName
+  Property: LastIndexedUtc
+  Method: LoadAsset
+  Method: GetGuidsForType
+  Method: TryGetMetadata
+  Method: TryGetMetadataByPath
+  Method: AllMetadata
+  Method: Rebuild
+  Method: RefreshGuid
+  Method: RefreshType
+  Method: Remove
+
+File: Editor/DataVisualizer/Data/DataVisualizerSettings.cs
+  Sealed: DataVisualizerSettings
+  Method (DataVisualizerSettings): MarkDirty
+  Method (DataVisualizerSettings): HydrateFrom
+
+File: Editor/DataVisualizer/Data/DataVisualizerUserState.cs
+  Sealed: DataVisualizerUserState
+  Method (DataVisualizerUserState): HydrateFrom
+  Method (DataVisualizerUserState): GetOrCreateObjectOrderList
+  Method (DataVisualizerUserState): SetLastObjectForType
+  Method (DataVisualizerUserState): GetLastObjectForType
+  Method (DataVisualizerUserState): GetOrCreateTypeOrderList
+  Method (DataVisualizerUserState): HasCollapseState
+  Method (DataVisualizerUserState): GetOrCreateCollapseState
+
+File: Editor/DataVisualizer/Data/LastObjectSelectionEntry.cs
+  Sealed: LastObjectSelectionEntry
+  Method (LastObjectSelectionEntry): Clone
+
+File: Editor/DataVisualizer/Data/NamespaceCollapseState.cs
+  Sealed: NamespaceCollapseState
+  Method (NamespaceCollapseState): Clone
+
+File: Editor/DataVisualizer/Data/NamespaceTypeOrder.cs
+  Sealed: NamespaceTypeOrder
+  Method (NamespaceTypeOrder): Clone
+
+File: Editor/DataVisualizer/Data/ProcessorState.cs
+  Enum: ProcessorLogic
+  Sealed: ProcessorState
+  Method (ProcessorState): Clone
+
+File: Editor/DataVisualizer/Data/TypeLabelFilterConfig.cs
+  Enum: LabelCombinationType
+  Sealed: TypeLabelFilterConfig
+  Method (TypeLabelFilterConfig): Clone
+
+File: Editor/DataVisualizer/Data/TypeObjectOrder.cs
+  Sealed: TypeObjectOrder
+  Method (TypeObjectOrder): Clone
+
+File: Editor/DataVisualizer/DataVisualizer.cs
+  Sealed: DataVisualizer
+  Method (DataVisualizer): ShowWindow
+  Method (DataVisualizer): SignalRefresh
+  Method (DataVisualizer): CreateGUI
+  Property (DataVisualizer): Root
+  Property (DataVisualizer): MoveUpButton
+  Property (DataVisualizer): MoveDownButton
+  Property (DataVisualizer): ContentArea
+  Property (DataVisualizer): TitleLabel
+  Property (DataVisualizer): ActionsArea
+  Property (DataVisualizer): CloneButton
+  Property (DataVisualizer): RenameButton
+  Property (DataVisualizer): MoveButton
+  Property (DataVisualizer): DeleteButton
+
+File: Editor/DataVisualizer/Diagnostics/PerformanceMetricSnapshot.cs
+  Property: ScenarioName
+  Property: ElapsedMilliseconds
+  Property: BytesAllocated
+
+File: Editor/DataVisualizer/Diagnostics/PerformanceMetricsRecorder.cs
+  Method: RecordScenario
+  Method: SaveSnapshots
+
+File: Editor/DataVisualizer/Events/DataVisualizerEventHub.cs
+  Method: Clear
+  Method: Dispose
+
+File: Editor/DataVisualizer/Events/LabelsChangedEvent.cs
+  Property: AndLabels
+  Property: OrLabels
+
+File: Editor/DataVisualizer/Events/NamespaceCollapseChangedEvent.cs
+  Property: NamespaceKey
+  Property: IsCollapsed
+
+File: Editor/DataVisualizer/Events/NamespaceRemovalConfirmedEvent.cs
+  Property: NamespaceKey
+  Property: Types
+
+File: Editor/DataVisualizer/Events/NamespaceRemovalRequestedEvent.cs
+  Property: NamespaceKey
+  Property: Types
+
+File: Editor/DataVisualizer/Events/NamespaceReorderRequestedEvent.cs
+  Property: NamespaceKey
+  Property: TargetIndex
+
+File: Editor/DataVisualizer/Events/ObjectCloneRequestedEvent.cs
+  Property: DataObject
+
+File: Editor/DataVisualizer/Events/ObjectDeleteRequestedEvent.cs
+  Property: Trigger
+  Property: DataObject
+
+File: Editor/DataVisualizer/Events/ObjectMoveRequestedEvent.cs
+  Property: Trigger
+  Property: DataObject
+
+File: Editor/DataVisualizer/Events/ObjectMoveToBottomRequestedEvent.cs
+  Property: DataObject
+
+File: Editor/DataVisualizer/Events/ObjectMoveToTopRequestedEvent.cs
+  Property: DataObject
+
+File: Editor/DataVisualizer/Events/ObjectPageChangedEvent.cs
+  Property: ObjectType
+  Property: PageIndex
+
+File: Editor/DataVisualizer/Events/ObjectRenameRequestedEvent.cs
+  Property: Trigger
+  Property: DataObject
+
+File: Editor/DataVisualizer/Events/ObjectSelectionChangedEvent.cs
+  Property: PrimarySelection
+  Property: Selections
+
+File: Editor/DataVisualizer/Events/ObjectsRequestedEvent.cs
+  Property: RequestedType
+  Property: RequestedGuids
+  Property: ForceRefresh
+
+File: Editor/DataVisualizer/Events/SearchRequestedEvent.cs
+  Property: Query
+  Property: IsCommit
+
+File: Editor/DataVisualizer/Events/TypeRemovalConfirmedEvent.cs
+  Property: Type
+
+File: Editor/DataVisualizer/Events/TypeRemovalRequestedEvent.cs
+  Property: Type
+
+File: Editor/DataVisualizer/Events/TypeReorderRequestedEvent.cs
+  Property: NamespaceKey
+  Property: Type
+  Property: TargetIndex
+
+File: Editor/DataVisualizer/Events/TypeSelectedEvent.cs
+  Property: NamespaceKey
+  Property: SelectedType
+
+File: Editor/DataVisualizer/Extensions/ColorExtensions.cs
+  Method: ToHex
+
+File: Editor/DataVisualizer/Extensions/UIExtensions.cs
+  Method: SetPlaceholderText
+  Method: IterateChildrenRecursively
+
+File: Editor/DataVisualizer/Extensions/VisualElementPropertyExtensions.cs
+  Method: SetProperty
+  Method: GetProperty
+
+File: Editor/DataVisualizer/Infrastructure/DataVisualizerDependencies.cs
+  Property: SessionState
+  Property: AssetService
+  Property: EventHub
+  Property: UserStateRepository
+  Property: Settings
+  Property: UserState
+  Property: UserStateFilePath
+  Method: RefreshUserState
+  Method: UpdatePersistenceStrategy
+
+File: Editor/DataVisualizer/NamespaceController.cs
+  Sealed: NamespaceController
+  Method (NamespaceController): Clear
+  Method (NamespaceController): DecrementTypeSelection
+  Method (NamespaceController): IncrementTypeSelection
+  Method (NamespaceController): SelectType
+  Method (NamespaceController): RecalibrateVisualElements
+  Method (NamespaceController): Build
+
+File: Editor/DataVisualizer/Search/MatchDetail.cs
+  Sealed: MatchDetail
+
+File: Editor/DataVisualizer/Search/MatchSource.cs
+  Static: MatchSource
+
+File: Editor/DataVisualizer/Search/SearchResultMatchInfo.cs
+  Sealed: SearchResultMatchInfo
+
+File: Editor/DataVisualizer/Services/DataAssetChangeEventArgs.cs
+  Property: IndexRebuilt
+  Property: UpdatedGuids
+  Property: RemovedGuids
+  Property: RefreshedType
+
+File: Editor/DataVisualizer/Services/DataAssetMetadata.cs
+  Property: Guid
+  Property: Path
+  Property: AssetType
+  Property: TypeFullName
+  Property: DisplayName
+  Property: Labels
+  Property: LastIndexedUtc
+  Method: LoadAsset
+
+File: Editor/DataVisualizer/Services/DataAssetService.cs
+  Method: ConfigureTrackedTypes
+  Method: MarkDirty
+  Method: ForceRebuild
+  Method: GetAssetsForType
+  Method: GetGuidsForType
+  Method: GetAllAssets
+  Method: TryGetAssetByGuid
+  Method: TryGetAssetByPath
+  Method: RefreshAsset
+  Method: RefreshType
+  Method: RemoveAsset
+  Method: EnumerateLabels
+
+File: Editor/DataVisualizer/Services/JsonUserStateRepository.cs
+  Method: LoadSettings
+  Method: LoadUserState
+  Method: SaveSettings
+  Method: SaveUserState
+
+File: Editor/DataVisualizer/Services/LabelService.cs
+  Method: UpdateLabelAreaAndFilter
+  Method: SaveLabelFilterConfig
+  Method: GetCurrentConfig
+
+File: Editor/DataVisualizer/Services/ObjectCommandService.cs
+  Method: MoveToTop
+  Method: MoveToBottom
+  Method: Clone
+  Method: Rename
+  Method: Move
+  Method: Delete
+
+File: Editor/DataVisualizer/Services/ObjectSelectionService.cs
+  Method: SynchronizeSelection
+  Method: ResolveGuid
+
+File: Editor/DataVisualizer/Services/SettingsAssetStateRepository.cs
+  Method: LoadSettings
+  Method: LoadUserState
+  Method: SaveSettings
+  Method: SaveUserState
+
+File: Editor/DataVisualizer/State/VisualizerSessionState.cs
+  Sealed: VisualizerSessionState
+  Sealed: SelectionState
+  Sealed: PaginationState
+  Sealed: SearchState
+  Sealed: PopoverState
+  Sealed: LabelFilterState
+  Property (VisualizerSessionState): Selection
+  Property (VisualizerSessionState): Pagination
+  Property (VisualizerSessionState): Search
+  Property (VisualizerSessionState): Popovers
+  Property (VisualizerSessionState): Labels
+  Property (SelectionState): SelectedNamespaceKey
+  Property (SelectionState): SelectedTypeFullName
+  Property (SelectionState): PrimarySelectedObjectGuid
+  Method (SelectionState): SetSelectedNamespace
+  Method (SelectionState): SetSelectedType
+  Method (SelectionState): SetPrimarySelectedObject
+  Method (SelectionState): SetSelectedObjects
+  Method (SelectionState): SetNamespaceCollapsed
+  Property (PaginationState): CurrentPage
+  Property (PaginationState): ItemsPerPage
+  Property (PaginationState): TotalItems
+  Method (PaginationState): SetCurrentPage
+  Method (PaginationState): SetItemsPerPage
+  Method (PaginationState): SetTotalItems
+  Property (SearchState): CurrentQuery
+  Property (SearchState): HighlightIndex
+  Method (SearchState): SetQuery
+  Method (SearchState): SetHighlightIndex
+  Property (PopoverState): ActivePopoverId
+  Property (PopoverState): ActiveNestedPopoverId
+  Method (PopoverState): SetActivePopover
+  Method (PopoverState): SetActiveNestedPopover
+  Method (PopoverState): Clear
+  Method (LabelFilterState): SetAndLabels
+  Method (LabelFilterState): SetOrLabels
+
+File: Editor/DataVisualizer/Styles/StyleConstants.cs
+  Static: StyleConstants
+
+File: Editor/DataVisualizer/UI/ActionButtonToggle.cs
+  Sealed: ActionButtonToggle
+  Method (ActionButtonToggle): SetValueWithoutNotify
+
+File: Editor/DataVisualizer/UI/HorizontalToggle.cs
+  Sealed: HorizontalToggle
+  Method (HorizontalToggle): Init
+  Method (HorizontalToggle): SelectLeft
+  Method (HorizontalToggle): SelectRight
+
+File: Editor/DataVisualizer/Unity/DataVisualizerAssetPostProcessor.cs
+  Sealed: DataVisualizerAssetProcessor
+
+File: Editor/DataVisualizer/Utilities/MonitorUtility.cs
+  Static: MonitorUtility
+  Method (MonitorUtility): GetPrimaryMonitorRect
+
+File: Editor/DataVisualizer/Utilities/ReadOnlyPropertyDrawer.cs
+  Method: GetPropertyHeight
+  Method: OnGUI
+
+File: Runtime/DataVisualizer/BaseDataObject.cs
+  Abstract: BaseDataObject
+  Method (BaseDataObject): BuildGUI
+  Method (BaseDataObject): CompareTo
+  Method (BaseDataObject): BeforeClone
+  Method (BaseDataObject): AfterClone
+  Method (BaseDataObject): BeforeCreate
+  Method (BaseDataObject): AfterCreate
+  Method (BaseDataObject): BeforeRename
+  Method (BaseDataObject): AfterRename
+
+File: Runtime/DataVisualizer/CustomDataVisualizationAttribute.cs
+  Sealed: CustomDataVisualizationAttribute
+  Property (CustomDataVisualizationAttribute): Namespace
+  Property (CustomDataVisualizationAttribute): TypeName
+  Property (CustomDataVisualizationAttribute): UseOdinInspector
+
+File: Runtime/DataVisualizer/DataVisualizerGUIContext.cs
+  Sealed: DataVisualizerGUIContext
+
+File: Runtime/DataVisualizer/ICreatable.cs
+  Interface: ICreatable
+  Method (ICreatable): BeforeCreate
+  Method (ICreatable): AfterCreate
+
+File: Runtime/DataVisualizer/IDataProcessor.cs
+  Interface: IDataProcessor
+
+File: Runtime/DataVisualizer/IDisplayable.cs
+  Interface: IDisplayable
+  Property (IDisplayable): Title
+
+File: Runtime/DataVisualizer/IDuplicable.cs
+  Interface: IDuplicable
+  Method (IDuplicable): BeforeClone
+  Method (IDuplicable): AfterClone
+
+File: Runtime/DataVisualizer/IGUIProvider.cs
+  Interface: IGUIProvider
+  Method (IGUIProvider): BuildGUI
+
+File: Runtime/DataVisualizer/IRenamable.cs
+  Interface: IRenamable
+  Method (IRenamable): BeforeRename
+  Method (IRenamable): AfterRename
+
+File: Runtime/Helper/DirectoryHelper.cs
+  Method: EnsureDirectoryExists
+  Method: GetCallerScriptDirectory
+  Method: FindPackageRootPath
+  Method: FindRootPath
+  Method: FindAbsolutePathToDirectory
+  Method: AbsoluteToUnityRelativePath
+
+File: Runtime/Helper/PathHelper.cs
+  Method: SanitizePath
+
+File: Runtime/Helper/Pooling/Buffers.cs
+  Method: GetList
+
+File: Runtime/Helper/Pooling/PooledResource.cs
+  Property: Resource
+  Method: Dispose
+  Method: T
+
+File: Runtime/Helper/Pooling/WallstopGenericPool.cs
+  Method: Get
+  Method: Get
+  Method: Dispose
+
+File: Runtime/Helper/ReflectionHelper.cs
+  Method: CreateArray
+  Method: CreateList
+  Method: CreateList
+  Method: GetFieldGetter
+  Method: GetPropertyGetter
+  Method: GetStaticFieldGetter
+  Method: GetFieldSetter
+  Method: GetStaticFieldSetter
+  Method: GetArrayCreator
+  Method: GetListCreator
+  Method: GetListWithCapacityCreator
+
