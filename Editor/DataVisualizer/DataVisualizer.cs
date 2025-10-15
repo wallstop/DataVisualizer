@@ -342,6 +342,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal IUserStateRepository _userStateRepository;
 
         internal NamespacePanelController _namespacePanelController;
+        internal ObjectListController _objectListController;
+        internal Services.ObjectSelectionService _objectSelectionService;
+        internal Services.ObjectCommandService _objectCommandService;
 
         public DataVisualizer()
         {
@@ -351,6 +354,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _namespaceController,
                 _sessionState
             );
+            _objectSelectionService = new Services.ObjectSelectionService(_sessionState);
+            _objectListController = new ObjectListController(
+                this,
+                _objectSelectionService,
+                _sessionState
+            );
+            _objectCommandService = new Services.ObjectCommandService(this);
         }
 
         [MenuItem("Tools/Wallstop Studios/Data Visualizer")]
@@ -399,6 +409,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _namespaceController,
                 _sessionState
             );
+            _objectSelectionService ??= new Services.ObjectSelectionService(_sessionState);
+            _objectListController ??= new ObjectListController(
+                this,
+                _objectSelectionService,
+                _sessionState
+            );
+            _objectCommandService ??= new Services.ObjectCommandService(this);
 
             _allDataProcessors.Clear();
             IEnumerable<Type> processorTypes = TypeCache
@@ -4840,14 +4857,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectPageController.AddToClassList("object-page-controller");
             _previousPageButton = new Button(() =>
             {
-                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
-                if (currentPage <= 0)
-                {
-                    return;
-                }
-
-                SetCurrentPage(_namespaceController.SelectedType, currentPage - 1);
-                BuildObjectsView();
+                _objectListController.HandlePreviousPageRequested();
             })
             {
                 text = "←",
@@ -4858,28 +4868,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             _currentPageField.AddToClassList("current-page-field");
             _currentPageField.RegisterValueChangedCallback(evt =>
             {
-                int newValue = evt.newValue;
-                newValue = Mathf.Clamp(newValue, 0, _filteredObjects.Count / MaxObjectsPerPage);
-                if (newValue != evt.newValue)
-                {
-                    _currentPageField.SetValueWithoutNotify(newValue);
-                }
-
-                SetCurrentPage(_namespaceController.SelectedType, newValue);
-                BuildObjectsView();
+                _objectListController.HandleCurrentPageChanged(evt.newValue);
             });
             _maxPageField = new IntegerField() { isReadOnly = true };
             _maxPageField.AddToClassList("max-page-field");
             _nextPageButton = new Button(() =>
             {
-                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
-                if (_filteredObjects.Count / MaxObjectsPerPage <= currentPage)
-                {
-                    return;
-                }
-
-                SetCurrentPage(_namespaceController.SelectedType, currentPage + 1);
-                BuildObjectsView();
+                _objectListController.HandleNextPageRequested();
             })
             {
                 text = "→",
@@ -4906,7 +4901,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             _objectListView.AddToClassList("object-list");
             _objectListView.itemsSource = _displayedObjects;
-            _objectListView.selectionChanged += OnObjectListSelectionChanged;
+            _objectListView.selectionChanged += _objectListController.HandleSelectionChanged;
             _objectListView.unbindItem += UnbindObjectRow;
             objectColumn.Add(_objectListView);
 
@@ -6008,173 +6003,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void BuildObjectsView()
         {
-            _selectedObjects.RemoveAll(obj => obj == null);
-            if (_objectListView == null)
-            {
-                return;
-            }
-
-            Type selectedType = _namespaceController.SelectedType;
-
-            if (selectedType == null)
-            {
-                _displayedObjects.Clear();
-                _currentDisplayStartIndex = 0;
-                _objectListView.RefreshItems();
-                if (_objectPageController != null)
-                {
-                    _objectPageController.style.display = DisplayStyle.None;
-                }
-
-                if (_emptyObjectLabel != null)
-                {
-                    _emptyObjectLabel.text = "Select a type to see objects.";
-                    _emptyObjectLabel.style.display = DisplayStyle.Flex;
-                }
-
-                _objectListView.style.display = DisplayStyle.None;
-                return;
-            }
-
-            ApplyLabelFilter(buildObjectsView: false);
-
-            if (_emptyObjectLabel != null)
-            {
-                _emptyObjectLabel.style.display = DisplayStyle.None;
-            }
-
-            if (_selectedObjects.Count == 0)
-            {
-                _displayedObjects.Clear();
-                _currentDisplayStartIndex = 0;
-                _objectListView.RefreshItems();
-                _objectListView.style.display = DisplayStyle.None;
-                if (_emptyObjectLabel != null)
-                {
-                    _emptyObjectLabel.text =
-                        $"No objects of type '{selectedType.Name}' found.\nUse the '+' button above to create one.";
-                    _emptyObjectLabel.style.display = DisplayStyle.Flex;
-                }
-
-                if (_objectPageController != null)
-                {
-                    _objectPageController.style.display = DisplayStyle.None;
-                }
-                return;
-            }
-
-            if (_filteredObjects.Count == 0)
-            {
-                _displayedObjects.Clear();
-                _currentDisplayStartIndex = 0;
-                _objectListView.RefreshItems();
-                _objectListView.style.display = DisplayStyle.None;
-                if (_emptyObjectLabel != null)
-                {
-                    string typeDisplay = NamespaceController.GetTypeDisplayName(selectedType);
-                    string message =
-                        _selectedObjects.Count > 0
-                            ? $"No objects of type '{typeDisplay}' match the current label filter."
-                            : $"No objects of type '{typeDisplay}' found.";
-                    _emptyObjectLabel.text = message;
-                    _emptyObjectLabel.style.display = DisplayStyle.Flex;
-                }
-
-                if (_objectPageController != null)
-                {
-                    _objectPageController.style.display = DisplayStyle.None;
-                }
-                return;
-            }
-
-            _objectListView.style.display = DisplayStyle.Flex;
-            if (_emptyObjectLabel != null)
-            {
-                _emptyObjectLabel.style.display = DisplayStyle.None;
-            }
-            _objectVisualElementMap.Clear();
-
-            if (_filteredObjects.Count <= MaxObjectsPerPage)
-            {
-                if (_objectPageController != null)
-                {
-                    _objectPageController.style.display = DisplayStyle.None;
-                }
-
-                _displayedObjects.Clear();
-                _displayedObjects.AddRange(_filteredObjects);
-                _currentDisplayStartIndex = 0;
-            }
-            else
-            {
-                if (_objectPageController != null)
-                {
-                    _objectPageController.style.display = DisplayStyle.Flex;
-                }
-
-                _maxPageField.value = _filteredObjects.Count / MaxObjectsPerPage;
-                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
-                currentPage = Mathf.Clamp(
-                    currentPage,
-                    0,
-                    _filteredObjects.Count / MaxObjectsPerPage
-                );
-                _currentPageField.SetValueWithoutNotify(currentPage);
-
-                _previousPageButton.EnableInClassList("go-button-disabled", currentPage <= 0);
-                _previousPageButton.EnableInClassList(
-                    StyleConstants.ActionButtonClass,
-                    0 < currentPage
-                );
-                _previousPageButton.EnableInClassList("go-button", 0 < currentPage);
-
-                _nextPageButton.EnableInClassList(
-                    "go-button-disabled",
-                    _maxPageField.value <= currentPage
-                );
-                _nextPageButton.EnableInClassList(
-                    StyleConstants.ActionButtonClass,
-                    currentPage < _maxPageField.value
-                );
-                _nextPageButton.EnableInClassList("go-button", currentPage < _maxPageField.value);
-
-                int startIndex = currentPage * MaxObjectsPerPage;
-                int endIndex = Mathf.Min(startIndex + MaxObjectsPerPage, _filteredObjects.Count);
-
-                _displayedObjects.Clear();
-                for (int i = startIndex; i < endIndex; i++)
-                {
-                    _displayedObjects.Add(_filteredObjects[i]);
-                }
-                _currentDisplayStartIndex = startIndex;
-            }
-
-            // Reset itemsSource so the virtualized list rebinds rows after reordering.
-            _objectListView.itemsSource = null;
-            _objectListView.itemsSource = _displayedObjects;
-            _objectListView.RefreshItems();
-            _objectListView.Rebuild();
-
-            if (_selectedObject != null)
-            {
-                int displayedIndex = _displayedObjects.IndexOf(_selectedObject);
-                _isUpdatingListSelection = true;
-                if (displayedIndex >= 0)
-                {
-                    _objectListView.SetSelectionWithoutNotify(new int[] { displayedIndex });
-                }
-                else
-                {
-                    _objectListView.ClearSelection();
-                }
-                _isUpdatingListSelection = false;
-            }
-            else
-            {
-                _isUpdatingListSelection = true;
-                _objectListView.ClearSelection();
-                _isUpdatingListSelection = false;
-            }
+            _objectListController.BuildObjectsView();
         }
 
         internal sealed class ObjectRowComponents
@@ -6205,11 +6034,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             row.style.alignItems = Align.Center;
 
             Button moveUpButton = new() { name = "go-up-button", text = "↑" };
-            moveUpButton.clicked += () => HandleMoveToTop(moveUpButton);
+            moveUpButton.clicked += () => _objectCommandService.MoveToTop(moveUpButton);
             row.Add(moveUpButton);
 
             Button moveDownButton = new() { name = "go-down-button", text = "↓" };
-            moveDownButton.clicked += () => HandleMoveToBottom(moveDownButton);
+            moveDownButton.clicked += () => _objectCommandService.MoveToBottom(moveDownButton);
             row.Add(moveDownButton);
 
             VisualElement contentArea = new() { name = "content" };
@@ -6236,25 +6065,25 @@ namespace WallstopStudios.DataVisualizer.Editor
             row.Add(actionsArea);
 
             Button cloneButton = new() { text = "++", tooltip = "Clone Object" };
-            cloneButton.clicked += () => HandleCloneButton(cloneButton);
+            cloneButton.clicked += () => _objectCommandService.Clone(cloneButton);
             cloneButton.AddToClassList(StyleConstants.ActionButtonClass);
             cloneButton.AddToClassList("clone-button");
             actionsArea.Add(cloneButton);
 
             Button renameButton = new() { text = "@", tooltip = "Rename Object" };
-            renameButton.clicked += () => HandleRenameButton(renameButton);
+            renameButton.clicked += () => _objectCommandService.Rename(renameButton);
             renameButton.AddToClassList(StyleConstants.ActionButtonClass);
             renameButton.AddToClassList("rename-button");
             actionsArea.Add(renameButton);
 
             Button moveButton = new() { text = "➔", tooltip = "Move Object" };
-            moveButton.clicked += () => HandleMoveButton(moveButton);
+            moveButton.clicked += () => _objectCommandService.Move(moveButton);
             moveButton.AddToClassList(StyleConstants.ActionButtonClass);
             moveButton.AddToClassList("move-button");
             actionsArea.Add(moveButton);
 
             Button deleteButton = new() { text = "X", tooltip = "Delete Object" };
-            deleteButton.clicked += () => HandleDeleteButton(deleteButton);
+            deleteButton.clicked += () => _objectCommandService.Delete(deleteButton);
             deleteButton.AddToClassList(StyleConstants.ActionButtonClass);
             deleteButton.AddToClassList("delete-button");
             actionsArea.Add(deleteButton);
@@ -6391,23 +6220,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        internal void OnObjectListSelectionChanged(IEnumerable<object> selectedItems)
-        {
-            if (_isUpdatingListSelection)
-            {
-                return;
-            }
-
-            ScriptableObject selected = selectedItems?.OfType<ScriptableObject>().FirstOrDefault();
-            if (
-                !ReferenceEquals(selected, _selectedObject)
-                || (selected == null && _selectedObject != null)
-            )
-            {
-                SelectObject(selected);
-            }
-        }
-
         internal ScrollView GetObjectListScrollView()
         {
             return _objectListView?.Q<ScrollView>();
@@ -6508,131 +6320,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             button.EnableInClassList("go-button-disabled", !enabled);
             button.EnableInClassList(StyleConstants.ActionButtonClass, enabled);
             button.EnableInClassList("go-button", enabled);
-        }
-
-        internal void HandleMoveToTop(Button button)
-        {
-            if (button?.userData is not ScriptableObject dataObject)
-            {
-                return;
-            }
-
-            _filteredObjects.Remove(dataObject);
-            _filteredObjects.Insert(0, dataObject);
-            _filteredObjects.Remove(dataObject);
-            _filteredObjects.Insert(0, dataObject);
-            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
-            BuildObjectsView();
-        }
-
-        internal void HandleMoveToBottom(Button button)
-        {
-            if (button?.userData is not ScriptableObject dataObject)
-            {
-                return;
-            }
-
-            _selectedObjects.Remove(dataObject);
-            _selectedObjects.Add(dataObject);
-            _filteredObjects.Remove(dataObject);
-            _filteredObjects.Add(dataObject);
-            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
-            BuildObjectsView();
-        }
-
-        internal void HandleCloneButton(Button button)
-        {
-            if (button?.userData is ScriptableObject dataObject)
-            {
-                CloneObject(dataObject);
-            }
-        }
-
-        internal void HandleRenameButton(Button button)
-        {
-            if (
-                button?.userData is ScriptableObject dataObject
-                && button.GetProperty(RowComponentsProperty) is ObjectRowComponents components
-            )
-            {
-                OpenRenamePopover(components.TitleLabel, button, dataObject);
-            }
-        }
-
-        internal void HandleMoveButton(Button button)
-        {
-            if (button?.userData is not ScriptableObject dataObject)
-            {
-                return;
-            }
-
-            string assetPath = AssetDatabase.GetAssetPath(dataObject);
-            string startDirectory = Path.GetDirectoryName(assetPath) ?? string.Empty;
-            string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
-                title: "Select New Location (Must be inside Assets)",
-                folder: startDirectory,
-                defaultName: string.Empty
-            );
-
-            if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
-            {
-                return;
-            }
-
-            selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
-            string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
-
-            if (
-                !selectedAbsolutePath.StartsWith(
-                    projectAssetsPath,
-                    StringComparison.OrdinalIgnoreCase
-                )
-            )
-            {
-                Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                EditorUtility.DisplayDialog(
-                    "Invalid Folder",
-                    "The selected folder must be inside the project's 'Assets' directory.",
-                    "OK"
-                );
-                return;
-            }
-
-            string relativePath = selectedAbsolutePath.Equals(
-                projectAssetsPath,
-                StringComparison.OrdinalIgnoreCase
-            )
-                ? "Assets"
-                : "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-            relativePath = relativePath.Replace("//", "/");
-
-            string targetPath = $"{relativePath}/{dataObject.name}.asset";
-            if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
-            AssetDatabase.SaveAssets();
-            if (!string.IsNullOrWhiteSpace(errorMessage))
-            {
-                Debug.LogError(
-                    $"Error moving asset {dataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}"
-                );
-                EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
-            }
-            else
-            {
-                RefreshMetadataForObject(dataObject);
-            }
-        }
-
-        internal void HandleDeleteButton(Button button)
-        {
-            if (button?.userData is ScriptableObject dataObject)
-            {
-                OpenConfirmDeletePopover(button, dataObject);
-            }
         }
 
         internal void BuildInspectorView()
@@ -7844,11 +7531,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _selectedObject = dataObject;
             _selectedElement = null;
 
-            string selectedObjectGuid = GetGuidForObject(dataObject);
-            _sessionState.Selection.SetPrimarySelectedObject(selectedObjectGuid);
-            string selectedTypeFullName = dataObject != null ? dataObject.GetType().FullName : null;
-            _sessionState.Selection.SetSelectedType(selectedTypeFullName);
-            UpdateSessionSelectedObjects(dataObject);
+            string selectedObjectGuid = _objectSelectionService.ResolveGuid(dataObject);
+            _objectSelectionService.SynchronizeSelection(_selectedObjects, dataObject);
 
             if (_objectListView != null)
             {
@@ -7942,61 +7626,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             BuildInspectorView();
-        }
-
-        private void UpdateSessionSelectedObjects(ScriptableObject primarySelection)
-        {
-            List<string> selectedGuids = new List<string>();
-            bool primaryFound = false;
-
-            foreach (ScriptableObject candidate in _selectedObjects)
-            {
-                string candidateGuid = GetGuidForObject(candidate);
-                if (string.IsNullOrWhiteSpace(candidateGuid))
-                {
-                    continue;
-                }
-
-                if (ReferenceEquals(candidate, primarySelection))
-                {
-                    primaryFound = true;
-                }
-
-                selectedGuids.Add(candidateGuid);
-            }
-
-            if (!primaryFound)
-            {
-                string primaryGuid = GetGuidForObject(primarySelection);
-                if (!string.IsNullOrWhiteSpace(primaryGuid))
-                {
-                    selectedGuids.Insert(0, primaryGuid);
-                }
-            }
-
-            _sessionState.Selection.SetSelectedObjects(selectedGuids);
-        }
-
-        private static string GetGuidForObject(ScriptableObject dataObject)
-        {
-            if (dataObject == null)
-            {
-                return null;
-            }
-
-            string assetPath = AssetDatabase.GetAssetPath(dataObject);
-            if (string.IsNullOrWhiteSpace(assetPath))
-            {
-                return null;
-            }
-
-            string guid = AssetDatabase.AssetPathToGUID(assetPath);
-            if (string.IsNullOrWhiteSpace(guid))
-            {
-                return null;
-            }
-
-            return guid;
         }
 
         private void EnsureUserStateRepository()
