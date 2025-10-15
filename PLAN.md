@@ -1,69 +1,96 @@
-# Data Visualizer Optimization Plan
+# Data Visualizer Architectural Refactor Plan
 
-## Implementation Plan
+## Current Observations
+- `Editor/DataVisualizer/DataVisualizer.cs`: ~9k lines combining window lifecycle, data loading, search, label management, drag and drop, persistence, and popover UI; violates the Single Responsibility and Interface Segregation principles and is difficult to reason about.
+- `Editor/DataVisualizer/NamespaceController.cs`: mixes visual tree construction, ordering logic, deletion confirmation, and persistence writes, relying on internal fields exposed by `DataVisualizer`, creating tight coupling.
+- Many `internal` mutable fields across modules (for example `_scriptableObjectTypes`, `_selectedObjects`, `_activePopover`) are shared instead of encapsulated, making invariants unclear and discouraging unit testing.
+- Asset, processor, and label workflows are tightly interwoven with UI code, so performance optimizations (caching, batching) require editing UI handlers—risking regressions.
+- Persistence concerns (`DataVisualizerSettings`, `DataVisualizerUserState`, EditorPrefs, JSON files) leak throughout the window logic, making it hard to reason about data flow and error handling.
+- Search, filtering, and drag operations allocate heavily and rebuild UI trees wholesale due to lack of separation between models and views.
 
-### [x] Introduce Allocation Utilities
-- Fork the minimal pooling APIs that are needed (`Buffers<T>`, `SetBuffers<T>`, `WallstopArrayPool<T>`, `PooledResource<T>`) into `Runtime/Helper/Pooling/` to keep the package dependency-free.
-- Trim features to project needs (List/HashSet/Array/Stopwatch pools) and wrap them with `internal` visibility.
-- Add light editor-only instrumentation helpers (pooled `Stopwatch`) for measuring hot paths during optimization.
+## Refactoring Objectives
+- Reduce `DataVisualizer` to a thin composition root that delegates to focused controllers adhering to SOLID principles.
+- Decouple domain state (types, assets, labels, processors) from UI representation so that logic can be unit-tested and reused.
+- Preserve and improve performance by keeping existing caches fast, enabling incremental updates, and avoiding redundant UI rebuilds.
+- Clarify persistence and configuration flows with dedicated services, making it easier to reason about state serialization and migration.
+- Establish clear extension seams for new processors, filters, and UI panels without touching core window code.
 
-### [x] Build Persistent Asset and Label Cache
-- Create `Editor/DataVisualizer/Data/AssetIndex.cs` that tracks GUID to lightweight metadata (type name, asset path, labels, last write) and keeps strong references to assets only on demand.
-- On window load, scan existing managed types once, store metadata, and keep the GUID list in `_allManagedObjectsCache` instead of live `ScriptableObject` instances.
-- Hook `AssetPostprocessor` and `EditorApplication.projectChanged` to enqueue incremental updates, using background delay callbacks to avoid duplicate scans.
-- Maintain per-type sorted GUID lists with dirty flags so `LoadObjectTypes` pulls data from the cache without round-tripping through the `AssetDatabase`.
+## Target Architecture Overview
+- **State Layer (`Editor/DataVisualizer/State/`)**: Immutable or narrowly mutable records (`VisualizerSessionState`, `NamespaceState`, `ObjectListState`, `LabelFilterState`, `ProcessorPanelState`) describing current selections, pagination, filters, and cached metadata.
+- **Service Layer (`Editor/DataVisualizer/Services/`)**: Interfaces such as `IDataAssetService`, `IUserStateRepository`, `IProcessorRegistry`, `ISearchService`, `ILabelService`, with concrete implementations wrapping `AssetIndex`, `AssetDatabase`, and persistence assets. These enforce Dependency Inversion and allow mocking in tests.
+- **Controller Layer (`Editor/DataVisualizer/Controllers/`)**: UI Toolkit-focused classes (for example `NamespacePanelController`, `ObjectListController`, `LabelPanelController`, `ProcessorPanelController`, `SearchPopoverController`, `PopoverManager`, `DragAndDropController`) that translate state into visual elements and raise events.
+- **Event Hub (`Editor/DataVisualizer/Events/`)**: Lightweight mediator publishing high-level events (`TypeSelected`, `ObjectsRequested`, `LabelsChanged`, `SearchRequested`) so controllers depend on abstractions instead of one another.
+- **DataVisualizer Window**: Retains lifecycle (`OnEnable`, `OnDisable`), creates services/controllers, wires them through the event hub, forwards Unity callbacks, and persists layout metrics.
+- **Runtime Contracts (`Runtime/DataVisualizer/`)**: Preserve existing interfaces (`IDataProcessor`, `IDisplayable`, etc.) but add small DTOs if needed for controller-service communication.
 
-### [x] Virtualize Object List Rendering
-- Replace manual row creation in `BuildObjectsView` with a `ListView` that binds to the cached GUID list, fetching metadata and (lazily) the `ScriptableObject` only for visible rows.
-- Preserve scroll offset and selection state between refreshes, and update individual rows in response to reorder events instead of rebuilding the entire list.
-- Add pooled row view-models to minimize per-frame allocations during drag operations.
+## Execution Roadmap
 
-### [x] Optimize Filtering and Search
-- Store labels in the asset metadata cache, updating only on label mutations or asset imports/deletes.
-- Rework label filtering to operate on cached label sets using pooled `HashSet<string>` instances; only fetch live objects for the final result list.
-- Convert the recursive reflection search to use compiled accessors from `ReflectionHelpers` and an iterative pool-backed traversal queue to eliminate repeated allocations and recursion depth risks.
-- Expand search results past the first 25 items with pagination or a "show all" toggle, and expose counts so users know if results are truncated.
+### Priority 0 – Safeguards and Baseline
+1. Document feature inventory and critical user journeys (type selection, object creation, label editing, processor execution, search, drag reorder) with before screenshots or recordings.
+2. Expand editor test scaffolding to open the window in isolation and simulate interactions. Stub `AssetDatabase` with test assets to capture current behavior for regression detection.
+3. Profile representative workflows to capture GC allocations and latency; store metrics to verify improvements (drag reorder, search, namespace collapse toggles).
+4. Freeze public API by exporting current assembly public surface (via `dotnet` reflection or Unity API analyzer) to track changes and update `package.json` intentionally when necessary.
 
-### Streamline Reordering and Processors
-- Update drag-and-drop reordering to mutate the cached GUID order and refresh just the affected range (using `ListView.RefreshItem`).
-- When invoking processors, supply pooled arrays from the new pooling helpers and only call `AssetDatabase.SaveAssets()` if any processor reports modifications.
-- Capture processor runtimes with pooled stopwatches and log slow runs (optional profiling toggle).
+### Priority 1 – Core Abstractions and Infrastructure
+1. Introduce `VisualizerSessionState` (selection, pagination, highlighted indices, popover status) as a serializable record under `Editor/DataVisualizer/State/`. Replace scattered fields in `DataVisualizer` with this state container.
+2. Wrap persistence logic in `IUserStateRepository` with two implementations: `SettingsAssetStateRepository` and `JsonUserStateRepository`. `DataVisualizer` asks the repository to load/save; persistence code no longer leaks into controllers.
+3. Extract `AssetIndex` responsibilities behind `IDataAssetService`, which exposes typed queries (`GetTypeMetadata`, `Rebuild`, `RefreshGuid`, `EnumerateLabels`). Ensure service batches index rebuilds and exposes change events.
+4. Build `DataVisualizerDependencies` (factory or simple struct) to gather services and share them via dependency injection when constructing controllers.
+5. Update `DataVisualizer` to use the new services/state container while still driving existing UI to guarantee behavior parity.
 
-### Robust Persistence and State Handling
-- Introduce a debounced persistence service that batches changes (namespace/type order, filters, label edits) and writes JSON/settings after a short idle period or on window close.
-- Harden `DirectoryHelper.AbsoluteToUnityRelativePath` logic and validate sanitized paths early to prevent incorrect asset moves/creations.
-- Ensure asset deletion detection uses GUID/type metadata so refreshes happen even when the asset no longer exists on disk.
+### Priority 2 – Namespace and Type Pane
+1. Create `NamespacePanelController` with ownership of namespace list visual elements, selection handling, reordering, and collapse state. Inject `IDataAssetService`, `IUserStateRepository`, and `VisualizerSessionState`.
+2. Move namespace-specific persistence into the controller, raising `TypeSelectionChanged` events via the event hub instead of calling `DataVisualizer` methods directly.
+3. Simplify `NamespaceController` by either rewriting it atop the new architecture or replacing it with `NamespacePanelController`. Remove direct access to `DataVisualizer` internals (`_scriptableObjectTypes`, `_namespaceOrder`).
+4. Ensure namespace rebuilds diff against cached state to minimize UI churn, keeping performance characteristics.
 
-### UX Enhancements
-- Keep search popover stateful (keyboard navigation, focus) without reallocating UI elements every keystroke; reuse pooled `VisualElement` instances.
-- Surface attribute requirements (for example, `CustomDataVisualizationAttribute`) in the type-add popover, possibly with quick actions to add attribute snippets.
-- Provide user feedback when long operations (bulk label updates, processors) run, using pooled overlays or progress bars to avoid GC pressure.
-- Fix move action button styling to match the circular appearance used for clone/rename/delete controls.
+### Priority 3 – Object List and Selection
+1. Introduce `ObjectListController` that owns the `ListView`, pagination header, and drag reorder behavior. It consumes `IDataAssetService` metadata and emits commands (`CloneRequested`, `RenameRequested`, etc.) through the event hub.
+2. Create `ObjectSelectionService` to manage `_selectedObjects`, `_selectedObject`, and associated metadata (GUID tracking, highlight index). This reduces shared mutable collections.
+3. Refactor object command handlers (clone, rename, move, delete) into dedicated command classes or strategies (`IObjectCommand`) scoped to services for file operations, keeping UI logic clean.
+4. Preserve `ListView` virtualization and pooling while ensuring row binding pulls metadata lazily and reuses row view models to maintain performance.
 
-## Performance and Correctness Opportunities
-- Measure key operations (initial scan, search, filter, reorder) with the new instrumentation to baseline improvements; target zero GC allocations in steady-state interactions.
-- Explore background GUID refresh via `EditorApplication.delayCall` to keep the UI responsive during large project scans.
-- Cache `SerializedObject` instances per GUID with version checks to reuse inspector state without rescan when practical.
+### Priority 4 – Inspector, Labels, and Filters
+1. Extract label management into `LabelPanelController` (UI) and `ILabelService` (data). Consolidate label caches, suggestion popovers, and AND/OR filter logic within these components.
+2. Move label filter state into `LabelFilterState`, stored within `VisualizerSessionState`. Provide change notifications so object list refreshes only when filters change.
+3. Introduce `LabelSuggestionProvider` that builds suggestions from `IDataAssetService` and supports incremental refresh to keep UI responsive.
+4. Update inspector integration to construct serialized objects via a helper (`InspectorBindingService`), disposing them responsibly and handling Odin integration with feature flags.
 
-## Automated Testing Plan
+### Priority 5 – Processor Pipeline
+1. Create `ProcessorPanelController` for building the processor list UI, toggles, and execution actions. It observes current selection and filter state via the event hub.
+2. Add `IProcessorRegistry` to surface available `IDataProcessor` implementations, caching instances and capabilities. `ProcessorPanelController` uses the registry instead of re-creating instances in `DataVisualizer.OnEnable`.
+3. Introduce `ProcessorExecutionService` to run processors asynchronously or with progress reporting, ensuring results update the state and trigger asset refreshes efficiently.
+4. Incorporate performance telemetry (duration, allocations) via opt-in diagnostics stored in `VisualizerSessionState` for future debugging.
 
-### Runtime Tests (`Tests/Runtime/`)
-- **BufferPoolsTests**: verify pool reuse, capacity guarantees, and disposal for `List`, `HashSet`, `Array`, and `Stopwatch` helpers.
-- **DirectoryHelperTests**: confirm path sanitization and Unity-relative conversion logic with edge cases (project root, nested folders, invalid input).
+### Priority 6 – Search and Popovers
+1. Split search responsibilities into `SearchService` (indexing, fuzzy match, highlight data) and `SearchPopoverController` (UI). Use pooled builders and limit allocations during typing.
+2. Generalize popover handling with a `PopoverManager` managing active popovers, focus restoration, and drag interactions. Replace direct `_activePopover`, `_popoverContext`, `_isDraggingPopover` fields with managed state objects.
+3. Ensure search results and popovers rely on immutable view models for clarity and testability.
 
-### Editor Tests (`Tests/Editor/`)
-- **AssetIndexTests**: simulate asset import/delete/label changes using `AssetDatabase` APIs in a temporary folder; assert caches update without loading live objects unnecessarily.
-- **LabelFilteringTests**: feed synthetic cached metadata and ensure AND/OR combinations handle empty, large, and duplicate label sets while keeping allocations stable (use Unity GC allocation tracking).
-- **SearchServiceTests**: mock metadata with nested structures to cover reflection search depth, circular references, and pagination boundaries.
-- **ListViewIntegrationTests**: instantiate the editor window in edit-mode tests, populate fake assets, and verify scroll position, selection persistence, and drag reorder state using UI Toolkit test helpers.
-- **ProcessorInvocationTests**: register a stub processor that records inputs; run it against filtered selections to confirm logic respects filter mode and that saves trigger only when required.
-- **PersistenceDebounceTests**: invoke multiple state mutations within short intervals and assert only one disk write occurs, plus a final flush on window close.
+### Priority 7 – Drag and Drop, Input, and Layout
+1. Centralize drag state in `DragAndDropController`, coordinating namespace/type/object drags via the event hub. This controller can reuse pooled visuals and handle keyboard modifiers consistently.
+2. Introduce `InputShortcutController` to register global key bindings and dispatch high-level commands (NextType, PreviousType, ExecuteSearchConfirm) without referencing UI internals.
+3. Extract layout persistence (split view widths, window size) into `LayoutPersistenceService`, debouncing writes and exposing load/save methods invoked by the window lifecycle.
 
-### Performance Guardrails
-- Add targeted allocation tests with `UnityEngine.Profiling.Recorder` or `GC.AllocRecorder` around search/filter/rebuild flows to enforce zero-allocation regressions.
-- Use large synthetic datasets (thousands of GUID entries) to confirm responsiveness and ensure caching keeps load times within acceptable bounds.
+### Priority 8 – Cleanup and API Hardening
+1. Remove obsolete fields and methods from `DataVisualizer`, exposing only minimal internal APIs needed by controllers. Update `package.json` if public surface changes.
+2. Delete legacy helper methods that migrated into services, ensuring old code paths are gone and tests cover new flows.
+3. Review accessibility of new types (`internal sealed` within editor assembly) and ensure runtime contracts remain stable.
+4. Update documentation (`README.md`) and AGENTS guidelines to reflect new architecture and extension points.
 
-## Additional Suggestions
-- Track before-and-after profiling snapshots in documentation to demonstrate improvements and guard against regressions.
-- Consider exposing a developer "Diagnostics" mode in the window that displays cache status, recent asset events, and per-operation timings.
-- Schedule regular CSharpier runs and include the new pooling files in style enforcement to keep formatting consistent.
+## Testing and Verification Strategy
+- Expand edit mode tests to cover each controller via mocked services, asserting UI state changes without touching `AssetDatabase` when possible.
+- Add integration tests that instantiate the window, inject fake services, and simulate user flows (type switch, label changes, processor run) to guard against regression.
+- Add performance guard tests using Unity profiling APIs to confirm drag reorder, search updates, and namespace rebuilds remain allocation-free or within budget.
+- Run targeted manual validation (large projects, thousands of assets) after each major phase to ensure responsiveness.
+
+## Risks and Mitigations
+- **Risk: Behavior changes during incremental extraction.** Mitigate by pairing each refactor with regression tests and shipping behind feature toggles where feasible.
+- **Risk: Service abstractions adding overhead.** Keep interfaces lean, pass pooled data structures, and ensure controllers operate on cached metadata to avoid unnecessary allocations.
+- **Risk: Editor-only dependencies leaking into runtime.** Constrain new types to editor assemblies via `.asmdef` updates and enforce editor namespace usage in CI.
+- **Risk: Public API drift.** Monitor API reports and coordinate `package.json` version updates with documentation to alert downstream consumers.
+
+## Follow-Up Opportunities
+- Add a diagnostics overlay powered by the new event hub to display cache status, processor runtimes, and recent asset changes for developers.
+- Evaluate moving reusable services (asset indexing, label suggestions) into separate packages for reuse across editor tooling.
+- Consider asynchronous asset scanning using background tasks once services encapsulate data access, further improving editor responsiveness.
