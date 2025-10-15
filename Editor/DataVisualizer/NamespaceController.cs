@@ -439,6 +439,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                     typeLabel.AddToClassList(StyleConstants.ClickableClass);
                     typeItem.Add(typeLabel);
 
+                    if (type == _selectedType)
+                    {
+                        namespaceGroupItem.AddToClassList(StyleConstants.SelectedClass);
+                        typeItem.AddToClassList(StyleConstants.SelectedClass);
+                        typeLabel.RemoveFromClassList(StyleConstants.ClickableClass);
+                    }
+
                     // ReSharper disable once HeapView.CanAvoidClosure
                     typeItem.RegisterCallback<PointerDownEvent>(evt =>
                         dataVisualizer.OnTypePointerDown(namespaceGroupItem, evt)
