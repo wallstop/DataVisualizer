@@ -332,7 +332,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             {
                 style =
                 {
-                    color = _dataVisualizer.IsColorDark(labelColor) ? Color.white : Color.black,
+                    color = DataVisualizer.IsColorDark(labelColor) ? Color.white : Color.black,
                     marginRight =
                         currentSection == DataVisualizer.LabelFilterSection.AND
                         || currentSection == DataVisualizer.LabelFilterSection.OR
