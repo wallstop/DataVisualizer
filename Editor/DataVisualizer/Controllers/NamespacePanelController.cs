@@ -48,6 +48,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 CacheNamespaceStructure();
             }
 
+            WireNamespaceInteractions();
             SynchronizeNamespaceState();
         }
 
@@ -160,6 +161,123 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     return changed;
                 }
             );
+        }
+
+        private void WireNamespaceInteractions()
+        {
+            VisualElement container = _dataVisualizer._namespaceListContainer;
+            if (container == null)
+            {
+                return;
+            }
+
+            foreach (VisualElement namespaceGroup in container.Children())
+            {
+                namespaceGroup.UnregisterCallback<PointerDownEvent>(HandleNamespacePointerDown);
+                namespaceGroup.RegisterCallback<PointerDownEvent>(HandleNamespacePointerDown);
+
+                string namespaceKey = namespaceGroup.userData as string;
+                if (string.IsNullOrWhiteSpace(namespaceKey))
+                {
+                    continue;
+                }
+
+                Label indicator = namespaceGroup.Q<Label>($"namespace-indicator-{namespaceKey}");
+                if (indicator != null)
+                {
+                    indicator.UnregisterCallback<PointerDownEvent>(HandleIndicatorPointerDown);
+                    indicator.RegisterCallback<PointerDownEvent>(HandleIndicatorPointerDown);
+                }
+
+                VisualElement typesContainer = namespaceGroup.Q<VisualElement>(
+                    $"types-container-{namespaceKey}"
+                );
+                if (typesContainer == null)
+                {
+                    continue;
+                }
+
+                foreach (VisualElement typeElement in typesContainer.Children())
+                {
+                    typeElement.UnregisterCallback<PointerDownEvent>(HandleTypePointerDown);
+                    typeElement.RegisterCallback<PointerDownEvent>(HandleTypePointerDown);
+                    typeElement.UnregisterCallback<PointerUpEvent>(HandleTypePointerUp);
+                    typeElement.RegisterCallback<PointerUpEvent>(HandleTypePointerUp);
+                }
+            }
+        }
+
+        private void HandleNamespacePointerDown(PointerDownEvent evt)
+        {
+            _dataVisualizer.OnNamespacePointerDown(evt);
+        }
+
+        private void HandleIndicatorPointerDown(PointerDownEvent evt)
+        {
+            if (evt.button != 0)
+            {
+                return;
+            }
+
+            if (evt.currentTarget is not VisualElement indicator)
+            {
+                return;
+            }
+
+            VisualElement header = indicator.parent;
+            VisualElement namespaceGroup = header?.parent;
+            string namespaceKey = namespaceGroup?.userData as string;
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return;
+            }
+
+            ToggleNamespaceCollapse(namespaceKey);
+            evt.StopPropagation();
+        }
+
+        private void HandleTypePointerDown(PointerDownEvent evt)
+        {
+            if (evt.currentTarget is not VisualElement typeElement)
+            {
+                return;
+            }
+
+            VisualElement typesContainer = typeElement.parent;
+            VisualElement namespaceGroup = typesContainer?.parent;
+            if (namespaceGroup == null)
+            {
+                return;
+            }
+
+            _dataVisualizer.OnTypePointerDown(namespaceGroup, evt);
+        }
+
+        private void HandleTypePointerUp(PointerUpEvent evt)
+        {
+            if (evt.button != 0)
+            {
+                return;
+            }
+
+            if (_dataVisualizer._isDragging)
+            {
+                return;
+            }
+
+            if (evt.currentTarget is not VisualElement typeElement)
+            {
+                return;
+            }
+
+            Type selectedType = typeElement.userData as Type;
+            if (selectedType == null)
+            {
+                return;
+            }
+
+            _namespaceController.SelectType(_dataVisualizer, selectedType);
+            evt.StopPropagation();
         }
 
         private bool NamespaceStructureChanged()

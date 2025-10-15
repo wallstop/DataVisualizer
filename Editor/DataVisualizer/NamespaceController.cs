@@ -229,9 +229,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 namespaceListContainer.Add(namespaceGroupItem);
-                namespaceGroupItem.RegisterCallback<PointerDownEvent>(
-                    dataVisualizer.OnNamespacePointerDown
-                );
 
                 VisualElement header = new() { name = $"namespace-header-{key}" };
                 header.AddToClassList(StyleConstants.NamespaceHeaderClass);
@@ -359,9 +356,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     false
                 );
 
-                // ReSharper disable once HeapView.CanAvoidClosure
-                indicator.RegisterCallback<PointerDownEvent>(ToggleNamespace);
-
                 // ReSharper disable once ForCanBeConvertedToForeach
                 for (int i = 0; i < types.Count; i++)
                 {
@@ -442,22 +436,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                         typeLabel.RemoveFromClassList(StyleConstants.ClickableClass);
                     }
 
-                    // ReSharper disable once HeapView.CanAvoidClosure
-                    typeItem.RegisterCallback<PointerDownEvent>(evt =>
-                        dataVisualizer.OnTypePointerDown(namespaceGroupItem, evt)
-                    );
-                    // ReSharper disable once HeapView.CanAvoidClosure
-                    typeItem.RegisterCallback<PointerUpEvent>(evt =>
-                    {
-                        if (dataVisualizer._isDragging || evt.button != 0)
-                        {
-                            return;
-                        }
-
-                        SelectType(dataVisualizer, type);
-                        evt.StopPropagation();
-                    });
-
                     if (isRemovableType)
                     {
                         Button typeRemoveButton = null;
@@ -491,42 +469,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 continue;
-
-                void ToggleNamespace(PointerDownEvent evt)
-                {
-                    if (evt.button != 0 || evt.propagationPhase == PropagationPhase.TrickleDown)
-                    {
-                        return;
-                    }
-
-                    VisualElement parentGroup = header.parent;
-                    Label associatedIndicator = parentGroup?.Q<Label>(
-                        className: StyleConstants.NamespaceIndicatorClass
-                    );
-                    VisualElement associatedTypesContainer = parentGroup?.Q<VisualElement>(
-                        $"types-container-{namespaceKey}"
-                    );
-                    string nsKey = parentGroup?.userData as string;
-
-                    if (
-                        associatedIndicator != null
-                        && associatedTypesContainer != null
-                        && !string.IsNullOrWhiteSpace(nsKey)
-                    )
-                    {
-                        bool currentlyCollapsed =
-                            associatedTypesContainer.style.display == DisplayStyle.None;
-                        bool newCollapsedState = !currentlyCollapsed;
-
-                        ApplyNamespaceCollapsedState(
-                            dataVisualizer,
-                            associatedIndicator,
-                            associatedTypesContainer,
-                            newCollapsedState,
-                            true
-                        );
-                    }
-                }
             }
         }
 
