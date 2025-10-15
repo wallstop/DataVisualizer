@@ -12,15 +12,15 @@ namespace WallstopStudios.DataVisualizer.Editor
 
     public sealed class NamespaceController
     {
-        private const string TypeItemLabelName = "type-item-label";
+        internal const string TypeItemLabelName = "type-item-label";
 
         public Type SelectedType => _selectedType;
 
         internal readonly Dictionary<Type, VisualElement> _namespaceCache = new();
 
-        private readonly Dictionary<string, List<Type>> _managedTypes;
-        private readonly Dictionary<string, int> _namespaceOrder;
-        private Type _selectedType;
+        internal readonly Dictionary<string, List<Type>> _managedTypes;
+        internal readonly Dictionary<string, int> _namespaceOrder;
+        internal Type _selectedType;
 
         public NamespaceController(
             Dictionary<string, List<Type>> managedTypes,
@@ -72,7 +72,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             SelectType(dataVisualizer, type);
         }
 
-        private bool InternalDeselectAndGetCurrentIndex(
+        internal bool InternalDeselectAndGetCurrentIndex(
             out VisualElement parent,
             out int currentIndex
         )
@@ -96,7 +96,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             return true;
         }
 
-        private static Type InternalSelected(VisualElement parent, int index)
+        internal static Type InternalSelected(VisualElement parent, int index)
         {
             if (0 > index || index >= parent.childCount)
             {
@@ -527,7 +527,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private bool TryGet(Type type, out VisualElement element)
+        internal bool TryGet(Type type, out VisualElement element)
         {
             if (type != null)
             {
@@ -538,7 +538,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             return false;
         }
 
-        private static void SaveNamespaceAndTypeSelectionState(
+        internal static void SaveNamespaceAndTypeSelectionState(
             DataVisualizer dataVisualizer,
             string namespaceKey,
             Type type
@@ -566,7 +566,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private static void SetLastSelectedTypeName(
+        internal static void SetLastSelectedTypeName(
             DataVisualizer dataVisualizer,
             string typeFullName
         )
@@ -605,7 +605,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        private static void SetLastSelectedNamespaceKey(DataVisualizer dataVisualizer, string value)
+        internal static void SetLastSelectedNamespaceKey(
+            DataVisualizer dataVisualizer,
+            string value
+        )
         {
             dataVisualizer.PersistSettings(
                 settings =>
@@ -641,7 +644,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        private static bool TryGetNamespace(
+        internal static bool TryGetNamespace(
             VisualElement typeElement,
             out VisualElement namespaceElement
         )
@@ -650,7 +653,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             return namespaceElement != null;
         }
 
-        private static void ApplyNamespaceCollapsedState(
+        internal static void ApplyNamespaceCollapsedState(
             DataVisualizer dataVisualizer,
             Label indicator,
             VisualElement typesContainer,
@@ -681,7 +684,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             SetIsNamespaceCollapsed(dataVisualizer, namespaceKey, collapsed);
         }
 
-        private static void SetIsNamespaceCollapsed(
+        internal static void SetIsNamespaceCollapsed(
             DataVisualizer dataVisualizer,
             string namespaceKey,
             bool isCollapsed
@@ -719,7 +722,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        private static bool GetIsNamespaceCollapsed(
+        internal static bool GetIsNamespaceCollapsed(
             DataVisualizer dataVisualizer,
             string namespaceKey
         )
@@ -747,7 +750,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void HandleRemoveNamespaceTypesConfirmed(
+        internal void HandleRemoveNamespaceTypesConfirmed(
             DataVisualizer dataVisualizer,
             string namespaceKey,
             List<Type> typesToRemove
@@ -786,7 +789,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void HandleRemoveTypeConfirmed(DataVisualizer dataVisualizer, Type typeToRemove)
+        internal void HandleRemoveTypeConfirmed(DataVisualizer dataVisualizer, Type typeToRemove)
         {
             if (!IsTypeRemovable(typeToRemove))
             {
@@ -814,7 +817,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private static void PersistManagedTypesList(
+        internal static void PersistManagedTypesList(
             DataVisualizer dataVisualizer,
             List<string> managedList
         )
@@ -833,7 +836,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        private static void RemoveTypeOrderEntry(
+        internal static void RemoveTypeOrderEntry(
             DataVisualizer dataVisualizer,
             string namespaceKey,
             string typeName
