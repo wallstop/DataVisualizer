@@ -140,9 +140,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             foreach (string namespaceKey in _dataVisualizer.GetNamespaceKeys())
             {
                 IReadOnlyList<Type> types = _dataVisualizer.GetTypesForNamespace(namespaceKey);
-                if (types.Contains(type))
+                for (int index = 0; index < types.Count; index++)
                 {
-                    return namespaceKey;
+                    if (types[index] == type)
+                    {
+                        return namespaceKey;
+                    }
                 }
             }
 

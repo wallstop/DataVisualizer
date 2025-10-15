@@ -445,7 +445,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectListController ??= new ObjectListController(
                 this,
                 _objectSelectionService,
-                _sessionState
+                _sessionState,
+                _eventHub
             );
             _objectCommandService ??= new Services.ObjectCommandService(this);
             _labelService ??= new Services.LabelService(this);
