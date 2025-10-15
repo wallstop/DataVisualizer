@@ -4784,114 +4784,38 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal bool CanCollapseAdvancedLabelConfiguration()
         {
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (config == null)
-            {
-                return true;
-            }
-
-            return _andOrToggle.IsLeftSelected && config.orLabels.Count == 0;
+            EnsureLabelSubsystems();
+            return _labelPanelController.CanCollapseAdvancedConfiguration();
         }
 
         internal bool CanCollapseLabels()
         {
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (config == null)
-            {
-                return true;
-            }
-
-            return config.andLabels.Count == 0 && config.orLabels.Count == 0;
+            EnsureLabelSubsystems();
+            return _labelPanelController.CanCollapseLabels();
         }
 
         internal void ToggleLabelsAdvancedCollapsed(bool isCollapsed)
         {
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (
-                config != null
-                && config.isAdvancedCollapsed != isCollapsed
-                && (!isCollapsed || CanCollapseAdvancedLabelConfiguration())
-            )
-            {
-                config.isAdvancedCollapsed = isCollapsed;
-                SaveLabelFilterConfig(config);
-            }
-
-            UpdateAdvancedClickableState();
-            if (_logicalGrouping != null)
-            {
-                _logicalGrouping.style.display =
-                    config?.isAdvancedCollapsed ?? true ? DisplayStyle.None : DisplayStyle.Flex;
-            }
+            EnsureLabelSubsystems();
+            _labelPanelController.ToggleLabelsAdvancedCollapsed(isCollapsed);
         }
 
         internal void UpdateAdvancedClickableState()
         {
-            if (_labelAdvancedCollapseToggle != null)
-            {
-                _labelAdvancedCollapseToggle.EnableInClassList(
-                    StyleConstants.ClickableClass,
-                    CanCollapseAdvancedLabelConfiguration()
-                );
-                bool isCollapsed = CurrentTypeLabelFilterConfig?.isAdvancedCollapsed ?? true;
-                _labelAdvancedCollapseToggle.text = isCollapsed
-                    ? StyleConstants.ArrowCollapsed
-                    : StyleConstants.ArrowExpanded;
-                _labelAdvancedCollapseToggle.tooltip =
-                    isCollapsed ? "Explore advanced boolean label logic"
-                    : CanCollapseAdvancedLabelConfiguration() ? "Hide advanced boolean logic"
-                    : "Can not un-collapse due to either OR toggle or OR labels";
-            }
+            EnsureLabelSubsystems();
+            _labelPanelController.UpdateAdvancedClickableState();
         }
 
         internal void UpdateLabelsCollapsedClickableState()
         {
-            if (_labelCollapseToggle != null)
-            {
-                _labelCollapseToggle.EnableInClassList(
-                    StyleConstants.ClickableClass,
-                    CanCollapseLabels()
-                );
-
-                bool isCollapsed = CurrentTypeLabelFilterConfig?.isCollapsed ?? true;
-                _labelCollapseToggle.text = isCollapsed
-                    ? StyleConstants.ArrowCollapsed
-                    : StyleConstants.ArrowExpanded;
-
-                _labelCollapseToggle.tooltip =
-                    isCollapsed ? "Explore label filtering logic"
-                    : CanCollapseAdvancedLabelConfiguration() ? "Hide label filtering logic"
-                    : "Can not un-collapse due to populated label configuration";
-            }
+            EnsureLabelSubsystems();
+            _labelPanelController.UpdateLabelsCollapsedClickableState();
         }
 
         internal void ToggleLabelsCollapsed(bool isCollapsed)
         {
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (
-                config != null
-                && config.isCollapsed != isCollapsed
-                && (!isCollapsed || CanCollapseLabels())
-            )
-            {
-                config.isCollapsed = isCollapsed;
-                SaveLabelFilterConfig(config);
-            }
-
-            UpdateLabelsCollapsedClickableState();
-            if (_labels != null)
-            {
-                _labels.text =
-                    config?.isCollapsed ?? true
-                        ? $"Labels (<b><color=yellow>{_currentUniqueLabelsForType.Count}</color></b>)"
-                        : "Labels";
-            }
-
-            if (_labelFilterSelectionRoot != null)
-            {
-                _labelFilterSelectionRoot.style.display =
-                    config?.isCollapsed ?? true ? DisplayStyle.None : DisplayStyle.Flex;
-            }
+            EnsureLabelSubsystems();
+            _labelPanelController.ToggleLabelsCollapsed(isCollapsed);
         }
 
         internal VisualElement CreateInspectorColumn()
@@ -5183,53 +5107,14 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal List<string> GetCurrentlyAvailableLabels()
         {
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (config == null)
-            {
-                return _currentUniqueLabelsForType.ToList();
-            }
-
-            return _currentUniqueLabelsForType
-                .Where(label =>
-                    !(config.andLabels.Contains(label) && config.orLabels.Contains(label))
-                )
-                .ToList();
+            EnsureLabelSubsystems();
+            return _labelPanelController.GetCurrentlyAvailableLabels();
         }
 
         internal void PopulateLabelPillContainers()
         {
-            List<string> availableLabels = GetCurrentlyAvailableLabels();
-
-            PopulateSingleLabelContainer(
-                _availableLabelsContainer,
-                availableLabels,
-                LabelFilterSection.Available
-            );
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (config != null)
-            {
-                PopulateSingleLabelContainer(
-                    _andLabelsContainer,
-                    config.andLabels,
-                    LabelFilterSection.AND
-                );
-                PopulateSingleLabelContainer(
-                    _orLabelsContainer,
-                    config.orLabels,
-                    LabelFilterSection.OR
-                );
-            }
-
-            if (_labelFilterSelectionRoot is { parent: not null })
-            {
-                _labelFilterSelectionRoot.parent.style.display =
-                    availableLabels.Count != 0 ? DisplayStyle.Flex : DisplayStyle.None;
-            }
-            if (_labelCollapseRow != null)
-            {
-                _labelCollapseRow.style.display =
-                    availableLabels.Count != 0 ? DisplayStyle.Flex : DisplayStyle.None;
-            }
+            EnsureLabelSubsystems();
+            _labelPanelController.PopulateLabelPillContainers();
         }
 
         internal void PopulateSingleLabelContainer(
@@ -5238,20 +5123,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             LabelFilterSection section
         )
         {
-            if (container == null)
-            {
-                return;
-            }
-            container.Clear();
-            if (labels == null)
-            {
-                return;
-            }
-
-            foreach (string labelText in labels.OrderBy(label => label))
-            {
-                container.Add(CreateLabelPill(labelText, section));
-            }
+            EnsureLabelSubsystems();
+            _labelPanelController.PopulateSingleLabelContainer(container, labels, section);
         }
 
         internal VisualElement CreateLabelPill(string labelText, LabelFilterSection currentSection)
@@ -7501,6 +7374,23 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _userStateRepository = new DefaultUserStateRepository(_userStateFilePath);
+        }
+
+        private void EnsureLabelSubsystems()
+        {
+            if (_labelService == null)
+            {
+                _labelService = new LabelService(this);
+            }
+
+            if (_labelPanelController == null)
+            {
+                _labelPanelController = new LabelPanelController(
+                    this,
+                    _labelService,
+                    _sessionState
+                );
+            }
         }
 
         internal void UpdateCreateObjectButtonStyle()

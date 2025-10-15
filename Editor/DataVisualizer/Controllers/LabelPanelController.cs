@@ -333,10 +333,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 style =
                 {
                     color = _dataVisualizer.IsColorDark(labelColor) ? Color.white : Color.black,
-                    marginRight = currentSection == DataVisualizer.LabelFilterSection.AND
+                    marginRight =
+                        currentSection == DataVisualizer.LabelFilterSection.AND
                         || currentSection == DataVisualizer.LabelFilterSection.OR
-                        ? 2
-                        : 0,
+                            ? 2
+                            : 0,
                 },
             };
             labelElement.AddToClassList("label-pill-text");
@@ -363,16 +364,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             switch (currentSection)
             {
                 case DataVisualizer.LabelFilterSection.Available:
-                    pillContainer.tooltip =
-                        "Drag '" + labelText + "' to an AND/OR filter section.";
+                    pillContainer.tooltip = "Drag '" + labelText + "' to an AND/OR filter section.";
                     break;
                 case DataVisualizer.LabelFilterSection.AND:
-                    pillContainer.tooltip =
-                        "Drag '" + labelText + "' back to Available or OR.";
+                    pillContainer.tooltip = "Drag '" + labelText + "' back to Available or OR.";
                     break;
                 case DataVisualizer.LabelFilterSection.OR:
-                    pillContainer.tooltip =
-                        "Drag '" + labelText + "' back to Available or AND.";
+                    pillContainer.tooltip = "Drag '" + labelText + "' back to Available or AND.";
                     break;
             }
 
