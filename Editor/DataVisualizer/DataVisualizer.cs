@@ -6366,6 +6366,80 @@ namespace WallstopStudios.DataVisualizer.Editor
             return _objectListView?.contentContainer;
         }
 
+        private static ScriptableObject FindObjectByGuid(
+            IEnumerable<ScriptableObject> source,
+            string guid
+        )
+        {
+            if (string.IsNullOrEmpty(guid))
+            {
+                return null;
+            }
+
+            foreach (ScriptableObject candidate in source)
+            {
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                string candidateGuid = GetAssetGuid(candidate);
+                if (string.IsNullOrEmpty(candidateGuid))
+                {
+                    continue;
+                }
+
+                if (string.Equals(candidateGuid, guid, StringComparison.Ordinal))
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        private static string GetAssetGuid(ScriptableObject asset)
+        {
+            if (asset == null)
+            {
+                return string.Empty;
+            }
+
+            string path = AssetDatabase.GetAssetPath(asset);
+            if (string.IsNullOrEmpty(path))
+            {
+                return string.Empty;
+            }
+
+            string guid = AssetDatabase.AssetPathToGUID(path);
+            return string.IsNullOrEmpty(guid) ? string.Empty : guid;
+        }
+
+        private static void RemoveDuplicateObjects(List<ScriptableObject> objects)
+        {
+            if (objects == null)
+            {
+                return;
+            }
+
+            HashSet<string> seenGuids = new HashSet<string>(StringComparer.Ordinal);
+            for (int index = objects.Count - 1; index >= 0; index--)
+            {
+                ScriptableObject candidate = objects[index];
+                string guid = GetAssetGuid(candidate);
+
+                if (string.IsNullOrEmpty(guid))
+                {
+                    continue;
+                }
+
+                if (!seenGuids.Add(guid))
+                {
+                    objects.RemoveAt(index);
+                }
+            }
+        }
+
         private static void UpdateGoButtonState(Button button, bool enabled)
         {
             if (button == null)
@@ -8154,25 +8228,19 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            int displayTargetIndex = Mathf.Clamp(targetIndex, 0, _displayedObjects.Count);
-
-            int globalCurrentIndex = _filteredObjects.IndexOf(draggedObject);
-            if (globalCurrentIndex < 0)
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null)
             {
                 return;
             }
 
             int filteredCount = _filteredObjects.Count;
+            int displayTargetIndex = Mathf.Clamp(targetIndex, 0, _displayedObjects.Count);
             int globalTargetIndex = Mathf.Clamp(
                 _currentDisplayStartIndex + displayTargetIndex,
                 0,
                 filteredCount
             );
-
-            if (globalCurrentIndex < globalTargetIndex)
-            {
-                globalTargetIndex = Mathf.Max(0, globalTargetIndex - 1);
-            }
 
             List<ScriptableObject> filteredWithoutDragged = new(_filteredObjects);
             filteredWithoutDragged.Remove(draggedObject);
@@ -8185,48 +8253,32 @@ namespace WallstopStudios.DataVisualizer.Editor
             ScriptableObject insertAfter =
                 globalTargetIndex > 0 ? filteredWithoutDragged[globalTargetIndex - 1] : null;
 
-            int selectedCurrentIndex = _selectedObjects.IndexOf(draggedObject);
-            if (selectedCurrentIndex < 0)
-            {
-                return;
-            }
+            ObjectOrderHelper.ReorderItem(
+                _filteredObjects,
+                draggedObject,
+                insertBefore,
+                insertAfter
+            );
+            RemoveDuplicateObjects(_filteredObjects);
 
-            _selectedObjects.RemoveAt(selectedCurrentIndex);
+            ObjectOrderHelper.ReorderItem(
+                _selectedObjects,
+                draggedObject,
+                insertBefore,
+                insertAfter
+            );
+            RemoveDuplicateObjects(_selectedObjects);
 
-            bool insertedIntoSelection = false;
-            if (insertBefore != null)
-            {
-                int beforeIndex = _selectedObjects.IndexOf(insertBefore);
-                if (beforeIndex >= 0)
-                {
-                    _selectedObjects.Insert(beforeIndex, draggedObject);
-                    insertedIntoSelection = true;
-                }
-            }
+            UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
 
-            if (!insertedIntoSelection && insertAfter != null)
-            {
-                int afterIndex = _selectedObjects.IndexOf(insertAfter);
-                if (afterIndex >= 0)
-                {
-                    _selectedObjects.Insert(afterIndex + 1, draggedObject);
-                    insertedIntoSelection = true;
-                }
-            }
+            string draggedGuid = GetAssetGuid(draggedObject);
 
-            if (!insertedIntoSelection)
-            {
-                _selectedObjects.Add(draggedObject);
-            }
-
-            Type selectedType = _namespaceController.SelectedType;
-            if (selectedType != null)
-            {
-                UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
-            }
-
+            LoadObjectTypes(selectedType);
+            ApplyLabelFilter(buildObjectsView: false);
             BuildObjectsView();
-            SelectObject(draggedObject);
+
+            ScriptableObject reloadedObject = FindObjectByGuid(_selectedObjects, draggedGuid);
+            SelectObject(reloadedObject ?? draggedObject);
         }
 
         private void StartDragVisuals(Vector2 currentPosition, string dragText)
