@@ -74,6 +74,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             DummyScriptableObject itemThree =
                 ScriptableObject.CreateInstance<DummyScriptableObject>();
 
+            itemOne.name = "One";
+            itemTwo.name = "Two";
+            itemThree.name = "Three";
+
             string itemOnePath = Path.Combine(TestFolderPath, "ItemOne.asset");
             string itemTwoPath = Path.Combine(TestFolderPath, "ItemTwo.asset");
             string itemThreePath = Path.Combine(TestFolderPath, "ItemThree.asset");
@@ -104,7 +108,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 selected.Clear();
                 selected.AddRange(displayed);
 
-                dataVisualizer._selectedObject = itemOne;
+                dataVisualizer._selectedObject = itemThree;
                 dataVisualizer._draggedData = itemOne;
                 dataVisualizer._draggedElement = new VisualElement();
 
@@ -164,6 +168,29 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 CollectionAssert.AreEqual(new[] { itemTwo, itemThree, itemOne }, filtered);
                 CollectionAssert.AreEqual(new[] { itemTwo, itemThree, itemOne }, displayed);
                 CollectionAssert.AreEqual(new[] { itemTwo, itemThree, itemOne }, selected);
+                Assert.AreEqual(1, listView.selectedIndex);
+
+                MethodInfo makeRowMethod = typeof(DataVisualizer)
+                    .GetMethod(
+                        "MakeObjectRow",
+                        BindingFlags.Instance | BindingFlags.NonPublic
+                    );
+                MethodInfo bindRowMethod = typeof(DataVisualizer)
+                    .GetMethod(
+                        "BindObjectRow",
+                        BindingFlags.Instance | BindingFlags.NonPublic
+                    );
+
+                List<string> titles = new List<string>();
+                for (int index = 0; index < displayed.Count; index++)
+                {
+                    VisualElement row = (VisualElement)makeRowMethod.Invoke(dataVisualizer, null);
+                    bindRowMethod.Invoke(dataVisualizer, new object[] { row, index });
+                    Label title = row.Q<Label>(name: "object-item-label");
+                    titles.Add(title?.text ?? string.Empty);
+                }
+
+                Assert.AreEqual(new[] { itemTwo.name, itemThree.name, itemOne.name }, titles);
             }
             finally
             {

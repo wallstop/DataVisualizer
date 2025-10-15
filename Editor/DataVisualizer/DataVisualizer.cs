@@ -6108,6 +6108,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectListView.itemsSource = null;
             _objectListView.itemsSource = _displayedObjects;
             _objectListView.RefreshItems();
+            _objectListView.Rebuild();
 
             if (_selectedObject != null)
             {
@@ -7750,21 +7751,50 @@ namespace WallstopStudios.DataVisualizer.Editor
             return false;
         }
 
-        internal void SelectObject(ScriptableObject dataObject)
+        private void ClearSelectedElementVisuals()
         {
-            if (_selectedObject == dataObject)
+            if (_selectedElement == null)
             {
                 return;
             }
 
-            _selectedElement?.RemoveFromClassList(StyleConstants.SelectedClass);
-            foreach (
-                VisualElement child in _selectedElement?.IterateChildrenRecursively()
-                    ?? Enumerable.Empty<VisualElement>()
-            )
+            _selectedElement.RemoveFromClassList(StyleConstants.SelectedClass);
+            foreach (VisualElement child in _selectedElement.IterateChildrenRecursively())
             {
                 child.EnableInClassList(StyleConstants.ClickableClass, true);
             }
+
+            _selectedElement = null;
+        }
+
+        private void ApplySelectedElementVisuals()
+        {
+            if (_selectedObject == null)
+            {
+                return;
+            }
+
+            if (
+                !_objectVisualElementMap.TryGetValue(
+                    _selectedObject,
+                    out VisualElement mappedElement
+                )
+            )
+            {
+                return;
+            }
+
+            _selectedElement = mappedElement;
+            _selectedElement.AddToClassList(StyleConstants.SelectedClass);
+            foreach (VisualElement child in _selectedElement.IterateChildrenRecursively())
+            {
+                child.EnableInClassList(StyleConstants.ClickableClass, false);
+            }
+        }
+
+        internal void SelectObject(ScriptableObject dataObject)
+        {
+            ClearSelectedElementVisuals();
 
             _selectedObject = dataObject;
             _selectedElement = null;
@@ -7793,21 +7823,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _objectListView.RefreshItems();
             }
 
-            if (
-                _selectedObject != null
-                && _objectVisualElementMap.TryGetValue(
-                    _selectedObject,
-                    out VisualElement newSelectedElement
-                )
-            )
-            {
-                _selectedElement = newSelectedElement;
-                _selectedElement.AddToClassList(StyleConstants.SelectedClass);
-                foreach (VisualElement child in _selectedElement.IterateChildrenRecursively())
-                {
-                    child.EnableInClassList(StyleConstants.ClickableClass, false);
-                }
+            ApplySelectedElementVisuals();
 
+            if (_selectedElement != null)
+            {
                 if (Settings.selectActiveObject)
                 {
                     Selection.activeObject = _selectedObject;
@@ -7816,7 +7835,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ScrollView listScrollView = GetObjectListScrollView();
                 if (listScrollView != null)
                 {
-                    Rect targetElementWorldBound = newSelectedElement.worldBound;
+                    Rect targetElementWorldBound = _selectedElement.worldBound;
                     Rect scrollViewContentViewportWorldBound = listScrollView
                         .contentViewport
                         .worldBound;
