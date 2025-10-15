@@ -345,6 +345,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal ObjectListController _objectListController;
         internal Services.ObjectSelectionService _objectSelectionService;
         internal Services.ObjectCommandService _objectCommandService;
+        internal LabelPanelController _labelPanelController;
+        internal Services.LabelService _labelService;
 
         public DataVisualizer()
         {
@@ -361,6 +363,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _sessionState
             );
             _objectCommandService = new Services.ObjectCommandService(this);
+            _labelService = new Services.LabelService(this);
+            _labelPanelController = new LabelPanelController(this, _labelService, _sessionState);
         }
 
         [MenuItem("Tools/Wallstop Studios/Data Visualizer")]
@@ -416,6 +420,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _sessionState
             );
             _objectCommandService ??= new Services.ObjectCommandService(this);
+            _labelService ??= new Services.LabelService(this);
+            _labelPanelController ??= new LabelPanelController(this, _labelService, _sessionState);
 
             _allDataProcessors.Clear();
             IEnumerable<Type> processorTypes = TypeCache
@@ -4698,156 +4704,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _labelCollapseRow.Add(_labels);
             objectColumn.Add(_labelCollapseRow);
 
-            _labelFilterSelectionRoot = new VisualElement { name = "label-filter-section-root" };
-            _labelFilterSelectionRoot.AddToClassList("label-filter-section-root");
-
-            VisualElement labelContainerContainer = new() { name = "label-container-container" };
-            labelContainerContainer.AddToClassList("label-container-container");
-            objectColumn.Add(labelContainerContainer);
-            labelContainerContainer.Add(_labelFilterSelectionRoot);
-
-            _availableLabelsContainer = new VisualElement { name = "available-labels-container" };
-            _availableLabelsContainer.AddToClassList("label-pill-container");
-            VisualElement availableRow = new() { name = "available-row" };
-            availableRow.AddToClassList("label-row-container");
-            availableRow.AddToClassList("label-row-container--available");
-            availableRow.Add(_availableLabelsContainer);
-            _labelFilterSelectionRoot.Add(availableRow);
-
-            VisualElement andRow = new() { name = "and-filter-row" };
-            andRow.AddToClassList("label-row-container");
-            Label andLabel = new("AND:")
-            {
-                style =
-                {
-                    unityFontStyleAndWeight = FontStyle.Bold,
-                    marginRight = 5,
-                    minWidth = 60,
-                },
-            };
-            andLabel.AddToClassList("label-header");
-            andRow.Add(andLabel);
-            _andLabelsContainer = new VisualElement { name = "and-labels-container" };
-            _andLabelsContainer.AddToClassList("label-pill-container");
-            andRow.Add(_andLabelsContainer);
-            VisualElement advancedRow = new();
-            advancedRow.AddToClassList("advanced-row");
-
-            _labelAdvancedCollapseToggle = new Label();
-            _labelAdvancedCollapseToggle.AddToClassList(StyleConstants.ClickableClass);
-            _labelAdvancedCollapseToggle.AddToClassList("collapse-toggle");
-            _labelAdvancedCollapseToggle.AddToClassList("advanced");
-            _labelAdvancedCollapseToggle.RegisterCallback<PointerDownEvent>(evt =>
-            {
-                if (evt.button != 0)
-                {
-                    return;
-                }
-
-                config = CurrentTypeLabelFilterConfig;
-                if (config == null)
-                {
-                    return;
-                }
-
-                ToggleLabelsAdvancedCollapsed(!config.isAdvancedCollapsed);
-                evt.StopPropagation();
-            });
-            advancedRow.Add(_labelAdvancedCollapseToggle);
-
-            Label advanced = new("Advanced");
-            advanced.AddToClassList("advanced-label");
-            advancedRow.Add(advanced);
-            _labelFilterSelectionRoot.Add(advancedRow);
-            _labelFilterSelectionRoot.Add(andRow);
-
-            _andOrToggle = new HorizontalToggle()
-            {
-                name = "and-or-toggle",
-                LeftText = "AND &&",
-                RightText = "OR ||",
-            };
-            _andOrToggle.AddToClassList("label");
-            _andOrToggle.OnLeftSelected += () =>
-            {
-                _andOrToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
-                _andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, false);
-                _andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, true);
-                config = CurrentTypeLabelFilterConfig;
-                if (config != null && config.combinationType != LabelCombinationType.And)
-                {
-                    config.combinationType = LabelCombinationType.And;
-                    SaveLabelFilterConfig(config);
-                    UpdateLabelAreaAndFilter();
-                }
-            };
-            _andOrToggle.OnRightSelected += () =>
-            {
-                _andOrToggle.Indicator.style.backgroundColor = new Color(1f, 0.5f, 0.3137254902f);
-                _andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, true);
-                _andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, false);
-                config = CurrentTypeLabelFilterConfig;
-                if (config != null && config.combinationType != LabelCombinationType.Or)
-                {
-                    config.combinationType = LabelCombinationType.Or;
-                    SaveLabelFilterConfig(config);
-                    UpdateLabelAreaAndFilter();
-                }
-            };
-            switch (config?.combinationType ?? LabelCombinationType.And)
-            {
-                case LabelCombinationType.And:
-                {
-                    _andOrToggle.SelectLeft(force: true);
-                    break;
-                }
-                case LabelCombinationType.Or:
-                {
-                    _andOrToggle.SelectRight(force: true);
-                    break;
-                }
-            }
-
-            _logicalGrouping = new VisualElement { name = "label-logical-grouping" };
-            _logicalGrouping.AddToClassList("label-logical-grouping");
-            _labelFilterSelectionRoot.Add(_logicalGrouping);
-            _logicalGrouping.Add(_andOrToggle);
-
-            VisualElement orRow = new() { name = "or-filter-row" };
-            orRow.AddToClassList("label-row-container");
-            Label orLabel = new("OR:")
-            {
-                style =
-                {
-                    unityFontStyleAndWeight = FontStyle.Bold,
-                    marginRight = 5,
-                    minWidth = 60,
-                },
-            };
-            orLabel.AddToClassList("label-header");
-            orRow.Add(orLabel);
-            _orLabelsContainer = new VisualElement { name = "or-labels-container" };
-            _orLabelsContainer.AddToClassList("label-pill-container");
-
-            orRow.Add(_orLabelsContainer);
-            _logicalGrouping.Add(orRow);
-
-            _filterStatusLabel = new Label("")
-            {
-                name = "filter-status-label",
-                style =
-                {
-                    color = Color.gray,
-                    alignSelf = Align.Center,
-                    marginTop = 3,
-                    minHeight = 12,
-                },
-            };
-            _labelFilterSelectionRoot.Add(_filterStatusLabel);
-
-            SetupDropTarget(_availableLabelsContainer, LabelFilterSection.Available);
-            SetupDropTarget(_andLabelsContainer, LabelFilterSection.AND);
-            SetupDropTarget(_orLabelsContainer, LabelFilterSection.OR);
+            _labelPanelController.BuildLabelPanel(objectColumn);
 
             _objectPageController = new VisualElement
             {
