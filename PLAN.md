@@ -40,7 +40,7 @@
 
 ### Priority 2 – Namespace and Type Pane
 1. [x] Create `NamespacePanelController` with ownership of namespace list visual elements, selection handling, reordering, and collapse state. Inject `IDataAssetService`, `IUserStateRepository`, and `VisualizerSessionState`.
-2. [~] Move namespace-specific persistence into the controller, raising `TypeSelectionChanged` events via the event hub instead of calling `DataVisualizer` methods directly.
+2. [x] Move namespace-specific persistence into the controller, raising `TypeSelectionChanged` events via the event hub instead of calling `DataVisualizer` methods directly.
 3. Simplify `NamespaceController` by either rewriting it atop the new architecture or replacing it with `NamespacePanelController`. Remove direct access to `DataVisualizer` internals (`_scriptableObjectTypes`, `_namespaceOrder`).
 4. Ensure namespace rebuilds diff against cached state to minimize UI churn, keeping performance characteristics.
 

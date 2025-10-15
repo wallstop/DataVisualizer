@@ -5830,8 +5830,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 this,
                 _namespaceController,
                 _sessionState,
-                _assetService,
-                _userStateRepository,
                 _eventHub
             );
         }

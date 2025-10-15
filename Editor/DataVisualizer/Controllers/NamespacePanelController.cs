@@ -77,7 +77,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
 
             bool collapse = typesContainer.style.display != DisplayStyle.None;
-            _namespaceController.ApplyNamespaceCollapsedState(
+            NamespaceController.ApplyNamespaceCollapsedState(
+                _dataVisualizer,
                 indicator,
                 typesContainer,
                 collapse,
@@ -187,7 +188,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     continue;
                 }
 
-                _namespaceController.ApplyNamespaceCollapsedState(
+                NamespaceController.ApplyNamespaceCollapsedState(
+                    _dataVisualizer,
                     indicator,
                     typesContainer,
                     true,
