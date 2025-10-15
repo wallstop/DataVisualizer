@@ -109,10 +109,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         private void HandleTypeSelected(Type selectedType)
         {
-            string namespaceKey =
-                selectedType != null
-                    ? NamespaceController.GetNamespaceKey(selectedType)
-                    : _sessionState.Selection.SelectedNamespaceKey;
+            string namespaceKey = selectedType != null
+                ? ResolveNamespaceKey(selectedType)
+                : _sessionState.Selection.SelectedNamespaceKey;
 
             if (!string.IsNullOrWhiteSpace(namespaceKey))
             {
@@ -128,6 +127,30 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
 
             _eventHub.Publish(new TypeSelectedEvent(namespaceKey, selectedType));
+        }
+
+        private string ResolveNamespaceKey(Type type)
+        {
+            if (type == null)
+            {
+                return null;
+            }
+
+            foreach (KeyValuePair<string, List<Type>> entry in _dataVisualizer._scriptableObjectTypes)
+            {
+                List<Type> types = entry.Value;
+                if (types == null)
+                {
+                    continue;
+                }
+
+                if (types.Contains(type))
+                {
+                    return entry.Key;
+                }
+            }
+
+            return NamespaceController.GetNamespaceKey(type);
         }
 
         private void PersistSelection(string namespaceKey, string typeFullName)

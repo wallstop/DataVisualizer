@@ -65,6 +65,48 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
         }
 
         [Test]
+        public void CancelDragResetsCursorAndDragState()
+        {
+            DataVisualizer dataVisualizer = ScriptableObject.CreateInstance<DataVisualizer>();
+            try
+            {
+                dataVisualizer.hideFlags = HideFlags.HideAndDontSave;
+
+                VisualElement draggedElement = new();
+                dataVisualizer.rootVisualElement.Add(draggedElement);
+
+                dataVisualizer._draggedElement = draggedElement;
+                dataVisualizer._draggedData = "Dummy";
+                dataVisualizer._dragGhost = new VisualElement();
+                dataVisualizer.rootVisualElement.Add(dataVisualizer._dragGhost);
+                dataVisualizer._inPlaceGhost = new VisualElement();
+                dataVisualizer._activeDragType = DataVisualizer.DragType.Namespace;
+                dataVisualizer._isDragging = true;
+
+                dataVisualizer.StartDragVisuals(Vector2.zero, "Dummy");
+                dataVisualizer.CancelDrag();
+
+                Assert.AreEqual(
+                    DataVisualizer.DragType.None,
+                    dataVisualizer._activeDragType
+                );
+                Assert.IsFalse(dataVisualizer._isDragging);
+                Assert.IsNull(dataVisualizer._draggedElement);
+                Assert.IsNull(dataVisualizer._draggedData);
+                Assert.IsNotNull(dataVisualizer._dragGhost);
+                Assert.AreEqual(
+                    Visibility.Hidden,
+                    dataVisualizer._dragGhost.style.visibility.value
+                );
+                Assert.IsFalse(dataVisualizer.rootVisualElement.ClassListContains("dragging-cursor"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(dataVisualizer);
+            }
+        }
+
+        [Test]
         public void PerformObjectDropMovesFirstItemToEnd()
         {
             DummyScriptableObject itemOne =

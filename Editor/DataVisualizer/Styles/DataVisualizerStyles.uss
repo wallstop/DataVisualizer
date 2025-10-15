@@ -1030,6 +1030,10 @@
     border-radius: 6px;
 }
 
+.dragging-cursor {
+    cursor: move-arrow;
+}
+
 .processor-button {
     margin: 2px 4px;
     padding: 0 4px;

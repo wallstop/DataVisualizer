@@ -6077,6 +6077,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             row.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
             row.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
             row.RegisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
+            row.RegisterCallback<PointerEnterEvent>(OnObjectPointerEnter);
+            row.RegisterCallback<PointerLeaveEvent>(OnObjectPointerLeave);
 
             ObjectRowComponents components = new()
             {
@@ -8151,6 +8153,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            rootVisualElement.AddToClassList("dragging-cursor");
+
             if (_dragGhost == null)
             {
                 _dragGhost = new VisualElement
@@ -8406,6 +8410,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _draggedElement = null;
             _draggedData = null;
             _activeDragType = DragType.None;
+            rootVisualElement.RemoveFromClassList("dragging-cursor");
         }
 
         internal static int NormalizeGhostInsertIndex(
