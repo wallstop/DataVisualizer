@@ -35,6 +35,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         {
             if (_dataVisualizer._objectListView == null)
             {
+                PublishSelectionChanged(null);
                 return;
             }
 
@@ -45,6 +46,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             if (selectedType == null)
             {
                 HandleNoSelectedType();
+                PublishSelectionChanged(null);
                 return;
             }
 
@@ -58,17 +60,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             if (selectedObjects.Count == 0)
             {
                 HandleNoObjectsForSelectedType(selectedType);
+                PublishPageChanged(selectedType);
+                PublishSelectionChanged(null);
                 return;
             }
 
-            if (_dataVisualizer._filteredObjects.Count == 0)
+            if (_dataVisualizer.FilteredMetadata.Count == 0)
             {
                 HandleNoFilteredObjects(selectedType);
+                PublishPageChanged(selectedType);
+                PublishSelectionChanged(null);
                 return;
             }
 
             PrepareListForDisplay();
             UpdateSelectionState();
+            PublishPageChanged(selectedType);
+            PublishSelectionChanged(_dataVisualizer._selectedObject);
         }
 
         public void HandlePreviousPageRequested()
@@ -87,7 +95,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer.SetCurrentPage(selectedType, currentPage - 1);
             BuildObjectsView();
-            PublishPageChanged(selectedType);
         }
 
         public void HandleNextPageRequested()
@@ -99,7 +106,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
 
             int currentPage = _dataVisualizer.GetCurrentPage(selectedType);
-            int maxPage = _dataVisualizer._filteredObjects.Count / DataVisualizer.MaxObjectsPerPage;
+            int maxPage = _dataVisualizer.FilteredMetadata.Count / DataVisualizer.MaxObjectsPerPage;
             if (currentPage >= maxPage)
             {
                 return;
@@ -107,7 +114,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer.SetCurrentPage(selectedType, currentPage + 1);
             BuildObjectsView();
-            PublishPageChanged(selectedType);
         }
 
         public void HandleCurrentPageChanged(int requestedPage)
@@ -118,7 +124,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
-            int maxPage = _dataVisualizer._filteredObjects.Count / DataVisualizer.MaxObjectsPerPage;
+            int maxPage = _dataVisualizer.FilteredMetadata.Count / DataVisualizer.MaxObjectsPerPage;
             int clampedPage = Mathf.Clamp(requestedPage, 0, maxPage);
             if (clampedPage != requestedPage)
             {
@@ -131,7 +137,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer.SetCurrentPage(selectedType, clampedPage);
             BuildObjectsView();
-            PublishPageChanged(selectedType);
         }
 
         public void HandleSelectionChanged(IEnumerable<object> selectedItems)
@@ -158,8 +163,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             if (!ReferenceEquals(firstSelection, _dataVisualizer._selectedObject))
             {
                 _dataVisualizer.SelectObject(firstSelection);
-                PublishSelectionChanged(firstSelection);
             }
+            PublishSelectionChanged(_dataVisualizer._selectedObject);
         }
 
         private void HandleNoSelectedType()
@@ -233,7 +238,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer._objectVisualElementMap.Clear();
 
-            List<ScriptableObject> filtered = _dataVisualizer._filteredObjects;
+            IReadOnlyList<ScriptableObject> filtered = _dataVisualizer.FilteredObjects;
+            IReadOnlyList<DataAssetMetadata> filteredMetadata = _dataVisualizer.FilteredMetadata;
             if (filtered.Count <= DataVisualizer.MaxObjectsPerPage)
             {
                 if (_dataVisualizer._objectPageController != null)
@@ -243,6 +249,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
                 _dataVisualizer._displayedObjects.Clear();
                 _dataVisualizer._displayedObjects.AddRange(filtered);
+                _dataVisualizer._displayedMetadata.Clear();
+                _dataVisualizer._displayedMetadata.AddRange(filteredMetadata);
                 _dataVisualizer._currentDisplayStartIndex = 0;
             }
             else
@@ -294,9 +302,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 );
 
                 _dataVisualizer._displayedObjects.Clear();
+                _dataVisualizer._displayedMetadata.Clear();
                 for (int index = startIndex; index < endIndex; index++)
                 {
                     _dataVisualizer._displayedObjects.Add(filtered[index]);
+                    if (index < filteredMetadata.Count)
+                    {
+                        _dataVisualizer._displayedMetadata.Add(filteredMetadata[index]);
+                    }
                 }
 
                 _dataVisualizer._currentDisplayStartIndex = startIndex;

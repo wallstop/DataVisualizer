@@ -5,6 +5,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
     using System.IO;
     using System.Reflection;
     using Data;
+    using Services;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
@@ -148,6 +149,22 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 List<ScriptableObject> filtered = dataVisualizer._filteredObjects;
                 filtered.Clear();
                 filtered.AddRange(displayed);
+                dataVisualizer._filteredMetadata.Clear();
+                foreach (ScriptableObject obj in filtered)
+                {
+                    string fakePath = $"Assets/TempDataVisualizerDragTests/{obj.name}.asset";
+                    dataVisualizer._filteredMetadata.Add(
+                        new DataAssetMetadata(
+                            System.Guid.NewGuid().ToString(),
+                            fakePath,
+                            obj.GetType(),
+                            obj.GetType().FullName,
+                            obj.name,
+                            System.Array.Empty<string>(),
+                            System.DateTime.UtcNow
+                        )
+                    );
+                }
 
                 List<ScriptableObject> selected = dataVisualizer._selectedObjects;
                 selected.Clear();

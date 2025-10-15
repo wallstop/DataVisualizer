@@ -192,6 +192,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal IDataAssetService _assetService;
         internal readonly List<string> _allManagedObjectGuids = new();
         internal readonly List<ScriptableObject> _displayedObjects = new();
+        internal readonly List<DataAssetMetadata> _filteredMetadata = new();
+        internal readonly List<DataAssetMetadata> _displayedMetadata = new();
+        internal IReadOnlyList<DataAssetMetadata> FilteredMetadata => _filteredMetadata;
+        internal IReadOnlyList<DataAssetMetadata> DisplayedMetadata => _displayedMetadata;
         internal int _currentDisplayStartIndex;
         internal readonly List<VisualElement> _currentSearchResultItems = new();
         internal readonly List<VisualElement> _currentTypePopoverItems = new();
@@ -251,6 +255,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal readonly List<string> _currentUniqueLabelsForType = new();
 
         internal readonly List<ScriptableObject> _filteredObjects = new();
+        internal IReadOnlyList<ScriptableObject> FilteredObjects => _filteredObjects;
         internal readonly Dictionary<string, Color> _textColorCache = new(StringComparer.Ordinal);
 
         internal int _nextColorIndex;
@@ -354,6 +359,14 @@ namespace WallstopStudios.DataVisualizer.Editor
         private IDisposable _typeSelectedSubscription;
         private IDisposable _namespaceRemovalConfirmedSubscription;
         private IDisposable _typeRemovalConfirmedSubscription;
+        private IDisposable _objectMoveToTopSubscription;
+        private IDisposable _objectMoveToBottomSubscription;
+        private IDisposable _objectCloneSubscription;
+        private IDisposable _objectRenameSubscription;
+        private IDisposable _objectMoveSubscription;
+        private IDisposable _objectDeleteSubscription;
+        private IDisposable _namespaceReorderSubscription;
+        private IDisposable _typeReorderSubscription;
 
         public DataVisualizer()
         {
@@ -366,9 +379,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _sessionState,
                 _eventHub
             );
-            _objectCommandService = new Services.ObjectCommandService(this);
+            _objectCommandService = new Services.ObjectCommandService(this, _eventHub);
             _labelService = new Services.LabelService(this);
             _labelPanelController = new LabelPanelController(this, _labelService, _sessionState);
+            EnsureObjectCommandSubscriptions();
         }
 
         [MenuItem("Tools/Wallstop Studios/Data Visualizer")]
@@ -438,8 +452,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             _namespaceRemovalConfirmedSubscription = null;
             _typeRemovalConfirmedSubscription?.Dispose();
             _typeRemovalConfirmedSubscription = null;
+            _objectMoveToTopSubscription?.Dispose();
+            _objectMoveToTopSubscription = null;
+            _objectMoveToBottomSubscription?.Dispose();
+            _objectMoveToBottomSubscription = null;
+            _objectCloneSubscription?.Dispose();
+            _objectCloneSubscription = null;
+            _objectRenameSubscription?.Dispose();
+            _objectRenameSubscription = null;
+            _objectMoveSubscription?.Dispose();
+            _objectMoveSubscription = null;
+            _objectDeleteSubscription?.Dispose();
+            _objectDeleteSubscription = null;
             EnsureTypeSelectedSubscription();
             EnsureRemovalSubscriptions();
+            EnsureObjectCommandSubscriptions();
             EnsureNamespacePanelController();
             _objectSelectionService ??= new Services.ObjectSelectionService(_sessionState);
             _objectListController ??= new ObjectListController(
@@ -448,7 +475,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _sessionState,
                 _eventHub
             );
-            _objectCommandService ??= new Services.ObjectCommandService(this);
+            _objectCommandService ??= new Services.ObjectCommandService(this, _eventHub);
             _labelService ??= new Services.LabelService(this);
             _labelPanelController ??= new LabelPanelController(this, _labelService, _sessionState);
 
@@ -3787,6 +3814,81 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private void ExecuteMoveObject(Button button, ScriptableObject dataObject)
+        {
+            if (button == null || dataObject == null)
+            {
+                return;
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(dataObject);
+            string startDirectory = Path.GetDirectoryName(assetPath);
+            if (string.IsNullOrWhiteSpace(startDirectory))
+            {
+                startDirectory = string.Empty;
+            }
+
+            string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
+                "Select New Location (Must be inside Assets)",
+                startDirectory,
+                string.Empty
+            );
+
+            if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
+            {
+                return;
+            }
+
+            selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
+            string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
+
+            if (!selectedAbsolutePath.StartsWith(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
+            {
+                Debug.LogError("Selected folder must be inside the project's Assets folder.");
+                EditorUtility.DisplayDialog(
+                    "Invalid Folder",
+                    "The selected folder must be inside the project's 'Assets' directory.",
+                    "OK"
+                );
+                return;
+            }
+
+            string relativePath = string.Equals(
+                selectedAbsolutePath,
+                projectAssetsPath,
+                StringComparison.OrdinalIgnoreCase
+            )
+                ? "Assets"
+                : "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+            relativePath = relativePath.Replace("//", "/");
+
+            string targetPath = relativePath + "/" + dataObject.name + ".asset";
+            if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
+            AssetDatabase.SaveAssets();
+            if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                Debug.LogError(
+                    "Error moving asset "
+                        + dataObject.name
+                        + " from '"
+                        + assetPath
+                        + "' to '"
+                        + targetPath
+                        + "': "
+                        + errorMessage
+                );
+                EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
+                return;
+            }
+
+            RefreshMetadataForObject(dataObject);
+        }
+
         internal void OpenConfirmDeletePopover(VisualElement source, ScriptableObject dataObject)
         {
             if (dataObject == null)
@@ -5955,6 +6057,171 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private void EnsureObjectCommandSubscriptions()
+        {
+            if (_eventHub == null)
+            {
+                return;
+            }
+
+            _objectMoveToTopSubscription ??= _eventHub.Subscribe<ObjectMoveToTopRequestedEvent>(HandleObjectMoveToTopRequested);
+            _objectMoveToBottomSubscription ??= _eventHub.Subscribe<ObjectMoveToBottomRequestedEvent>(HandleObjectMoveToBottomRequested);
+            _objectCloneSubscription ??= _eventHub.Subscribe<ObjectCloneRequestedEvent>(HandleObjectCloneRequested);
+            _objectRenameSubscription ??= _eventHub.Subscribe<ObjectRenameRequestedEvent>(HandleObjectRenameRequested);
+            _objectMoveSubscription ??= _eventHub.Subscribe<ObjectMoveRequestedEvent>(HandleObjectMoveRequested);
+            _objectDeleteSubscription ??= _eventHub.Subscribe<ObjectDeleteRequestedEvent>(HandleObjectDeleteRequested);
+            _namespaceReorderSubscription ??= _eventHub.Subscribe<NamespaceReorderRequestedEvent>(HandleNamespaceReorderRequested);
+            _typeReorderSubscription ??= _eventHub.Subscribe<TypeReorderRequestedEvent>(HandleTypeReorderRequested);
+        }
+
+        private void HandleObjectMoveToTopRequested(ObjectMoveToTopRequestedEvent evt)
+        {
+            ScriptableObject dataObject = evt?.DataObject;
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            _filteredObjects.Remove(dataObject);
+            _filteredObjects.Insert(0, dataObject);
+            _selectedObjects.Remove(dataObject);
+            _selectedObjects.Insert(0, dataObject);
+            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+            BuildObjectsView();
+        }
+
+        private void HandleObjectMoveToBottomRequested(ObjectMoveToBottomRequestedEvent evt)
+        {
+            ScriptableObject dataObject = evt?.DataObject;
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            _selectedObjects.Remove(dataObject);
+            _selectedObjects.Add(dataObject);
+            _filteredObjects.Remove(dataObject);
+            _filteredObjects.Add(dataObject);
+            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+            BuildObjectsView();
+        }
+
+        private void HandleObjectCloneRequested(ObjectCloneRequestedEvent evt)
+        {
+            ScriptableObject dataObject = evt?.DataObject;
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            CloneObject(dataObject);
+        }
+
+        private void HandleObjectRenameRequested(ObjectRenameRequestedEvent evt)
+        {
+            if (evt?.Trigger == null || evt.DataObject == null)
+            {
+                return;
+            }
+
+            object property = evt.Trigger.GetProperty(RowComponentsProperty);
+            if (property is not ObjectRowComponents components)
+            {
+                return;
+            }
+
+            OpenRenamePopover(components.TitleLabel, evt.Trigger, evt.DataObject);
+        }
+
+        private void HandleObjectMoveRequested(ObjectMoveRequestedEvent evt)
+        {
+            if (evt?.Trigger == null || evt.DataObject == null)
+            {
+                return;
+            }
+
+            ExecuteMoveObject(evt.Trigger, evt.DataObject);
+        }
+
+        private void HandleNamespaceReorderRequested(NamespaceReorderRequestedEvent evt)
+        {
+            if (evt == null || string.IsNullOrWhiteSpace(evt.NamespaceKey))
+            {
+                return;
+            }
+
+            if (!_namespaceOrder.TryGetValue(evt.NamespaceKey, out int currentIndex))
+            {
+                return;
+            }
+
+            int targetIndex = Mathf.Clamp(evt.TargetIndex, 0, Mathf.Max(0, _namespaceOrder.Count - 1));
+            if (targetIndex == currentIndex)
+            {
+                return;
+            }
+
+            List<KeyValuePair<string, int>> ordered = _namespaceOrder
+                .OrderBy(pair => pair.Value)
+                .ToList();
+            ordered.RemoveAll(pair => pair.Key == evt.NamespaceKey);
+            ordered.Insert(targetIndex, new KeyValuePair<string, int>(evt.NamespaceKey, targetIndex));
+
+            for (int index = 0; index < ordered.Count; index++)
+            {
+                _namespaceOrder[ordered[index].Key] = index;
+            }
+
+            List<string> newOrder = ordered.Select(pair => pair.Key).ToList();
+            SetNamespaceOrder(newOrder);
+            SyncNamespaceChanges();
+        }
+
+        private void HandleTypeReorderRequested(TypeReorderRequestedEvent evt)
+        {
+            if (evt == null || string.IsNullOrWhiteSpace(evt.NamespaceKey) || evt.Type == null)
+            {
+                return;
+            }
+
+            if (!_scriptableObjectTypes.TryGetValue(evt.NamespaceKey, out List<Type> types) || types == null)
+            {
+                return;
+            }
+
+            int currentIndex = types.IndexOf(evt.Type);
+            if (currentIndex < 0)
+            {
+                return;
+            }
+
+            int targetIndex = Mathf.Clamp(evt.TargetIndex, 0, Mathf.Max(0, types.Count - 1));
+            if (targetIndex == currentIndex)
+            {
+                return;
+            }
+
+            types.RemoveAt(currentIndex);
+            if (targetIndex > types.Count)
+            {
+                targetIndex = types.Count;
+            }
+            types.Insert(targetIndex, evt.Type);
+
+            UpdateAndSaveTypeOrder(evt.NamespaceKey, types);
+            SyncNamespaceChanges();
+        }
+
+        private void HandleObjectDeleteRequested(ObjectDeleteRequestedEvent evt)
+        {
+            if (evt?.Trigger == null || evt.DataObject == null)
+            {
+                return;
+            }
+
+            OpenConfirmDeletePopover(evt.Trigger, evt.DataObject);
+        }
+
         private bool RemoveManagedType(Type type)
         {
             if (type == null)
@@ -7278,6 +7545,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _selectedObjects.Clear();
             _objectVisualElementMap.Clear();
+            _filteredMetadata.Clear();
+            _displayedMetadata.Clear();
 
             if (_assetService == null)
             {
@@ -7286,6 +7555,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             List<string> customGuidOrder = GetObjectOrderForType(type);
             Dictionary<string, ScriptableObject> objectsByGuid = new Dictionary<string, ScriptableObject>(
+                StringComparer.OrdinalIgnoreCase
+            );
+            Dictionary<string, DataAssetMetadata> metadataByGuid = new Dictionary<string, DataAssetMetadata>(
                 StringComparer.OrdinalIgnoreCase
             );
             IReadOnlyList<string> indexedGuids = _assetService.GetGuidsForType(type);
@@ -7308,9 +7580,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 objectsByGuid[guid] = asset;
+                metadataByGuid[guid] = metadata;
             }
 
             List<ScriptableObject> sortedObjects = new();
+            List<DataAssetMetadata> sortedMetadata = new();
 
             foreach (string guid in customGuidOrder)
             {
@@ -7318,6 +7592,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     sortedObjects.Add(orderedObject);
                     objectsByGuid.Remove(guid);
+                    if (metadataByGuid.TryGetValue(guid, out DataAssetMetadata orderedMetadata))
+                    {
+                        sortedMetadata.Add(orderedMetadata);
+                        metadataByGuid.Remove(guid);
+                    }
                 }
             }
 
@@ -7342,15 +7621,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                         }
 
                         if (
-                            _assetService != null
-                            && _assetService.TryGetAssetByGuid(
-                                lhs.Key,
-                                out DataAssetMetadata leftMetadata
-                            )
-                            && _assetService.TryGetAssetByGuid(
-                                rhs.Key,
-                                out DataAssetMetadata rightMetadata
-                            )
+                            metadataByGuid.TryGetValue(lhs.Key, out DataAssetMetadata leftMetadata)
+                            && metadataByGuid.TryGetValue(rhs.Key, out DataAssetMetadata rightMetadata)
                         )
                         {
                             return string.Compare(
@@ -7369,6 +7641,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                     if (entry.Value != null)
                     {
                         sortedObjects.Add(entry.Value);
+                        if (metadataByGuid.TryGetValue(entry.Key, out DataAssetMetadata metadata))
+                        {
+                            sortedMetadata.Add(metadata);
+                        }
                     }
                 }
             }
@@ -7378,6 +7654,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _filteredObjects.Clear();
             _filteredObjects.AddRange(sortedObjects);
+            _filteredMetadata.Clear();
+            _filteredMetadata.AddRange(sortedMetadata);
         }
 
         internal void LoadScriptableObjectTypes()
@@ -7942,39 +8220,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 NamespaceController.RecalibrateVisualElements(child);
             }
 
-            int oldDataIndex = _namespaceOrder.GetValueOrDefault(draggedKey, -1);
-            if (0 > oldDataIndex)
-            {
-                return;
-            }
-
-            if (oldDataIndex < targetIndex)
-            {
-                foreach (KeyValuePair<string, int> entry in _namespaceOrder.ToArray())
-                {
-                    if (oldDataIndex < entry.Value && entry.Value <= targetIndex)
-                    {
-                        _namespaceOrder[entry.Key] = entry.Value - 1;
-                    }
-                }
-            }
-            else if (targetIndex < oldDataIndex)
-            {
-                foreach (KeyValuePair<string, int> entry in _namespaceOrder.ToArray())
-                {
-                    if (targetIndex <= entry.Value && entry.Value < oldDataIndex)
-                    {
-                        _namespaceOrder[entry.Key] = entry.Value + 1;
-                    }
-                }
-            }
-            else
-            {
-                return;
-            }
-
-            _namespaceOrder[draggedKey] = Mathf.Clamp(targetIndex, 0, _namespaceOrder.Count - 1);
-            UpdateAndSaveNamespaceOrder();
+            _eventHub?.Publish(new NamespaceReorderRequestedEvent(draggedKey, targetIndex));
         }
 
         internal void UpdateAndSaveNamespaceOrder()
@@ -8069,20 +8315,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 NamespaceController.RecalibrateVisualElements(child);
             }
 
-            int namespaceIndex = _namespaceOrder.GetValueOrDefault(namespaceKey, -1);
-            if (0 <= namespaceIndex)
-            {
-                List<Type> typesList = _scriptableObjectTypes.GetValueOrDefault(namespaceKey, null);
-                int? oldDataIndex = typesList?.IndexOf(draggedType);
-                if (0 <= oldDataIndex)
-                {
-                    typesList.RemoveAt(oldDataIndex.Value);
-                    int dataInsertIndex = targetIndex;
-                    dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, typesList.Count);
-                    typesList.Insert(dataInsertIndex, draggedType);
-                    UpdateAndSaveTypeOrder(namespaceKey, typesList);
-                }
-            }
+            _eventHub?.Publish(new TypeReorderRequestedEvent(namespaceKey, draggedType, targetIndex));
         }
 
         internal void UpdateAndSaveTypeOrder(string namespaceKey, List<Type> orderedTypes)
