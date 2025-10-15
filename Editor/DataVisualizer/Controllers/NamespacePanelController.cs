@@ -13,6 +13,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private readonly NamespaceController _namespaceController;
         private readonly VisualizerSessionState _sessionState;
         private readonly DataVisualizerEventHub _eventHub;
+        private readonly List<string> _lastNamespaceOrder = new List<string>();
+        private readonly Dictionary<string, List<string>> _lastNamespaceTypeOrders = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
         public NamespacePanelController(
             DataVisualizer dataVisualizer,
@@ -37,9 +39,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         public void BuildNamespaceView()
         {
-            VisualElement container = _dataVisualizer._namespaceListContainer;
-            _namespaceController.Build(_dataVisualizer, ref container);
-            _dataVisualizer._namespaceListContainer = container;
+            bool structureChanged = NamespaceStructureChanged();
+            if (structureChanged)
+            {
+                VisualElement container = _dataVisualizer._namespaceListContainer;
+                _namespaceController.Build(_dataVisualizer, ref container);
+                _dataVisualizer._namespaceListContainer = container;
+                CacheNamespaceStructure();
+            }
+
             SynchronizeNamespaceState();
         }
 
@@ -84,7 +92,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 collapse,
                 true
             );
-            _sessionState.Selection.SetNamespaceCollapsed(namespaceKey, collapse);
             _eventHub.Publish(new NamespaceCollapseChangedEvent(namespaceKey, collapse));
         }
 
@@ -153,6 +160,125 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     return changed;
                 }
             );
+        }
+
+        private bool NamespaceStructureChanged()
+        {
+            List<string> desiredNamespaces = BuildDesiredNamespaceOrder();
+            if (desiredNamespaces.Count != _lastNamespaceOrder.Count)
+            {
+                return true;
+            }
+
+            for (int index = 0; index < desiredNamespaces.Count; index++)
+            {
+                if (!string.Equals(desiredNamespaces[index], _lastNamespaceOrder[index], StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            foreach (string namespaceKey in desiredNamespaces)
+            {
+                List<string> desiredTypes = BuildDesiredTypeOrder(namespaceKey);
+                if (!_lastNamespaceTypeOrders.TryGetValue(namespaceKey, out List<string> previousTypes))
+                {
+                    return true;
+                }
+
+                if (desiredTypes.Count != previousTypes.Count)
+                {
+                    return true;
+                }
+
+                for (int index = 0; index < desiredTypes.Count; index++)
+                {
+                    if (!string.Equals(desiredTypes[index], previousTypes[index], StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private void CacheNamespaceStructure()
+        {
+            List<string> desiredNamespaces = BuildDesiredNamespaceOrder();
+            _lastNamespaceOrder.Clear();
+            _lastNamespaceOrder.AddRange(desiredNamespaces);
+
+            _lastNamespaceTypeOrders.Clear();
+            foreach (string namespaceKey in desiredNamespaces)
+            {
+                List<string> desiredTypes = BuildDesiredTypeOrder(namespaceKey);
+                _lastNamespaceTypeOrders[namespaceKey] = desiredTypes;
+            }
+        }
+
+        private List<string> BuildDesiredNamespaceOrder()
+        {
+            Dictionary<string, int> resolvedOrder = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, int> entry in _dataVisualizer._namespaceOrder)
+            {
+                resolvedOrder[entry.Key] = entry.Value;
+            }
+
+            foreach (KeyValuePair<string, List<Type>> entry in _dataVisualizer._scriptableObjectTypes)
+            {
+                if (!resolvedOrder.ContainsKey(entry.Key))
+                {
+                    resolvedOrder[entry.Key] = int.MaxValue;
+                }
+            }
+
+            List<KeyValuePair<string, int>> orderedPairs = new List<KeyValuePair<string, int>>(resolvedOrder);
+            orderedPairs.Sort((left, right) =>
+            {
+                int comparison = left.Value.CompareTo(right.Value);
+                if (comparison != 0)
+                {
+                    return comparison;
+                }
+
+                return string.Compare(left.Key, right.Key, StringComparison.Ordinal);
+            });
+
+            List<string> result = new List<string>(orderedPairs.Count);
+            for (int index = 0; index < orderedPairs.Count; index++)
+            {
+                result.Add(orderedPairs[index].Key);
+            }
+
+            return result;
+        }
+
+        private List<string> BuildDesiredTypeOrder(string namespaceKey)
+        {
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return new List<string>();
+            }
+
+            if (!_dataVisualizer._scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
+            {
+                return new List<string>();
+            }
+
+            List<string> ordered = new List<string>(types.Count);
+            for (int index = 0; index < types.Count; index++)
+            {
+                Type type = types[index];
+                if (type == null)
+                {
+                    continue;
+                }
+
+                ordered.Add(type.FullName);
+            }
+
+            return ordered;
         }
 
         private void SynchronizeNamespaceState()
