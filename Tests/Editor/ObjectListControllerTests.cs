@@ -55,9 +55,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
 
                 dataVisualizer.SetCurrentPage(selectedType, 0);
 
+                int initialPage = dataVisualizer.GetCurrentPage(selectedType);
                 dataVisualizer._objectListController.HandleNextPageRequested();
 
-                Assert.AreEqual(1, dataVisualizer.GetCurrentPage(selectedType));
+                Assert.AreEqual(initialPage + 1, dataVisualizer.GetCurrentPage(selectedType));
             }
             finally
             {
