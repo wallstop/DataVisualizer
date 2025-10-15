@@ -306,32 +306,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 header.Add(headerRight);
                 if (showNamespaceRemoveButton)
                 {
-                    Button namespaceRemoveButton = null;
-                    namespaceRemoveButton = new Button(() =>
-                    {
-                        dataVisualizer.BuildAndOpenConfirmationPopover(
-                            $"Remove {removableTypeCount} non-core type{(removableTypeCount > 1 ? "s" : "")} from namespace '{namespaceKey}'?",
-                            "Remove",
-                            () =>
-                            {
-                                HandleRemoveNamespaceTypesConfirmed(
-                                    dataVisualizer,
-                                    namespaceKey,
-                                    nonCoreManagedTypes
-                                );
-                                if (nonCoreManagedTypes.Contains(SelectedType))
-                                {
-                                    SelectType(dataVisualizer, null);
-                                    dataVisualizer.SelectObject(null);
-                                }
-                            },
-                            namespaceRemoveButton
-                        );
-                    })
+                    Button namespaceRemoveButton = new Button
                     {
                         text = "X",
                         tooltip =
-                            $"Remove {removableTypeCount} non-BaseDataObject type{(removableTypeCount > 1 ? "s" : "")}",
+                            $"Remove {removableTypeCount} non-BaseDataObject type{(removableTypeCount > 1 ? "s" : string.Empty)}",
+                        userData = namespaceKey,
                     };
                     namespaceRemoveButton.AddToClassList(StyleConstants.ActionButtonClass);
                     namespaceRemoveButton.AddToClassList(StyleConstants.DeleteButtonClass);
@@ -581,73 +561,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     string.Equals(state.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
                 return entry?.isCollapsed ?? false;
-            }
-        }
-
-        internal void HandleRemoveNamespaceTypesConfirmed(
-            DataVisualizer dataVisualizer,
-            string namespaceKey,
-            List<Type> typesToRemove
-        )
-        {
-            if (typesToRemove == null || typesToRemove.Count == 0)
-            {
-                return;
-            }
-
-            List<string> currentManagedList = GetManagedTypeNames(namespaceKey);
-            bool changed = false;
-            foreach (Type type in typesToRemove)
-            {
-                string typeName = type.FullName;
-                if (!IsTypeRemovable(type) || !currentManagedList.Remove(typeName))
-                {
-                    continue;
-                }
-
-                changed = true;
-                dataVisualizer.SetLastSelectedObjectGuidForType(typeName, null);
-                RemoveTypeOrderEntry(dataVisualizer, namespaceKey, typeName);
-            }
-
-            if (changed)
-            {
-                PersistManagedTypesList(dataVisualizer, currentManagedList);
-                DataVisualizer.SignalRefresh();
-            }
-            else
-            {
-                Debug.LogWarning(
-                    $"No change detected for namespace '{namespaceKey}' removal (tried to remove [{string.Join(",", typesToRemove.Select(type => type.Name))}])"
-                );
-            }
-        }
-
-        internal void HandleRemoveTypeConfirmed(DataVisualizer dataVisualizer, Type typeToRemove)
-        {
-            if (!IsTypeRemovable(typeToRemove))
-            {
-                Debug.LogWarning(
-                    $"Attempted to remove BaseDataObject derivative '{typeToRemove?.FullName}' or null type."
-                );
-                return;
-            }
-
-            string namespaceKey = GetNamespaceKey(typeToRemove);
-            List<string> currentManagedList = GetManagedTypeNames(namespaceKey);
-            string typeName = typeToRemove.FullName;
-            if (currentManagedList.Remove(typeName))
-            {
-                dataVisualizer.SetLastSelectedObjectGuidForType(typeName, null);
-                RemoveTypeOrderEntry(dataVisualizer, namespaceKey, typeName);
-                PersistManagedTypesList(dataVisualizer, currentManagedList);
-                DataVisualizer.SignalRefresh();
-            }
-            else
-            {
-                Debug.LogWarning(
-                    $"Type '{typeName}' was not found in managed list during removal. Current list: [{string.Join(",", currentManagedList)}]."
-                );
             }
         }
 

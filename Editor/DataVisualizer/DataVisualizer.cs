@@ -352,6 +352,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal LabelPanelController _labelPanelController;
         internal Services.LabelService _labelService;
         private IDisposable _typeSelectedSubscription;
+        private IDisposable _namespaceRemovalConfirmedSubscription;
+        private IDisposable _typeRemovalConfirmedSubscription;
 
         public DataVisualizer()
         {
@@ -430,7 +432,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             _userState = _dependencies.UserState;
             _typeSelectedSubscription?.Dispose();
             _typeSelectedSubscription = null;
+            _namespaceRemovalConfirmedSubscription?.Dispose();
+            _namespaceRemovalConfirmedSubscription = null;
+            _typeRemovalConfirmedSubscription?.Dispose();
+            _typeRemovalConfirmedSubscription = null;
             EnsureTypeSelectedSubscription();
+            EnsureRemovalSubscriptions();
             EnsureNamespacePanelController();
             _objectSelectionService ??= new Services.ObjectSelectionService(_sessionState);
             _objectListController ??= new ObjectListController(
@@ -522,6 +529,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             _namespacePanelController = null;
             _typeSelectedSubscription?.Dispose();
             _typeSelectedSubscription = null;
+            _namespaceRemovalConfirmedSubscription?.Dispose();
+            _namespaceRemovalConfirmedSubscription = null;
+            _typeRemovalConfirmedSubscription?.Dispose();
+            _typeRemovalConfirmedSubscription = null;
             _isLabelCachePopulated = false;
             _selectedElement = null;
             _selectedObject = null;
@@ -5783,6 +5794,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             Type selectedType = evt.SelectedType;
+            string namespaceKey = evt.NamespaceKey;
+            if (string.IsNullOrWhiteSpace(namespaceKey) && selectedType != null)
+            {
+                namespaceKey = NamespaceController.GetNamespaceKey(selectedType);
+            }
+
+            if (!string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                _sessionState.Selection.SetSelectedNamespace(namespaceKey);
+            }
+
             if (selectedType == null)
             {
                 SelectObject(null);
@@ -5796,6 +5818,38 @@ namespace WallstopStudios.DataVisualizer.Editor
             SelectObject(objectToSelect);
             UpdateCreateObjectButtonStyle();
             UpdateLabelAreaAndFilter();
+        }
+
+        private void HandleNamespaceRemovalConfirmed(NamespaceRemovalConfirmedEvent evt)
+        {
+            if (evt == null || evt.Types == null)
+            {
+                return;
+            }
+
+            bool removedAny = false;
+            foreach (Type type in evt.Types)
+            {
+                removedAny |= RemoveManagedType(type);
+            }
+
+            if (removedAny)
+            {
+                SyncNamespaceChanges();
+            }
+        }
+
+        private void HandleTypeRemovalConfirmed(TypeRemovalConfirmedEvent evt)
+        {
+            if (evt == null || evt.Type == null)
+            {
+                return;
+            }
+
+            if (RemoveManagedType(evt.Type))
+            {
+                SyncNamespaceChanges();
+            }
         }
 
 
@@ -5825,6 +5879,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetService ??= new DataAssetService();
 
             EnsureTypeSelectedSubscription();
+            EnsureRemovalSubscriptions();
 
             _namespacePanelController = new NamespacePanelController(
                 this,
@@ -5847,6 +5902,93 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _typeSelectedSubscription = _eventHub.Subscribe<TypeSelectedEvent>(HandleTypeSelectedEvent);
+        }
+
+        private void EnsureRemovalSubscriptions()
+        {
+            if (_eventHub == null)
+            {
+                return;
+            }
+
+            if (_namespaceRemovalConfirmedSubscription == null)
+            {
+                _namespaceRemovalConfirmedSubscription = _eventHub.Subscribe<NamespaceRemovalConfirmedEvent>(HandleNamespaceRemovalConfirmed);
+            }
+
+            if (_typeRemovalConfirmedSubscription == null)
+            {
+                _typeRemovalConfirmedSubscription = _eventHub.Subscribe<TypeRemovalConfirmedEvent>(HandleTypeRemovalConfirmed);
+            }
+        }
+
+        private bool RemoveManagedType(Type type)
+        {
+            if (type == null)
+            {
+                return false;
+            }
+
+            string namespaceKey = NamespaceController.GetNamespaceKey(type);
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return false;
+            }
+
+            if (!NamespaceController.IsTypeRemovable(type))
+            {
+                Debug.LogWarning(
+                    $"Attempted to remove non-removable type '{type.FullName}'."
+                );
+                return false;
+            }
+
+            if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> managedTypes))
+            {
+                return false;
+            }
+
+            bool removed = managedTypes.Remove(type);
+            if (!removed)
+            {
+                return false;
+            }
+
+            _namespaceController._namespaceCache.Remove(type);
+            SetLastSelectedObjectGuidForType(type.FullName, null);
+
+            if (managedTypes.Count == 0)
+            {
+                _scriptableObjectTypes.Remove(namespaceKey);
+                if (_namespaceOrder.Remove(namespaceKey))
+                {
+                    ReindexNamespaceOrder();
+                }
+            }
+
+            List<string> managedTypeNames = _namespaceController.GetAllManagedTypeNames();
+            NamespaceController.PersistManagedTypesList(this, managedTypeNames);
+            NamespaceController.RemoveTypeOrderEntry(this, namespaceKey, type.FullName);
+
+            if (_namespaceController.SelectedType == type)
+            {
+                _namespaceController.SelectType(this, null);
+                SelectObject(null);
+            }
+
+            return true;
+        }
+
+        private void ReindexNamespaceOrder()
+        {
+            List<KeyValuePair<string, int>> ordered = _namespaceOrder
+                .OrderBy(pair => pair.Value)
+                .ToList();
+
+            for (int index = 0; index < ordered.Count; index++)
+            {
+                _namespaceOrder[ordered[index].Key] = index;
+            }
         }
 
         internal sealed class ObjectRowComponents

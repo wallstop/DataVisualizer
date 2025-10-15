@@ -3,14 +3,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
     using System;
     using System.Collections.Generic;
     using Events;
+    using Extensions;
     using State;
     using Styles;
-    using Styles;
-    using UnityEngine;
     using UnityEngine.UIElements;
 
     internal sealed class NamespacePanelController : IDisposable
     {
+        private const string RemoveHandlerProperty = "NamespacePanelController.RemoveHandler";
+
         private readonly DataVisualizer _dataVisualizer;
         private readonly NamespaceController _namespaceController;
         private readonly VisualizerSessionState _sessionState;
@@ -237,7 +238,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 }
 
                 Button removeButton = namespaceGroup.Q<Button>(
-                    StyleConstants.NamespaceDeleteButton
+                    className: StyleConstants.NamespaceDeleteButton
                 );
                 if (removeButton != null)
                 {
@@ -267,16 +268,22 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     typeElement.UnregisterCallback<PointerUpEvent>(HandleTypePointerUp);
                     typeElement.RegisterCallback<PointerUpEvent>(HandleTypePointerUp);
 
-                    Button typeRemoveButton = typeElement.Q<Button>(className: StyleConstants.DeleteButtonClass);
+                    Button typeRemoveButton = typeElement.Q<Button>(
+                        className: StyleConstants.DeleteButtonClass
+                    );
                     Type removableType = typeRemoveButton?.userData as Type;
                     if (typeRemoveButton != null && removableType != null)
                     {
-                        if (typeRemoveButton.GetProperty(RemoveHandlerProperty) is Action existingHandler)
+                        if (
+                            typeRemoveButton.GetProperty(RemoveHandlerProperty)
+                            is Action existingHandler
+                        )
                         {
                             typeRemoveButton.clicked -= existingHandler;
                         }
 
-                        Action handler = () => HandleTypeRemoveRequested(removableType, typeRemoveButton);
+                        Action handler = () =>
+                            HandleTypeRemoveRequested(removableType, typeRemoveButton);
                         typeRemoveButton.clicked += handler;
                         typeRemoveButton.SetProperty(RemoveHandlerProperty, handler);
                     }
@@ -392,22 +399,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         {
             List<Type> snapshot = new List<Type>(typesToRemove);
             _eventHub.Publish(new NamespaceRemovalConfirmedEvent(namespaceKey, snapshot));
-
-            foreach (Type type in snapshot)
-            {
-                if (type == null)
-                {
-                    continue;
-                }
-
-                _namespaceController.HandleRemoveTypeConfirmed(_dataVisualizer, type);
-
-                if (type == _namespaceController.SelectedType)
-                {
-                    _namespaceController.SelectType(_dataVisualizer, null);
-                    _dataVisualizer.SelectObject(null);
-                }
-            }
         }
 
         private void HandleTypeRemoveRequested(Type type, VisualElement trigger)
@@ -435,13 +426,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
 
             _eventHub.Publish(new TypeRemovalConfirmedEvent(type));
-            _namespaceController.HandleRemoveTypeConfirmed(_dataVisualizer, type);
-
-            if (type == _namespaceController.SelectedType)
-            {
-                _namespaceController.SelectType(_dataVisualizer, null);
-                _dataVisualizer.SelectObject(null);
-            }
         }
 
         private bool NamespaceStructureChanged()

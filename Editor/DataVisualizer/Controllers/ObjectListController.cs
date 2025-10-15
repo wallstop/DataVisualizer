@@ -116,7 +116,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             int clampedPage = Mathf.Clamp(requestedPage, 0, maxPage);
             if (clampedPage != requestedPage)
             {
-                _dataVisualizer._currentPageField.SetValueWithoutNotify(clampedPage);
+                IntegerField currentPageField = _dataVisualizer._currentPageField;
+                if (currentPageField != null)
+                {
+                    currentPageField.SetValueWithoutNotify(clampedPage);
+                }
             }
 
             _dataVisualizer.SetCurrentPage(selectedType, clampedPage);

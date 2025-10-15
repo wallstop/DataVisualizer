@@ -42,7 +42,7 @@
 1. [x] Create `NamespacePanelController` with ownership of namespace list visual elements, selection handling, reordering, and collapse state. Inject `IDataAssetService`, `IUserStateRepository`, and `VisualizerSessionState`.
 2. [x] Move namespace-specific persistence into the controller, raising `TypeSelectionChanged` events via the event hub instead of calling `DataVisualizer` methods directly.
 3. [~] Simplify `NamespaceController` by either rewriting it atop the new architecture or replacing it with `NamespacePanelController`. Remove direct access to `DataVisualizer` internals (`_scriptableObjectTypes`, `_namespaceOrder`).
-4. Ensure namespace rebuilds diff against cached state to minimize UI churn, keeping performance characteristics.
+4. [x] Ensure namespace rebuilds diff against cached state to minimize UI churn, keeping performance characteristics.
 
 ### Priority 3 – Object List and Selection
 1. Introduce `ObjectListController` that owns the `ListView`, pagination header, and drag reorder behavior. It consumes `IDataAssetService` metadata and emits commands (`CloneRequested`, `RenameRequested`, etc.) through the event hub.
