@@ -4,6 +4,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
     using System.Collections.Generic;
     using Events;
     using State;
+    using Styles;
+    using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
 
@@ -14,7 +16,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private readonly VisualizerSessionState _sessionState;
         private readonly DataVisualizerEventHub _eventHub;
         private readonly List<string> _lastNamespaceOrder = new List<string>();
-        private readonly Dictionary<string, List<string>> _lastNamespaceTypeOrders = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        private readonly Dictionary<string, List<string>> _lastNamespaceTypeOrders = new Dictionary<
+            string,
+            List<string>
+        >(StringComparer.Ordinal);
 
         public NamespacePanelController(
             DataVisualizer dataVisualizer,
@@ -103,9 +108,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         private void HandleTypeSelected(Type selectedType)
         {
-            string namespaceKey = selectedType != null
-                ? NamespaceController.GetNamespaceKey(selectedType)
-                : _sessionState.Selection.SelectedNamespaceKey;
+            string namespaceKey =
+                selectedType != null
+                    ? NamespaceController.GetNamespaceKey(selectedType)
+                    : _sessionState.Selection.SelectedNamespaceKey;
 
             if (!string.IsNullOrWhiteSpace(namespaceKey))
             {
@@ -129,13 +135,25 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 settings =>
                 {
                     bool changed = false;
-                    if (!string.Equals(settings.lastSelectedNamespaceKey, namespaceKey, StringComparison.Ordinal))
+                    if (
+                        !string.Equals(
+                            settings.lastSelectedNamespaceKey,
+                            namespaceKey,
+                            StringComparison.Ordinal
+                        )
+                    )
                     {
                         settings.lastSelectedNamespaceKey = namespaceKey;
                         changed = true;
                     }
 
-                    if (!string.Equals(settings.lastSelectedTypeName, typeFullName, StringComparison.Ordinal))
+                    if (
+                        !string.Equals(
+                            settings.lastSelectedTypeName,
+                            typeFullName,
+                            StringComparison.Ordinal
+                        )
+                    )
                     {
                         settings.lastSelectedTypeName = typeFullName;
                         changed = true;
@@ -146,13 +164,25 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 userState =>
                 {
                     bool changed = false;
-                    if (!string.Equals(userState.lastSelectedNamespaceKey, namespaceKey, StringComparison.Ordinal))
+                    if (
+                        !string.Equals(
+                            userState.lastSelectedNamespaceKey,
+                            namespaceKey,
+                            StringComparison.Ordinal
+                        )
+                    )
                     {
                         userState.lastSelectedNamespaceKey = namespaceKey;
                         changed = true;
                     }
 
-                    if (!string.Equals(userState.lastSelectedTypeName, typeFullName, StringComparison.Ordinal))
+                    if (
+                        !string.Equals(
+                            userState.lastSelectedTypeName,
+                            typeFullName,
+                            StringComparison.Ordinal
+                        )
+                    )
                     {
                         userState.lastSelectedTypeName = typeFullName;
                         changed = true;
@@ -182,11 +212,44 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     continue;
                 }
 
+                List<Type> removableTypes = new List<Type>();
+                _dataVisualizer._scriptableObjectTypes.TryGetValue(
+                    namespaceKey,
+                    out List<Type> allTypes
+                );
+                if (allTypes != null)
+                {
+                    for (int index = 0; index < allTypes.Count; index++)
+                    {
+                        Type candidate = allTypes[index];
+                        if (NamespaceController.IsTypeRemovable(candidate))
+                        {
+                            removableTypes.Add(candidate);
+                        }
+                    }
+                }
+
                 Label indicator = namespaceGroup.Q<Label>($"namespace-indicator-{namespaceKey}");
                 if (indicator != null)
                 {
                     indicator.UnregisterCallback<PointerDownEvent>(HandleIndicatorPointerDown);
                     indicator.RegisterCallback<PointerDownEvent>(HandleIndicatorPointerDown);
+                }
+
+                Button removeButton = namespaceGroup.Q<Button>(
+                    StyleConstants.NamespaceDeleteButton
+                );
+                if (removeButton != null)
+                {
+                    if (removeButton.GetProperty(RemoveHandlerProperty) is Action existing)
+                    {
+                        removeButton.clicked -= existing;
+                    }
+
+                    Action handler = () =>
+                        HandleNamespaceRemoveRequested(namespaceKey, removableTypes, removeButton);
+                    removeButton.clicked += handler;
+                    removeButton.SetProperty(RemoveHandlerProperty, handler);
                 }
 
                 VisualElement typesContainer = namespaceGroup.Q<VisualElement>(
@@ -203,6 +266,20 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     typeElement.RegisterCallback<PointerDownEvent>(HandleTypePointerDown);
                     typeElement.UnregisterCallback<PointerUpEvent>(HandleTypePointerUp);
                     typeElement.RegisterCallback<PointerUpEvent>(HandleTypePointerUp);
+
+                    Button typeRemoveButton = typeElement.Q<Button>(className: StyleConstants.DeleteButtonClass);
+                    Type removableType = typeRemoveButton?.userData as Type;
+                    if (typeRemoveButton != null && removableType != null)
+                    {
+                        if (typeRemoveButton.GetProperty(RemoveHandlerProperty) is Action existingHandler)
+                        {
+                            typeRemoveButton.clicked -= existingHandler;
+                        }
+
+                        Action handler = () => HandleTypeRemoveRequested(removableType, typeRemoveButton);
+                        typeRemoveButton.clicked += handler;
+                        typeRemoveButton.SetProperty(RemoveHandlerProperty, handler);
+                    }
                 }
             }
         }
@@ -280,6 +357,93 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             evt.StopPropagation();
         }
 
+        private void HandleNamespaceRemoveRequested(
+            string namespaceKey,
+            IReadOnlyList<Type> typesToRemove,
+            VisualElement trigger
+        )
+        {
+            if (string.IsNullOrWhiteSpace(namespaceKey) || typesToRemove == null)
+            {
+                return;
+            }
+
+            int removableCount = typesToRemove.Count;
+            if (removableCount == 0)
+            {
+                return;
+            }
+
+            List<Type> snapshot = new List<Type>(typesToRemove);
+            _eventHub.Publish(new NamespaceRemovalRequestedEvent(namespaceKey, snapshot));
+
+            _dataVisualizer.BuildAndOpenConfirmationPopover(
+                $"Remove {removableCount} non-core type{(removableCount > 1 ? "s" : string.Empty)} from namespace '<color=yellow>{namespaceKey}</color>'?",
+                "Remove",
+                () => OnNamespaceRemovalConfirmed(namespaceKey, snapshot),
+                trigger
+            );
+        }
+
+        private void OnNamespaceRemovalConfirmed(
+            string namespaceKey,
+            IReadOnlyList<Type> typesToRemove
+        )
+        {
+            List<Type> snapshot = new List<Type>(typesToRemove);
+            _eventHub.Publish(new NamespaceRemovalConfirmedEvent(namespaceKey, snapshot));
+
+            foreach (Type type in snapshot)
+            {
+                if (type == null)
+                {
+                    continue;
+                }
+
+                _namespaceController.HandleRemoveTypeConfirmed(_dataVisualizer, type);
+
+                if (type == _namespaceController.SelectedType)
+                {
+                    _namespaceController.SelectType(_dataVisualizer, null);
+                    _dataVisualizer.SelectObject(null);
+                }
+            }
+        }
+
+        private void HandleTypeRemoveRequested(Type type, VisualElement trigger)
+        {
+            if (type == null)
+            {
+                return;
+            }
+
+            _eventHub.Publish(new TypeRemovalRequestedEvent(type));
+
+            _dataVisualizer.BuildAndOpenConfirmationPopover(
+                $"Remove type '<color=yellow><i>{type.Name}</i></color>' from Data Visualizer?",
+                "Remove",
+                () => OnTypeRemovalConfirmed(type),
+                trigger
+            );
+        }
+
+        private void OnTypeRemovalConfirmed(Type type)
+        {
+            if (type == null)
+            {
+                return;
+            }
+
+            _eventHub.Publish(new TypeRemovalConfirmedEvent(type));
+            _namespaceController.HandleRemoveTypeConfirmed(_dataVisualizer, type);
+
+            if (type == _namespaceController.SelectedType)
+            {
+                _namespaceController.SelectType(_dataVisualizer, null);
+                _dataVisualizer.SelectObject(null);
+            }
+        }
+
         private bool NamespaceStructureChanged()
         {
             List<string> desiredNamespaces = BuildDesiredNamespaceOrder();
@@ -290,7 +454,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             for (int index = 0; index < desiredNamespaces.Count; index++)
             {
-                if (!string.Equals(desiredNamespaces[index], _lastNamespaceOrder[index], StringComparison.Ordinal))
+                if (
+                    !string.Equals(
+                        desiredNamespaces[index],
+                        _lastNamespaceOrder[index],
+                        StringComparison.Ordinal
+                    )
+                )
                 {
                     return true;
                 }
@@ -299,7 +469,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             foreach (string namespaceKey in desiredNamespaces)
             {
                 List<string> desiredTypes = BuildDesiredTypeOrder(namespaceKey);
-                if (!_lastNamespaceTypeOrders.TryGetValue(namespaceKey, out List<string> previousTypes))
+                if (
+                    !_lastNamespaceTypeOrders.TryGetValue(
+                        namespaceKey,
+                        out List<string> previousTypes
+                    )
+                )
                 {
                     return true;
                 }
@@ -311,7 +486,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
                 for (int index = 0; index < desiredTypes.Count; index++)
                 {
-                    if (!string.Equals(desiredTypes[index], previousTypes[index], StringComparison.Ordinal))
+                    if (
+                        !string.Equals(
+                            desiredTypes[index],
+                            previousTypes[index],
+                            StringComparison.Ordinal
+                        )
+                    )
                     {
                         return true;
                     }
@@ -337,13 +518,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         private List<string> BuildDesiredNamespaceOrder()
         {
-            Dictionary<string, int> resolvedOrder = new Dictionary<string, int>(StringComparer.Ordinal);
+            Dictionary<string, int> resolvedOrder = new Dictionary<string, int>(
+                StringComparer.Ordinal
+            );
             foreach (KeyValuePair<string, int> entry in _dataVisualizer._namespaceOrder)
             {
                 resolvedOrder[entry.Key] = entry.Value;
             }
 
-            foreach (KeyValuePair<string, List<Type>> entry in _dataVisualizer._scriptableObjectTypes)
+            foreach (
+                KeyValuePair<string, List<Type>> entry in _dataVisualizer._scriptableObjectTypes
+            )
             {
                 if (!resolvedOrder.ContainsKey(entry.Key))
                 {
@@ -351,17 +536,21 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 }
             }
 
-            List<KeyValuePair<string, int>> orderedPairs = new List<KeyValuePair<string, int>>(resolvedOrder);
-            orderedPairs.Sort((left, right) =>
-            {
-                int comparison = left.Value.CompareTo(right.Value);
-                if (comparison != 0)
+            List<KeyValuePair<string, int>> orderedPairs = new List<KeyValuePair<string, int>>(
+                resolvedOrder
+            );
+            orderedPairs.Sort(
+                (left, right) =>
                 {
-                    return comparison;
-                }
+                    int comparison = left.Value.CompareTo(right.Value);
+                    if (comparison != 0)
+                    {
+                        return comparison;
+                    }
 
-                return string.Compare(left.Key, right.Key, StringComparison.Ordinal);
-            });
+                    return string.Compare(left.Key, right.Key, StringComparison.Ordinal);
+                }
+            );
 
             List<string> result = new List<string>(orderedPairs.Count);
             for (int index = 0; index < orderedPairs.Count; index++)
@@ -379,7 +568,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return new List<string>();
             }
 
-            if (!_dataVisualizer._scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
+            if (
+                !_dataVisualizer._scriptableObjectTypes.TryGetValue(
+                    namespaceKey,
+                    out List<Type> types
+                )
+            )
             {
                 return new List<string>();
             }

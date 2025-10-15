@@ -438,27 +438,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     if (isRemovableType)
                     {
-                        Button typeRemoveButton = null;
-                        typeRemoveButton = new Button(() =>
-                        {
-                            dataVisualizer.BuildAndOpenConfirmationPopover(
-                                $"Remove type '<color=yellow><i>{type.Name}</i></color>' from Data Visualizer?",
-                                "Remove",
-                                () =>
-                                {
-                                    HandleRemoveTypeConfirmed(dataVisualizer, type);
-                                    if (type == SelectedType)
-                                    {
-                                        SelectType(dataVisualizer, null);
-                                        dataVisualizer.SelectObject(null);
-                                    }
-                                },
-                                typeRemoveButton
-                            );
-                        })
+                        Button typeRemoveButton = new Button
                         {
                             text = "X",
                             tooltip = $"Remove {GetTypeDisplayName(type)}",
+                            userData = type,
                         };
                         typeRemoveButton.AddToClassList(StyleConstants.ActionButtonClass);
                         typeRemoveButton.AddToClassList(StyleConstants.DeleteButtonClass);
