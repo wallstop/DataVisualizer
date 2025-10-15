@@ -6103,6 +6103,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _currentDisplayStartIndex = startIndex;
             }
 
+            // Reset itemsSource so the virtualized list rebinds rows after reordering.
+            _objectListView.itemsSource = null;
+            _objectListView.itemsSource = _displayedObjects;
             _objectListView.RefreshItems();
 
             if (_selectedObject != null)
@@ -7595,6 +7598,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _selectedObjects.Clear();
             _selectedObjects.AddRange(sortedObjects);
+
+            _filteredObjects.Clear();
             _filteredObjects.AddRange(sortedObjects);
         }
 

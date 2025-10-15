@@ -28,6 +28,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
         }
 
         [Test]
+        public void ReorderItemMovesElementToEnd()
+        {
+            List<string> items = new() { "1", "2", "3" };
+
+            ObjectOrderHelper.ReorderItem(items, "2", insertBefore: null, insertAfter: "3");
+
+            CollectionAssert.AreEqual(new[] { "1", "3", "2" }, items);
+        }
+
+        [Test]
         public void ReorderItemAppendsWhenTargetsMissing()
         {
             List<string> items = new() { "a", "b" };

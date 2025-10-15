@@ -30,6 +30,9 @@
 - Do not create `async Task` test methods; rely on `IEnumerator`-based Unity test methods instead.
 - Do not use `Assert.ThrowsAsync` because it is unavailable.
 - When checking UnityEngine.Objects for null, compare directly (`thing != null`, `thing == null`) to respect Unity's object existence rules.
+- Do not use underscores in function names, especially test function names.
+- Do not use regions, anywhere, ever.
+- Avoid `var` wherever possible, use expressive types.
 
 ## Commit & Pull Request Guidelines
 - Keep commit messages short, present-tense, and imperative (for example, `Add namespace collapse state cache`).
