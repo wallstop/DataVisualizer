@@ -1,11 +1,11 @@
 namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
 {
     using Events;
+    using Extensions;
     using UnityEngine;
     using UnityEngine.UIElements;
 
-    internal sealed class RenameObjectCommand
-        : ObjectCommandBase<ObjectRenameRequestedEvent>
+    internal sealed class RenameObjectCommand : ObjectCommandBase<ObjectRenameRequestedEvent>
     {
         public RenameObjectCommand(DataVisualizer dataVisualizer)
             : base(dataVisualizer) { }

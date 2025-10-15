@@ -4,6 +4,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
     using Events;
 
     internal abstract class ObjectCommandBase<TEvent> : IObjectCommand
+        where TEvent : class
     {
         protected ObjectCommandBase(DataVisualizer dataVisualizer)
         {

@@ -14,12 +14,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
     internal sealed class LabelPanelController
     {
         private readonly DataVisualizer _dataVisualizer;
-        private readonly LabelService _labelService;
+        private readonly ILabelService _labelService;
         private readonly VisualizerSessionState _sessionState;
 
         public LabelPanelController(
             DataVisualizer dataVisualizer,
-            LabelService labelService,
+            ILabelService labelService,
             VisualizerSessionState sessionState
         )
         {
@@ -534,8 +534,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             if (config != null && config.combinationType != LabelCombinationType.And)
             {
                 config.combinationType = LabelCombinationType.And;
-                _dataVisualizer.SaveLabelFilterConfig(config);
-                _labelService.UpdateLabelAreaAndFilter();
+                _labelService.SaveConfig(config);
+                Type selectedType = _dataVisualizer._namespaceController.SelectedType;
+                _labelService.UpdateSessionState(selectedType, config, _sessionState);
+                _dataVisualizer.ApplyLabelFilter();
             }
         }
 
@@ -558,8 +560,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             if (config != null && config.combinationType != LabelCombinationType.Or)
             {
                 config.combinationType = LabelCombinationType.Or;
-                _dataVisualizer.SaveLabelFilterConfig(config);
-                _labelService.UpdateLabelAreaAndFilter();
+                _labelService.SaveConfig(config);
+                Type selectedType = _dataVisualizer._namespaceController.SelectedType;
+                _labelService.UpdateSessionState(selectedType, config, _sessionState);
+                _dataVisualizer.ApplyLabelFilter();
             }
         }
     }

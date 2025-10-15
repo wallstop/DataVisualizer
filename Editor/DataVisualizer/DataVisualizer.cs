@@ -194,6 +194,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal readonly List<ScriptableObject> _displayedObjects = new();
         internal readonly List<DataAssetMetadata> _filteredMetadata = new();
         internal readonly List<DataAssetMetadata> _displayedMetadata = new();
+        internal readonly List<ObjectRowViewModel> _objectRowViewModels = new();
+        internal readonly Stack<ObjectRowViewModel> _objectRowViewModelPool = new();
         internal IReadOnlyList<DataAssetMetadata> FilteredMetadata => _filteredMetadata;
         internal IReadOnlyList<DataAssetMetadata> DisplayedMetadata => _displayedMetadata;
         internal int _currentDisplayStartIndex;
@@ -356,7 +358,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal Services.ObjectCommandService _objectCommandService;
         private Services.ObjectCommands.ObjectCommandDispatcher _objectCommandDispatcher;
         internal LabelPanelController _labelPanelController;
-        internal Services.LabelService _labelService;
+        internal ILabelService _labelService;
         private IDisposable _typeSelectedSubscription;
         private IDisposable _namespaceRemovalConfirmedSubscription;
         private IDisposable _typeRemovalConfirmedSubscription;
@@ -375,8 +377,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _eventHub
             );
             _objectCommandService = new Services.ObjectCommandService(this, _eventHub);
-            _labelService = new Services.LabelService(this);
-            _labelPanelController = new LabelPanelController(this, _labelService, _sessionState);
             EnsureObjectCommandSubscriptions();
         }
 
@@ -459,8 +459,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _eventHub
             );
             _objectCommandService ??= new Services.ObjectCommandService(this, _eventHub);
-            _labelService ??= new Services.LabelService(this);
-            _labelPanelController ??= new LabelPanelController(this, _labelService, _sessionState);
+            EnsureLabelSubsystems();
 
             _allDataProcessors.Clear();
             IEnumerable<Type> processorTypes = TypeCache
@@ -546,6 +545,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             _namespaceRemovalConfirmedSubscription = null;
             _typeRemovalConfirmedSubscription?.Dispose();
             _typeRemovalConfirmedSubscription = null;
+            _namespaceReorderSubscription?.Dispose();
+            _namespaceReorderSubscription = null;
+            _typeReorderSubscription?.Dispose();
+            _typeReorderSubscription = null;
             _isLabelCachePopulated = false;
             _selectedElement = null;
             _selectedObject = null;
@@ -572,6 +575,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _dragGhost?.RemoveFromHierarchy();
             _dragGhost = null;
             _draggedElement = null;
+            _objectRowViewModels.Clear();
+            _objectRowViewModelPool.Clear();
 #if ODIN_INSPECTOR
             _odinRepaintSchedule?.Pause();
             _odinRepaintSchedule = null;
@@ -4884,7 +4889,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             objectColumn.Add(_objectPageController);
 
             _objectListView = new ListView(
-                _displayedObjects,
+                _objectRowViewModels,
                 itemHeight: 36,
                 makeItem: MakeObjectRow,
                 bindItem: BindObjectRow
@@ -4896,7 +4901,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight,
             };
             _objectListView.AddToClassList("object-list");
-            _objectListView.itemsSource = _displayedObjects;
+            _objectListView.itemsSource = _objectRowViewModels;
             _objectListView.selectionChanged += _objectListController.HandleSelectionChanged;
             _objectListView.unbindItem += UnbindObjectRow;
             objectColumn.Add(_objectListView);
@@ -5160,12 +5165,16 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void UpdateLabelAreaAndFilter()
         {
+            EnsureLabelSubsystems();
             ClearLabelFilterUI();
-            if (_namespaceController.SelectedType == null)
+
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null)
             {
                 if (_filterStatusLabel != null)
                 {
-                    _filterStatusLabel.text = "";
+                    _filterStatusLabel.style.display = DisplayStyle.None;
+                    _filterStatusLabel.text = string.Empty;
                 }
 
                 if (_labelFilterSelectionRoot is { parent: not null })
@@ -5182,58 +5191,49 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _currentUniqueLabelsForType.Clear();
-            HashSet<string> labelSet = new(StringComparer.OrdinalIgnoreCase);
-            foreach (ScriptableObject obj in _selectedObjects)
+            HashSet<string> availableLabelSet = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase
+            );
+            IReadOnlyCollection<string> availableLabels =
+                _labelService.GetAvailableLabels(selectedType)
+                ?? Array.Empty<string>();
+            foreach (string label in availableLabels)
             {
-                if (obj == null)
+                if (string.IsNullOrWhiteSpace(label))
                 {
                     continue;
                 }
 
-                string[] labels = AssetDatabase.GetLabels(obj);
-                foreach (string label in labels)
+                string normalized = label.Trim();
+                if (availableLabelSet.Add(normalized))
                 {
-                    labelSet.Add(label);
+                    _currentUniqueLabelsForType.Add(normalized);
                 }
             }
 
-            foreach (string label in labelSet)
-            {
-                _currentUniqueLabelsForType.Add(label);
-            }
-            _currentUniqueLabelsForType.Sort();
+            _currentUniqueLabelsForType.Sort(StringComparer.OrdinalIgnoreCase);
 
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (config == null)
+            TypeLabelFilterConfig config = _labelService.GetOrCreateConfig(selectedType);
+            if (config != null)
             {
-                return;
-            }
+                bool configChanged = false;
+                configChanged |= config.andLabels.RemoveAll(label =>
+                    !availableLabelSet.Contains(label)
+                ) > 0;
+                configChanged |= config.orLabels.RemoveAll(label =>
+                    !availableLabelSet.Contains(label)
+                ) > 0;
 
-            bool configChanged = false;
-            int removedAnd = config.andLabels.RemoveAll(label =>
-                !_currentUniqueLabelsForType.Contains(label)
-            );
-            int removedOr = config.orLabels.RemoveAll(label =>
-                !_currentUniqueLabelsForType.Contains(label)
-            );
-
-            if (removedAnd > 0 || removedOr > 0)
-            {
-                configChanged = true;
-            }
-
-            if (configChanged)
-            {
-                SaveLabelFilterConfig(config);
+                if (configChanged)
+                {
+                    _labelService.SaveConfig(config);
+                }
             }
 
             PopulateLabelPillContainers();
             ApplyLabelFilter();
-            ToggleLabelsCollapsed(CurrentTypeLabelFilterConfig?.isCollapsed == true);
-            ToggleLabelsAdvancedCollapsed(
-                CurrentTypeLabelFilterConfig?.isAdvancedCollapsed == true
-            );
+            ToggleLabelsCollapsed(config?.isCollapsed == true);
+            ToggleLabelsAdvancedCollapsed(config?.isAdvancedCollapsed == true);
         }
 
         internal void ClearLabelFilterUI()
@@ -5379,122 +5379,85 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void ApplyLabelFilter(bool buildObjectsView = true)
         {
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            try
+            EnsureLabelSubsystems();
+
+            Type selectedType = _namespaceController.SelectedType;
+            TypeLabelFilterConfig config = selectedType != null
+                ? _labelService.GetOrCreateConfig(selectedType)
+                : null;
+
+            if (selectedType == null || config == null)
             {
-                if (config == null || _namespaceController.SelectedType == null)
-                {
-                    _filteredObjects.Clear();
-                    _currentDisplayStartIndex = 0;
-                    if (_filterStatusLabel != null)
-                    {
-                        _filterStatusLabel.text = "Select a type to see objects.";
-                    }
-
-                    return;
-                }
-
-                switch (config.combinationType)
-                {
-                    case LabelCombinationType.And:
-                    {
-                        _andOrToggle?.SelectLeft(force: true);
-                        break;
-                    }
-                    case LabelCombinationType.Or:
-                    {
-                        _andOrToggle?.SelectRight(force: true);
-                        break;
-                    }
-                }
-
                 _filteredObjects.Clear();
-                List<string> andLabels = config.andLabels;
-                List<string> orLabels = config.orLabels;
-
-                bool noAndFilter = andLabels == null || andLabels.Count == 0;
-                bool noOrFilter = orLabels == null || orLabels.Count == 0;
-
-                if (noAndFilter && noOrFilter)
-                {
-                    foreach (ScriptableObject selectedObject in _selectedObjects)
-                    {
-                        _filteredObjects.Add(selectedObject);
-                    }
-                }
-                else
-                {
-                    using PooledResource<HashSet<string>> labelSetLease =
-                        Buffers<string>.HashSet.Get(out HashSet<string> uniqueLabels);
-                    Predicate<string> labelMatch = uniqueLabels.Contains;
-                    foreach (ScriptableObject obj in _selectedObjects)
-                    {
-                        if (obj == null)
-                        {
-                            continue;
-                        }
-
-                        string[] labels = AssetDatabase.GetLabels(obj);
-                        uniqueLabels.Clear();
-                        foreach (string label in labels)
-                        {
-                            uniqueLabels.Add(label);
-                        }
-
-                        bool matchesAnd = noAndFilter || andLabels.TrueForAll(labelMatch);
-                        bool matchesOr = noOrFilter || orLabels.Exists(labelMatch);
-
-                        switch (config.combinationType)
-                        {
-                            case LabelCombinationType.And:
-                            {
-                                if (matchesAnd && matchesOr)
-                                {
-                                    _filteredObjects.Add(obj);
-                                }
-
-                                break;
-                            }
-                            case LabelCombinationType.Or:
-                            {
-                                if (matchesAnd || matchesOr)
-                                {
-                                    _filteredObjects.Add(obj);
-                                }
-
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                int totalCount = _selectedObjects.Count;
-                int shownCount = _filteredObjects.Count;
+                _filteredMetadata.Clear();
+                _currentUniqueLabelsForType.Clear();
+                _currentDisplayStartIndex = 0;
                 if (_filterStatusLabel != null)
                 {
-                    if (shownCount == totalCount)
-                    {
-                        _filterStatusLabel.style.display = DisplayStyle.None;
-                    }
-                    else
-                    {
-                        _filterStatusLabel.style.display = DisplayStyle.Flex;
-                        int hidden = totalCount - shownCount;
-                        _filterStatusLabel.text =
-                            hidden < 20 && hidden != totalCount
-                                ? $"<b><color=yellow>{hidden}</color></b> objects hidden by label filter."
-                                : $"<b><color=red>{hidden}</color></b> objects hidden by label filter.";
-                    }
+                    _filterStatusLabel.style.display = DisplayStyle.None;
+                    _filterStatusLabel.text = string.Empty;
                 }
-            }
-            finally
-            {
-                UpdateLabelsCollapsedClickableState();
-                UpdateAdvancedClickableState();
+
                 if (buildObjectsView)
                 {
                     BuildObjectsView();
                 }
+
+                return;
+            }
+
+            switch (config.combinationType)
+            {
+                case LabelCombinationType.And:
+                    _andOrToggle?.SelectLeft(force: true);
+                    break;
+                case LabelCombinationType.Or:
+                    _andOrToggle?.SelectRight(force: true);
+                    break;
+            }
+
+            LabelFilterResult result = _labelService.ApplyFilter(
+                selectedType,
+                _selectedObjects,
+                config
+            );
+
+            _filteredObjects.Clear();
+            _filteredObjects.AddRange(result.FilteredObjects);
+
+            _filteredMetadata.Clear();
+            _filteredMetadata.AddRange(result.FilteredMetadata);
+
+            _currentUniqueLabelsForType.Clear();
+            foreach (string label in result.UniqueLabels)
+            {
+                _currentUniqueLabelsForType.Add(label);
+            }
+
+            _currentDisplayStartIndex = 0;
+
+            if (_filterStatusLabel != null)
+            {
+                if (string.IsNullOrWhiteSpace(result.StatusMessage))
+                {
+                    _filterStatusLabel.style.display = DisplayStyle.None;
+                    _filterStatusLabel.text = string.Empty;
+                }
+                else
+                {
+                    _filterStatusLabel.style.display = DisplayStyle.Flex;
+                    _filterStatusLabel.text = result.StatusMessage;
+                }
+            }
+
+            _labelService.UpdateSessionState(selectedType, config, _sessionState);
+
+            UpdateLabelsCollapsedClickableState();
+            UpdateAdvancedClickableState();
+
+            if (buildObjectsView)
+            {
+                BuildObjectsView();
             }
         }
 
@@ -6316,8 +6279,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void BindObjectRow(VisualElement element, int index)
         {
-            ScriptableObject dataObject =
-                index >= 0 && index < _displayedObjects.Count ? _displayedObjects[index] : null;
+            ObjectRowViewModel viewModel =
+                index >= 0 && index < _objectRowViewModels.Count
+                    ? _objectRowViewModels[index]
+                    : null;
+            ScriptableObject dataObject = viewModel?.DataObject;
+            DataAssetMetadata metadata = viewModel?.Metadata;
 
             if (element.userData is ScriptableObject previous && previous != dataObject)
             {
@@ -6342,9 +6309,18 @@ namespace WallstopStudios.DataVisualizer.Editor
             string displayName = string.Empty;
             if (hasData)
             {
-                displayName = dataObject is IDisplayable displayable
-                    ? displayable.Title
-                    : dataObject.name;
+                if (metadata != null && !string.IsNullOrWhiteSpace(metadata.DisplayName))
+                {
+                    displayName = metadata.DisplayName;
+                }
+                else if (dataObject is IDisplayable displayable)
+                {
+                    displayName = displayable.Title;
+                }
+                else
+                {
+                    displayName = dataObject.name;
+                }
                 components.TitleLabel.text = displayName;
                 _objectVisualElementMap[dataObject] = element;
                 element.name = $"object-item-row-{dataObject.GetInstanceID()}";
@@ -6367,7 +6343,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             UpdateGoButtonState(components.MoveUpButton, hasData && index > 0);
             UpdateGoButtonState(
                 components.MoveDownButton,
-                hasData && index < _displayedObjects.Count - 1
+                hasData && index < _objectRowViewModels.Count - 1
             );
 
             bool isSelected = hasData && ReferenceEquals(dataObject, _selectedObject);
@@ -6843,39 +6819,34 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _projectUniqueLabelsCache.Clear();
-            if (_assetService == null)
+            EnsureLabelSubsystems();
+
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null)
             {
                 return;
             }
 
-            using PooledResource<HashSet<string>> allLabelsLease = Buffers<string>.HashSet.Get(
-                out HashSet<string> allLabelsSet
-            );
-            IEnumerable<DataAssetMetadata> allAssets = _assetService.GetAllAssets();
-            if (allAssets != null)
-            {
-                foreach (DataAssetMetadata metadata in allAssets)
-                {
-                    if (metadata.Labels == null || metadata.Labels.Count == 0)
-                    {
-                        continue;
-                    }
+            IReadOnlyCollection<string> labels =
+                _labelService.GetAvailableLabels(selectedType)
+                ?? Array.Empty<string>();
 
-                    foreach (string label in metadata.Labels)
-                    {
-                        if (!string.IsNullOrWhiteSpace(label))
-                        {
-                            allLabelsSet.Add(label.Trim());
-                        }
-                    }
+            HashSet<string> unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string label in labels)
+            {
+                if (string.IsNullOrWhiteSpace(label))
+                {
+                    continue;
+                }
+
+                string normalized = label.Trim();
+                if (unique.Add(normalized))
+                {
+                    _projectUniqueLabelsCache.Add(normalized);
                 }
             }
 
-            foreach (string label in allLabelsSet)
-            {
-                _projectUniqueLabelsCache.Add(label);
-            }
-            _projectUniqueLabelsCache.Sort();
+            _projectUniqueLabelsCache.Sort(StringComparer.OrdinalIgnoreCase);
             _isLabelCachePopulated = true;
         }
 
@@ -6886,8 +6857,19 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            PopulateProjectUniqueLabelsCache();
-            if (_activePopover == null && _projectUniqueLabelsCache.Count > 0)
+            EnsureLabelSubsystems();
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null)
+            {
+                if (_activePopover == _inspectorLabelSuggestionsPopover)
+                {
+                    CloseActivePopover();
+                }
+
+                return;
+            }
+
+            if (_activePopover == null)
             {
                 OpenPopover(
                     _inspectorLabelSuggestionsPopover,
@@ -6904,28 +6886,24 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _selectedObject != null
                     ? AssetDatabase.GetLabels(_selectedObject)
                     : Array.Empty<string>();
-            HashSet<string> currentAssetLabelsSet = new(
+            HashSet<string> currentAssetLabelsSet = new HashSet<string>(
                 currentAssetLabelsArray,
-                StringComparer.Ordinal
+                StringComparer.OrdinalIgnoreCase
             );
 
-            string[] suggestions = _projectUniqueLabelsCache
-                .Where(label =>
-                    (
-                        string.IsNullOrWhiteSpace(currentInput)
-                        || label.Contains(currentInput, StringComparison.OrdinalIgnoreCase)
-                    ) && !currentAssetLabelsSet.Contains(label)
-                )
-                .Take(10)
-                .ToArray();
+            IReadOnlyList<string> suggestions = _labelService
+                .SuggestionProvider
+                .GetSuggestions(selectedType, currentInput, currentAssetLabelsSet);
 
-            if (suggestions.Length > 0)
+            if (suggestions.Count > 0)
             {
                 foreach (string suggestionText in suggestions)
                 {
                     Label suggestionItem = CreateHighlightedLabel(
                         suggestionText,
-                        new List<string> { currentInput },
+                        string.IsNullOrWhiteSpace(currentInput)
+                            ? new List<string>()
+                            : new List<string> { currentInput },
                         LabelSuggestionItemClass
                     );
                     suggestionItem.userData = suggestionText;
@@ -6950,12 +6928,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _currentLabelSuggestionItems.Add(suggestionItem);
                 }
             }
-            else
+            else if (_activePopover == _inspectorLabelSuggestionsPopover)
             {
-                if (_activePopover == _inspectorLabelSuggestionsPopover)
-                {
-                    CloseActivePopover();
-                }
+                CloseActivePopover();
             }
         }
 
@@ -7893,7 +7868,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             if (_labelService == null)
             {
-                _labelService = new LabelService(this);
+                _assetService ??= new Services.DataAssetService();
+                _labelService = new LabelService(this, _assetService, _sessionState);
             }
 
             if (_labelPanelController == null)

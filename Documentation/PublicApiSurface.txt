@@ -26,6 +26,12 @@ File: Editor/DataVisualizer/Controllers/ObjectListController.cs
   Method: HandleCurrentPageChanged
   Method: HandleSelectionChanged
 
+File: Editor/DataVisualizer/Controllers/ObjectRowViewModel.cs
+  Property: DataObject
+  Property: Metadata
+  Property: DisplayIndex
+  Method: Update
+
 File: Editor/DataVisualizer/Data/AssetIndex.cs
   Property: Guid
   Property: Path
@@ -262,10 +268,25 @@ File: Editor/DataVisualizer/Services/JsonUserStateRepository.cs
   Method: SaveSettings
   Method: SaveUserState
 
+File: Editor/DataVisualizer/Services/LabelFilterResult.cs
+  Property: FilteredObjects
+  Property: FilteredMetadata
+  Property: UniqueLabels
+  Property: TotalCount
+  Property: MatchedCount
+  Property: StatusMessage
+
 File: Editor/DataVisualizer/Services/LabelService.cs
-  Method: UpdateLabelAreaAndFilter
-  Method: SaveLabelFilterConfig
-  Method: GetCurrentConfig
+  Method: GetOrCreateConfig
+  Method: SaveConfig
+  Method: UpdateSessionState
+  Method: ApplyFilter
+  Method: GetAvailableLabels
+
+File: Editor/DataVisualizer/Services/LabelSuggestionProvider.cs
+  Method: GetSuggestions
+  Method: Invalidate
+  Method: InvalidateAll
 
 File: Editor/DataVisualizer/Services/ObjectCommandService.cs
   Method: MoveToTop
@@ -274,6 +295,12 @@ File: Editor/DataVisualizer/Services/ObjectCommandService.cs
   Method: Rename
   Method: Move
   Method: Delete
+
+File: Editor/DataVisualizer/Services/ObjectCommands/ObjectCommandBase.cs
+  Method: Subscribe
+
+File: Editor/DataVisualizer/Services/ObjectCommands/ObjectCommandDispatcher.cs
+  Method: Dispose
 
 File: Editor/DataVisualizer/Services/ObjectSelectionService.cs
   Method: SynchronizeSelection
@@ -320,8 +347,10 @@ File: Editor/DataVisualizer/State/VisualizerSessionState.cs
   Method (PopoverState): SetActivePopover
   Method (PopoverState): SetActiveNestedPopover
   Method (PopoverState): Clear
+  Property (LabelFilterState): CombinationType
   Method (LabelFilterState): SetAndLabels
   Method (LabelFilterState): SetOrLabels
+  Method (LabelFilterState): SetCombinationType
 
 File: Editor/DataVisualizer/Styles/StyleConstants.cs
   Static: StyleConstants

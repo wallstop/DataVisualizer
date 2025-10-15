@@ -2,6 +2,7 @@ namespace WallstopStudios.DataVisualizer.Editor.State
 {
     using System;
     using System.Collections.Generic;
+    using Data;
 
     public sealed class VisualizerSessionState
     {
@@ -278,6 +279,9 @@ namespace WallstopStudios.DataVisualizer.Editor.State
 
             public IReadOnlyList<string> OrLabels => _orLabels;
 
+            public LabelCombinationType CombinationType { get; private set; } =
+                LabelCombinationType.And;
+
             public bool SetAndLabels(IEnumerable<string> labels)
             {
                 return SetLabelsInternal(_andLabels, labels);
@@ -286,6 +290,17 @@ namespace WallstopStudios.DataVisualizer.Editor.State
             public bool SetOrLabels(IEnumerable<string> labels)
             {
                 return SetLabelsInternal(_orLabels, labels);
+            }
+
+            public bool SetCombinationType(LabelCombinationType combinationType)
+            {
+                if (CombinationType == combinationType)
+                {
+                    return false;
+                }
+
+                CombinationType = combinationType;
+                return true;
             }
 
             private static bool SetLabelsInternal(List<string> target, IEnumerable<string> source)

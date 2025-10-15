@@ -171,7 +171,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         {
             _dataVisualizer._displayedObjects.Clear();
             _dataVisualizer._currentDisplayStartIndex = 0;
-            _dataVisualizer._objectListView.RefreshItems();
+            ClearRowViewModels();
+            if (_dataVisualizer._objectListView != null)
+            {
+                _dataVisualizer._objectListView.RefreshItems();
+            }
+
             if (_dataVisualizer._objectPageController != null)
             {
                 _dataVisualizer._objectPageController.style.display = DisplayStyle.None;
@@ -190,8 +195,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         {
             _dataVisualizer._displayedObjects.Clear();
             _dataVisualizer._currentDisplayStartIndex = 0;
-            _dataVisualizer._objectListView.RefreshItems();
-            _dataVisualizer._objectListView.style.display = DisplayStyle.None;
+            ClearRowViewModels();
+            if (_dataVisualizer._objectListView != null)
+            {
+                _dataVisualizer._objectListView.RefreshItems();
+                _dataVisualizer._objectListView.style.display = DisplayStyle.None;
+            }
             if (_dataVisualizer._emptyObjectLabel != null)
             {
                 _dataVisualizer._emptyObjectLabel.text =
@@ -209,8 +218,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         {
             _dataVisualizer._displayedObjects.Clear();
             _dataVisualizer._currentDisplayStartIndex = 0;
-            _dataVisualizer._objectListView.RefreshItems();
-            _dataVisualizer._objectListView.style.display = DisplayStyle.None;
+            ClearRowViewModels();
+            if (_dataVisualizer._objectListView != null)
+            {
+                _dataVisualizer._objectListView.RefreshItems();
+                _dataVisualizer._objectListView.style.display = DisplayStyle.None;
+            }
             if (_dataVisualizer._emptyObjectLabel != null)
             {
                 string typeDisplay = NamespaceController.GetTypeDisplayName(selectedType);
@@ -252,6 +265,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 _dataVisualizer._displayedMetadata.Clear();
                 _dataVisualizer._displayedMetadata.AddRange(filteredMetadata);
                 _dataVisualizer._currentDisplayStartIndex = 0;
+                SynchronizeRowViewModels(_dataVisualizer._currentDisplayStartIndex);
             }
             else
             {
@@ -313,12 +327,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 }
 
                 _dataVisualizer._currentDisplayStartIndex = startIndex;
+                SynchronizeRowViewModels(_dataVisualizer._currentDisplayStartIndex);
             }
 
-            _dataVisualizer._objectListView.itemsSource = null;
-            _dataVisualizer._objectListView.itemsSource = _dataVisualizer._displayedObjects;
-            _dataVisualizer._objectListView.RefreshItems();
-            _dataVisualizer._objectListView.Rebuild();
+            if (_dataVisualizer._objectListView != null)
+            {
+                _dataVisualizer._objectListView.itemsSource = null;
+                _dataVisualizer._objectListView.itemsSource = _dataVisualizer._objectRowViewModels;
+                _dataVisualizer._objectListView.RefreshItems();
+                _dataVisualizer._objectListView.Rebuild();
+            }
         }
 
         private void UpdateSelectionState()
@@ -370,6 +388,50 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 _dataVisualizer._selectedObjects
             );
             _eventHub.Publish(new ObjectSelectionChangedEvent(primarySelection, snapshot));
+        }
+
+        private void SynchronizeRowViewModels(int startIndex)
+        {
+            List<ObjectRowViewModel> viewModels = _dataVisualizer._objectRowViewModels;
+            Stack<ObjectRowViewModel> pool = _dataVisualizer._objectRowViewModelPool;
+            List<ScriptableObject> displayedObjects = _dataVisualizer._displayedObjects;
+            List<DataAssetMetadata> displayedMetadata = _dataVisualizer._displayedMetadata;
+
+            while (viewModels.Count < displayedObjects.Count)
+            {
+                ObjectRowViewModel viewModel =
+                    pool.Count > 0 ? pool.Pop() : new ObjectRowViewModel();
+                viewModels.Add(viewModel);
+            }
+
+            while (viewModels.Count > displayedObjects.Count)
+            {
+                int lastIndex = viewModels.Count - 1;
+                ObjectRowViewModel recycled = viewModels[lastIndex];
+                viewModels.RemoveAt(lastIndex);
+                pool.Push(recycled);
+            }
+
+            for (int index = 0; index < viewModels.Count; index++)
+            {
+                ScriptableObject dataObject = displayedObjects[index];
+                DataAssetMetadata metadata = index < displayedMetadata.Count
+                    ? displayedMetadata[index]
+                    : null;
+                viewModels[index].Update(dataObject, metadata, startIndex + index);
+            }
+        }
+
+        private void ClearRowViewModels()
+        {
+            List<ObjectRowViewModel> viewModels = _dataVisualizer._objectRowViewModels;
+            Stack<ObjectRowViewModel> pool = _dataVisualizer._objectRowViewModelPool;
+            for (int index = 0; index < viewModels.Count; index++)
+            {
+                pool.Push(viewModels[index]);
+            }
+
+            viewModels.Clear();
         }
     }
 }
