@@ -84,6 +84,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 dataVisualizer._isDragging = true;
 
                 dataVisualizer.StartDragVisuals(Vector2.zero, "Dummy");
+                Assert.IsTrue(
+                    dataVisualizer.rootVisualElement.ClassListContains("dragging-cursor")
+                );
                 dataVisualizer.CancelDrag();
 
                 Assert.AreEqual(

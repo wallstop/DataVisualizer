@@ -5786,6 +5786,36 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectListController.BuildObjectsView();
         }
 
+        internal IReadOnlyList<Type> GetTypesForNamespace(string namespaceKey)
+        {
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return Array.Empty<Type>();
+            }
+
+            if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types) || types == null)
+            {
+                return Array.Empty<Type>();
+            }
+
+            return types.ToList();
+        }
+
+        internal IReadOnlyDictionary<string, int> GetNamespaceOrderSnapshot()
+        {
+            return new Dictionary<string, int>(_namespaceOrder, StringComparer.Ordinal);
+        }
+
+        internal IReadOnlyCollection<string> GetNamespaceKeys()
+        {
+            return _scriptableObjectTypes.Keys.ToList();
+        }
+
+        internal int GetNamespaceOrderIndex(string namespaceKey)
+        {
+            return _namespaceOrder.GetValueOrDefault(namespaceKey, -1);
+        }
+
         private void HandleTypeSelectedEvent(TypeSelectedEvent evt)
         {
             if (evt == null)

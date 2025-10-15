@@ -65,7 +65,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
-            if (!_dataVisualizer._namespaceOrder.TryGetValue(namespaceKey, out int order))
+            int order = _dataVisualizer.GetNamespaceOrderIndex(namespaceKey);
+            if (order < 0)
             {
                 return;
             }
@@ -136,17 +137,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return null;
             }
 
-            foreach (KeyValuePair<string, List<Type>> entry in _dataVisualizer._scriptableObjectTypes)
+            foreach (string namespaceKey in _dataVisualizer.GetNamespaceKeys())
             {
-                List<Type> types = entry.Value;
-                if (types == null)
-                {
-                    continue;
-                }
-
+                IReadOnlyList<Type> types = _dataVisualizer.GetTypesForNamespace(namespaceKey);
                 if (types.Contains(type))
                 {
-                    return entry.Key;
+                    return namespaceKey;
                 }
             }
 
@@ -237,19 +233,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 }
 
                 List<Type> removableTypes = new List<Type>();
-                _dataVisualizer._scriptableObjectTypes.TryGetValue(
-                    namespaceKey,
-                    out List<Type> allTypes
-                );
-                if (allTypes != null)
+                IReadOnlyList<Type> allTypes = _dataVisualizer.GetTypesForNamespace(namespaceKey);
+                for (int index = 0; index < allTypes.Count; index++)
                 {
-                    for (int index = 0; index < allTypes.Count; index++)
+                    Type candidate = allTypes[index];
+                    if (NamespaceController.IsTypeRemovable(candidate))
                     {
-                        Type candidate = allTypes[index];
-                        if (NamespaceController.IsTypeRemovable(candidate))
-                        {
-                            removableTypes.Add(candidate);
-                        }
+                        removableTypes.Add(candidate);
                     }
                 }
 
@@ -526,20 +516,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private List<string> BuildDesiredNamespaceOrder()
         {
             Dictionary<string, int> resolvedOrder = new Dictionary<string, int>(
+                _dataVisualizer.GetNamespaceOrderSnapshot(),
                 StringComparer.Ordinal
             );
-            foreach (KeyValuePair<string, int> entry in _dataVisualizer._namespaceOrder)
-            {
-                resolvedOrder[entry.Key] = entry.Value;
-            }
 
-            foreach (
-                KeyValuePair<string, List<Type>> entry in _dataVisualizer._scriptableObjectTypes
-            )
+            foreach (string namespaceKey in _dataVisualizer.GetNamespaceKeys())
             {
-                if (!resolvedOrder.ContainsKey(entry.Key))
+                if (!resolvedOrder.ContainsKey(namespaceKey))
                 {
-                    resolvedOrder[entry.Key] = int.MaxValue;
+                    resolvedOrder[namespaceKey] = int.MaxValue;
                 }
             }
 
@@ -575,16 +560,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return new List<string>();
             }
 
-            if (
-                !_dataVisualizer._scriptableObjectTypes.TryGetValue(
-                    namespaceKey,
-                    out List<Type> types
-                )
-            )
-            {
-                return new List<string>();
-            }
-
+            IReadOnlyList<Type> types = _dataVisualizer.GetTypesForNamespace(namespaceKey);
             List<string> ordered = new List<string>(types.Count);
             for (int index = 0; index < types.Count; index++)
             {
