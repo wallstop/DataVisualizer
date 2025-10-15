@@ -7724,6 +7724,38 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private void OnObjectPointerEnter(PointerEnterEvent evt)
+        {
+            if (_isDragging)
+            {
+                return;
+            }
+
+            VisualElement targetElement = evt.currentTarget as VisualElement;
+            if (targetElement == null)
+            {
+                return;
+            }
+
+            targetElement.RemoveFromClassList("dragging-cursor");
+        }
+
+        private void OnObjectPointerLeave(PointerLeaveEvent evt)
+        {
+            if (_isDragging)
+            {
+                return;
+            }
+
+            VisualElement targetElement = evt.currentTarget as VisualElement;
+            if (targetElement == null)
+            {
+                return;
+            }
+
+            targetElement.RemoveFromClassList("dragging-cursor");
+        }
+
         internal void OnPointerCaptureOut(PointerCaptureOutEvent evt)
         {
             if (_activeDragType != DragType.None && _draggedElement != null)
