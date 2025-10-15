@@ -183,6 +183,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private readonly AssetIndex _assetIndex = new();
         private readonly List<string> _allManagedObjectGuids = new();
         private readonly List<ScriptableObject> _displayedObjects = new();
+        private int _currentDisplayStartIndex;
         private bool _assetIndexNeedsFullRebuild = true;
         private readonly List<VisualElement> _currentSearchResultItems = new();
         private readonly List<VisualElement> _currentTypePopoverItems = new();
@@ -199,7 +200,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Button _nextPageButton;
         private IntegerField _currentPageField;
         private IntegerField _maxPageField;
-        private VisualElement _objectListContainer;
         private VisualElement _inspectorContainer;
         private ListView _objectListView;
         private ScrollView _inspectorScrollView;
@@ -4863,7 +4863,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectListView.selectionChanged += OnObjectListSelectionChanged;
             _objectListView.unbindItem += UnbindObjectRow;
             objectColumn.Add(_objectListView);
-            _objectListContainer = _objectListView.contentContainer;
 
             _emptyObjectLabel = new Label("")
             {
@@ -5476,6 +5475,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (config == null || _namespaceController.SelectedType == null)
                 {
                     _filteredObjects.Clear();
+                    _currentDisplayStartIndex = 0;
                     if (_filterStatusLabel != null)
                     {
                         _filterStatusLabel.text = "Select a type to see objects.";
@@ -5973,6 +5973,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (selectedType == null)
             {
                 _displayedObjects.Clear();
+                _currentDisplayStartIndex = 0;
                 _objectListView.RefreshItems();
                 if (_objectPageController != null)
                 {
@@ -5999,6 +6000,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (_selectedObjects.Count == 0)
             {
                 _displayedObjects.Clear();
+                _currentDisplayStartIndex = 0;
                 _objectListView.RefreshItems();
                 _objectListView.style.display = DisplayStyle.None;
                 if (_emptyObjectLabel != null)
@@ -6018,6 +6020,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (_filteredObjects.Count == 0)
             {
                 _displayedObjects.Clear();
+                _currentDisplayStartIndex = 0;
                 _objectListView.RefreshItems();
                 _objectListView.style.display = DisplayStyle.None;
                 if (_emptyObjectLabel != null)
@@ -6054,6 +6057,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 _displayedObjects.Clear();
                 _displayedObjects.AddRange(_filteredObjects);
+                _currentDisplayStartIndex = 0;
             }
             else
             {
@@ -6096,6 +6100,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     _displayedObjects.Add(_filteredObjects[i]);
                 }
+                _currentDisplayStartIndex = startIndex;
             }
 
             _objectListView.RefreshItems();
@@ -6348,6 +6353,17 @@ namespace WallstopStudios.DataVisualizer.Editor
         private ScrollView GetObjectListScrollView()
         {
             return _objectListView?.Q<ScrollView>();
+        }
+
+        private VisualElement GetObjectListContentContainer()
+        {
+            ScrollView scrollView = GetObjectListScrollView();
+            if (scrollView != null)
+            {
+                return scrollView.contentContainer;
+            }
+
+            return _objectListView?.contentContainer;
         }
 
         private static void UpdateGoButtonState(Button button, bool enabled)
@@ -8123,54 +8139,94 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             int targetIndex = _inPlaceGhost?.userData is int index ? index : -1;
             _inPlaceGhost?.RemoveFromHierarchy();
-            if (
-                _draggedElement == null
-                || _draggedData is not ScriptableObject draggedObject
-                || _objectListContainer == null
-            )
+            if (_draggedElement == null || _draggedData is not ScriptableObject draggedObject)
             {
                 return;
             }
 
-            if (targetIndex < 0)
+            if (GetObjectListContentContainer() == null || targetIndex < 0)
             {
                 return;
             }
 
-            int currentIndex = _objectListContainer.IndexOf(_draggedElement);
-            if (currentIndex < 0)
+            if (_displayedObjects.Count == 0)
             {
                 return;
             }
 
-            if (currentIndex < targetIndex)
-            {
-                targetIndex--;
-            }
+            int displayTargetIndex = Mathf.Clamp(targetIndex, 0, _displayedObjects.Count);
 
-            _draggedElement.style.display = DisplayStyle.Flex;
-            _draggedElement.style.opacity = 1.0f;
-            _objectListContainer.Insert(targetIndex, _draggedElement);
-            foreach (VisualElement child in _objectListContainer.Children())
-            {
-                NamespaceController.RecalibrateVisualElements(child, offset: 1);
-            }
-
-            int oldDataIndex = _selectedObjects.IndexOf(draggedObject);
-            if (0 > oldDataIndex)
+            int globalCurrentIndex = _filteredObjects.IndexOf(draggedObject);
+            if (globalCurrentIndex < 0)
             {
                 return;
             }
 
-            _selectedObjects.RemoveAt(oldDataIndex);
-            int dataInsertIndex = targetIndex;
-            dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _selectedObjects.Count);
-            _selectedObjects.Insert(dataInsertIndex, draggedObject);
+            int filteredCount = _filteredObjects.Count;
+            int globalTargetIndex = Mathf.Clamp(
+                _currentDisplayStartIndex + displayTargetIndex,
+                0,
+                filteredCount
+            );
+
+            if (globalCurrentIndex < globalTargetIndex)
+            {
+                globalTargetIndex = Mathf.Max(0, globalTargetIndex - 1);
+            }
+
+            List<ScriptableObject> filteredWithoutDragged = new(_filteredObjects);
+            filteredWithoutDragged.Remove(draggedObject);
+            globalTargetIndex = Mathf.Clamp(globalTargetIndex, 0, filteredWithoutDragged.Count);
+
+            ScriptableObject insertBefore =
+                globalTargetIndex < filteredWithoutDragged.Count
+                    ? filteredWithoutDragged[globalTargetIndex]
+                    : null;
+            ScriptableObject insertAfter =
+                globalTargetIndex > 0 ? filteredWithoutDragged[globalTargetIndex - 1] : null;
+
+            int selectedCurrentIndex = _selectedObjects.IndexOf(draggedObject);
+            if (selectedCurrentIndex < 0)
+            {
+                return;
+            }
+
+            _selectedObjects.RemoveAt(selectedCurrentIndex);
+
+            bool insertedIntoSelection = false;
+            if (insertBefore != null)
+            {
+                int beforeIndex = _selectedObjects.IndexOf(insertBefore);
+                if (beforeIndex >= 0)
+                {
+                    _selectedObjects.Insert(beforeIndex, draggedObject);
+                    insertedIntoSelection = true;
+                }
+            }
+
+            if (!insertedIntoSelection && insertAfter != null)
+            {
+                int afterIndex = _selectedObjects.IndexOf(insertAfter);
+                if (afterIndex >= 0)
+                {
+                    _selectedObjects.Insert(afterIndex + 1, draggedObject);
+                    insertedIntoSelection = true;
+                }
+            }
+
+            if (!insertedIntoSelection)
+            {
+                _selectedObjects.Add(draggedObject);
+            }
+
             Type selectedType = _namespaceController.SelectedType;
             if (selectedType != null)
             {
                 UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
             }
+
+            BuildObjectsView();
+            SelectObject(draggedObject);
         }
 
         private void StartDragVisuals(Vector2 currentPosition, string dragText)
@@ -8281,7 +8337,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 case DragType.Object:
                 {
-                    container = _objectListContainer.contentContainer;
+                    container = GetObjectListContentContainer();
                     break;
                 }
                 case DragType.Namespace:
