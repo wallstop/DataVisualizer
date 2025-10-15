@@ -358,11 +358,13 @@ namespace WallstopStudios.DataVisualizer.Editor
         public DataVisualizer()
         {
             _namespaceController = new NamespaceController(_scriptableObjectTypes, _namespaceOrder);
+            _eventHub ??= new DataVisualizerEventHub();
             _objectSelectionService = new Services.ObjectSelectionService(_sessionState);
             _objectListController = new ObjectListController(
                 this,
                 _objectSelectionService,
-                _sessionState
+                _sessionState,
+                _eventHub
             );
             _objectCommandService = new Services.ObjectCommandService(this);
             _labelService = new Services.LabelService(this);

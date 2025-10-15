@@ -45,7 +45,7 @@
 4. [x] Ensure namespace rebuilds diff against cached state to minimize UI churn, keeping performance characteristics.
 
 ### Priority 3 – Object List and Selection
-1. Introduce `ObjectListController` that owns the `ListView`, pagination header, and drag reorder behavior. It consumes `IDataAssetService` metadata and emits commands (`CloneRequested`, `RenameRequested`, etc.) through the event hub.
+1. [~] Introduce `ObjectListController` that owns the `ListView`, pagination header, and drag reorder behavior. It consumes `IDataAssetService` metadata and emits commands (`CloneRequested`, `RenameRequested`, etc.) through the event hub.
 2. Create `ObjectSelectionService` to manage `_selectedObjects`, `_selectedObject`, and associated metadata (GUID tracking, highlight index). This reduces shared mutable collections.
 3. Refactor object command handlers (clone, rename, move, delete) into dedicated command classes or strategies (`IObjectCommand`) scoped to services for file operations, keeping UI logic clean.
 4. Preserve `ListView` virtualization and pooling while ensuring row binding pulls metadata lazily and reuses row view models to maintain performance.

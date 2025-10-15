@@ -2,6 +2,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 {
     using System;
     using System.Collections.Generic;
+    using Events;
     using Services;
     using State;
     using Styles;
@@ -13,11 +14,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private readonly DataVisualizer _dataVisualizer;
         private readonly ObjectSelectionService _selectionService;
         private readonly VisualizerSessionState _sessionState;
+        private readonly DataVisualizerEventHub _eventHub;
 
         public ObjectListController(
             DataVisualizer dataVisualizer,
             ObjectSelectionService selectionService,
-            VisualizerSessionState sessionState
+            VisualizerSessionState sessionState,
+            DataVisualizerEventHub eventHub
         )
         {
             _dataVisualizer =
@@ -25,6 +28,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _selectionService =
                 selectionService ?? throw new ArgumentNullException(nameof(selectionService));
             _sessionState = sessionState ?? throw new ArgumentNullException(nameof(sessionState));
+            _eventHub = eventHub ?? throw new ArgumentNullException(nameof(eventHub));
         }
 
         public void BuildObjectsView()
@@ -83,6 +87,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer.SetCurrentPage(selectedType, currentPage - 1);
             BuildObjectsView();
+            PublishPageChanged(selectedType);
         }
 
         public void HandleNextPageRequested()
@@ -102,6 +107,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer.SetCurrentPage(selectedType, currentPage + 1);
             BuildObjectsView();
+            PublishPageChanged(selectedType);
         }
 
         public void HandleCurrentPageChanged(int requestedPage)
@@ -125,6 +131,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer.SetCurrentPage(selectedType, clampedPage);
             BuildObjectsView();
+            PublishPageChanged(selectedType);
         }
 
         public void HandleSelectionChanged(IEnumerable<object> selectedItems)
@@ -151,6 +158,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             if (!ReferenceEquals(firstSelection, _dataVisualizer._selectedObject))
             {
                 _dataVisualizer.SelectObject(firstSelection);
+                PublishSelectionChanged(firstSelection);
             }
         }
 
@@ -330,6 +338,25 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _dataVisualizer._isUpdatingListSelection = true;
             _dataVisualizer._objectListView.ClearSelection();
             _dataVisualizer._isUpdatingListSelection = false;
+        }
+
+        private void PublishPageChanged(Type selectedType)
+        {
+            if (selectedType == null)
+            {
+                return;
+            }
+
+            int pageIndex = _dataVisualizer.GetCurrentPage(selectedType);
+            _eventHub.Publish(new ObjectPageChangedEvent(selectedType, pageIndex));
+        }
+
+        private void PublishSelectionChanged(ScriptableObject primarySelection)
+        {
+            IReadOnlyList<ScriptableObject> snapshot = new List<ScriptableObject>(
+                _dataVisualizer._selectedObjects
+            );
+            _eventHub.Publish(new ObjectSelectionChangedEvent(primarySelection, snapshot));
         }
     }
 }
