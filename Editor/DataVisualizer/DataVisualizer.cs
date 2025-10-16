@@ -253,7 +253,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal VisualElement _orLabelsContainer;
         internal Label _filterStatusLabel;
 
-
         internal readonly List<string> _currentUniqueLabelsForType = new();
 
         internal IReadOnlyList<ScriptableObject> FilteredObjects =>
@@ -274,7 +273,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal bool _isLabelCachePopulated;
         internal readonly List<VisualElement> _currentLabelSuggestionItems = new();
         internal int _labelSuggestionHighlightIndex = -1;
-
 
         internal TextField _searchField;
         internal VisualElement _searchPopover;
@@ -347,9 +345,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal InputShortcutController _inputShortcutController;
         internal DragAndDropController _dragAndDropController;
         private Services.ObjectCommands.ObjectCommandDispatcher _objectCommandDispatcher;
+        internal ProcessorPanelController _processorPanelController;
+        internal Services.IDataProcessorRegistry _processorRegistry;
+        internal Services.ProcessorExecutionService _processorExecutionService;
         internal LabelPanelController _labelPanelController;
         internal ILabelService _labelService;
-        internal ProcessorPanelController _processorPanelController;
         private IDisposable _typeSelectedSubscription;
         private IDisposable _namespaceRemovalConfirmedSubscription;
         private IDisposable _typeRemovalConfirmedSubscription;
@@ -367,7 +367,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _sessionState,
                 _eventHub
             );
-            _processorPanelController = new ProcessorPanelController(this, _sessionState);
+            _processorRegistry = new Services.DataProcessorRegistry();
+            _processorExecutionService = new Services.ProcessorExecutionService();
+            _processorPanelController = new ProcessorPanelController(
+                this,
+                _sessionState,
+                _processorRegistry
+            );
             _objectCommandService = new Services.ObjectCommandService(this, _eventHub);
             EnsureObjectCommandSubscriptions();
             _inputShortcutController = new InputShortcutController(this, _eventHub);
@@ -474,6 +480,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 (popover, trigger) => OpenPopover(popover, trigger),
                 _createPopover
             );
+            _processorRegistry ??= new Services.DataProcessorRegistry();
+            _processorExecutionService ??= new Services.ProcessorExecutionService();
+            _processorPanelController ??= new ProcessorPanelController(
+                this,
+                _sessionState,
+                _processorRegistry
+            );
+            _processorPanelController.Bind(_eventHub);
             _objectCommandService ??= new Services.ObjectCommandService(this, _eventHub);
             _inputShortcutController = new InputShortcutController(this, _eventHub);
             _dragAndDropController = new DragAndDropController(this, _eventHub);
@@ -531,6 +545,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _namespacePanelController?.Dispose();
             _namespacePanelController = null;
+            _processorPanelController?.Dispose();
+            _processorPanelController = null;
+            _processorRegistry = null;
+            _processorExecutionService = null;
             _typeSelectedSubscription?.Dispose();
             _typeSelectedSubscription = null;
             _namespaceRemovalConfirmedSubscription?.Dispose();
@@ -1579,7 +1597,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-
         internal void BuildProcessorColumnView()
         {
             _processorPanelController?.Refresh();
@@ -1589,7 +1606,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             _processorPanelController?.ToggleCollapse();
         }
-
 
         internal void RunDataProcessor(VisualElement context, IDataProcessor processor)
         {
@@ -1636,9 +1652,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     try
                     {
-                        processor.Process(_namespaceController.SelectedType, toProcess);
-                        AssetDatabase.SaveAssets();
-                        AssetDatabase.Refresh();
+                        _processorExecutionService.Execute(
+                            processor,
+                            _namespaceController.SelectedType,
+                            toProcess
+                        );
                         ScheduleRefresh();
                     }
                     catch (Exception ex)
@@ -4432,8 +4450,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
 
             objectColumn.Add(_processorPanelController.RootElement);
-
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
 
             _objectListController.ConfigureCreateButton(
                 BuildCreatePopoverContent,

@@ -2,8 +2,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using Data;
+    using Events;
     using Services;
     using State;
     using Styles;
@@ -12,12 +12,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
     using UnityEngine;
     using UnityEngine.UIElements;
 
-    internal sealed class ProcessorPanelController
+    internal sealed class ProcessorPanelController : IDisposable
     {
         private readonly DataVisualizer _dataVisualizer;
         private readonly VisualizerSessionState _sessionState;
-        private readonly List<IDataProcessor> _allProcessors = new List<IDataProcessor>();
-        private readonly List<IDataProcessor> _compatibleProcessors = new List<IDataProcessor>();
+        private readonly IDataProcessorRegistry _registry;
+        private readonly List<IDataProcessor> _compatibleProcessors = new();
         private readonly VisualElement _root;
         private readonly VisualElement _header;
         private readonly Label _headerLabel;
@@ -26,15 +26,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private readonly HorizontalToggle _logicToggle;
         private readonly ScrollView _scrollView;
         private readonly VisualElement _listContainer;
-
+        private DataVisualizerEventHub _eventHub;
+        private IDisposable _typeSelectedSubscription;
         public ProcessorPanelController(
             DataVisualizer dataVisualizer,
-            VisualizerSessionState sessionState
+            VisualizerSessionState sessionState,
+            IDataProcessorRegistry registry
         )
         {
             _dataVisualizer =
                 dataVisualizer ?? throw new ArgumentNullException(nameof(dataVisualizer));
             _sessionState = sessionState ?? throw new ArgumentNullException(nameof(sessionState));
+            _registry = registry ?? throw new ArgumentNullException(nameof(registry));
 
             _root = new VisualElement { name = "processor-column" };
             _root.AddToClassList("processor-column");
@@ -94,32 +97,28 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         public VisualElement RootElement => _root;
 
-        public void RebuildProcessorCache()
+        public void Bind(DataVisualizerEventHub eventHub)
         {
-            _allProcessors.Clear();
-
-            IEnumerable<Type> processorTypes = TypeCache
-                .GetTypesDerivedFrom<IDataProcessor>()
-                .Where(t => !t.IsAbstract && !t.IsInterface && !t.IsGenericTypeDefinition);
-
-            foreach (Type type in processorTypes)
+            if (eventHub == null)
             {
-                try
-                {
-                    if (Activator.CreateInstance(type) is IDataProcessor processor)
-                    {
-                        _allProcessors.Add(processor);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError(
-                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex.Message}"
-                    );
-                }
+                return;
             }
 
-            _allProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
+            Unbind();
+            _eventHub = eventHub;
+            _typeSelectedSubscription = _eventHub.Subscribe<TypeSelectedEvent>(HandleTypeSelected);
+        }
+
+        public void Unbind()
+        {
+            _typeSelectedSubscription?.Dispose();
+            _typeSelectedSubscription = null;
+            _eventHub = null;
+        }
+
+        public void RebuildProcessorCache()
+        {
+            _registry.Refresh();
         }
 
         public void Refresh()
@@ -130,13 +129,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             Type selectedType = _dataVisualizer._namespaceController.SelectedType;
             if (selectedType != null)
             {
-                for (int index = 0; index < _allProcessors.Count; index++)
+                IReadOnlyList<IDataProcessor> compatible = _registry.GetCompatibleProcessors(
+                    selectedType
+                );
+                for (int index = 0; index < compatible.Count; index++)
                 {
-                    IDataProcessor processor = _allProcessors[index];
-                    if (processor.Accepts != null && processor.Accepts.Contains(selectedType))
-                    {
-                        _compatibleProcessors.Add(processor);
-                    }
+                    _compatibleProcessors.Add(compatible[index]);
                 }
             }
 
@@ -263,6 +261,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _headerLabel.text = "Processors";
             _content.style.display = DisplayStyle.Flex;
             _header.style.borderBottomWidth = 0;
+        }
+
+        private void HandleTypeSelected(TypeSelectedEvent evt)
+        {
+            Refresh();
+        }
+
+        public void Dispose()
+        {
+            Unbind();
         }
     }
 }
