@@ -57,7 +57,7 @@
 4. Update inspector integration to construct serialized objects via a helper (`InspectorBindingService`), disposing them responsibly and handling Odin integration with feature flags.
 
 ### Priority 5 – Processor Pipeline
-1. Create `ProcessorPanelController` for building the processor list UI, toggles, and execution actions. It observes current selection and filter state via the event hub.
+1. [~] Create `ProcessorPanelController` for building the processor list UI, toggles, and execution actions. Controller now owns the processor column UI and refresh logic; event hub integration and registry abstraction pending.
 2. Add `IProcessorRegistry` to surface available `IDataProcessor` implementations, caching instances and capabilities. `ProcessorPanelController` uses the registry instead of re-creating instances in `DataVisualizer.OnEnable`.
 3. Introduce `ProcessorExecutionService` to run processors asynchronously or with progress reporting, ensuring results update the state and trigger asset refreshes efficiently.
 4. Incorporate performance telemetry (duration, allocations) via opt-in diagnostics stored in `VisualizerSessionState` for future debugging.

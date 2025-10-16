@@ -253,8 +253,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal VisualElement _orLabelsContainer;
         internal Label _filterStatusLabel;
 
-        internal HorizontalToggle _processorLogicToggle;
-        internal VisualElement _processorArea;
 
         internal readonly List<string> _currentUniqueLabelsForType = new();
 
@@ -277,13 +275,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal readonly List<VisualElement> _currentLabelSuggestionItems = new();
         internal int _labelSuggestionHighlightIndex = -1;
 
-        internal VisualElement _processorAreaElement;
-        internal VisualElement _processorListContainer;
-        internal Label _processorToggleCollapseButton;
-        internal VisualElement _processorHeader;
-        internal Label _processorHeaderLabel;
-        internal readonly List<IDataProcessor> _allDataProcessors = new();
-        internal readonly List<IDataProcessor> _compatibleDataProcessors = new();
 
         internal TextField _searchField;
         internal VisualElement _searchPopover;
@@ -358,6 +349,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Services.ObjectCommands.ObjectCommandDispatcher _objectCommandDispatcher;
         internal LabelPanelController _labelPanelController;
         internal ILabelService _labelService;
+        internal ProcessorPanelController _processorPanelController;
         private IDisposable _typeSelectedSubscription;
         private IDisposable _namespaceRemovalConfirmedSubscription;
         private IDisposable _typeRemovalConfirmedSubscription;
@@ -375,6 +367,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _sessionState,
                 _eventHub
             );
+            _processorPanelController = new ProcessorPanelController(this, _sessionState);
             _objectCommandService = new Services.ObjectCommandService(this, _eventHub);
             EnsureObjectCommandSubscriptions();
             _inputShortcutController = new InputShortcutController(this, _eventHub);
@@ -486,28 +479,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _dragAndDropController = new DragAndDropController(this, _eventHub);
             EnsureLabelSubsystems();
 
-            _allDataProcessors.Clear();
-            IEnumerable<Type> processorTypes = TypeCache
-                .GetTypesDerivedFrom<IDataProcessor>()
-                .Where(t => !t.IsAbstract && !t.IsInterface && !t.IsGenericTypeDefinition);
-            foreach (Type type in processorTypes)
-            {
-                try
-                {
-                    if (Activator.CreateInstance(type) is IDataProcessor instance)
-                    {
-                        _allDataProcessors.Add(instance);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError(
-                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex.Message}"
-                    );
-                }
-            }
-
-            _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
+            _processorPanelController.RebuildProcessorCache();
+            _processorPanelController.Refresh();
 
             string restoredNamespaceKey = GetLastSelectedNamespaceKey();
             if (!string.IsNullOrWhiteSpace(restoredNamespaceKey))
@@ -1361,7 +1334,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             }
             _namespaceColumnElement = CreateNamespaceColumn();
-            CreateProcessorColumn();
             _objectColumnElement = CreateObjectColumn();
             VisualElement inspectorColumn = CreateInspectorColumn();
 
@@ -1607,233 +1579,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        internal void CreateProcessorColumn()
-        {
-            _processorAreaElement = new VisualElement { name = "processor-column" };
-            _processorAreaElement.AddToClassList("processor-column");
-
-            _processorHeader = new VisualElement { name = "processor-column-header" };
-            _processorHeader.AddToClassList("processor-column-header");
-            _processorHeaderLabel = new Label("Processors")
-            {
-                style = { unityFontStyleAndWeight = FontStyle.Bold },
-            };
-            _processorToggleCollapseButton = new Label();
-            _processorToggleCollapseButton.AddToClassList("collapse-toggle");
-            _processorToggleCollapseButton.AddToClassList(StyleConstants.ClickableClass);
-            _processorToggleCollapseButton.RegisterCallback<PointerDownEvent>(evt =>
-            {
-                if (evt.button != 0)
-                {
-                    return;
-                }
-
-                ToggleProcessorContentCollapse();
-            });
-
-            _processorHeader.Add(_processorToggleCollapseButton);
-            _processorHeader.Add(_processorHeaderLabel);
-            _processorAreaElement.Add(_processorHeader);
-
-            ProcessorState state = CurrentProcessorState;
-
-            _processorArea = new VisualElement { style = { flexDirection = FlexDirection.Column } };
-            _processorArea.AddToClassList("processor-area");
-            _processorLogicToggle = new HorizontalToggle()
-            {
-                name = "processor-logic-toggle",
-                LeftText = "ALL",
-                RightText = "FILTERED",
-            };
-            _processorLogicToggle.AddToClassList("processor");
-            _processorLogicToggle.OnLeftSelected += () =>
-            {
-                _processorLogicToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
-                _processorLogicToggle.LeftLabel.EnableInClassList(
-                    StyleConstants.ClickableClass,
-                    false
-                );
-                _processorLogicToggle.RightLabel.EnableInClassList(
-                    StyleConstants.ClickableClass,
-                    true
-                );
-                state = CurrentProcessorState;
-                if (state != null && state.logic != ProcessorLogic.All)
-                {
-                    state.logic = ProcessorLogic.All;
-                    SaveProcessorState(state);
-                }
-            };
-            _processorLogicToggle.OnRightSelected += () =>
-            {
-                _processorLogicToggle.Indicator.style.backgroundColor = new Color(
-                    1f,
-                    0.5f,
-                    0.3137254902f
-                );
-                _processorLogicToggle.LeftLabel.EnableInClassList(
-                    StyleConstants.ClickableClass,
-                    true
-                );
-                _processorLogicToggle.RightLabel.EnableInClassList(
-                    StyleConstants.ClickableClass,
-                    false
-                );
-                state = CurrentProcessorState;
-                if (state != null && state.logic != ProcessorLogic.Filtered)
-                {
-                    state.logic = ProcessorLogic.Filtered;
-                    SaveProcessorState(state);
-                }
-            };
-
-            switch (state?.logic ?? ProcessorLogic.Filtered)
-            {
-                case ProcessorLogic.All:
-                {
-                    _processorLogicToggle.SelectLeft(force: true);
-                    break;
-                }
-                case ProcessorLogic.Filtered:
-                {
-                    _processorLogicToggle.SelectRight(force: true);
-                    break;
-                }
-            }
-
-            _processorArea.Add(_processorLogicToggle);
-
-            ScrollView scrollView = new(ScrollViewMode.Vertical)
-            {
-                name = "processor-list-scrollview",
-            };
-            scrollView.AddToClassList("processor-list-scrollview");
-            _processorListContainer = new VisualElement { name = "processor-list-container" };
-            _processorListContainer.AddToClassList("processor-list-container");
-            scrollView.Add(_processorListContainer);
-            _processorArea.Add(scrollView);
-            _processorAreaElement.Add(_processorArea);
-        }
 
         internal void BuildProcessorColumnView()
         {
-            if (_processorListContainer == null || _processorAreaElement == null)
-            {
-                return;
-            }
-
-            _processorListContainer.Clear();
-            _compatibleDataProcessors.Clear();
-
-            if (_namespaceController.SelectedType != null)
-            {
-                _compatibleDataProcessors.AddRange(
-                    _allDataProcessors.Where(p =>
-                        p.Accepts != null && p.Accepts.Contains(_namespaceController.SelectedType)
-                    )
-                );
-            }
-
-            if (_compatibleDataProcessors.Count == 0)
-            {
-                _processorAreaElement.style.display = DisplayStyle.None;
-                return;
-            }
-
-            _processorAreaElement.style.display = DisplayStyle.Flex;
-            _processorToggleCollapseButton.SetEnabled(true);
-
-            ProcessorState state = CurrentProcessorState;
-
-            switch (state?.logic ?? ProcessorLogic.Filtered)
-            {
-                case ProcessorLogic.All:
-                {
-                    _processorLogicToggle.SelectLeft(force: true);
-                    break;
-                }
-                case ProcessorLogic.Filtered:
-                {
-                    _processorLogicToggle.SelectRight(force: true);
-                    break;
-                }
-            }
-
-            bool isCollapsed = state?.isCollapsed == true;
-            if (isCollapsed)
-            {
-                _processorToggleCollapseButton.text = StyleConstants.ArrowCollapsed;
-                _processorHeaderLabel.text =
-                    $"Processors (<b><color=yellow>{_compatibleDataProcessors.Count}</color></b>)";
-                if (_processorArea != null)
-                {
-                    _processorArea.style.display = DisplayStyle.None;
-                }
-
-                if (_processorHeader != null)
-                {
-                    _processorHeader.style.borderBottomWidth = 1;
-                }
-            }
-            else
-            {
-                _processorToggleCollapseButton.text = StyleConstants.ArrowExpanded;
-                _processorHeaderLabel.text = "Processors";
-                if (_processorArea != null)
-                {
-                    _processorArea.style.display = DisplayStyle.Flex;
-                }
-                if (_processorHeader != null)
-                {
-                    _processorHeader.style.borderBottomWidth = 0;
-                }
-
-                foreach (IDataProcessor processor in _compatibleDataProcessors)
-                {
-                    string processorName = processor.Name;
-                    if (!_textColorCache.TryGetValue(processorName, out Color color))
-                    {
-                        color = GenerateColorForText(processorName);
-                        _textColorCache[processorName] = color;
-                    }
-
-                    Label processorButton = new(processorName)
-                    {
-                        tooltip = processor.Description,
-                        style =
-                        {
-                            backgroundColor = color,
-                            color = IsColorDark(color) ? Color.white : Color.black,
-                        },
-                    };
-                    processorButton.AddToClassList("processor-button");
-                    processorButton.AddToClassList(StyleConstants.ClickableClass);
-
-                    IDataProcessor localProcessor = processor;
-                    processorButton.RegisterCallback<PointerDownEvent>(evt =>
-                    {
-                        if (evt.button != 0)
-                        {
-                            return;
-                        }
-
-                        RunDataProcessor(processorButton, localProcessor);
-                    });
-                    _processorListContainer.Add(processorButton);
-                }
-            }
+            _processorPanelController?.Refresh();
         }
 
         internal void ToggleProcessorContentCollapse()
         {
-            ProcessorState state = CurrentProcessorState;
-            if (state != null)
-            {
-                state.isCollapsed = !state.isCollapsed;
-                SaveProcessorState(state);
-            }
-            BuildProcessorColumnView();
+            _processorPanelController?.ToggleCollapse();
         }
+
 
         internal void RunDataProcessor(VisualElement context, IDataProcessor processor)
         {
@@ -4675,7 +4431,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
 
-            objectColumn.Add(_processorAreaElement);
+            objectColumn.Add(_processorPanelController.RootElement);
 
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
 
