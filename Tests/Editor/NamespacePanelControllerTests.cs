@@ -37,7 +37,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             public void SaveSettings(DataVisualizerSettings settings) { }
 
             public void SaveUserState(DataVisualizerUserState userState) { }
-
         }
 
         [Test]
@@ -62,8 +61,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
 
                 DataVisualizerUserState userState = new DataVisualizerUserState();
 
-                dataVisualizer._settings = settings;
-                dataVisualizer._userState = userState;
                 dataVisualizer._userStateRepository = new StubUserStateRepository
                 {
                     Settings = settings,

@@ -2,6 +2,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 {
     using System;
     using System.Linq;
+    using Events;
     using Extensions;
     using Styles;
     using UnityEngine;
@@ -10,11 +11,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
     internal sealed class InputShortcutController
     {
         private readonly DataVisualizer _dataVisualizer;
+        private readonly DataVisualizerEventHub _eventHub;
 
-        public InputShortcutController(DataVisualizer dataVisualizer)
+        public InputShortcutController(
+            DataVisualizer dataVisualizer,
+            DataVisualizerEventHub eventHub
+        )
         {
             _dataVisualizer =
                 dataVisualizer ?? throw new ArgumentNullException(nameof(dataVisualizer));
+            _eventHub = eventHub ?? throw new ArgumentNullException(nameof(eventHub));
         }
 
         public void Register(VisualElement target)
@@ -148,8 +154,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                         case DataVisualizer.FocusArea.TypeList:
                         {
                             navigationHandled = true;
-                            _dataVisualizer._namespaceController.IncrementTypeSelection(
-                                _dataVisualizer
+                            _eventHub.Publish(
+                                new TypeNavigationRequestedEvent(TypeNavigationDirection.Next)
                             );
                             break;
                         }
@@ -171,8 +177,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                         case DataVisualizer.FocusArea.TypeList:
                         {
                             navigationHandled = true;
-                            _dataVisualizer._namespaceController.DecrementTypeSelection(
-                                _dataVisualizer
+                            _eventHub.Publish(
+                                new TypeNavigationRequestedEvent(TypeNavigationDirection.Previous)
                             );
                             break;
                         }

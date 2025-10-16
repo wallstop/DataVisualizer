@@ -7,6 +7,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
     using System.Reflection;
     using Data;
     using NUnit.Framework;
+    using Services;
     using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
@@ -21,6 +22,27 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
 
         private sealed class ThirdDummyScriptableObject : ScriptableObject { }
 
+        private sealed class StubUserStateRepository : IUserStateRepository
+        {
+            public DataVisualizerSettings Settings { get; set; }
+
+            public DataVisualizerUserState UserState { get; set; }
+
+            public DataVisualizerSettings LoadSettings()
+            {
+                return Settings;
+            }
+
+            public DataVisualizerUserState LoadUserState()
+            {
+                return UserState;
+            }
+
+            public void SaveSettings(DataVisualizerSettings settings) { }
+
+            public void SaveUserState(DataVisualizerUserState userState) { }
+        }
+
         [Test]
         public void BuildNamespaceViewWithSelectedTypeRetainsNamespaceSelection()
         {
@@ -34,7 +56,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 try
                 {
                     settings.persistStateInSettingsAsset = true;
-                    dataVisualizer._settings = settings;
+                    DataVisualizerUserState userState = new DataVisualizerUserState();
+                    dataVisualizer._userStateRepository = new StubUserStateRepository
+                    {
+                        Settings = settings,
+                        UserState = userState,
+                    };
 
                     Dictionary<string, List<Type>> managedTypes = new Dictionary<
                         string,
@@ -120,7 +147,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 try
                 {
                     settings.persistStateInSettingsAsset = true;
-                    dataVisualizer._settings = settings;
+                    DataVisualizerUserState userState = new DataVisualizerUserState();
+                    dataVisualizer._userStateRepository = new StubUserStateRepository
+                    {
+                        Settings = settings,
+                        UserState = userState,
+                    };
 
                     Dictionary<string, List<Type>> managedTypes = new Dictionary<
                         string,

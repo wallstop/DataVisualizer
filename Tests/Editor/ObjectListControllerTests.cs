@@ -5,8 +5,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
     using System.Collections.Generic;
     using System.Linq;
     using Controllers;
-    using Events;
     using Data;
+    using Events;
     using NUnit.Framework;
     using Services;
     using State;
@@ -38,7 +38,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             public void SaveSettings(DataVisualizerSettings settings) { }
 
             public void SaveUserState(DataVisualizerUserState userState) { }
-
         }
 
         [Test]
@@ -54,7 +53,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     dataVisualizer,
                     out Type selectedType
                 );
-                createdSettings = dataVisualizer._settings;
+                createdSettings = dataVisualizer.Settings;
 
                 dataVisualizer.SetCurrentPage(selectedType, 0);
 
@@ -93,7 +92,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     dataVisualizer,
                     out Type selectedType
                 );
-                createdSettings = dataVisualizer._settings;
+                createdSettings = dataVisualizer.Settings;
 
                 dataVisualizer.SetCurrentPage(selectedType, 0);
 
@@ -118,7 +117,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             }
         }
 
-
         [Test]
         public void HandleNextPageRequestedPublishesEvent()
         {
@@ -132,7 +130,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     dataVisualizer,
                     out Type selectedType
                 );
-                createdSettings = dataVisualizer._settings;
+                createdSettings = dataVisualizer.Settings;
 
                 dataVisualizer.SetCurrentPage(selectedType, 0);
                 dataVisualizer.BuildObjectsView();
@@ -178,7 +176,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     dataVisualizer,
                     out Type selectedType
                 );
-                createdSettings = dataVisualizer._settings;
+                createdSettings = dataVisualizer.Settings;
 
                 dataVisualizer.BuildObjectsView();
                 ScriptableObject selection = dataVisualizer._selectedObjects.First();
@@ -187,7 +185,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 using IDisposable subscription =
                     dataVisualizer._eventHub.Subscribe<ObjectSelectionChangedEvent>(events.Add);
 
-                dataVisualizer._objectListController.HandleSelectionChanged(new object[] { selection });
+                dataVisualizer._objectListController.HandleSelectionChanged(
+                    new object[] { selection }
+                );
 
                 Assert.IsNotEmpty(events);
                 ObjectSelectionChangedEvent lastEvent = events.Last();
@@ -227,8 +227,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 UserState = userState,
             };
 
-            dataVisualizer._settings = settings;
-            dataVisualizer._userState = userState;
             dataVisualizer._userStateRepository = repository;
 
             selectedType = typeof(DummyScriptableObject);
@@ -272,7 +270,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 makeItem = () => new Label(),
                 bindItem = (element, index) =>
                 {
-                    if (element is Label label && index >= 0 && index < dataVisualizer._displayedObjects.Count)
+                    if (
+                        element is Label label
+                        && index >= 0
+                        && index < dataVisualizer._displayedObjects.Count
+                    )
                     {
                         label.text = dataVisualizer._displayedObjects[index]?.name ?? string.Empty;
                     }

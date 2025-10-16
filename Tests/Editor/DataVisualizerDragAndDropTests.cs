@@ -5,8 +5,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
     using System.IO;
     using System.Reflection;
     using Data;
-    using Services;
     using NUnit.Framework;
+    using Services;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.UIElements;
@@ -18,6 +18,27 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
         private const string TestFolderPath = "Assets/TempDataVisualizerDragTests";
 
         private sealed class DummyScriptableObject : ScriptableObject { }
+
+        private sealed class StubUserStateRepository : IUserStateRepository
+        {
+            public DataVisualizerSettings Settings { get; set; }
+
+            public DataVisualizerUserState UserState { get; set; }
+
+            public DataVisualizerSettings LoadSettings()
+            {
+                return Settings;
+            }
+
+            public DataVisualizerUserState LoadUserState()
+            {
+                return UserState;
+            }
+
+            public void SaveSettings(DataVisualizerSettings settings) { }
+
+            public void SaveUserState(DataVisualizerUserState userState) { }
+        }
 
         [SetUp]
         public void SetUp()
@@ -90,10 +111,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 );
                 dataVisualizer.CancelDrag();
 
-                Assert.AreEqual(
-                    DataVisualizer.DragType.None,
-                    dataVisualizer._activeDragType
-                );
+                Assert.AreEqual(DataVisualizer.DragType.None, dataVisualizer._activeDragType);
                 Assert.IsFalse(dataVisualizer._isDragging);
                 Assert.IsNull(dataVisualizer._draggedElement);
                 Assert.IsNull(dataVisualizer._draggedData);
@@ -102,7 +120,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     Visibility.Hidden,
                     dataVisualizer._dragGhost.style.visibility.value
                 );
-                Assert.IsFalse(dataVisualizer.rootVisualElement.ClassListContains("dragging-cursor"));
+                Assert.IsFalse(
+                    dataVisualizer.rootVisualElement.ClassListContains("dragging-cursor")
+                );
             }
             finally
             {
@@ -191,13 +211,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 DataVisualizerSettings settings =
                     ScriptableObject.CreateInstance<DataVisualizerSettings>();
                 settings.persistStateInSettingsAsset = true;
-#pragma warning disable CS0618 // Type or member is obsolete
-                dataVisualizer._settings = settings;
-#pragma warning restore CS0618 // Type or member is obsolete
-
-#pragma warning disable CS0618 // Type or member is obsolete
-                dataVisualizer._userState = new DataVisualizerUserState();
-#pragma warning restore CS0618 // Type or member is obsolete
+                DataVisualizerUserState userState = new DataVisualizerUserState();
+                dataVisualizer._userStateRepository = new StubUserStateRepository
+                {
+                    Settings = settings,
+                    UserState = userState,
+                };
 
                 dataVisualizer._userStateFilePath = Path.Combine(
                     Application.temporaryCachePath,

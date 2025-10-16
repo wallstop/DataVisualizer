@@ -68,12 +68,12 @@
 3. Ensure search results and popovers rely on immutable view models for clarity and testability.
 
 ### Priority 7 – Drag and Drop, Input, and Layout
-1. Centralize drag state in `DragAndDropController`, coordinating namespace/type/object drags via the event hub. This controller can reuse pooled visuals and handle keyboard modifiers consistently.
-2. [~] Introduce `InputShortcutController` to register global key bindings and dispatch high-level commands (NextType, PreviousType, ExecuteSearchConfirm) without referencing UI internals (created controller, moved global/popover key handling out of `DataVisualizer`; still consumes window internals pending follow-up abstractions).
+1. [~] Centralize drag state in `DragAndDropController`, coordinating namespace/type/object drags via the event hub. This controller can reuse pooled visuals and handle keyboard modifiers consistently (controller now owns ghost visuals and drop execution; event-driven coordination and modifiers still pending).
+2. [~] Introduce `InputShortcutController` to register global key bindings and dispatch high-level commands (NextType, PreviousType, ExecuteSearchConfirm) without referencing UI internals (controller now publishes type navigation via the event hub and owns popover escape handling; still relies on window focus state/search methods pending state refactors).
 3. [x] Extract layout persistence (split view widths, window size) into `LayoutPersistenceService`, debouncing writes and exposing load/save methods invoked by the window lifecycle (implemented `LayoutPersistenceService` and migrated `DataVisualizer` to use it for EditorPrefs reads/writes and scheduled saves).
 
 ### Priority 8 – Cleanup and API Hardening
-1. Remove obsolete fields and methods from `DataVisualizer`, exposing only minimal internal APIs needed by controllers. Update `package.json` if public surface changes.
+1. [~] Remove obsolete fields and methods from `DataVisualizer`, exposing only minimal internal APIs needed by controllers. Update `package.json` if public surface changes (eliminated `_settings` and `_userState` caches in favour of repository-backed access; additional clean-up pending).
 2. Delete legacy helper methods that migrated into services, ensuring old code paths are gone and tests cover new flows.
 3. Review accessibility of new types (`internal sealed` within editor assembly) and ensure runtime contracts remain stable.
 4. Update documentation (`README.md`) and AGENTS guidelines to reflect new architecture and extension points.

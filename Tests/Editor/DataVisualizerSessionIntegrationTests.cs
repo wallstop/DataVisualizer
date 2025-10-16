@@ -35,16 +35,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                         UserState = userState,
                     };
 
-                    dataVisualizer._settings = settings;
-                    dataVisualizer._userState = userState;
                     dataVisualizer._userStateRepository = repository;
 
                     dataVisualizer._scriptableObjectTypes.Clear();
                     dataVisualizer._namespaceOrder.Clear();
-                    dataVisualizer._scriptableObjectTypes["TestNamespace"] = new System.Collections.Generic.List<System.Type>
-                    {
-                        typeof(DummyScriptableObject),
-                    };
+                    dataVisualizer._scriptableObjectTypes["TestNamespace"] =
+                        new System.Collections.Generic.List<System.Type>
+                        {
+                            typeof(DummyScriptableObject),
+                        };
                     dataVisualizer._namespaceOrder["TestNamespace"] = 0;
 
                     DataVisualizerEventHub eventHub = new DataVisualizerEventHub();
@@ -68,10 +67,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                             typeof(DummyScriptableObject).FullName,
                             dataVisualizer.SessionState.Selection.SelectedTypeFullName
                         );
-                        Assert.AreEqual(
-                            "TestNamespace",
-                            settings.lastSelectedNamespaceKey
-                        );
+                        Assert.AreEqual("TestNamespace", settings.lastSelectedNamespaceKey);
                         Assert.AreEqual(
                             typeof(DummyScriptableObject).FullName,
                             settings.lastSelectedTypeName

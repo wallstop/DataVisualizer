@@ -16,6 +16,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private readonly NamespaceController _namespaceController;
         private readonly VisualizerSessionState _sessionState;
         private readonly DataVisualizerEventHub _eventHub;
+        private readonly IDisposable _typeNavigationSubscription;
         private readonly List<string> _lastNamespaceOrder = new List<string>();
         private readonly Dictionary<string, List<string>> _lastNamespaceTypeOrders = new Dictionary<
             string,
@@ -36,11 +37,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _sessionState = sessionState ?? throw new ArgumentNullException(nameof(sessionState));
             _eventHub = eventHub ?? throw new ArgumentNullException(nameof(eventHub));
             _namespaceController.TypeSelected += HandleTypeSelected;
+            _typeNavigationSubscription = _eventHub.Subscribe<TypeNavigationRequestedEvent>(
+                HandleTypeNavigationRequested
+            );
         }
 
         public void Dispose()
         {
             _namespaceController.TypeSelected -= HandleTypeSelected;
+            _typeNavigationSubscription?.Dispose();
         }
 
         public void BuildNamespaceView()
@@ -110,9 +115,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         private void HandleTypeSelected(Type selectedType)
         {
-            string namespaceKey = selectedType != null
-                ? ResolveNamespaceKey(selectedType)
-                : _sessionState.Selection.SelectedNamespaceKey;
+            string namespaceKey =
+                selectedType != null
+                    ? ResolveNamespaceKey(selectedType)
+                    : _sessionState.Selection.SelectedNamespaceKey;
 
             if (!string.IsNullOrWhiteSpace(namespaceKey))
             {
@@ -128,6 +134,22 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
 
             _eventHub.Publish(new TypeSelectedEvent(namespaceKey, selectedType));
+        }
+
+        private void HandleTypeNavigationRequested(TypeNavigationRequestedEvent evt)
+        {
+            if (evt == null)
+            {
+                return;
+            }
+
+            if (evt.Direction == TypeNavigationDirection.Next)
+            {
+                _namespaceController.IncrementTypeSelection(_dataVisualizer);
+                return;
+            }
+
+            _namespaceController.DecrementTypeSelection(_dataVisualizer);
         }
 
         private string ResolveNamespaceKey(Type type)

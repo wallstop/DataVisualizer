@@ -355,6 +355,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal Services.ObjectSelectionService _objectSelectionService;
         internal Services.ObjectCommandService _objectCommandService;
         internal InputShortcutController _inputShortcutController;
+        internal DragAndDropController _dragAndDropController;
         private Services.ObjectCommands.ObjectCommandDispatcher _objectCommandDispatcher;
         internal LabelPanelController _labelPanelController;
         internal ILabelService _labelService;
@@ -377,7 +378,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
             _objectCommandService = new Services.ObjectCommandService(this, _eventHub);
             EnsureObjectCommandSubscriptions();
-            _inputShortcutController = new InputShortcutController(this);
+            _inputShortcutController = new InputShortcutController(this, _eventHub);
+            _dragAndDropController = new DragAndDropController(this, _eventHub);
         }
 
         [MenuItem("Tools/Wallstop Studios/Data Visualizer")]
@@ -476,7 +478,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _eventHub
             );
             _objectCommandService ??= new Services.ObjectCommandService(this, _eventHub);
-            _inputShortcutController ??= new InputShortcutController(this);
+            _inputShortcutController = new InputShortcutController(this, _eventHub);
+            _dragAndDropController = new DragAndDropController(this, _eventHub);
             EnsureLabelSubsystems();
 
             _allDataProcessors.Clear();
@@ -7664,7 +7667,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             ApplySelectedElementVisuals();
 
-            if (_selectedElement != null)
+            VisualElement elementToScroll = _selectedElement;
+
+            if (elementToScroll != null)
             {
                 if (Settings.selectActiveObject)
                 {
@@ -7674,7 +7679,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ScrollView listScrollView = GetObjectListScrollView();
                 if (listScrollView != null)
                 {
-                    Rect targetElementWorldBound = _selectedElement.worldBound;
+                    Rect targetElementWorldBound =
+                        elementToScroll.panel != null ? elementToScroll.worldBound : Rect.zero;
                     Rect scrollViewContentViewportWorldBound = listScrollView
                         .contentViewport
                         .worldBound;
@@ -7687,7 +7693,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                         listScrollView
                             .schedule.Execute(() =>
                             {
-                                listScrollView.ScrollTo(_selectedElement);
+                                if (elementToScroll != null && elementToScroll.panel != null)
+                                {
+                                    listScrollView.ScrollTo(elementToScroll);
+                                }
                             })
                             .ExecuteLater(1);
                     }
@@ -7906,110 +7915,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void OnCapturedPointerUp(PointerUpEvent evt)
         {
-            if (
-                _draggedElement == null
-                || !_draggedElement.HasPointerCapture(evt.pointerId)
-                || _activeDragType == DragType.None
-            )
-            {
-                return;
-            }
-
-            int pointerId = evt.pointerId;
-            bool performDrop = _isDragging;
-            DragType dropType = _activeDragType;
-
-            VisualElement draggedElement = _draggedElement;
-            try
-            {
-                _draggedElement.ReleasePointer(pointerId);
-
-                if (performDrop)
-                {
-                    switch (dropType)
-                    {
-                        case DragType.Object:
-                        {
-                            PerformObjectDrop();
-                            break;
-                        }
-                        case DragType.Namespace:
-                        {
-                            PerformNamespaceDrop();
-                            break;
-                        }
-                        case DragType.Type:
-                        {
-                            PerformTypeDrop();
-                            break;
-                        }
-                        default:
-                        {
-                            throw new InvalidEnumArgumentException(
-                                nameof(dropType),
-                                (int)dropType,
-                                typeof(DragType)
-                            );
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Error during drop execution for {dropType}. {e}");
-            }
-            finally
-            {
-                draggedElement.UnregisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
-                draggedElement.UnregisterCallback<PointerUpEvent>(OnCapturedPointerUp);
-                draggedElement.UnregisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
-
-                CancelDrag();
-            }
-
-            evt.StopPropagation();
+            _dragAndDropController?.HandlePointerUp(evt);
         }
 
         internal void PerformNamespaceDrop()
         {
-            int targetIndex = _inPlaceGhost?.userData is int index ? index : -1;
-
-            _inPlaceGhost?.RemoveFromHierarchy();
-
-            if (
-                _draggedElement == null
-                || _draggedData is not string draggedKey
-                || _namespaceListContainer == null
-            )
-            {
-                return;
-            }
-
-            if (targetIndex < 0)
-            {
-                return;
-            }
-
-            int currentIndex = _namespaceListContainer.IndexOf(_draggedElement);
-            if (currentIndex < 0)
-            {
-                return;
-            }
-
-            if (currentIndex < targetIndex)
-            {
-                targetIndex--;
-            }
-
-            _draggedElement.style.display = DisplayStyle.Flex;
-            _draggedElement.style.opacity = 1.0f;
-            _namespaceListContainer.Insert(targetIndex, _draggedElement);
-            foreach (VisualElement child in _namespaceListContainer.Children())
-            {
-                NamespaceController.RecalibrateVisualElements(child);
-            }
-
-            _eventHub?.Publish(new NamespaceReorderRequestedEvent(draggedKey, targetIndex));
+            _dragAndDropController?.PerformNamespaceDrop();
         }
 
         internal void UpdateAndSaveNamespaceOrder()
@@ -8069,44 +7980,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void PerformTypeDrop()
         {
-            int targetIndex = _inPlaceGhost?.userData is int index ? index : -1;
-            _inPlaceGhost?.RemoveFromHierarchy();
-
-            VisualElement typesContainer = _draggedElement?.parent;
-            string namespaceKey = typesContainer?.userData as string;
-
-            if (
-                _draggedElement == null
-                || _draggedData is not Type draggedType
-                || typesContainer == null
-                || string.IsNullOrWhiteSpace(namespaceKey)
-            )
-            {
-                return;
-            }
-
-            if (targetIndex < 0)
-            {
-                return;
-            }
-
-            int currentIndex = typesContainer.IndexOf(_draggedElement);
-            if (currentIndex < targetIndex)
-            {
-                targetIndex--;
-            }
-
-            _draggedElement.style.display = DisplayStyle.Flex;
-            _draggedElement.style.opacity = 1.0f;
-            typesContainer.Insert(targetIndex, _draggedElement);
-            foreach (VisualElement child in typesContainer.Children())
-            {
-                NamespaceController.RecalibrateVisualElements(child);
-            }
-
-            _eventHub?.Publish(
-                new TypeReorderRequestedEvent(namespaceKey, draggedType, targetIndex)
-            );
+            _dragAndDropController?.PerformTypeDrop();
         }
 
         internal void UpdateAndSaveTypeOrder(string namespaceKey, List<Type> orderedTypes)
@@ -8117,87 +7991,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void PerformObjectDrop()
         {
-            int targetIndex = _inPlaceGhost?.userData is int index ? index : -1;
-            _inPlaceGhost?.RemoveFromHierarchy();
-            if (_draggedElement == null || _draggedData is not ScriptableObject draggedObject)
-            {
-                return;
-            }
-
-            if (GetObjectListContentContainer() == null || targetIndex < 0)
-            {
-                return;
-            }
-
-            if (_displayedObjects.Count == 0)
-            {
-                return;
-            }
-
-            Type selectedType = _namespaceController.SelectedType;
-            if (selectedType == null)
-            {
-                return;
-            }
-
-            ScriptableObject previousSelection = _selectedObject;
-            int filteredCount = _filteredObjects.Count;
-            int displayTargetIndex = Mathf.Clamp(targetIndex, 0, _displayedObjects.Count);
-            int globalTargetIndex = Mathf.Clamp(
-                _currentDisplayStartIndex + displayTargetIndex,
-                0,
-                filteredCount
-            );
-
-            List<ScriptableObject> filteredWithoutDragged = new(_filteredObjects);
-            filteredWithoutDragged.Remove(draggedObject);
-            globalTargetIndex = Mathf.Clamp(globalTargetIndex, 0, filteredWithoutDragged.Count);
-
-            ScriptableObject insertBefore =
-                globalTargetIndex < filteredWithoutDragged.Count
-                    ? filteredWithoutDragged[globalTargetIndex]
-                    : null;
-            ScriptableObject insertAfter =
-                globalTargetIndex > 0 ? filteredWithoutDragged[globalTargetIndex - 1] : null;
-
-            ObjectOrderHelper.ReorderItem(
-                _filteredObjects,
-                draggedObject,
-                insertBefore,
-                insertAfter
-            );
-            RemoveDuplicateObjects(_filteredObjects);
-
-            ObjectOrderHelper.ReorderItem(
-                _selectedObjects,
-                draggedObject,
-                insertBefore,
-                insertAfter
-            );
-            RemoveDuplicateObjects(_selectedObjects);
-
-            UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
-
-            string draggedGuid = GetAssetGuid(draggedObject);
-
-            if (_suppressObjectListReloadForTests)
-            {
-                _displayedObjects.Clear();
-                _displayedObjects.AddRange(_filteredObjects);
-            }
-            else
-            {
-                LoadObjectTypes(selectedType);
-                ApplyLabelFilter(buildObjectsView: false);
-                BuildObjectsView();
-            }
-
-            ScriptableObject objectToSelect = DeterminePostDropSelection(
-                previousSelection,
-                draggedObject,
-                draggedGuid
-            );
-            SelectObject(objectToSelect);
+            _dragAndDropController?.PerformObjectDrop();
         }
 
         internal ScriptableObject DeterminePostDropSelection(
@@ -8237,269 +8031,17 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void StartDragVisuals(Vector2 currentPosition, string dragText)
         {
-            if (_draggedElement == null || _draggedData == null)
-            {
-                return;
-            }
-
-            rootVisualElement.AddToClassList("dragging-cursor");
-
-            if (_dragGhost == null)
-            {
-                _dragGhost = new VisualElement
-                {
-                    name = "drag-ghost-cursor",
-                    style = { visibility = Visibility.Visible },
-                };
-                _dragGhost.style.left = currentPosition.x - _dragGhost.resolvedStyle.width / 2;
-                _dragGhost.style.top = currentPosition.y - _dragGhost.resolvedStyle.height;
-                _dragGhost.AddToClassList("drag-ghost");
-                _dragGhost.BringToFront();
-                Label ghostLabel = new(dragText)
-                {
-                    style = { unityTextAlign = TextAnchor.MiddleLeft },
-                };
-                _dragGhost.Add(ghostLabel);
-                rootVisualElement.Add(_dragGhost);
-            }
-            else
-            {
-                Label ghostLabel = _dragGhost.Q<Label>();
-                if (ghostLabel != null)
-                {
-                    ghostLabel.text = dragText;
-                }
-            }
-
-            _dragGhost.style.visibility = Visibility.Visible;
-            _dragGhost.style.left = currentPosition.x - _dragGhost.resolvedStyle.width / 2;
-            _dragGhost.style.top = currentPosition.y - _dragGhost.resolvedStyle.height;
-            _dragGhost.BringToFront();
-
-            if (_inPlaceGhost == null)
-            {
-                try
-                {
-                    _inPlaceGhost = new VisualElement
-                    {
-                        name = "drag-ghost-overlay",
-                        style =
-                        {
-                            height = _draggedElement.resolvedStyle.height,
-                            marginTop = _draggedElement.resolvedStyle.marginTop,
-                            marginBottom = _draggedElement.resolvedStyle.marginBottom,
-                            marginLeft = _draggedElement.resolvedStyle.marginLeft,
-                            marginRight = _draggedElement.resolvedStyle.marginRight,
-                        },
-                    };
-
-                    foreach (string className in _draggedElement.GetClasses())
-                    {
-                        _inPlaceGhost.AddToClassList(className);
-                    }
-
-                    _inPlaceGhost.AddToClassList("in-place-ghost");
-
-                    Label originalLabel =
-                        _draggedElement.Q<Label>(className: "object-item__label")
-                        ?? _draggedElement.Q<Label>(className: "type-item__label")
-                        ?? _draggedElement.Q<Label>();
-
-                    if (originalLabel != null)
-                    {
-                        Label ghostLabel = new(dragText);
-                        foreach (string className in originalLabel.GetClasses())
-                        {
-                            ghostLabel.AddToClassList(className);
-                        }
-
-                        ghostLabel.pickingMode = PickingMode.Ignore;
-                        _inPlaceGhost.Add(ghostLabel);
-                    }
-                    else
-                    {
-                        Label fallbackLabel = new(dragText) { pickingMode = PickingMode.Ignore };
-                        _inPlaceGhost.Add(fallbackLabel);
-                    }
-
-                    _inPlaceGhost.pickingMode = PickingMode.Ignore;
-                    _inPlaceGhost.style.visibility = Visibility.Hidden;
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"Error creating in-place ghost. {e}");
-                    _inPlaceGhost = null;
-                }
-            }
-
-            _lastGhostInsertIndex = -1;
-            _lastGhostParent = null;
-            _draggedElement.style.display = DisplayStyle.None;
-            _draggedElement.style.opacity = 0.5f;
+            _dragAndDropController?.StartDragVisuals(currentPosition, dragText);
         }
 
         internal void UpdateInPlaceGhostPosition(Vector2 pointerPosition)
         {
-            VisualElement container = null;
-            switch (_activeDragType)
-            {
-                case DragType.Object:
-                {
-                    container = GetObjectListContentContainer();
-                    break;
-                }
-                case DragType.Namespace:
-                {
-                    container = _namespaceListContainer;
-                    break;
-                }
-                case DragType.Type:
-                {
-                    container = _draggedElement?.parent;
-                    break;
-                }
-            }
-
-            if (container == null || _draggedElement == null || _inPlaceGhost == null)
-            {
-                if (_inPlaceGhost?.parent != null)
-                {
-                    _inPlaceGhost.RemoveFromHierarchy();
-                }
-
-                if (_inPlaceGhost != null)
-                {
-                    _inPlaceGhost.style.visibility = Visibility.Hidden;
-                }
-
-                _lastGhostInsertIndex = -1;
-                _lastGhostParent = null;
-                return;
-            }
-
-            int childCount = container.childCount;
-            int targetIndex;
-            Vector2 localPointerPos = container.WorldToLocal(pointerPosition);
-
-            if (_activeDragType != DragType.Namespace)
-            {
-                targetIndex = -1;
-                for (int i = 0; i < childCount; ++i)
-                {
-                    VisualElement child = container.ElementAt(i);
-                    float midpoint = child.layout.yMin + child.layout.height / 2f;
-                    if (localPointerPos.y < midpoint)
-                    {
-                        targetIndex = i;
-                        break;
-                    }
-                }
-
-                if (targetIndex < 0)
-                {
-                    targetIndex = childCount;
-                }
-            }
-            else
-            {
-                targetIndex = 0;
-                if (0 <= localPointerPos.y)
-                {
-                    bool seenInPlaceGhost = false;
-                    for (int i = 0; i < childCount; ++i)
-                    {
-                        VisualElement child = container.ElementAt(i);
-                        if (child == _inPlaceGhost)
-                        {
-                            seenInPlaceGhost = true;
-                        }
-                        float yMax = child.layout.yMax;
-                        if (localPointerPos.y < yMax)
-                        {
-                            if (seenInPlaceGhost)
-                            {
-                                targetIndex = i;
-                            }
-                            else
-                            {
-                                targetIndex = i + 1;
-                            }
-
-                            break;
-                        }
-                    }
-                }
-            }
-            targetIndex = Mathf.Max(0, targetIndex);
-            targetIndex = Mathf.Min(targetIndex, childCount);
-
-            int normalizedIndex = NormalizeGhostInsertIndex(container, _inPlaceGhost, targetIndex);
-            bool targetIndexValid = normalizedIndex >= 0;
-
-            if (
-                targetIndexValid
-                && (normalizedIndex != _lastGhostInsertIndex || container != _lastGhostParent)
-            )
-            {
-                if (_inPlaceGhost.parent != null)
-                {
-                    _inPlaceGhost.RemoveFromHierarchy();
-                }
-
-                int insertionIndex = Mathf.Clamp(normalizedIndex, 0, container.childCount);
-                container.Insert(insertionIndex, _inPlaceGhost);
-                normalizedIndex = insertionIndex;
-
-                _lastGhostInsertIndex = normalizedIndex;
-                _lastGhostParent = container;
-            }
-
-            if (targetIndexValid)
-            {
-                _inPlaceGhost.style.visibility = Visibility.Visible;
-                _inPlaceGhost.userData = normalizedIndex;
-            }
-            else
-            {
-                if (_inPlaceGhost.parent != null)
-                {
-                    _inPlaceGhost.RemoveFromHierarchy();
-                }
-
-                _inPlaceGhost.style.visibility = Visibility.Hidden;
-                _inPlaceGhost.userData = -1;
-                _lastGhostInsertIndex = -1;
-                _lastGhostParent = null;
-            }
+            _dragAndDropController?.UpdateInPlaceGhostPosition(pointerPosition);
         }
 
         internal void CancelDrag()
         {
-            if (_inPlaceGhost != null)
-            {
-                _inPlaceGhost.RemoveFromHierarchy();
-                _inPlaceGhost = null;
-            }
-
-            _lastGhostInsertIndex = -1;
-            _lastGhostParent = null;
-
-            if (_draggedElement != null)
-            {
-                _draggedElement.style.display = DisplayStyle.Flex;
-                _draggedElement.style.opacity = 1.0f;
-            }
-
-            if (_dragGhost != null)
-            {
-                _dragGhost.style.visibility = Visibility.Hidden;
-            }
-
-            _isDragging = false;
-            _draggedElement = null;
-            _draggedData = null;
-            _activeDragType = DragType.None;
-            rootVisualElement.RemoveFromClassList("dragging-cursor");
+            _dragAndDropController?.CancelDrag();
         }
 
         internal static int NormalizeGhostInsertIndex(
@@ -8508,21 +8050,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             int desiredIndex
         )
         {
-            if (container == null)
-            {
-                return -1;
-            }
-
-            int childCount = container.childCount;
-            bool ghostInContainer = ghost != null && ghost.parent == container;
-
-            if (ghostInContainer)
-            {
-                childCount = Math.Max(0, childCount - 1);
-            }
-
-            childCount = Math.Max(0, childCount);
-            return Mathf.Clamp(desiredIndex, 0, childCount);
+            return DragAndDropController.NormalizeGhostInsertIndex(container, ghost, desiredIndex);
         }
 
         [Obsolete("Should not be used internally except by UserState")]

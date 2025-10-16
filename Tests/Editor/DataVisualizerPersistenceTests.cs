@@ -45,7 +45,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             {
                 SaveUserStateCallCount++;
             }
-
         }
 
         [Test]
@@ -66,8 +65,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     UserState = userState,
                 };
 
-                dataVisualizer._settings = settings;
-                dataVisualizer._userState = userState;
                 dataVisualizer._userStateRepository = repository;
 
                 bool appliedSettings = false;
@@ -108,8 +105,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     UserState = userState,
                 };
 
-                dataVisualizer._settings = settings;
-                dataVisualizer._userState = userState;
                 dataVisualizer._userStateRepository = repository;
 
                 bool appliedUserState = false;
@@ -144,12 +139,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 };
 
                 dataVisualizer._userStateRepository = repository;
-                dataVisualizer._userState = null;
 
                 dataVisualizer.LoadUserStateFromFile();
 
                 Assert.AreEqual(1, repository.LoadUserStateCallCount);
-                Assert.AreSame(repository.UserState, dataVisualizer._userState);
+                Assert.AreSame(repository.UserState, dataVisualizer.UserState);
             }
             finally
             {
@@ -170,7 +164,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 };
 
                 dataVisualizer._userStateRepository = repository;
-                dataVisualizer._userState = userState;
 
                 dataVisualizer.SaveUserStateToFile();
 
