@@ -46,8 +46,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer._lastGhostInsertIndex = -1;
             _dataVisualizer._lastGhostParent = null;
+            _dataVisualizer._draggedElement.style.visibility = Visibility.Visible;
+            _dataVisualizer._draggedElement.style.display = DisplayStyle.Flex;
             _dataVisualizer._draggedElement.style.opacity = 0f;
-            _dataVisualizer._draggedElement.style.visibility = Visibility.Hidden;
         }
 
         public void UpdateInPlaceGhostPosition(Vector2 pointerPosition)
