@@ -2,10 +2,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 {
     using System;
     using System.Collections.Generic;
+    using Data;
     using Events;
     using Services;
     using State;
     using Styles;
+    using UnityEditor.UIElements;
     using UnityEngine;
     using UnityEngine.UIElements;
 
@@ -16,6 +18,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private readonly VisualizerSessionState _sessionState;
         private readonly DataVisualizerEventHub _eventHub;
         private readonly ObjectListState _objectListState;
+        private Action<Type> _createPopoverBuilder;
+        private Action<VisualElement, VisualElement> _popoverOpener;
+        private VisualElement _popoverReference;
+        private Button _createObjectButton;
+        private VisualElement _objectPageController;
+        private Button _previousPageButton;
+        private Button _nextPageButton;
+        private IntegerField _currentPageField;
+        private IntegerField _maxPageField;
+        private ListView _listView;
+        private Label _emptyObjectLabel;
 
         public ObjectListController(
             DataVisualizer dataVisualizer,
@@ -33,9 +46,39 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _objectListState = _sessionState.Objects;
         }
 
+        public void ConfigureCreateButton(
+            Action<Type> createPopoverBuilder,
+            Action<VisualElement, VisualElement> popoverOpener,
+            VisualElement createPopover
+        )
+        {
+            _createPopoverBuilder = createPopoverBuilder;
+            _popoverOpener = popoverOpener;
+            _popoverReference = createPopover;
+            UpdateCreateButtonState();
+        }
+
+        public void BuildObjectListSection(VisualElement objectColumn)
+        {
+            if (objectColumn == null)
+            {
+                throw new ArgumentNullException(nameof(objectColumn));
+            }
+
+            EnsureHeader(objectColumn);
+            EnsureLabelsSection(objectColumn);
+            EnsurePaginationControls();
+            EnsureListView();
+            EnsureEmptyLabel();
+
+            AttachElement(_objectPageController, objectColumn);
+            AttachElement(_listView, objectColumn);
+            AttachElement(_emptyObjectLabel, objectColumn);
+        }
+
         public void BuildObjectsView()
         {
-            if (_dataVisualizer._objectListView == null)
+            if (_listView == null)
             {
                 PublishSelectionChanged(null);
                 return;
@@ -45,6 +88,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             selectedObjects.RemoveAll(obj => obj == null);
 
             Type selectedType = _dataVisualizer._namespaceController.SelectedType;
+            UpdateCreateButtonState();
             if (selectedType == null)
             {
                 HandleNoSelectedType();
@@ -54,9 +98,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer.ApplyLabelFilter(false);
 
-            if (_dataVisualizer._emptyObjectLabel != null)
+            if (_emptyObjectLabel != null)
             {
-                _dataVisualizer._emptyObjectLabel.style.display = DisplayStyle.None;
+                _emptyObjectLabel.style.display = DisplayStyle.None;
             }
 
             if (selectedObjects.Count == 0)
@@ -128,13 +172,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             int maxPage = _dataVisualizer.FilteredMetadata.Count / DataVisualizer.MaxObjectsPerPage;
             int clampedPage = Mathf.Clamp(requestedPage, 0, maxPage);
-            if (clampedPage != requestedPage)
+            if (clampedPage != requestedPage && _currentPageField != null)
             {
-                IntegerField currentPageField = _dataVisualizer._currentPageField;
-                if (currentPageField != null)
-                {
-                    currentPageField.SetValueWithoutNotify(clampedPage);
-                }
+                _currentPageField.SetValueWithoutNotify(clampedPage);
             }
 
             _dataVisualizer.SetCurrentPage(selectedType, clampedPage);
@@ -173,79 +213,88 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         {
             _objectListState.ClearDisplayed();
             ClearRowViewModels();
-            if (_dataVisualizer._objectListView != null)
+            _listView?.RefreshItems();
+
+            if (_objectPageController != null)
             {
-                _dataVisualizer._objectListView.RefreshItems();
+                _objectPageController.style.display = DisplayStyle.None;
             }
 
-            if (_dataVisualizer._objectPageController != null)
+            if (_emptyObjectLabel != null)
             {
-                _dataVisualizer._objectPageController.style.display = DisplayStyle.None;
+                _emptyObjectLabel.text = "Select a type to see objects.";
+                _emptyObjectLabel.style.display = DisplayStyle.Flex;
             }
 
-            if (_dataVisualizer._emptyObjectLabel != null)
+            if (_listView != null)
             {
-                _dataVisualizer._emptyObjectLabel.text = "Select a type to see objects.";
-                _dataVisualizer._emptyObjectLabel.style.display = DisplayStyle.Flex;
+                _listView.style.display = DisplayStyle.None;
             }
 
-            _dataVisualizer._objectListView.style.display = DisplayStyle.None;
+            UpdateCreateButtonState();
         }
 
         private void HandleNoObjectsForSelectedType(Type selectedType)
         {
             _objectListState.ClearDisplayed();
             ClearRowViewModels();
-            if (_dataVisualizer._objectListView != null)
+            if (_listView != null)
             {
-                _dataVisualizer._objectListView.RefreshItems();
-                _dataVisualizer._objectListView.style.display = DisplayStyle.None;
+                _listView.RefreshItems();
+                _listView.style.display = DisplayStyle.None;
             }
-            if (_dataVisualizer._emptyObjectLabel != null)
+            if (_emptyObjectLabel != null)
             {
-                _dataVisualizer._emptyObjectLabel.text =
+                _emptyObjectLabel.text =
                     $"No objects of type '{selectedType.Name}' found.\nUse the '+' button above to create one.";
-                _dataVisualizer._emptyObjectLabel.style.display = DisplayStyle.Flex;
+                _emptyObjectLabel.style.display = DisplayStyle.Flex;
             }
 
-            if (_dataVisualizer._objectPageController != null)
+            if (_objectPageController != null)
             {
-                _dataVisualizer._objectPageController.style.display = DisplayStyle.None;
+                _objectPageController.style.display = DisplayStyle.None;
             }
+
+            UpdateCreateButtonState();
         }
 
         private void HandleNoFilteredObjects(Type selectedType)
         {
             _objectListState.ClearDisplayed();
             ClearRowViewModels();
-            if (_dataVisualizer._objectListView != null)
+            if (_listView != null)
             {
-                _dataVisualizer._objectListView.RefreshItems();
-                _dataVisualizer._objectListView.style.display = DisplayStyle.None;
+                _listView.RefreshItems();
+                _listView.style.display = DisplayStyle.None;
             }
-            if (_dataVisualizer._emptyObjectLabel != null)
+            if (_emptyObjectLabel != null)
             {
                 string typeDisplay = NamespaceController.GetTypeDisplayName(selectedType);
                 string message =
                     _dataVisualizer._selectedObjects.Count > 0
                         ? $"No objects of type '{typeDisplay}' match the current label filter."
                         : $"No objects of type '{typeDisplay}' found.";
-                _dataVisualizer._emptyObjectLabel.text = message;
-                _dataVisualizer._emptyObjectLabel.style.display = DisplayStyle.Flex;
+                _emptyObjectLabel.text = message;
+                _emptyObjectLabel.style.display = DisplayStyle.Flex;
             }
 
-            if (_dataVisualizer._objectPageController != null)
+            if (_objectPageController != null)
             {
-                _dataVisualizer._objectPageController.style.display = DisplayStyle.None;
+                _objectPageController.style.display = DisplayStyle.None;
             }
+
+            UpdateCreateButtonState();
         }
 
         private void PrepareListForDisplay()
         {
-            _dataVisualizer._objectListView.style.display = DisplayStyle.Flex;
-            if (_dataVisualizer._emptyObjectLabel != null)
+            if (_listView != null)
             {
-                _dataVisualizer._emptyObjectLabel.style.display = DisplayStyle.None;
+                _listView.style.display = DisplayStyle.Flex;
+            }
+            if (_emptyObjectLabel != null)
+            {
+                _emptyObjectLabel.style.display = DisplayStyle.None;
             }
 
             _dataVisualizer._objectVisualElementMap.Clear();
@@ -256,9 +305,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             List<DataAssetMetadata> displayedMetadata = _objectListState.DisplayedMetadataBuffer;
             if (filtered.Count <= DataVisualizer.MaxObjectsPerPage)
             {
-                if (_dataVisualizer._objectPageController != null)
+                if (_objectPageController != null)
                 {
-                    _dataVisualizer._objectPageController.style.display = DisplayStyle.None;
+                    _objectPageController.style.display = DisplayStyle.None;
                 }
 
                 _objectListState.ClearDisplayed();
@@ -269,13 +318,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
             else
             {
-                if (_dataVisualizer._objectPageController != null)
+                if (_objectPageController != null)
                 {
-                    _dataVisualizer._objectPageController.style.display = DisplayStyle.Flex;
+                    _objectPageController.style.display = DisplayStyle.Flex;
                 }
 
-                _dataVisualizer._maxPageField.value =
-                    filtered.Count / DataVisualizer.MaxObjectsPerPage;
+                if (_maxPageField != null)
+                {
+                    _maxPageField.value = filtered.Count / DataVisualizer.MaxObjectsPerPage;
+                }
+
                 int currentPage = _dataVisualizer.GetCurrentPage(
                     _dataVisualizer._namespaceController.SelectedType
                 );
@@ -284,30 +336,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     0,
                     filtered.Count / DataVisualizer.MaxObjectsPerPage
                 );
-                _dataVisualizer._currentPageField.SetValueWithoutNotify(currentPage);
+                _currentPageField?.SetValueWithoutNotify(currentPage);
 
-                _dataVisualizer._previousPageButton.EnableInClassList(
-                    "go-button-disabled",
-                    currentPage <= 0
-                );
-                _dataVisualizer._previousPageButton.EnableInClassList(
+                _previousPageButton?.EnableInClassList("go-button-disabled", currentPage <= 0);
+                _previousPageButton?.EnableInClassList(
                     StyleConstants.ActionButtonClass,
                     currentPage > 0
                 );
-                _dataVisualizer._previousPageButton.EnableInClassList("go-button", currentPage > 0);
+                _previousPageButton?.EnableInClassList("go-button", currentPage > 0);
 
-                _dataVisualizer._nextPageButton.EnableInClassList(
-                    "go-button-disabled",
-                    _dataVisualizer._maxPageField.value <= currentPage
-                );
-                _dataVisualizer._nextPageButton.EnableInClassList(
-                    StyleConstants.ActionButtonClass,
-                    currentPage < _dataVisualizer._maxPageField.value
-                );
-                _dataVisualizer._nextPageButton.EnableInClassList(
-                    "go-button",
-                    currentPage < _dataVisualizer._maxPageField.value
-                );
+                bool disableNext = _maxPageField != null && _maxPageField.value <= currentPage;
+                _nextPageButton?.EnableInClassList("go-button-disabled", disableNext);
+                _nextPageButton?.EnableInClassList(StyleConstants.ActionButtonClass, !disableNext);
+                _nextPageButton?.EnableInClassList("go-button", !disableNext);
 
                 int startIndex = currentPage * DataVisualizer.MaxObjectsPerPage;
                 int endIndex = Mathf.Min(
@@ -329,13 +370,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 SynchronizeRowViewModels(_objectListState.DisplayStartIndex);
             }
 
-            if (_dataVisualizer._objectListView != null)
+            if (_listView != null)
             {
-                _dataVisualizer._objectListView.itemsSource = null;
-                _dataVisualizer._objectListView.itemsSource = _dataVisualizer._objectRowViewModels;
-                _dataVisualizer._objectListView.RefreshItems();
-                _dataVisualizer._objectListView.Rebuild();
+                _listView.itemsSource = null;
+                _listView.itemsSource = _dataVisualizer._objectRowViewModels;
+                _listView.RefreshItems();
+                _listView.Rebuild();
             }
+
+            UpdateCreateButtonState();
         }
 
         private void UpdateSelectionState()
@@ -352,15 +395,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     selectedObject
                 );
                 _dataVisualizer._isUpdatingListSelection = true;
-                if (displayedIndex >= 0)
+                if (_listView != null)
                 {
-                    _dataVisualizer._objectListView.SetSelectionWithoutNotify(
-                        new int[] { displayedIndex }
-                    );
-                }
-                else
-                {
-                    _dataVisualizer._objectListView.ClearSelection();
+                    if (displayedIndex >= 0)
+                    {
+                        _listView.SetSelectionWithoutNotify(new int[] { displayedIndex });
+                        _listView.ScrollToItem(displayedIndex);
+                    }
+                    else
+                    {
+                        _listView.ClearSelection();
+                    }
                 }
 
                 _dataVisualizer._isUpdatingListSelection = false;
@@ -368,7 +413,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
 
             _dataVisualizer._isUpdatingListSelection = true;
-            _dataVisualizer._objectListView.ClearSelection();
+            _listView?.ClearSelection();
             _dataVisualizer._isUpdatingListSelection = false;
         }
 
@@ -420,6 +465,241 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     index < displayedMetadata.Count ? displayedMetadata[index] : null;
                 viewModels[index].Update(dataObject, metadata, startIndex + index);
             }
+        }
+
+        internal ListView ListView => _listView;
+
+        internal ScrollView GetListScrollView()
+        {
+            return _listView?.Q<ScrollView>();
+        }
+
+        internal VisualElement GetListContentContainer()
+        {
+            ScrollView scrollView = GetListScrollView();
+            if (scrollView != null)
+            {
+                return scrollView.contentContainer;
+            }
+
+            return _listView?.contentContainer;
+        }
+
+        internal void RefreshListItem(int index)
+        {
+            if (_listView == null || index < 0)
+            {
+                return;
+            }
+
+            _listView.RefreshItem(index);
+        }
+
+        internal void ShowEmptyLabel()
+        {
+            if (_emptyObjectLabel == null)
+            {
+                return;
+            }
+
+            _emptyObjectLabel.style.display = DisplayStyle.Flex;
+        }
+
+        private void EnsurePaginationControls()
+        {
+            if (_objectPageController != null)
+            {
+                return;
+            }
+
+            _objectPageController = new VisualElement
+            {
+                name = "object-page-controller",
+                style = { display = DisplayStyle.None },
+            };
+            _objectPageController.AddToClassList("object-page-controller");
+
+            _previousPageButton = new Button(() => HandlePreviousPageRequested()) { text = "←" };
+            _previousPageButton.AddToClassList("go-button-disabled");
+
+            _currentPageField = new IntegerField();
+            _currentPageField.AddToClassList("current-page-field");
+            _currentPageField.RegisterValueChangedCallback(evt =>
+            {
+                HandleCurrentPageChanged(evt.newValue);
+            });
+
+            _maxPageField = new IntegerField { isReadOnly = true };
+            _maxPageField.AddToClassList("max-page-field");
+
+            _nextPageButton = new Button(() => HandleNextPageRequested()) { text = "→" };
+            _nextPageButton.AddToClassList("go-button-disabled");
+
+            _objectPageController.Add(_previousPageButton);
+            _objectPageController.Add(_currentPageField);
+            _objectPageController.Add(_maxPageField);
+            _objectPageController.Add(_nextPageButton);
+        }
+
+        private void EnsureListView()
+        {
+            if (_listView != null)
+            {
+                return;
+            }
+
+            _listView = new ListView(
+                _dataVisualizer._objectRowViewModels,
+                itemHeight: 36,
+                makeItem: _dataVisualizer.MakeObjectRow,
+                bindItem: _dataVisualizer.BindObjectRow
+            )
+            {
+                name = "object-list",
+                style = { flexGrow = 1 },
+                selectionType = SelectionType.Single,
+                virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight,
+            };
+            _listView.AddToClassList("object-list");
+            _listView.itemsSource = _dataVisualizer._objectRowViewModels;
+            _listView.selectionChanged += HandleSelectionChanged;
+            _listView.unbindItem += _dataVisualizer.UnbindObjectRow;
+        }
+
+        private void EnsureEmptyLabel()
+        {
+            if (_emptyObjectLabel != null)
+            {
+                return;
+            }
+
+            _emptyObjectLabel = new Label(string.Empty)
+            {
+                name = "empty-object-list-label",
+                style =
+                {
+                    alignSelf = Align.Center,
+                    unityTextAlign = TextAnchor.MiddleCenter,
+                    display = DisplayStyle.None,
+                    whiteSpace = WhiteSpace.Normal,
+                    paddingTop = 8,
+                    paddingBottom = 8,
+                },
+            };
+            _emptyObjectLabel.AddToClassList("empty-object-list-label");
+        }
+
+        private static void AttachElement(VisualElement element, VisualElement parent)
+        {
+            if (element == null)
+            {
+                return;
+            }
+
+            element.RemoveFromHierarchy();
+            parent.Add(element);
+        }
+
+        private void EnsureHeader(VisualElement objectColumn)
+        {
+            VisualElement header = objectColumn.Q<VisualElement>(name: "object-header");
+            if (header == null)
+            {
+                header = new VisualElement { name = "object-header" };
+                header.AddToClassList("object-header");
+                header.Add(new Label("Objects"));
+            }
+            else
+            {
+                header.Clear();
+                header.Add(new Label("Objects"));
+            }
+
+            _createObjectButton = new Button(() => HandleCreateRequested())
+            {
+                text = "+",
+                tooltip = "Create New Object",
+                name = "create-object-button",
+            };
+            _createObjectButton.AddToClassList("create-button");
+            _createObjectButton.AddToClassList("icon-button");
+            _createObjectButton.AddToClassList(StyleConstants.ClickableClass);
+            header.Add(_createObjectButton);
+
+            header.RemoveFromHierarchy();
+            objectColumn.Insert(0, header);
+            UpdateCreateButtonState();
+        }
+
+        private void EnsureLabelHeader(VisualElement objectColumn)
+        {
+            VisualElement header = new VisualElement();
+            header.AddToClassList("collapse-row");
+
+            Label toggle = new Label();
+            toggle.AddToClassList(StyleConstants.ClickableClass);
+            toggle.AddToClassList("collapse-toggle");
+            toggle.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                TypeLabelFilterConfig config = _dataVisualizer.CurrentTypeLabelFilterConfig;
+                if (config == null)
+                {
+                    return;
+                }
+
+                _dataVisualizer.ToggleLabelsCollapsed(!config.isCollapsed);
+                evt.StopPropagation();
+            });
+            header.Add(toggle);
+
+            header.Add(new Label("Labels") { name = "labels-header" });
+
+            objectColumn.Add(header);
+        }
+
+        private void HandleCreateRequested()
+        {
+            Type selectedType = _dataVisualizer._namespaceController.SelectedType;
+            if (selectedType == null)
+            {
+                return;
+            }
+
+            if (
+                _createPopoverBuilder == null
+                || _popoverOpener == null
+                || _popoverReference == null
+                || _createObjectButton == null
+            )
+            {
+                return;
+            }
+
+            _createPopoverBuilder(selectedType);
+            _popoverOpener(_popoverReference, _createObjectButton);
+        }
+
+        private void EnsureLabelsSection(VisualElement objectColumn)
+        {
+            _dataVisualizer._labelPanelController.BuildLabelPanel(objectColumn);
+        }
+
+        private void UpdateCreateButtonState()
+        {
+            if (_createObjectButton == null)
+            {
+                return;
+            }
+
+            _createObjectButton.style.display =
+                _dataVisualizer._namespaceController.SelectedType != null
+                    ? DisplayStyle.Flex
+                    : DisplayStyle.None;
         }
 
         private void ClearRowViewModels()

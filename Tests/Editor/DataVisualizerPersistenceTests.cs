@@ -1,4 +1,3 @@
-#pragma warning disable CS0618 // Type or member is obsolete
 namespace WallstopStudios.DataVisualizer.Editor.Tests
 {
     using Data;
@@ -176,4 +175,3 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
         }
     }
 }
-#pragma warning restore CS0618 // Type or member is obsolete

@@ -122,14 +122,19 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             get
             {
-#pragma warning disable CS0618 // Type or member is obsolete
-                if (_userState == null)
+                DataVisualizerUserState dependencyState = _dependencies?.UserState;
+                if (dependencyState != null)
                 {
-                    LoadUserStateFromFile();
+                    return dependencyState;
                 }
 
-                return _userState;
-#pragma warning restore CS0618 // Type or member is obsolete
+                if (_userStateCache != null)
+                {
+                    return _userStateCache;
+                }
+
+                LoadUserStateFromFile();
+                return _userStateCache;
             }
         }
 
@@ -137,15 +142,20 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             get
             {
-#pragma warning disable CS0618 // Type or member is obsolete
-                if (_settings == null)
+                DataVisualizerSettings dependencySettings = _dependencies?.Settings;
+                if (dependencySettings != null)
                 {
-                    EnsureUserStateRepository();
-                    _settings = _userStateRepository?.LoadSettings() ?? LoadOrCreateSettings();
+                    return dependencySettings;
                 }
 
-                return _settings;
-#pragma warning restore CS0618 // Type or member is obsolete
+                if (_settingsCache != null)
+                {
+                    return _settingsCache;
+                }
+
+                EnsureUserStateRepository();
+                _settingsCache = _userStateRepository?.LoadSettings() ?? LoadOrCreateSettings();
+                return _settingsCache;
             }
         }
 
@@ -207,13 +217,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal VisualElement _selectedNamespaceElement;
 
         internal VisualElement _namespaceListContainer;
-        internal VisualElement _objectPageController;
-        internal Button _previousPageButton;
-        internal Button _nextPageButton;
-        internal IntegerField _currentPageField;
-        internal IntegerField _maxPageField;
         internal VisualElement _inspectorContainer;
-        internal ListView _objectListView;
         internal ScrollView _inspectorScrollView;
 
         internal TwoPaneSplitView _outerSplitView;
@@ -237,11 +241,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal Vector2 _popoverDragStartMousePos;
         internal Vector2 _popoverDragStartPos;
 
+        internal Label _labelAdvancedCollapseToggle;
+        internal HorizontalToggle _andOrToggle;
         internal VisualElement _labelCollapseRow;
         internal Label _labelCollapseToggle;
         internal Label _labels;
-        internal Label _labelAdvancedCollapseToggle;
-        internal HorizontalToggle _andOrToggle;
         internal VisualElement _labelFilterSelectionRoot;
         internal VisualElement _logicalGrouping;
         internal VisualElement _availableLabelsContainer;
@@ -287,10 +291,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal string _lastSearchString;
 
         internal Button _addTypeButton;
-        internal Label _emptyObjectLabel;
         internal Button _addTypesFromScriptFolderButton;
         internal Button _addTypesFromDataFolderButton;
-        internal Button _createObjectButton;
         internal Button _settingsButton;
         internal TextField _typeAddSearchField;
         internal VisualElement _typePopoverListContainer;
@@ -320,13 +322,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal string _userStateFilePath;
 
-        [Obsolete("Use UserState instead.")]
-        internal DataVisualizerUserState _userState;
-
         internal bool _userStateDirty;
 
-        [Obsolete("User Settings instead.")]
-        internal DataVisualizerSettings _settings;
+        private DataVisualizerSettings _settingsCache;
+        private DataVisualizerUserState _userStateCache;
 
         internal List<Type> _relevantScriptableObjectTypes;
 
@@ -450,8 +449,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetService = _dependencies.AssetService;
             _eventHub = _dependencies.EventHub;
             _userStateRepository = _dependencies.UserStateRepository;
-            _settings = _dependencies.Settings;
-            _userState = _dependencies.UserState;
+            _settingsCache = _dependencies.Settings;
+            _userStateCache = _dependencies.UserState;
             if (_layoutPersistenceService == null)
             {
                 _layoutPersistenceService = new LayoutPersistenceService(
@@ -476,6 +475,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _objectSelectionService,
                 _sessionState,
                 _eventHub
+            );
+            _objectListController.ConfigureCreateButton(
+                BuildCreatePopoverContent,
+                (popover, trigger) => OpenPopover(popover, trigger),
+                _createPopover
             );
             _objectCommandService ??= new Services.ObjectCommandService(this, _eventHub);
             _inputShortcutController = new InputShortcutController(this, _eventHub);
@@ -1260,7 +1264,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _namespaceController.SelectType(this, selectedType);
             }
-            UpdateCreateObjectButtonStyle();
             BuildProcessorColumnView();
             UpdateLabelAreaAndFilter();
         }
@@ -1392,6 +1395,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             root.Add(_settingsPopover);
 
             _createPopover = CreatePopoverBase("create-popover");
+            _objectListController.ConfigureCreateButton(
+                BuildCreatePopoverContent,
+                (popover, trigger) => OpenPopover(popover, trigger),
+                _createPopover
+            );
             root.Add(_createPopover);
             _renamePopover = CreatePopoverBase("rename-popover");
             root.Add(_renamePopover);
@@ -3863,7 +3871,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 else
                 {
-                    _emptyObjectLabel.style.display = DisplayStyle.Flex;
+                    _objectListController?.ShowEmptyLabel();
                     SelectObject(null);
                 }
             }
@@ -4667,137 +4675,16 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
 
-            VisualElement objectHeader = new() { name = "object-header" };
-            objectHeader.AddToClassList("object-header");
-
-            objectHeader.Add(new Label("Objects"));
-            _createObjectButton = null;
-            _createObjectButton = new Button(() =>
-            {
-                if (_namespaceController.SelectedType == null)
-                {
-                    return;
-                }
-                BuildCreatePopoverContent(_namespaceController.SelectedType);
-                OpenPopover(_createPopover, _createObjectButton);
-            })
-            {
-                text = "+",
-                tooltip = "Create New Object",
-                name = "create-object-button",
-            };
-            _createObjectButton.AddToClassList("create-button");
-            _createObjectButton.AddToClassList("icon-button");
-            _createObjectButton.AddToClassList(StyleConstants.ClickableClass);
-            UpdateCreateObjectButtonStyle();
-            objectHeader.Add(_createObjectButton);
-            objectColumn.Add(objectHeader);
-
             objectColumn.Add(_processorAreaElement);
 
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
 
-            _labelCollapseRow = new VisualElement();
-            _labelCollapseRow.AddToClassList("collapse-row");
-            _labelCollapseToggle = new Label();
-            _labelCollapseToggle.AddToClassList(StyleConstants.ClickableClass);
-            _labelCollapseToggle.AddToClassList("collapse-toggle");
-            _labelCollapseToggle.RegisterCallback<PointerDownEvent>(evt =>
-            {
-                if (evt.button != 0)
-                {
-                    return;
-                }
-                config = CurrentTypeLabelFilterConfig;
-                if (config == null)
-                {
-                    return;
-                }
-
-                ToggleLabelsCollapsed(!config.isCollapsed);
-                evt.StopPropagation();
-            });
-            _labelCollapseRow.Add(_labelCollapseToggle);
-
-            _labels = new Label("Labels");
-            _labels.AddToClassList("labels-label");
-            _labelCollapseRow.Add(_labels);
-            objectColumn.Add(_labelCollapseRow);
-
-            _labelPanelController.BuildLabelPanel(objectColumn);
-
-            _objectPageController = new VisualElement
-            {
-                name = "object-page-controller",
-                style = { display = DisplayStyle.None },
-            };
-            _objectPageController.AddToClassList("object-page-controller");
-            _previousPageButton = new Button(() =>
-            {
-                _objectListController.HandlePreviousPageRequested();
-            })
-            {
-                text = "←",
-            };
-            _previousPageButton.AddToClassList("go-button-disabled");
-
-            _currentPageField = new IntegerField();
-            _currentPageField.AddToClassList("current-page-field");
-            _currentPageField.RegisterValueChangedCallback(evt =>
-            {
-                _objectListController.HandleCurrentPageChanged(evt.newValue);
-            });
-            _maxPageField = new IntegerField() { isReadOnly = true };
-            _maxPageField.AddToClassList("max-page-field");
-            _nextPageButton = new Button(() =>
-            {
-                _objectListController.HandleNextPageRequested();
-            })
-            {
-                text = "→",
-            };
-            _nextPageButton.AddToClassList("go-button-disabled");
-            _objectPageController.Add(_previousPageButton);
-            _objectPageController.Add(_currentPageField);
-            _objectPageController.Add(_maxPageField);
-            _objectPageController.Add(_nextPageButton);
-
-            objectColumn.Add(_objectPageController);
-
-            _objectListView = new ListView(
-                _objectRowViewModels,
-                itemHeight: 36,
-                makeItem: MakeObjectRow,
-                bindItem: BindObjectRow
-            )
-            {
-                name = "object-list",
-                style = { flexGrow = 1 },
-                selectionType = SelectionType.Single,
-                virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight,
-            };
-            _objectListView.AddToClassList("object-list");
-            _objectListView.itemsSource = _objectRowViewModels;
-            _objectListView.selectionChanged += _objectListController.HandleSelectionChanged;
-            _objectListView.unbindItem += UnbindObjectRow;
-            objectColumn.Add(_objectListView);
-
-            _emptyObjectLabel = new Label("")
-            {
-                name = "empty-object-list-label",
-                style =
-                {
-                    alignSelf = Align.Center,
-                    unityTextAlign = TextAnchor.MiddleCenter,
-                    display = DisplayStyle.None,
-                    whiteSpace = WhiteSpace.Normal,
-                    paddingTop = 8,
-                    paddingBottom = 8,
-                },
-            };
-            _emptyObjectLabel.AddToClassList("empty-object-list-label");
-            objectColumn.Add(_emptyObjectLabel);
-            UpdateCreateObjectButtonStyle();
+            _objectListController.ConfigureCreateButton(
+                BuildCreatePopoverContent,
+                (popover, trigger) => OpenPopover(popover, trigger),
+                _createPopover
+            );
+            _objectListController.BuildObjectListSection(objectColumn);
             UpdateLabelAreaAndFilter();
             return objectColumn;
         }
@@ -4805,37 +4692,38 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal bool CanCollapseAdvancedLabelConfiguration()
         {
             EnsureLabelSubsystems();
-            return _labelPanelController.CanCollapseAdvancedConfiguration();
+            return _labelPanelController != null
+                && _labelPanelController.CanCollapseAdvancedConfiguration();
         }
 
         internal bool CanCollapseLabels()
         {
             EnsureLabelSubsystems();
-            return _labelPanelController.CanCollapseLabels();
+            return _labelPanelController != null && _labelPanelController.CanCollapseLabels();
         }
 
         internal void ToggleLabelsAdvancedCollapsed(bool isCollapsed)
         {
             EnsureLabelSubsystems();
-            _labelPanelController.ToggleLabelsAdvancedCollapsed(isCollapsed);
+            _labelPanelController?.ToggleLabelsAdvancedCollapsed(isCollapsed);
         }
 
         internal void UpdateAdvancedClickableState()
         {
             EnsureLabelSubsystems();
-            _labelPanelController.UpdateAdvancedClickableState();
+            _labelPanelController?.UpdateAdvancedClickableState();
         }
 
         internal void UpdateLabelsCollapsedClickableState()
         {
             EnsureLabelSubsystems();
-            _labelPanelController.UpdateLabelsCollapsedClickableState();
+            _labelPanelController?.UpdateLabelsCollapsedClickableState();
         }
 
         internal void ToggleLabelsCollapsed(bool isCollapsed)
         {
             EnsureLabelSubsystems();
-            _labelPanelController.ToggleLabelsCollapsed(isCollapsed);
+            _labelPanelController?.ToggleLabelsCollapsed(isCollapsed);
         }
 
         internal VisualElement CreateInspectorColumn()
@@ -5058,11 +4946,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _labelFilterSelectionRoot.parent.style.display = DisplayStyle.None;
                 }
 
-                if (_labelCollapseRow != null)
-                {
-                    _labelCollapseRow.style.display = DisplayStyle.None;
-                }
-
                 ApplyLabelFilter();
                 return;
             }
@@ -5105,8 +4988,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             PopulateLabelPillContainers();
             ApplyLabelFilter();
-            ToggleLabelsCollapsed(config?.isCollapsed == true);
-            ToggleLabelsAdvancedCollapsed(config?.isAdvancedCollapsed == true);
         }
 
         internal void ClearLabelFilterUI()
@@ -5775,7 +5656,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             BuildProcessorColumnView();
             BuildObjectsView();
             SelectObject(objectToSelect);
-            UpdateCreateObjectButtonStyle();
             UpdateLabelAreaAndFilter();
         }
 
@@ -6297,18 +6177,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal ScrollView GetObjectListScrollView()
         {
-            return _objectListView?.Q<ScrollView>();
+            return _objectListController?.GetListScrollView();
         }
 
         internal VisualElement GetObjectListContentContainer()
         {
-            ScrollView scrollView = GetObjectListScrollView();
-            if (scrollView != null)
-            {
-                return scrollView.contentContainer;
-            }
-
-            return _objectListView?.contentContainer;
+            return _objectListController?.GetListContentContainer();
         }
 
         internal static ScriptableObject FindObjectByGuid(
@@ -7313,7 +7187,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void RefreshSelectedElementVisuals(ScriptableObject dataObject)
         {
-            if (dataObject == null || _objectListView == null)
+            if (dataObject == null || _objectListController?.ListView == null)
             {
                 return;
             }
@@ -7321,7 +7195,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             int index = ObjectListState.DisplayedObjectsBuffer.IndexOf(dataObject);
             if (index >= 0)
             {
-                _objectListView.RefreshItem(index);
+                _objectListController?.RefreshListItem(index);
             }
         }
 
@@ -7334,8 +7208,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _selectedObjects.Clear();
             _objectVisualElementMap.Clear();
-            _filteredMetadata.Clear();
-            _displayedMetadata.Clear();
+            ObjectListState.ClearFiltered();
 
             if (_assetService == null)
             {
@@ -7647,7 +7520,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             string selectedObjectGuid = _objectSelectionService.ResolveGuid(dataObject);
             _objectSelectionService.SynchronizeSelection(_selectedObjects, dataObject);
 
-            if (_objectListView != null)
+            ListView listView = _objectListController?.ListView;
+            if (listView != null)
             {
                 _isUpdatingListSelection = true;
                 if (_selectedObject != null)
@@ -7657,20 +7531,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                     );
                     if (displayedIndex >= 0)
                     {
-                        _objectListView.SetSelectionWithoutNotify(new int[] { displayedIndex });
-                        _objectListView.ScrollToItem(displayedIndex);
+                        listView.SetSelectionWithoutNotify(new int[] { displayedIndex });
+                        listView.ScrollToItem(displayedIndex);
                     }
                     else
                     {
-                        _objectListView.ClearSelection();
+                        listView.ClearSelection();
                     }
                 }
                 else
                 {
-                    _objectListView.ClearSelection();
+                    listView.ClearSelection();
                 }
                 _isUpdatingListSelection = false;
-                _objectListView.RefreshItems();
+                listView.RefreshItems();
             }
 
             ApplySelectedElementVisuals();
@@ -7764,23 +7638,31 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             }
 
-            DataVisualizerSettings existingSettings = _settings;
+            DataVisualizerSettings existingSettings = _settingsCache;
             if (existingSettings == null)
             {
-                existingSettings = DataVisualizer.LoadOrCreateSettings();
-                _settings = existingSettings;
+                existingSettings = _dependencies?.Settings ?? DataVisualizer.LoadOrCreateSettings();
+                _settingsCache = existingSettings;
             }
 
-            if (existingSettings != null && existingSettings.persistStateInSettingsAsset)
+            bool persistInSettingsAsset =
+                existingSettings != null && existingSettings.persistStateInSettingsAsset;
+            _userStateRepository = persistInSettingsAsset
+                ? new SettingsAssetStateRepository()
+                : new JsonUserStateRepository(_userStateFilePath);
+
+            DataVisualizerSettings loadedSettings = _userStateRepository.LoadSettings();
+            if (loadedSettings != null)
             {
-                _userStateRepository = new SettingsAssetStateRepository();
-            }
-            else
-            {
-                _userStateRepository = new JsonUserStateRepository(_userStateFilePath);
+                _settingsCache = loadedSettings;
             }
 
-            _settings = _userStateRepository.LoadSettings();
+            if (_userStateCache == null)
+            {
+                _userStateCache =
+                    _userStateRepository.LoadUserState() ?? new DataVisualizerUserState();
+                _userStateDirty = false;
+            }
         }
 
         private void EnsureLabelSubsystems()
@@ -7798,17 +7680,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _labelService,
                     _sessionState
                 );
-            }
-        }
-
-        internal void UpdateCreateObjectButtonStyle()
-        {
-            if (_createObjectButton != null)
-            {
-                _createObjectButton.style.display =
-                    _namespaceController.SelectedType != null
-                        ? DisplayStyle.Flex
-                        : DisplayStyle.None;
             }
         }
 
@@ -8061,23 +7932,27 @@ namespace WallstopStudios.DataVisualizer.Editor
             return DragAndDropController.NormalizeGhostInsertIndex(container, ghost, desiredIndex);
         }
 
-        [Obsolete("Should not be used internally except by UserState")]
         internal void LoadUserStateFromFile()
         {
             EnsureUserStateRepository();
-            _userState = _userStateRepository?.LoadUserState() ?? new DataVisualizerUserState();
+            _userStateCache =
+                _userStateRepository?.LoadUserState() ?? new DataVisualizerUserState();
             _userStateDirty = false;
         }
 
         internal void SaveUserStateToFile()
         {
             EnsureUserStateRepository();
-            if (_userState == null)
+            if (_userStateCache == null)
             {
-                return;
+                LoadUserStateFromFile();
+                if (_userStateCache == null)
+                {
+                    return;
+                }
             }
 
-            _userStateRepository.SaveUserState(_userState);
+            _userStateRepository.SaveUserState(_userStateCache);
             _userStateDirty = false;
         }
 

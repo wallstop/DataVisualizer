@@ -366,6 +366,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 filteredCount
             );
 
+            int sourceIndex = listState.FilteredObjectsBuffer.IndexOf(draggedObject);
+            if (sourceIndex >= 0 && sourceIndex < globalTargetIndex)
+            {
+                globalTargetIndex = Mathf.Max(0, globalTargetIndex - 1);
+            }
+
             List<ScriptableObject> filteredWithoutDragged = new List<ScriptableObject>(
                 listState.FilteredObjects
             );

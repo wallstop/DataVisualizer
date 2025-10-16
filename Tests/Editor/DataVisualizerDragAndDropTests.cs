@@ -203,13 +203,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 dataVisualizer._activeDragType = DataVisualizer.DragType.Object;
                 listState.SetDisplayStartIndex(0);
 
-                ListView listView = new()
-                {
-                    itemsSource = displayed,
-                    makeItem = () => new VisualElement(),
-                    bindItem = (_, _) => { },
-                };
-                dataVisualizer._objectListView = listView;
+                VisualElement objectColumn = new VisualElement();
+                dataVisualizer._objectListController.ConfigureCreateButton(
+                    _ => { },
+                    (_, _) => { },
+                    new VisualElement()
+                );
+                dataVisualizer._objectListController.BuildObjectListSection(objectColumn);
+                dataVisualizer.rootVisualElement.Add(objectColumn);
+                ListView listView = dataVisualizer._objectListController.ListView;
 
                 DataVisualizerSettings settings =
                     ScriptableObject.CreateInstance<DataVisualizerSettings>();
@@ -273,6 +275,103 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 }
 
                 Assert.AreEqual(new[] { itemTwo.name, itemThree.name, itemOne.name }, titles);
+            }
+            finally
+            {
+                Object.DestroyImmediate(dataVisualizer);
+                AssetDatabase.DeleteAsset(itemOnePath);
+                AssetDatabase.DeleteAsset(itemTwoPath);
+                AssetDatabase.DeleteAsset(itemThreePath);
+                AssetDatabase.SaveAssets();
+                Object.DestroyImmediate(itemOne);
+                Object.DestroyImmediate(itemTwo);
+                Object.DestroyImmediate(itemThree);
+            }
+        }
+
+        [Test]
+        public void PerformObjectDrop_ReordersBetweenItems()
+        {
+            DummyScriptableObject itemOne =
+                ScriptableObject.CreateInstance<DummyScriptableObject>();
+            DummyScriptableObject itemTwo =
+                ScriptableObject.CreateInstance<DummyScriptableObject>();
+            DummyScriptableObject itemThree =
+                ScriptableObject.CreateInstance<DummyScriptableObject>();
+
+            itemOne.name = "One";
+            itemTwo.name = "Two";
+            itemThree.name = "Three";
+
+            string itemOnePath = Path.Combine(TestFolderPath, "ItemOneBetween.asset");
+            string itemTwoPath = Path.Combine(TestFolderPath, "ItemTwoBetween.asset");
+            string itemThreePath = Path.Combine(TestFolderPath, "ItemThreeBetween.asset");
+
+            AssetDatabase.CreateAsset(itemOne, itemOnePath);
+            AssetDatabase.CreateAsset(itemTwo, itemTwoPath);
+            AssetDatabase.CreateAsset(itemThree, itemThreePath);
+            AssetDatabase.SaveAssets();
+
+            DataVisualizer dataVisualizer = ScriptableObject.CreateInstance<DataVisualizer>();
+            try
+            {
+                dataVisualizer.hideFlags = HideFlags.HideAndDontSave;
+                dataVisualizer._suppressObjectListReloadForTests = true;
+
+                ObjectListState listState = dataVisualizer.ObjectListState;
+                listState.FilteredObjectsBuffer.Clear();
+                listState.DisplayedObjectsBuffer.Clear();
+                listState.FilteredMetadataBuffer.Clear();
+                listState.DisplayedMetadataBuffer.Clear();
+                listState.FilteredObjectsBuffer.AddRange(new[] { itemOne, itemTwo, itemThree });
+                listState.DisplayedObjectsBuffer.AddRange(new[] { itemOne, itemTwo, itemThree });
+                dataVisualizer._selectedObjects.Clear();
+                dataVisualizer._selectedObjects.AddRange(new[] { itemOne, itemTwo, itemThree });
+                listState.SetDisplayStartIndex(0);
+
+                VisualElement objectColumn = new VisualElement();
+                dataVisualizer._objectListController.ConfigureCreateButton(
+                    _ => { },
+                    (_, _) => { },
+                    new VisualElement()
+                );
+                dataVisualizer._objectListController.BuildObjectListSection(objectColumn);
+                dataVisualizer.rootVisualElement.Add(objectColumn);
+
+                dataVisualizer._namespaceController = new NamespaceController(
+                    new Dictionary<string, List<Type>>
+                    {
+                        {
+                            "DummyNamespace",
+                            new List<Type> { typeof(DummyScriptableObject) }
+                        },
+                    },
+                    new Dictionary<string, int> { { "DummyNamespace", 0 } }
+                )
+                {
+                    _selectedType = typeof(DummyScriptableObject),
+                };
+
+                dataVisualizer._selectedObject = itemOne;
+                dataVisualizer._draggedData = itemOne;
+                dataVisualizer._draggedElement = new VisualElement();
+                dataVisualizer._inPlaceGhost = new VisualElement { userData = 2 };
+                dataVisualizer._activeDragType = DataVisualizer.DragType.Object;
+
+                dataVisualizer.PerformObjectDrop();
+
+                CollectionAssert.AreEqual(
+                    new[] { itemTwo, itemOne, itemThree },
+                    listState.FilteredObjectsBuffer
+                );
+                CollectionAssert.AreEqual(
+                    new[] { itemTwo, itemOne, itemThree },
+                    listState.DisplayedObjectsBuffer
+                );
+                CollectionAssert.AreEqual(
+                    new[] { itemTwo, itemOne, itemThree },
+                    dataVisualizer._selectedObjects
+                );
             }
             finally
             {

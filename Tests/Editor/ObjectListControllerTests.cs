@@ -264,38 +264,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 created.Add(obj);
             }
 
-            ListView listView = new ListView
-            {
-                selectionType = SelectionType.Single,
-                makeItem = () => new Label(),
-                bindItem = (element, index) =>
-                {
-                    if (
-                        element is Label label
-                        && index >= 0
-                        && index < listState.DisplayedObjects.Count
-                    )
-                    {
-                        ScriptableObject displayed = listState.DisplayedObjects[index];
-                        label.text = displayed != null ? displayed.name : string.Empty;
-                    }
-                },
-            };
-            dataVisualizer._objectListView = listView;
-            dataVisualizer.rootVisualElement.Add(listView);
-
-            dataVisualizer._emptyObjectLabel = new Label();
-            dataVisualizer.rootVisualElement.Add(dataVisualizer._emptyObjectLabel);
-            dataVisualizer._objectPageController = new VisualElement();
-            dataVisualizer.rootVisualElement.Add(dataVisualizer._objectPageController);
-            dataVisualizer._currentPageField = new IntegerField();
-            dataVisualizer.rootVisualElement.Add(dataVisualizer._currentPageField);
-            dataVisualizer._maxPageField = new IntegerField();
-            dataVisualizer.rootVisualElement.Add(dataVisualizer._maxPageField);
-            dataVisualizer._previousPageButton = new Button();
-            dataVisualizer.rootVisualElement.Add(dataVisualizer._previousPageButton);
-            dataVisualizer._nextPageButton = new Button();
-            dataVisualizer.rootVisualElement.Add(dataVisualizer._nextPageButton);
+            VisualElement objectColumn = new VisualElement();
+            dataVisualizer.rootVisualElement.Add(objectColumn);
+            dataVisualizer._objectListController.ConfigureCreateButton(
+                _ => { },
+                (_, _) => { },
+                new VisualElement()
+            );
+            dataVisualizer._objectListController.BuildObjectListSection(objectColumn);
+            ListView listView = dataVisualizer._objectListController.ListView;
 
             return created;
         }

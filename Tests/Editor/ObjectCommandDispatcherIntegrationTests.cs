@@ -36,9 +36,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 listState.FilteredObjectsBuffer.Add(first);
                 listState.FilteredObjectsBuffer.Add(second);
 
-                // Simplify BuildObjectsView path for the test to avoid UI dependencies.
-                harness.Window._objectListView = null;
-
                 harness.Window._eventHub.Publish(new ObjectMoveToTopRequestedEvent(second));
 
                 Assert.AreSame(
