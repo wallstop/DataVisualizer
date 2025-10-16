@@ -299,9 +299,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal TextField _typeSearchField;
 
-        internal float _lastSavedOuterWidth = -1f;
-        internal float _lastSavedInnerWidth = -1f;
-        internal IVisualElementScheduledItem _saveWidthsTask;
+        private LayoutPersistenceService _layoutPersistenceService;
 
         internal int _searchHighlightIndex = -1;
         internal int _typePopoverHighlightIndex = -1;
@@ -356,6 +354,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal ObjectListController _objectListController;
         internal Services.ObjectSelectionService _objectSelectionService;
         internal Services.ObjectCommandService _objectCommandService;
+        internal InputShortcutController _inputShortcutController;
         private Services.ObjectCommands.ObjectCommandDispatcher _objectCommandDispatcher;
         internal LabelPanelController _labelPanelController;
         internal ILabelService _labelService;
@@ -378,6 +377,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
             _objectCommandService = new Services.ObjectCommandService(this, _eventHub);
             EnsureObjectCommandSubscriptions();
+            _inputShortcutController = new InputShortcutController(this);
         }
 
         [MenuItem("Tools/Wallstop Studios/Data Visualizer")]
@@ -387,7 +387,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             window.titleContent = new GUIContent("Data Visualizer");
             window.minSize = new Vector2(960f, 540f);
 
-            bool initialSizeApplied = EditorPrefs.GetBool(PrefsInitialSizeAppliedKey, false);
+            LayoutPersistenceService layoutPersistenceService = new LayoutPersistenceService(
+                PrefsSplitterOuterKey,
+                PrefsSplitterInnerKey,
+                PrefsInitialSizeAppliedKey
+            );
+
+            bool initialSizeApplied = layoutPersistenceService.IsInitialSizeApplied();
             if (initialSizeApplied)
             {
                 return;
@@ -404,7 +410,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             float y = Mathf.Max(0, centerY);
 
             window.position = new Rect(x, y, width, height);
-            EditorPrefs.SetBool(PrefsInitialSizeAppliedKey, true);
+            layoutPersistenceService.MarkInitialSizeApplied();
         }
 
         internal void OnEnable()
@@ -420,18 +426,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             _odinPropertyTree = null;
 #endif
             _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
-            if (_dependencies == null
+            if (
+                _dependencies == null
                 || !string.Equals(
                     _dependencies.UserStateFilePath,
                     _userStateFilePath,
                     StringComparison.Ordinal
-                ))
+                )
+            )
             {
                 _dependencies = new DataVisualizerDependencies(_userStateFilePath, _sessionState);
             }
             else
             {
-                bool persistInSettingsAsset = _dependencies.Settings != null
+                bool persistInSettingsAsset =
+                    _dependencies.Settings != null
                     && _dependencies.Settings.persistStateInSettingsAsset;
                 _dependencies.UpdatePersistenceStrategy(persistInSettingsAsset, _userStateFilePath);
             }
@@ -441,6 +450,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             _userStateRepository = _dependencies.UserStateRepository;
             _settings = _dependencies.Settings;
             _userState = _dependencies.UserState;
+            if (_layoutPersistenceService == null)
+            {
+                _layoutPersistenceService = new LayoutPersistenceService(
+                    PrefsSplitterOuterKey,
+                    PrefsSplitterInnerKey,
+                    PrefsInitialSizeAppliedKey
+                );
+            }
             _typeSelectedSubscription?.Dispose();
             _typeSelectedSubscription = null;
             _namespaceRemovalConfirmedSubscription?.Dispose();
@@ -459,6 +476,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _eventHub
             );
             _objectCommandService ??= new Services.ObjectCommandService(this, _eventHub);
+            _inputShortcutController ??= new InputShortcutController(this);
             EnsureLabelSubsystems();
 
             _allDataProcessors.Clear();
@@ -502,10 +520,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             LoadScriptableObjectTypes();
-            rootVisualElement.RegisterCallback<KeyDownEvent>(
-                HandleGlobalKeyDown,
-                TrickleDown.TrickleDown
-            );
+            _inputShortcutController.Register(rootVisualElement);
             rootVisualElement
                 .schedule.Execute(() =>
                 {
@@ -518,10 +533,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void OnDisable()
         {
-            rootVisualElement.UnregisterCallback<KeyDownEvent>(
-                HandleGlobalKeyDown,
-                TrickleDown.TrickleDown
-            );
+            _inputShortcutController?.Unregister(rootVisualElement);
             Cleanup();
         }
 
@@ -563,13 +575,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             CancelDrag();
             _objectCommandDispatcher?.Dispose();
             _objectCommandDispatcher = null;
-            _saveWidthsTask?.Pause();
+            if (_layoutPersistenceService != null)
+            {
+                _layoutPersistenceService.StopTrackingSplitViewWidths();
+            }
             if (!Settings.persistStateInSettingsAsset && _userStateDirty)
             {
                 SaveUserStateToFile();
             }
 
-            _saveWidthsTask = null;
             _currentInspectorScriptableObject?.Dispose();
             _currentInspectorScriptableObject = null;
             _dragGhost?.RemoveFromHierarchy();
@@ -1064,40 +1078,50 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void StartPeriodicWidthSave()
         {
-            _saveWidthsTask?.Pause();
-            _saveWidthsTask = rootVisualElement
-                .schedule.Execute(CheckAndSaveSplitterWidths)
-                .Every(1000);
-        }
-
-        internal void CheckAndSaveSplitterWidths()
-        {
-            if (
-                _outerSplitView == null
-                || _innerSplitView == null
-                || _namespaceColumnElement == null
-                || _objectColumnElement == null
-                || float.IsNaN(_namespaceColumnElement.resolvedStyle.width)
-                || float.IsNaN(_objectColumnElement.resolvedStyle.width)
-            )
+            if (_layoutPersistenceService == null)
             {
                 return;
             }
 
-            float currentOuterWidth = _namespaceColumnElement.resolvedStyle.width;
-            float currentInnerWidth = _objectColumnElement.resolvedStyle.width;
+            Func<float> outerWidthProvider = GetNamespaceColumnWidth;
+            Func<float> innerWidthProvider = GetObjectColumnWidth;
+            _layoutPersistenceService.StartTrackingSplitViewWidths(
+                rootVisualElement,
+                outerWidthProvider,
+                innerWidthProvider
+            );
+        }
 
-            if (!Mathf.Approximately(currentOuterWidth, _lastSavedOuterWidth))
+        private float GetNamespaceColumnWidth()
+        {
+            if (_namespaceColumnElement == null)
             {
-                EditorPrefs.SetFloat(PrefsSplitterOuterKey, currentOuterWidth);
-                _lastSavedOuterWidth = currentOuterWidth;
+                return float.NaN;
             }
 
-            if (!Mathf.Approximately(currentInnerWidth, _lastSavedInnerWidth))
+            float currentWidth = _namespaceColumnElement.resolvedStyle.width;
+            if (float.IsNaN(currentWidth))
             {
-                EditorPrefs.SetFloat(PrefsSplitterInnerKey, currentInnerWidth);
-                _lastSavedInnerWidth = currentInnerWidth;
+                return float.NaN;
             }
+
+            return currentWidth;
+        }
+
+        private float GetObjectColumnWidth()
+        {
+            if (_objectColumnElement == null)
+            {
+                return float.NaN;
+            }
+
+            float currentWidth = _objectColumnElement.resolvedStyle.width;
+            if (float.IsNaN(currentWidth))
+            {
+                return float.NaN;
+            }
+
+            return currentWidth;
         }
 
         internal void RestorePreviousSelection()
@@ -1319,17 +1343,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
             headerRow.Add(_searchField);
 
-            float initialOuterWidth = EditorPrefs.GetFloat(
-                PrefsSplitterOuterKey,
-                DefaultOuterSplitWidth
-            );
-            float initialInnerWidth = EditorPrefs.GetFloat(
-                PrefsSplitterInnerKey,
-                DefaultInnerSplitWidth
-            );
-
-            _lastSavedOuterWidth = initialOuterWidth;
-            _lastSavedInnerWidth = initialInnerWidth;
+            float initialOuterWidth = DefaultOuterSplitWidth;
+            float initialInnerWidth = DefaultInnerSplitWidth;
+            if (_layoutPersistenceService != null)
+            {
+                initialOuterWidth = _layoutPersistenceService.LoadOuterSplitWidth(
+                    DefaultOuterSplitWidth
+                );
+                initialInnerWidth = _layoutPersistenceService.LoadInnerSplitWidth(
+                    DefaultInnerSplitWidth
+                );
+            }
             _namespaceColumnElement = CreateNamespaceColumn();
             CreateProcessorColumn();
             _objectColumnElement = CreateObjectColumn();
@@ -2075,7 +2099,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            List<(DataAssetMetadata metadata, SearchResultMatchInfo match)> results = new List<(DataAssetMetadata metadata, SearchResultMatchInfo match)>();
+            List<(DataAssetMetadata metadata, SearchResultMatchInfo match)> results =
+                new List<(DataAssetMetadata metadata, SearchResultMatchInfo match)>();
             foreach (string guid in _allManagedObjectGuids)
             {
                 if (string.IsNullOrWhiteSpace(guid))
@@ -2121,10 +2146,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _searchPopover.style.maxHeight = StyleKeyword.Null;
                 foreach (
-                    (
-                        DataAssetMetadata resultMetadata,
-                        SearchResultMatchInfo resultInfo
-                    ) in results
+                    (DataAssetMetadata resultMetadata, SearchResultMatchInfo resultInfo) in results
                 )
                 {
                     List<string> termsMatchingThisObject = resultInfo.AllMatchedTerms.ToList();
@@ -2616,7 +2638,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
             popover.Add(contentWrapper);
-            dragHandle.RegisterCallback<KeyDownEvent>(HandlePopoverKeyDown);
+            _inputShortcutController?.RegisterPopoverKeyHandler(dragHandle);
             return popover;
         }
 
@@ -3005,161 +3027,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _activePopover = null;
             _popoverContext = null;
-        }
-
-        internal void HandleGlobalKeyDown(KeyDownEvent evt)
-        {
-            if (_activePopover == _inspectorLabelSuggestionsPopover)
-            {
-                HandleNewLabelInputKeyDown(evt);
-                return;
-            }
-
-            VisualElement activePopover = _activeNestedPopover ?? _activePopover;
-            if (activePopover != null && activePopover.style.display == DisplayStyle.Flex)
-            {
-                switch (evt.keyCode)
-                {
-                    case KeyCode.Escape:
-                    {
-                        CloseActivePopover();
-                        evt.PreventDefault();
-                        evt.StopPropagation();
-                        return;
-                    }
-                    case KeyCode.DownArrow:
-                    case KeyCode.UpArrow:
-                    case KeyCode.Return:
-                    case KeyCode.KeypadEnter:
-                    {
-                        if (_lastActiveFocusArea == FocusArea.SearchResultsPopover)
-                        {
-                            _lastEnterPressed = Time.realtimeSinceStartup;
-                            HandleSearchKeyDown(evt);
-                            return;
-                        }
-
-                        if (_lastActiveFocusArea == FocusArea.AddTypePopover)
-                        {
-                            _lastEnterPressed = Time.realtimeSinceStartup;
-                            HandleTypePopoverKeyDown(evt);
-                            return;
-                        }
-
-                        if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
-                        {
-                            Button primaryButton = activePopover
-                                .IterateChildrenRecursively()
-                                .Where(child =>
-                                    child.ClassListContains(
-                                        StyleConstants.PopoverPrimaryActionClass
-                                    )
-                                )
-                                .OfType<Button>()
-                                .FirstOrDefault();
-
-                            if (primaryButton?.userData is Action action)
-                            {
-                                action.Invoke();
-                            }
-                        }
-
-                        break;
-                    }
-                }
-
-                if (evt.keyCode == KeyCode.DownArrow || evt.keyCode == KeyCode.UpArrow)
-                {
-                    evt.PreventDefault();
-                    evt.StopPropagation();
-                    return;
-                }
-            }
-
-            switch (evt.keyCode)
-            {
-                case KeyCode.DownArrow:
-                {
-                    bool navigationHandled = false;
-                    switch (_lastActiveFocusArea)
-                    {
-                        case FocusArea.TypeList:
-                        {
-                            navigationHandled = true;
-                            _namespaceController.IncrementTypeSelection(this);
-                            break;
-                        }
-                    }
-
-                    if (navigationHandled)
-                    {
-                        evt.PreventDefault();
-                        evt.StopPropagation();
-                    }
-
-                    break;
-                }
-                case KeyCode.UpArrow:
-                {
-                    bool navigationHandled = false;
-                    switch (_lastActiveFocusArea)
-                    {
-                        case FocusArea.TypeList:
-                        {
-                            navigationHandled = true;
-                            _namespaceController.DecrementTypeSelection(this);
-                            break;
-                        }
-                    }
-
-                    if (navigationHandled)
-                    {
-                        evt.PreventDefault();
-                        evt.StopPropagation();
-                    }
-
-                    break;
-                }
-            }
-        }
-
-        internal void HandlePopoverKeyDown(KeyDownEvent evt)
-        {
-            VisualElement activePopover = _activeNestedPopover ?? _activePopover;
-            if (activePopover == null || activePopover.style.display != DisplayStyle.Flex)
-            {
-                return;
-            }
-
-            switch (evt.keyCode)
-            {
-                case KeyCode.Escape:
-                {
-                    CloseActivePopover();
-                    evt.PreventDefault();
-                    evt.StopPropagation();
-                    return;
-                }
-                case KeyCode.None when evt.character is '\n' or '\r':
-                case KeyCode.Return:
-                case KeyCode.KeypadEnter:
-                {
-                    Button primaryButton = activePopover
-                        .IterateChildrenRecursively()
-                        .Where(child =>
-                            child.ClassListContains(StyleConstants.PopoverPrimaryActionClass)
-                        )
-                        .OfType<Button>()
-                        .FirstOrDefault();
-
-                    if (primaryButton?.userData is Action action)
-                    {
-                        action.Invoke();
-                    }
-
-                    break;
-                }
-            }
         }
 
         internal void HandleClickOutsidePopover(PointerDownEvent evt)
@@ -3832,7 +3699,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
             string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
 
-            if (!selectedAbsolutePath.StartsWith(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
+            if (
+                !selectedAbsolutePath.StartsWith(
+                    projectAssetsPath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             {
                 Debug.LogError("Selected folder must be inside the project's Assets folder.");
                 EditorUtility.DisplayDialog(
@@ -5195,8 +5067,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 StringComparer.OrdinalIgnoreCase
             );
             IReadOnlyCollection<string> availableLabels =
-                _labelService.GetAvailableLabels(selectedType)
-                ?? Array.Empty<string>();
+                _labelService.GetAvailableLabels(selectedType) ?? Array.Empty<string>();
             foreach (string label in availableLabels)
             {
                 if (string.IsNullOrWhiteSpace(label))
@@ -5217,12 +5088,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (config != null)
             {
                 bool configChanged = false;
-                configChanged |= config.andLabels.RemoveAll(label =>
-                    !availableLabelSet.Contains(label)
-                ) > 0;
-                configChanged |= config.orLabels.RemoveAll(label =>
-                    !availableLabelSet.Contains(label)
-                ) > 0;
+                configChanged |=
+                    config.andLabels.RemoveAll(label => !availableLabelSet.Contains(label)) > 0;
+                configChanged |=
+                    config.orLabels.RemoveAll(label => !availableLabelSet.Contains(label)) > 0;
 
                 if (configChanged)
                 {
@@ -5382,9 +5251,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             EnsureLabelSubsystems();
 
             Type selectedType = _namespaceController.SelectedType;
-            TypeLabelFilterConfig config = selectedType != null
-                ? _labelService.GetOrCreateConfig(selectedType)
-                : null;
+            TypeLabelFilterConfig config =
+                selectedType != null ? _labelService.GetOrCreateConfig(selectedType) : null;
 
             if (selectedType == null || config == null)
             {
@@ -5846,7 +5714,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return Array.Empty<Type>();
             }
 
-            if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types) || types == null)
+            if (
+                !_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types)
+                || types == null
+            )
             {
                 return Array.Empty<Type>();
             }
@@ -5951,7 +5822,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     if (string.IsNullOrWhiteSpace(_userStateFilePath))
                     {
-                        _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
+                        _userStateFilePath = Path.Combine(
+                            Application.persistentDataPath,
+                            UserStateFileName
+                        );
                     }
 
                     _userStateRepository = new JsonUserStateRepository(_userStateFilePath);
@@ -5983,7 +5857,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _typeSelectedSubscription = _eventHub.Subscribe<TypeSelectedEvent>(HandleTypeSelectedEvent);
+            _typeSelectedSubscription = _eventHub.Subscribe<TypeSelectedEvent>(
+                HandleTypeSelectedEvent
+            );
         }
 
         private void EnsureRemovalSubscriptions()
@@ -5995,12 +5871,17 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (_namespaceRemovalConfirmedSubscription == null)
             {
-                _namespaceRemovalConfirmedSubscription = _eventHub.Subscribe<NamespaceRemovalConfirmedEvent>(HandleNamespaceRemovalConfirmed);
+                _namespaceRemovalConfirmedSubscription =
+                    _eventHub.Subscribe<NamespaceRemovalConfirmedEvent>(
+                        HandleNamespaceRemovalConfirmed
+                    );
             }
 
             if (_typeRemovalConfirmedSubscription == null)
             {
-                _typeRemovalConfirmedSubscription = _eventHub.Subscribe<TypeRemovalConfirmedEvent>(HandleTypeRemovalConfirmed);
+                _typeRemovalConfirmedSubscription = _eventHub.Subscribe<TypeRemovalConfirmedEvent>(
+                    HandleTypeRemovalConfirmed
+                );
             }
         }
 
@@ -6013,17 +5894,24 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (_namespaceReorderSubscription == null)
             {
-                _namespaceReorderSubscription = _eventHub.Subscribe<NamespaceReorderRequestedEvent>(HandleNamespaceReorderRequested);
+                _namespaceReorderSubscription = _eventHub.Subscribe<NamespaceReorderRequestedEvent>(
+                    HandleNamespaceReorderRequested
+                );
             }
 
             if (_typeReorderSubscription == null)
             {
-                _typeReorderSubscription = _eventHub.Subscribe<TypeReorderRequestedEvent>(HandleTypeReorderRequested);
+                _typeReorderSubscription = _eventHub.Subscribe<TypeReorderRequestedEvent>(
+                    HandleTypeReorderRequested
+                );
             }
 
             if (_objectCommandDispatcher == null)
             {
-                _objectCommandDispatcher = new Services.ObjectCommands.ObjectCommandDispatcher(this, _eventHub);
+                _objectCommandDispatcher = new Services.ObjectCommands.ObjectCommandDispatcher(
+                    this,
+                    _eventHub
+                );
             }
         }
 
@@ -6039,7 +5927,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            int targetIndex = Mathf.Clamp(evt.TargetIndex, 0, Mathf.Max(0, _namespaceOrder.Count - 1));
+            int targetIndex = Mathf.Clamp(
+                evt.TargetIndex,
+                0,
+                Mathf.Max(0, _namespaceOrder.Count - 1)
+            );
             if (targetIndex == currentIndex)
             {
                 return;
@@ -6049,7 +5941,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .OrderBy(pair => pair.Value)
                 .ToList();
             ordered.RemoveAll(pair => pair.Key == evt.NamespaceKey);
-            ordered.Insert(targetIndex, new KeyValuePair<string, int>(evt.NamespaceKey, targetIndex));
+            ordered.Insert(
+                targetIndex,
+                new KeyValuePair<string, int>(evt.NamespaceKey, targetIndex)
+            );
 
             for (int index = 0; index < ordered.Count; index++)
             {
@@ -6068,7 +5963,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            if (!_scriptableObjectTypes.TryGetValue(evt.NamespaceKey, out List<Type> types) || types == null)
+            if (
+                !_scriptableObjectTypes.TryGetValue(evt.NamespaceKey, out List<Type> types)
+                || types == null
+            )
             {
                 return;
             }
@@ -6111,9 +6009,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (!NamespaceController.IsTypeRemovable(type))
             {
-                Debug.LogWarning(
-                    $"Attempted to remove non-removable type '{type.FullName}'."
-                );
+                Debug.LogWarning($"Attempted to remove non-removable type '{type.FullName}'.");
                 return false;
             }
 
@@ -6828,8 +6724,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             IReadOnlyCollection<string> labels =
-                _labelService.GetAvailableLabels(selectedType)
-                ?? Array.Empty<string>();
+                _labelService.GetAvailableLabels(selectedType) ?? Array.Empty<string>();
 
             HashSet<string> unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string label in labels)
@@ -6891,9 +6786,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 StringComparer.OrdinalIgnoreCase
             );
 
-            IReadOnlyList<string> suggestions = _labelService
-                .SuggestionProvider
-                .GetSuggestions(selectedType, currentInput, currentAssetLabelsSet);
+            IReadOnlyList<string> suggestions = _labelService.SuggestionProvider.GetSuggestions(
+                selectedType,
+                currentInput,
+                currentAssetLabelsSet
+            );
 
             if (suggestions.Count > 0)
             {
@@ -7440,12 +7337,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             List<string> customGuidOrder = GetObjectOrderForType(type);
-            Dictionary<string, ScriptableObject> objectsByGuid = new Dictionary<string, ScriptableObject>(
-                StringComparer.OrdinalIgnoreCase
-            );
-            Dictionary<string, DataAssetMetadata> metadataByGuid = new Dictionary<string, DataAssetMetadata>(
-                StringComparer.OrdinalIgnoreCase
-            );
+            Dictionary<string, ScriptableObject> objectsByGuid = new Dictionary<
+                string,
+                ScriptableObject
+            >(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, DataAssetMetadata> metadataByGuid = new Dictionary<
+                string,
+                DataAssetMetadata
+            >(StringComparer.OrdinalIgnoreCase);
             IReadOnlyList<string> indexedGuids = _assetService.GetGuidsForType(type);
             if (indexedGuids.Count == 0)
             {
@@ -7508,7 +7407,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                         if (
                             metadataByGuid.TryGetValue(lhs.Key, out DataAssetMetadata leftMetadata)
-                            && metadataByGuid.TryGetValue(rhs.Key, out DataAssetMetadata rightMetadata)
+                            && metadataByGuid.TryGetValue(
+                                rhs.Key,
+                                out DataAssetMetadata rightMetadata
+                            )
                         )
                         {
                             return string.Compare(
@@ -8202,7 +8104,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 NamespaceController.RecalibrateVisualElements(child);
             }
 
-            _eventHub?.Publish(new TypeReorderRequestedEvent(namespaceKey, draggedType, targetIndex));
+            _eventHub?.Publish(
+                new TypeReorderRequestedEvent(namespaceKey, draggedType, targetIndex)
+            );
         }
 
         internal void UpdateAndSaveTypeOrder(string namespaceKey, List<Type> orderedTypes)

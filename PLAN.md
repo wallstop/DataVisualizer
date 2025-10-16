@@ -69,8 +69,8 @@
 
 ### Priority 7 – Drag and Drop, Input, and Layout
 1. Centralize drag state in `DragAndDropController`, coordinating namespace/type/object drags via the event hub. This controller can reuse pooled visuals and handle keyboard modifiers consistently.
-2. Introduce `InputShortcutController` to register global key bindings and dispatch high-level commands (NextType, PreviousType, ExecuteSearchConfirm) without referencing UI internals.
-3. Extract layout persistence (split view widths, window size) into `LayoutPersistenceService`, debouncing writes and exposing load/save methods invoked by the window lifecycle.
+2. [~] Introduce `InputShortcutController` to register global key bindings and dispatch high-level commands (NextType, PreviousType, ExecuteSearchConfirm) without referencing UI internals (created controller, moved global/popover key handling out of `DataVisualizer`; still consumes window internals pending follow-up abstractions).
+3. [x] Extract layout persistence (split view widths, window size) into `LayoutPersistenceService`, debouncing writes and exposing load/save methods invoked by the window lifecycle (implemented `LayoutPersistenceService` and migrated `DataVisualizer` to use it for EditorPrefs reads/writes and scheduled saves).
 
 ### Priority 8 – Cleanup and API Hardening
 1. Remove obsolete fields and methods from `DataVisualizer`, exposing only minimal internal APIs needed by controllers. Update `package.json` if public surface changes.
