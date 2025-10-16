@@ -8,6 +8,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
     internal sealed class ProcessorExecutionService
     {
+        private readonly ScriptableAssetSaveScheduler _saveScheduler;
+
+        public ProcessorExecutionService(ScriptableAssetSaveScheduler saveScheduler)
+        {
+            _saveScheduler = saveScheduler
+                ?? throw new ArgumentNullException(nameof(saveScheduler));
+        }
+
         public void Execute(
             IDataProcessor processor,
             Type targetType,
@@ -30,8 +38,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             }
 
             processor.Process(targetType, objects);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
+            _saveScheduler.ScheduleAssetDatabaseSave();
+            _saveScheduler.Schedule(AssetDatabase.Refresh);
         }
     }
 }

@@ -14,6 +14,7 @@ namespace WallstopStudios.DataVisualizer.Editor.State
             Popovers = new PopoverState();
             Labels = new LabelFilterState();
             Objects = new ObjectListState();
+            Processors = new ProcessorPanelState();
         }
 
         public SelectionState Selection { get; }
@@ -27,6 +28,8 @@ namespace WallstopStudios.DataVisualizer.Editor.State
         public LabelFilterState Labels { get; }
 
         public ObjectListState Objects { get; }
+
+        public ProcessorPanelState Processors { get; }
 
         public sealed class SelectionState
         {

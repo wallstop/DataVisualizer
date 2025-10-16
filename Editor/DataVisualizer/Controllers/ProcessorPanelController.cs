@@ -126,7 +126,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _listContainer.Clear();
             _compatibleProcessors.Clear();
 
-            Type selectedType = _dataVisualizer._namespaceController.SelectedType;
+            Type selectedType = _dataVisualizer.GetSelectedType();
             if (selectedType != null)
             {
                 IReadOnlyList<IDataProcessor> compatible = _registry.GetCompatibleProcessors(
@@ -147,7 +147,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _root.style.display = DisplayStyle.Flex;
             _collapseToggle.SetEnabled(true);
 
-            ProcessorState state = _dataVisualizer.CurrentProcessorState;
+            ProcessorState state =
+                _sessionState.Processors.ActiveState ?? _dataVisualizer.CurrentProcessorState;
             ApplyLogicToggle(state?.logic ?? ProcessorLogic.Filtered, force: true);
             ApplyCollapseState(state?.isCollapsed == true);
 
@@ -195,7 +196,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         public void ToggleCollapse()
         {
-            ProcessorState state = _dataVisualizer.CurrentProcessorState;
+            ProcessorState state =
+                _sessionState.Processors.ActiveState ?? _dataVisualizer.CurrentProcessorState;
             if (state != null)
             {
                 state.isCollapsed = !state.isCollapsed;
@@ -207,7 +209,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         private void SetProcessorLogic(ProcessorLogic logic)
         {
-            ProcessorState state = _dataVisualizer.CurrentProcessorState;
+            ProcessorState state =
+                _sessionState.Processors.ActiveState ?? _dataVisualizer.CurrentProcessorState;
             if (state != null && state.logic != logic)
             {
                 state.logic = logic;

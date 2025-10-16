@@ -171,8 +171,43 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal TypeLabelFilterConfig CurrentTypeLabelFilterConfig =>
             LoadOrCreateLabelFilterConfig(_namespaceController.SelectedType);
 
-        internal ProcessorState CurrentProcessorState =>
-            LoadOrCreateProcessorState(_namespaceController.SelectedType);
+        internal ProcessorState CurrentProcessorState
+        {
+            get
+            {
+                Type selectedType = _namespaceController?.SelectedType;
+                if (selectedType == null)
+                {
+                    _sessionState.Processors.SetActiveState(null);
+                    return null;
+                }
+
+                ProcessorPanelState processorState = _sessionState.Processors;
+                ProcessorState active = processorState.ActiveState;
+                if (
+                    active != null
+                    && string.Equals(
+                        active.typeFullName,
+                        selectedType.FullName,
+                        StringComparison.Ordinal
+                    )
+                )
+                {
+                    return active;
+                }
+
+                ProcessorState cached = processorState.GetState(selectedType.FullName);
+                if (cached != null)
+                {
+                    processorState.SetActiveState(cached);
+                    return cached;
+                }
+
+                ProcessorState loaded = LoadOrCreateProcessorState(selectedType);
+                processorState.SetActiveState(loaded);
+                return loaded;
+            }
+        }
 
         internal int HiddenNamespaces
         {
@@ -313,6 +348,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private LayoutPersistenceService _layoutPersistenceService;
         private ScriptableAssetSaveScheduler _saveScheduler;
+        private bool _ownsSaveScheduler;
 
         internal int _searchHighlightIndex = -1;
         internal int _typePopoverHighlightIndex = -1;
@@ -392,7 +428,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _eventHub
             );
             _processorRegistry = new Services.DataProcessorRegistry();
-            _processorExecutionService = new Services.ProcessorExecutionService();
+            _processorExecutionService = new Services.ProcessorExecutionService(
+                EnsureSaveScheduler()
+            );
             _processorPanelController = new ProcessorPanelController(
                 this,
                 _sessionState,
@@ -459,7 +497,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 )
             )
             {
-                _dependencies = new DataVisualizerDependencies(_userStateFilePath, _sessionState);
+                _dependencies = new DataVisualizerDependencies(
+                    _userStateFilePath,
+                    _sessionState,
+                    EnsureSaveScheduler()
+                );
             }
             else
             {
@@ -505,7 +547,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _createPopover
             );
             _processorRegistry ??= new Services.DataProcessorRegistry();
-            _processorExecutionService ??= new Services.ProcessorExecutionService();
+            _processorExecutionService ??= new Services.ProcessorExecutionService(
+                EnsureSaveScheduler()
+            );
             _processorPanelController ??= new ProcessorPanelController(
                 this,
                 _sessionState,
@@ -597,6 +641,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             CancelDrag();
             _objectCommandDispatcher?.Dispose();
             _objectCommandDispatcher = null;
+            _sessionState.Processors.Clear();
             if (_layoutPersistenceService != null)
             {
                 _layoutPersistenceService.StopTrackingSplitViewWidths();
@@ -609,6 +654,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             ScriptableAssetSaveScheduler scheduler = GetActiveSaveScheduler();
             scheduler?.Flush();
             _userStateDirty = false;
+
+            if (_ownsSaveScheduler && _saveScheduler != null)
+            {
+                _saveScheduler.Dispose();
+                _saveScheduler = null;
+                _ownsSaveScheduler = false;
+            }
 
             _currentInspectorScriptableObject?.Dispose();
             _currentInspectorScriptableObject = null;
@@ -5077,6 +5129,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             if (type == null)
             {
+                _sessionState.Processors.SetActiveState(null);
                 return null;
             }
             ProcessorState state = null;
@@ -5128,6 +5181,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return dirty;
                 }
             );
+            _sessionState.Processors.SetActiveState(state);
             return state;
         }
 
@@ -5179,6 +5233,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return true;
                 }
             );
+            _sessionState.Processors.SetActiveState(state);
         }
 
         internal void SaveLabelFilterConfig(TypeLabelFilterConfig config)
@@ -5426,16 +5481,31 @@ namespace WallstopStudios.DataVisualizer.Editor
             return _namespaceOrder.GetValueOrDefault(namespaceKey, -1);
         }
 
+        internal Type GetSelectedType()
+        {
+            return _namespaceController?.SelectedType;
+        }
+
         private ScriptableAssetSaveScheduler EnsureSaveScheduler()
         {
             if (_dependencies != null && _dependencies.SaveScheduler != null)
             {
+                if (_saveScheduler == null)
+                {
+                    _ownsSaveScheduler = false;
+                }
+                else if (!ReferenceEquals(_saveScheduler, _dependencies.SaveScheduler))
+                {
+                    _ownsSaveScheduler = false;
+                }
+
                 return _dependencies.SaveScheduler;
             }
 
             if (_saveScheduler == null)
             {
                 _saveScheduler = new ScriptableAssetSaveScheduler();
+                _ownsSaveScheduler = true;
             }
 
             return _saveScheduler;
@@ -5477,6 +5547,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             LoadObjectTypes(selectedType);
+            LoadOrCreateProcessorState(selectedType);
             ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
             BuildProcessorColumnView();
             BuildObjectsView();

@@ -45,7 +45,7 @@
 4. [x] Ensure namespace rebuilds diff against cached state to minimize UI churn, keeping performance characteristics.
 
 ### Priority 3 – Object List and Selection
-1. [~] Introduce `ObjectListController` that owns the `ListView`, pagination header, and drag reorder behavior. It consumes `IDataAssetService` metadata and emits commands (`CloneRequested`, `RenameRequested`, etc.) through the event hub (controller now drives filtered/displayed collections, builds the header/create button, and manages list/pagination UI; drag command modelling still pending).
+1. [~] Introduce `ObjectListController` that owns the `ListView`, pagination header, and drag reorder behavior. It consumes `IDataAssetService` metadata and emits commands (`CloneRequested`, `RenameRequested`, etc.) through the event hub (controller now drives filtered/displayed collections, builds the header/create button, and manages list/pagination UI; staged asset loading hooked into controller state; drag command modelling still pending).
 2. [x] Create `ObjectSelectionService` to manage `_selectedObjects`, `_selectedObject`, and associated metadata (GUID tracking, highlight index). This reduces shared mutable collections.
 3. [x] Refactor object command handlers (clone, rename, move, delete) into dedicated command classes or strategies (`IObjectCommand`) scoped to services for file operations, keeping UI logic clean.
 4. [x] Preserve `ListView` virtualization and pooling while ensuring row binding pulls metadata lazily and reuses row view models to maintain performance.
@@ -62,9 +62,9 @@
 4. Update inspector integration to construct serialized objects via a helper (`InspectorBindingService`), disposing them responsibly and handling Odin integration with feature flags.
 
 ### Priority 5 – Processor Pipeline
-1. [~] Create `ProcessorPanelController` for building the processor list UI, toggles, and execution actions. Controller now owns the processor column UI and refresh logic; event hub integration and registry abstraction pending.
+1. [~] Create `ProcessorPanelController` for building the processor list UI, toggles, and execution actions. Controller now owns the processor column UI and refresh logic with state sourced from `ProcessorPanelState`; event hub integration and registry abstraction pending.
 2. [~] Add `IProcessorRegistry` to surface available `IDataProcessor` implementations, caching instances and capabilities (registry now owns discovery while the panel consumes it; further event-driven updates pending).
-3. [~] Introduce `ProcessorExecutionService` to run processors asynchronously or with progress reporting, ensuring results update the state and trigger asset refreshes efficiently (service now owns processor invocation, save, and refresh hooks; async/progress work outstanding).
+3. [~] Introduce `ProcessorExecutionService` to run processors asynchronously or with progress reporting, ensuring results update the state and trigger asset refreshes efficiently (service now owns processor invocation, queues saves/refresh through the shared scheduler; async/progress work outstanding).
 4. Incorporate performance telemetry (duration, allocations) via opt-in diagnostics stored in `VisualizerSessionState` for future debugging.
 
 ### Priority 6 – Search and Popovers

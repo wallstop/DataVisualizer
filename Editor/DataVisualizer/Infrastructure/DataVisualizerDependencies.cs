@@ -10,7 +10,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Infrastructure
     {
         public DataVisualizerDependencies(
             string userStateFilePath,
-            VisualizerSessionState sessionState
+            VisualizerSessionState sessionState,
+            ScriptableAssetSaveScheduler saveScheduler
         )
         {
             if (sessionState == null)
@@ -28,7 +29,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Infrastructure
 
             UserStateFilePath = userStateFilePath;
             SessionState = sessionState;
-            SaveScheduler = new ScriptableAssetSaveScheduler();
+            SaveScheduler = saveScheduler ?? new ScriptableAssetSaveScheduler();
             InitializeRepositories();
             AssetService = new DataAssetService();
         }
