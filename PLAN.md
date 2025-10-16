@@ -68,7 +68,7 @@
 3. Ensure search results and popovers rely on immutable view models for clarity and testability.
 
 ### Priority 7 – Drag and Drop, Input, and Layout
-1. [~] Centralize drag state in `DragAndDropController`, coordinating namespace/type/object drags via the event hub. This controller can reuse pooled visuals and handle keyboard modifiers consistently (controller now owns ghost visuals and drop execution; event-driven coordination and modifiers still pending).
+1. [~] Centralize drag state in `DragAndDropController`, coordinating namespace/type/object drags via the event hub. This controller can reuse pooled visuals and handle keyboard modifiers consistently (controller now owns ghost visuals, placeholder sizing for objects/namespaces, and drop execution; event-driven coordination and keyboard modifiers still pending).
 2. [~] Introduce `InputShortcutController` to register global key bindings and dispatch high-level commands (NextType, PreviousType, ExecuteSearchConfirm) without referencing UI internals (controller now publishes type navigation via the event hub and owns popover escape handling; still relies on window focus state/search methods pending state refactors).
 3. [x] Extract layout persistence (split view widths, window size) into `LayoutPersistenceService`, debouncing writes and exposing load/save methods invoked by the window lifecycle (implemented `LayoutPersistenceService` and migrated `DataVisualizer` to use it for EditorPrefs reads/writes and scheduled saves).
 

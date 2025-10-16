@@ -46,9 +46,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer._lastGhostInsertIndex = -1;
             _dataVisualizer._lastGhostParent = null;
-            _dataVisualizer._draggedElement.style.visibility = Visibility.Visible;
-            _dataVisualizer._draggedElement.style.display = DisplayStyle.Flex;
-            _dataVisualizer._draggedElement.style.opacity = 0f;
+
+            _dataVisualizer._draggedElement.style.visibility = Visibility.Hidden;
+            _dataVisualizer._draggedElement.style.display = DisplayStyle.None;
         }
 
         public void UpdateInPlaceGhostPosition(Vector2 pointerPosition)
@@ -693,47 +693,54 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         private void ApplyCachedSizing(VisualElement ghost, VisualElement container)
         {
-            float width = _cachedDragWidth;
-            if (width <= 0f && container != null)
-            {
-                width = container.resolvedStyle.width;
-            }
-
-            if (width <= 0f)
-            {
-                width = _dataVisualizer.rootVisualElement.resolvedStyle.width;
-            }
-
-            if (width > 0f)
-            {
-                ghost.style.width = width;
-                ghost.style.minWidth = width;
-            }
-            else
-            {
-                ghost.style.width = StyleKeyword.Auto;
-                ghost.style.minWidth = StyleKeyword.Auto;
-            }
-
-            float height =
-                _cachedDragHeight > 0f
-                    ? _cachedDragHeight
-                    : (_dataVisualizer._draggedElement?.layout.height ?? 1f);
-            height = Mathf.Max(1f, height);
-            ghost.style.height = height;
-            ghost.style.minHeight = height;
-            ghost.style.flexBasis = height;
-
+            float width;
             if (_dataVisualizer._activeDragType == DataVisualizer.DragType.Namespace)
             {
+                width =
+                    container?.resolvedStyle.width
+                    ?? _dataVisualizer.rootVisualElement.resolvedStyle.width;
                 ghost.style.marginLeft = 0f;
                 ghost.style.marginRight = 0f;
             }
             else
             {
+                width = _cachedDragWidth;
+                if (width <= 0f && container != null)
+                {
+                    width = container.resolvedStyle.width;
+                }
+
+                if (width <= 0f)
+                {
+                    width = _dataVisualizer.rootVisualElement.resolvedStyle.width;
+                }
+
                 ghost.style.marginLeft = _cachedMarginLeft;
                 ghost.style.marginRight = _cachedMarginRight;
             }
+
+            if (width <= 0f)
+            {
+                width = _dataVisualizer._draggedElement?.layout.width ?? 1f;
+            }
+
+            ghost.style.width = width > 0f ? width : 1f;
+            ghost.style.minWidth = ghost.style.width;
+
+            float height = _cachedDragHeight;
+            if (height <= 0f)
+            {
+                height = _dataVisualizer._draggedElement?.layout.height ?? 1f;
+            }
+            if (height <= 0f)
+            {
+                height = _dataVisualizer._draggedElement?.contentRect.height ?? 1f;
+            }
+
+            height = Mathf.Max(1f, height);
+            ghost.style.height = height;
+            ghost.style.minHeight = height;
+            ghost.style.flexBasis = height;
 
             ghost.style.marginTop = _cachedMarginTop;
             ghost.style.marginBottom = _cachedMarginBottom;
