@@ -62,7 +62,7 @@
 4. Update inspector integration to construct serialized objects via a helper (`InspectorBindingService`), disposing them responsibly and handling Odin integration with feature flags.
 
 ### Priority 5 – Processor Pipeline
-1. [~] Create `ProcessorPanelController` for building the processor list UI, toggles, and execution actions. Controller now owns the processor column UI and refresh logic with state sourced from `ProcessorPanelState`; event hub integration and registry abstraction pending.
+1. [~] Create `ProcessorPanelController` for building the processor list UI, toggles, and execution actions. Controller now owns the processor column UI and refresh logic with state sourced from `ProcessorPanelState`, and initialization now occurs during `OnEnable` to satisfy Unity's constructor restrictions; event hub integration and registry abstraction pending.
 2. [~] Add `IProcessorRegistry` to surface available `IDataProcessor` implementations, caching instances and capabilities (registry now owns discovery while the panel consumes it; further event-driven updates pending).
 3. [~] Introduce `ProcessorExecutionService` to run processors asynchronously or with progress reporting, ensuring results update the state and trigger asset refreshes efficiently (service now owns processor invocation, queues saves/refresh through the shared scheduler; async/progress work outstanding).
 4. Incorporate performance telemetry (duration, allocations) via opt-in diagnostics stored in `VisualizerSessionState` for future debugging.

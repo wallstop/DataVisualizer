@@ -427,15 +427,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _sessionState,
                 _eventHub
             );
-            _processorRegistry = new Services.DataProcessorRegistry();
-            _processorExecutionService = new Services.ProcessorExecutionService(
-                EnsureSaveScheduler()
-            );
-            _processorPanelController = new ProcessorPanelController(
-                this,
-                _sessionState,
-                _processorRegistry
-            );
             _objectCommandService = new Services.ObjectCommandService(this, _eventHub);
             EnsureObjectCommandSubscriptions();
             _inputShortcutController = new InputShortcutController(this, _eventHub);
