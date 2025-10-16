@@ -24,10 +24,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private readonly Label _collapseToggle;
         private readonly VisualElement _content;
         private readonly HorizontalToggle _logicToggle;
+        private readonly Label _statusLabel;
         private readonly ScrollView _scrollView;
         private readonly VisualElement _listContainer;
         private DataVisualizerEventHub _eventHub;
         private IDisposable _typeSelectedSubscription;
+        private bool _registrySubscribed;
         public ProcessorPanelController(
             DataVisualizer dataVisualizer,
             VisualizerSessionState sessionState,
@@ -81,6 +83,20 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _logicToggle.OnRightSelected += () => SetProcessorLogic(ProcessorLogic.Filtered);
             _content.Add(_logicToggle);
 
+            _statusLabel = new Label
+            {
+                name = "processor-status-label",
+                style =
+                {
+                    display = DisplayStyle.None,
+                    unityFontStyleAndWeight = FontStyle.Italic,
+                    marginBottom = 4,
+                    marginLeft = 4,
+                },
+            };
+            _statusLabel.AddToClassList("processor-status-label");
+            _content.Add(_statusLabel);
+
             _scrollView = new ScrollView(ScrollViewMode.Vertical)
             {
                 name = "processor-list-scrollview",
@@ -107,6 +123,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             Unbind();
             _eventHub = eventHub;
             _typeSelectedSubscription = _eventHub.Subscribe<TypeSelectedEvent>(HandleTypeSelected);
+            if (!_registrySubscribed)
+            {
+                _registry.ProcessorsChanged += HandleProcessorsChanged;
+                _registrySubscribed = true;
+            }
         }
 
         public void Unbind()
@@ -114,6 +135,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _typeSelectedSubscription?.Dispose();
             _typeSelectedSubscription = null;
             _eventHub = null;
+            if (_registrySubscribed)
+            {
+                _registry.ProcessorsChanged -= HandleProcessorsChanged;
+                _registrySubscribed = false;
+            }
         }
 
         public void RebuildProcessorCache()
@@ -126,6 +152,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _listContainer.Clear();
             _compatibleProcessors.Clear();
 
+            ProcessorPanelState panelState = _sessionState.Processors;
             Type selectedType = _dataVisualizer.GetSelectedType();
             if (selectedType != null)
             {
@@ -150,13 +177,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             ProcessorState state =
                 _sessionState.Processors.ActiveState ?? _dataVisualizer.CurrentProcessorState;
             ApplyLogicToggle(state?.logic ?? ProcessorLogic.Filtered, force: true);
-            ApplyCollapseState(state?.isCollapsed == true);
+            ApplyCollapseState(state?.isCollapsed == true, panelState);
 
             if (state?.isCollapsed == true)
             {
+                UpdateStatusLabel(panelState);
                 return;
             }
 
+            UpdateStatusLabel(panelState);
+
+            bool disableButtons = panelState.IsExecuting;
             for (int index = 0; index < _compatibleProcessors.Count; index++)
             {
                 IDataProcessor processor = _compatibleProcessors[index];
@@ -179,6 +210,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 processorButton.AddToClassList("processor-button");
                 processorButton.AddToClassList(StyleConstants.ClickableClass);
 
+                Color highlightColor = color;
                 IDataProcessor localProcessor = processor;
                 processorButton.RegisterCallback<PointerDownEvent>(evt =>
                 {
@@ -187,9 +219,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                         return;
                     }
 
-                    _dataVisualizer.RunDataProcessor(processorButton, localProcessor);
+                    Type targetType = _dataVisualizer.GetSelectedType();
+                    if (targetType == null)
+                    {
+                        return;
+                    }
+
+                    _eventHub?.Publish(
+                        new ProcessorExecutionRequestedEvent(
+                            localProcessor,
+                            targetType,
+                            highlightColor,
+                            processorButton
+                        )
+                    );
                 });
 
+                processorButton.SetEnabled(!disableButtons);
                 _listContainer.Add(processorButton);
             }
         }
@@ -248,13 +294,21 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
         }
 
-        private void ApplyCollapseState(bool isCollapsed)
+        private void ApplyCollapseState(bool isCollapsed, ProcessorPanelState panelState)
         {
             if (isCollapsed)
             {
                 _collapseToggle.text = StyleConstants.ArrowCollapsed;
-                _headerLabel.text =
-                    $"Processors (<b><color=yellow>{_compatibleProcessors.Count}</color></b>)";
+                if (panelState.IsExecuting)
+                {
+                    _headerLabel.text =
+                        $"Processors (<b><color=yellow>running…</color></b>)";
+                }
+                else
+                {
+                    _headerLabel.text =
+                        $"Processors (<b><color=yellow>{_compatibleProcessors.Count}</color></b>)";
+                }
                 _content.style.display = DisplayStyle.None;
                 _header.style.borderBottomWidth = 1;
                 return;
@@ -274,6 +328,55 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         public void Dispose()
         {
             Unbind();
+        }
+
+        private void HandleProcessorsChanged()
+        {
+            Refresh();
+        }
+
+        private void UpdateStatusLabel(ProcessorPanelState panelState)
+        {
+            if (panelState == null)
+            {
+                _statusLabel.style.display = DisplayStyle.None;
+                _statusLabel.text = string.Empty;
+                return;
+            }
+
+            if (panelState.IsExecuting)
+            {
+                string pendingText = panelState.PendingExecutionCount > 0
+                    ? $" · Pending: {panelState.PendingExecutionCount}"
+                    : string.Empty;
+                _statusLabel.text =
+                    $"Running {panelState.ActiveProcessorName} on {panelState.ActiveObjectCount} objects{pendingText}";
+                _statusLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(panelState.LastExecutionError))
+            {
+                _statusLabel.text =
+                    $"Last processor failed: {panelState.LastExecutionError}";
+                _statusLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            if (panelState.LastExecutionDurationSeconds.HasValue)
+            {
+                double duration = panelState.LastExecutionDurationSeconds.Value;
+                string pendingText = panelState.PendingExecutionCount > 0
+                    ? $" · Pending: {panelState.PendingExecutionCount}"
+                    : string.Empty;
+                _statusLabel.text =
+                    $"Last processor finished in {duration:0.00}s{pendingText}";
+                _statusLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            _statusLabel.style.display = DisplayStyle.None;
+            _statusLabel.text = string.Empty;
         }
     }
 }

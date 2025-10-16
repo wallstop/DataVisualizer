@@ -11,6 +11,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
         private readonly Dictionary<Type, List<IDataProcessor>> _compatibilityCache =
             new Dictionary<Type, List<IDataProcessor>>();
 
+        public event Action ProcessorsChanged;
+
         public void Refresh()
         {
             _processors.Clear();
@@ -39,6 +41,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             }
 
             _processors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
+
+            ProcessorsChanged?.Invoke();
         }
 
         public IReadOnlyList<IDataProcessor> GetAllProcessors()

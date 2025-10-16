@@ -6,6 +6,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
     internal interface IDataProcessorRegistry
     {
+        event Action ProcessorsChanged;
+
         void Refresh();
 
         IReadOnlyList<IDataProcessor> GetAllProcessors();

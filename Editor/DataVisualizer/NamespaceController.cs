@@ -148,6 +148,63 @@ namespace WallstopStudios.DataVisualizer.Editor
             string namespaceKey = GetNamespaceKey(_selectedType);
         }
 
+        public void PerformTypeSearch(string searchText)
+        {
+            if (_namespaceCache.Count == 0 || string.IsNullOrWhiteSpace(searchText))
+            {
+                foreach (VisualElement typeItem in _namespaceCache.Values)
+                {
+                    typeItem.style.display = DisplayStyle.Flex;
+                }
+
+                UpdateNamespaceVisibility();
+                return;
+            }
+
+            string[] terms = searchText
+                .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .ToArray();
+
+            foreach (KeyValuePair<Type, VisualElement> entry in _namespaceCache)
+            {
+                Type type = entry.Key;
+                VisualElement element = entry.Value;
+                string displayName = GetTypeDisplayName(type);
+                bool shouldDisplay = terms.All(term =>
+                    displayName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                );
+                element.style.display = shouldDisplay ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            UpdateNamespaceVisibility();
+        }
+
+        private void UpdateNamespaceVisibility()
+        {
+            HashSet<VisualElement> namespaceContainers = _namespaceCache
+                .Values
+                .Select(element => element.parent?.parent)
+                .Where(element => element != null)
+                .ToHashSet();
+
+            int hiddenNamespaces = 0;
+            foreach (VisualElement container in namespaceContainers)
+            {
+                bool allHidden = container
+                    .Query<VisualElement>(className: "type-item")
+                    .ToList()
+                    .All(item => item.style.display == DisplayStyle.None);
+                container.style.display = allHidden ? DisplayStyle.None : DisplayStyle.Flex;
+                if (allHidden)
+                {
+                    hiddenNamespaces++;
+                }
+            }
+
+            // just to keep parity with previous behavior; DataVisualizer listens to this value
+            _namespaceCache.TryGetValue(_selectedType, out VisualElement selectedElement);
+        }
+
         public static void RecalibrateVisualElements(VisualElement item, int offset = 0)
         {
             VisualElement parent = item?.parent;

@@ -247,14 +247,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal readonly List<ScriptableObject> _selectedObjects = new();
         internal IDataAssetService _assetService;
-        internal readonly List<string> _allManagedObjectGuids = new();
+        private SearchService _searchService;
         internal readonly List<ObjectRowViewModel> _objectRowViewModels = new();
         internal readonly Stack<ObjectRowViewModel> _objectRowViewModelPool = new();
         internal IReadOnlyList<DataAssetMetadata> FilteredMetadata =>
             _sessionState.Objects.FilteredMetadata;
         internal IReadOnlyList<DataAssetMetadata> DisplayedMetadata =>
             _sessionState.Objects.DisplayedMetadata;
-        internal readonly List<VisualElement> _currentSearchResultItems = new();
         internal readonly List<VisualElement> _currentTypePopoverItems = new();
 
         private readonly List<string> _currentTypeGuidOrder = new();
@@ -335,7 +334,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal TextField _searchField;
         internal VisualElement _searchPopover;
         internal bool _isSearchCachePopulated;
-        internal string _lastSearchString;
 
         internal Button _addTypeButton;
         internal Button _addTypesFromScriptFolderButton;
@@ -350,7 +348,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private ScriptableAssetSaveScheduler _saveScheduler;
         private bool _ownsSaveScheduler;
 
-        internal int _searchHighlightIndex = -1;
         internal int _typePopoverHighlightIndex = -1;
         internal string _lastTypeAddSearchTerm;
 #pragma warning disable CS0618 // Type or member is obsolete
@@ -404,17 +401,25 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal Services.ObjectCommandService _objectCommandService;
         internal InputShortcutController _inputShortcutController;
         internal DragAndDropController _dragAndDropController;
+        internal SearchPopoverController _searchPopoverController;
         private Services.ObjectCommands.ObjectCommandDispatcher _objectCommandDispatcher;
         internal ProcessorPanelController _processorPanelController;
         internal Services.IDataProcessorRegistry _processorRegistry;
         internal Services.ProcessorExecutionService _processorExecutionService;
         internal LabelPanelController _labelPanelController;
         internal ILabelService _labelService;
+        private DialogService _dialogService;
         private IDisposable _typeSelectedSubscription;
         private IDisposable _namespaceRemovalConfirmedSubscription;
         private IDisposable _typeRemovalConfirmedSubscription;
         private IDisposable _namespaceReorderSubscription;
         private IDisposable _typeReorderSubscription;
+        private IDisposable _processorExecutionRequestedSubscription;
+        private IDisposable _processorExecutionStartedSubscription;
+        private IDisposable _processorExecutionCompletedSubscription;
+        private IDisposable _processorExecutionFailedSubscription;
+        private IDisposable _dialogMessageSubscription;
+        private IDisposable _dialogConfirmationSubscription;
 
         public DataVisualizer()
         {
@@ -503,6 +508,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _assetService = _dependencies.AssetService;
+            _searchService ??= new SearchService(_assetService);
+            _searchPopoverController ??= new SearchPopoverController(this, _searchService);
             _eventHub = _dependencies.EventHub;
             _userStateRepository = _dependencies.UserStateRepository;
             _settingsCache = _dependencies.Settings;
@@ -523,6 +530,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _typeRemovalConfirmedSubscription = null;
             EnsureTypeSelectedSubscription();
             EnsureRemovalSubscriptions();
+            EnsureProcessorExecutionSubscription();
             EnsureObjectCommandSubscriptions();
             EnsureNamespacePanelController();
             _objectSelectionService ??= new Services.ObjectSelectionService(_sessionState);
@@ -539,7 +547,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
             _processorRegistry ??= new Services.DataProcessorRegistry();
             _processorExecutionService ??= new Services.ProcessorExecutionService(
-                EnsureSaveScheduler()
+                EnsureSaveScheduler(),
+                _eventHub
             );
             _processorPanelController ??= new ProcessorPanelController(
                 this,
@@ -547,6 +556,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _processorRegistry
             );
             _processorPanelController.Bind(_eventHub);
+            EnsureDialogSubscriptions();
             _objectCommandService ??= new Services.ObjectCommandService(this, _eventHub);
             _inputShortcutController = new InputShortcutController(this, _eventHub);
             _dragAndDropController = new DragAndDropController(this, _eventHub);
@@ -607,7 +617,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             _processorPanelController?.Dispose();
             _processorPanelController = null;
             _processorRegistry = null;
+            (_processorExecutionService as IDisposable)?.Dispose();
             _processorExecutionService = null;
+            _searchService = null;
             _typeSelectedSubscription?.Dispose();
             _typeSelectedSubscription = null;
             _namespaceRemovalConfirmedSubscription?.Dispose();
@@ -618,16 +630,27 @@ namespace WallstopStudios.DataVisualizer.Editor
             _namespaceReorderSubscription = null;
             _typeReorderSubscription?.Dispose();
             _typeReorderSubscription = null;
+            _processorExecutionRequestedSubscription?.Dispose();
+            _processorExecutionRequestedSubscription = null;
+            _processorExecutionStartedSubscription?.Dispose();
+            _processorExecutionStartedSubscription = null;
+            _processorExecutionCompletedSubscription?.Dispose();
+            _processorExecutionCompletedSubscription = null;
+            _processorExecutionFailedSubscription?.Dispose();
+            _processorExecutionFailedSubscription = null;
+            _dialogMessageSubscription?.Dispose();
+            _dialogMessageSubscription = null;
+            _dialogConfirmationSubscription?.Dispose();
+            _dialogConfirmationSubscription = null;
             _isLabelCachePopulated = false;
             _selectedElement = null;
             _selectedObject = null;
             _scriptableObjectTypes.Clear();
             _namespaceOrder.Clear();
             _namespaceController.Clear();
-            _allManagedObjectGuids.Clear();
-            _currentSearchResultItems.Clear();
             _currentTypePopoverItems.Clear();
             _isSearchCachePopulated = false;
+            _searchPopoverController?.MarkCachePopulated(false);
             CloseActivePopover();
             CancelDrag();
             _objectCommandDispatcher?.Dispose();
@@ -652,6 +675,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _saveScheduler = null;
                 _ownsSaveScheduler = false;
             }
+
+            _dialogService?.Dispose();
+            _dialogService = null;
+            _searchPopoverController?.ClearResults();
 
             _currentInspectorScriptableObject?.Dispose();
             _currentInspectorScriptableObject = null;
@@ -678,65 +705,187 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void PopulateSearchCache(bool forceRebuild = false)
         {
+            RebuildSearchIndex(forceRebuild);
+            _isSearchCachePopulated = true;
+            _searchPopoverController?.MarkCachePopulated(true);
+        }
+
+        private void RebuildSearchIndex(bool forceRebuild)
+        {
+            if (_searchService == null)
+            {
+                return;
+            }
+
             IEnumerable<Type> allTypes = _scriptableObjectTypes
                 .SelectMany(entry => entry.Value)
                 .Where(type => type != null)
                 .Distinct();
 
-            if (_assetService != null)
-            {
-                _assetService.ConfigureTrackedTypes(allTypes);
-                if (forceRebuild)
-                {
-                    _assetService.ForceRebuild();
-                }
-            }
-
-            RebuildManagedObjectGuidCache();
-            _isSearchCachePopulated = true;
+            _searchService.PopulateSearchCache(allTypes, forceRebuild);
         }
 
-        internal void RebuildManagedObjectGuidCache()
+        internal Label CreateHighlightedLabel(
+            string fullText,
+            IReadOnlyList<string> termsToHighlight,
+            string baseStyleClass,
+            bool bindToContextHovers = false,
+            params VisualElement[] contexts
+        )
         {
-            _allManagedObjectGuids.Clear();
-
-            if (_assetService == null)
+            Label label = new Label();
+            if (!string.IsNullOrWhiteSpace(baseStyleClass))
             {
-                return;
+                label.AddToClassList(baseStyleClass);
             }
 
-            using PooledResource<List<DataAssetMetadata>> metadataBuffer =
-                Buffers<DataAssetMetadata>.GetList(0, out List<DataAssetMetadata> metadata);
-            metadata.AddRange(_assetService.GetAllAssets() ?? Array.Empty<DataAssetMetadata>());
+            label.enableRichText = true;
 
-            metadata.Sort(
-                (lhs, rhs) =>
+            if (string.IsNullOrEmpty(fullText) || termsToHighlight == null || termsToHighlight.Count == 0)
+            {
+                label.text = EscapeRichText(fullText);
+                return label;
+            }
+
+            List<(int start, int length)> matches = BuildMatches(fullText, termsToHighlight);
+            label.text = BuildContents(false);
+            label.RegisterCallback<MouseOverEvent>(_ => label.text = BuildContents(true));
+            label.RegisterCallback<MouseOutEvent>(_ => label.text = BuildContents(false));
+
+            if (bindToContextHovers && contexts != null)
+            {
+                for (int index = 0; index < contexts.Length; index++)
                 {
-                    int nameComparison = string.Compare(
-                        lhs.DisplayName,
-                        rhs.DisplayName,
-                        StringComparison.Ordinal
-                    );
-                    if (nameComparison != 0)
+                    VisualElement context = contexts[index];
+                    if (context == null)
                     {
-                        return nameComparison;
+                        continue;
                     }
 
-                    return string.Compare(
-                        lhs.TypeFullName,
-                        rhs.TypeFullName,
-                        StringComparison.Ordinal
-                    );
-                }
-            );
-
-            foreach (DataAssetMetadata entry in metadata)
-            {
-                if (!string.IsNullOrWhiteSpace(entry.Guid))
-                {
-                    _allManagedObjectGuids.Add(entry.Guid);
+                    context.RegisterCallback<MouseOverEvent>(_ => label.text = BuildContents(true));
+                    context.RegisterCallback<MouseOutEvent>(_ => label.text = BuildContents(false));
                 }
             }
+
+            return label;
+
+            string BuildContents(bool hovering)
+            {
+                CachedStringBuilder.Clear();
+                int currentIndex = 0;
+
+                for (int matchIndex = 0; matchIndex < matches.Count; matchIndex++)
+                {
+                    (int start, int length) = matches[matchIndex];
+                    if (start > currentIndex)
+                    {
+                        AppendSegment(fullText.Substring(currentIndex, start - currentIndex));
+                    }
+
+                    string matchedText = fullText.Substring(start, length);
+                    if (!hovering)
+                    {
+                        CachedStringBuilder
+                            .Append("<b><color=#FFD54F>")
+                            .Append(EscapeRichText(matchedText))
+                            .Append("</color></b>");
+                    }
+                    else
+                    {
+                        AppendSegment(matchedText);
+                    }
+
+                    currentIndex = start + length;
+                }
+
+                if (currentIndex < fullText.Length)
+                {
+                    AppendSegment(fullText.Substring(currentIndex));
+                }
+
+                return CachedStringBuilder.ToString();
+            }
+
+            void AppendSegment(string segment)
+            {
+                if (string.IsNullOrEmpty(segment))
+                {
+                    return;
+                }
+
+                CachedStringBuilder.Append(EscapeRichText(segment));
+            }
+        }
+
+        private static List<(int start, int length)> BuildMatches(
+            string fullText,
+            IReadOnlyList<string> terms
+        )
+        {
+            List<(int start, int length)> matches = new List<(int start, int length)>();
+            if (string.IsNullOrEmpty(fullText) || terms == null)
+            {
+                return matches;
+            }
+
+            for (int termIndex = 0; termIndex < terms.Count; termIndex++)
+            {
+                string term = terms[termIndex];
+                if (string.IsNullOrWhiteSpace(term))
+                {
+                    continue;
+                }
+
+                int searchIndex = 0;
+                while (searchIndex < fullText.Length)
+                {
+                    int foundIndex = fullText.IndexOf(term, searchIndex, StringComparison.OrdinalIgnoreCase);
+                    if (foundIndex < 0)
+                    {
+                        break;
+                    }
+
+                    matches.Add((foundIndex, term.Length));
+                    searchIndex = foundIndex + term.Length;
+                }
+            }
+
+            matches.Sort((lhs, rhs) =>
+            {
+                int comparison = lhs.start.CompareTo(rhs.start);
+                if (comparison != 0)
+                {
+                    return comparison;
+                }
+
+                return rhs.length.CompareTo(lhs.length);
+            });
+
+            List<(int start, int length)> filtered = new List<(int start, int length)>();
+            int currentEnd = -1;
+            for (int index = 0; index < matches.Count; index++)
+            {
+                (int start, int length) = matches[index];
+                if (start < currentEnd)
+                {
+                    continue;
+                }
+
+                filtered.Add((start, length));
+                currentEnd = start + length;
+            }
+
+            return filtered;
+        }
+
+        private static string EscapeRichText(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            return System.Security.SecurityElement.Escape(value);
         }
 
         public static void SignalRefresh()
@@ -832,7 +981,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            RebuildManagedObjectGuidCache();
+            RebuildSearchIndex(false);
+            _searchPopoverController?.MarkCachePopulated(true);
             _isSearchCachePopulated = true;
             ScheduleRefresh();
         }
@@ -860,7 +1010,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _assetService.RefreshAsset(guid);
             }
-            RebuildManagedObjectGuidCache();
+            RebuildSearchIndex(false);
+            _searchPopoverController?.MarkCachePopulated(true);
             _isSearchCachePopulated = true;
             _isLabelCachePopulated = false;
         }
@@ -1356,7 +1507,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             VisualElement root = rootVisualElement;
             root.Clear();
+            _dialogService?.Dispose();
+            _dialogService = null;
             TryLoadStyleSheet(root);
+            EnsureDialogService();
 
             VisualElement headerRow = new()
             {
@@ -1389,13 +1543,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchField = new TextField { name = "global-search-field" };
             _searchField.AddToClassList("global-search-field");
             _searchField.SetPlaceholderText(SearchPlaceholder);
-            _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue));
+            _searchField.RegisterValueChangedCallback(evt =>
+                _searchPopoverController?.HandleSearchValueChanged(evt.newValue)
+            );
             _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
                 (_, context) =>
                 {
                     if (
                         !string.IsNullOrWhiteSpace(context._searchField.value)
-                        && context._searchPopover.childCount > 0
+                        && context._searchPopoverController?.HasContent() == true
                         && context._activePopover != context._searchPopover
                     )
                     {
@@ -1408,7 +1564,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
                 this
             );
-            _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
+            _searchField.RegisterCallback<KeyDownEvent>(evt =>
+                _searchPopoverController?.HandleKeyDown(evt)
+            );
             headerRow.Add(_searchField);
 
             float initialOuterWidth = DefaultOuterSplitWidth;
@@ -1471,6 +1629,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchPopover = new VisualElement { name = "search-popover" };
             _searchPopover.AddToClassList("search-popover");
             root.Add(_searchPopover);
+            _searchPopoverController?.Attach(_searchField, _searchPopover);
 
             _typeAddPopover = new VisualElement { name = "type-add-popover" };
             _typeAddPopover.AddToClassList("type-add-popover");
@@ -1678,10 +1837,25 @@ namespace WallstopStudios.DataVisualizer.Editor
             _processorPanelController?.ToggleCollapse();
         }
 
-        internal void RunDataProcessor(VisualElement context, IDataProcessor processor)
+        internal void RunDataProcessor(
+            VisualElement anchor,
+            IDataProcessor processor,
+            Type targetType,
+            Color highlightColor
+        )
         {
-            ProcessorState state = CurrentProcessorState;
-            if (processor == null || _namespaceController.SelectedType == null || state == null)
+            if (
+                processor == null
+                || targetType == null
+                || _processorExecutionService == null
+                || _namespaceController.SelectedType != targetType
+            )
+            {
+                return;
+            }
+
+            ProcessorState state = LoadOrCreateProcessorState(targetType);
+            if (state == null)
             {
                 return;
             }
@@ -1711,748 +1885,40 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
+            if (toProcess.Length == 0)
+            {
+                ShowMessageDialog(
+                    "Processor",
+                    "There are no objects available for the selected processor.",
+                    "OK"
+                );
+                return;
+            }
+
             string message =
-                $"Run processor '{processor.Name}' on <b><color={context.style.backgroundColor.value.ToHex()}>{toProcess.Length}</color></b> "
+                $"Run processor '{processor.Name}' on <b><color={highlightColor.ToHex()}>{toProcess.Length}</color></b> "
                 + $"object{(toProcess.Length != 1 ? "s" : "")} "
-                + $"of type '<b><color=yellow>{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}</color></b>'?";
+                + $"of type '<b><color=yellow>{NamespaceController.GetTypeDisplayName(targetType)}</color></b>'?";
 
             BuildAndOpenConfirmationPopover(
                 message,
                 "Run",
                 () =>
-                {
-                    try
-                    {
-                        _processorExecutionService.Execute(
-                            processor,
-                            _namespaceController.SelectedType,
-                            toProcess
-                        );
-                        ScheduleRefresh();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"Error running processor '{processor.Name}': {ex}");
-                        EditorUtility.DisplayDialog(
-                            "Processor Error",
-                            $"An error occurred while running '{processor.Name}':\n{ex.Message}",
-                            "OK"
-                        );
-                    }
-                },
-                context
+                    _processorExecutionService.EnqueueExecution(
+                        processor,
+                        targetType,
+                        toProcess
+                    ),
+                anchor
             );
         }
 
-        internal void HandleSearchKeyDown(KeyDownEvent evt)
+                internal void HandleSearchKeyDown(KeyDownEvent evt)
         {
-            if (
-                _activePopover != _searchPopover
-                || _searchPopover.style.display == DisplayStyle.None
-                || _currentSearchResultItems.Count == 0
-            )
-            {
-                return;
-            }
-
-            bool highlightChanged = false;
-
-            switch (evt.keyCode)
-            {
-                case KeyCode.DownArrow:
-                {
-                    _searchHighlightIndex++;
-                    if (_searchHighlightIndex >= _currentSearchResultItems.Count)
-                    {
-                        _searchHighlightIndex = 0;
-                    }
-
-                    highlightChanged = true;
-                    break;
-                }
-                case KeyCode.UpArrow:
-                {
-                    _searchHighlightIndex--;
-                    if (_searchHighlightIndex < 0)
-                    {
-                        _searchHighlightIndex = _currentSearchResultItems.Count - 1;
-                    }
-
-                    highlightChanged = true;
-                    break;
-                }
-                case KeyCode.Return:
-                case KeyCode.KeypadEnter:
-                {
-                    if (
-                        _searchHighlightIndex >= 0
-                        && _searchHighlightIndex < _currentSearchResultItems.Count
-                    )
-                    {
-                        if (
-                            _currentSearchResultItems[_searchHighlightIndex].userData
-                            is DataAssetMetadata selectedMetadata
-                        )
-                        {
-                            ScriptableObject selectedObject = selectedMetadata.LoadAsset();
-                            if (selectedObject != null)
-                            {
-                                NavigateToObject(selectedObject);
-                                _searchField.value = string.Empty;
-                            }
-                        }
-
-                        evt.PreventDefault();
-                        evt.StopPropagation();
-                    }
-
-                    break;
-                }
-                case KeyCode.Escape:
-                {
-                    CloseActivePopover();
-                    evt.PreventDefault();
-                    evt.StopPropagation();
-                    break;
-                }
-                default:
-                {
-                    return;
-                }
-            }
-
-            if (highlightChanged)
-            {
-                UpdateSearchResultHighlight();
-                evt.PreventDefault();
-                evt.StopPropagation();
-            }
+            _searchPopoverController?.HandleKeyDown(evt);
         }
 
-        internal void UpdateSearchResultHighlight()
-        {
-            if (_currentSearchResultItems == null || _searchPopover == null)
-            {
-                return;
-            }
-
-            ScrollView scrollView = _searchPopover.Q<ScrollView>("search-scroll");
-
-            for (int i = 0; i < _currentSearchResultItems.Count; i++)
-            {
-                VisualElement item = _currentSearchResultItems[i];
-                if (item == null)
-                {
-                    continue;
-                }
-
-                if (i == _searchHighlightIndex)
-                {
-                    item.AddToClassList(SearchResultHighlightClass);
-                    scrollView?.ScrollTo(item);
-                }
-                else
-                {
-                    item.RemoveFromClassList(SearchResultHighlightClass);
-                }
-            }
-        }
-
-        internal void PerformTypeSearch(string searchText)
-        {
-            HashSet<VisualElement> typeElements =
-                _namespaceController._namespaceCache.Values.ToHashSet();
-            try
-            {
-                if (
-                    string.IsNullOrWhiteSpace(searchText)
-                    || string.Equals(SearchPlaceholder, searchText, StringComparison.Ordinal)
-                )
-                {
-                    foreach (VisualElement typeItem in _namespaceController._namespaceCache.Values)
-                    {
-                        typeItem.style.display = DisplayStyle.Flex;
-                    }
-                    return;
-                }
-
-                string[] searchTerms = searchText.Split(
-                    new[] { ' ' },
-                    StringSplitOptions.RemoveEmptyEntries
-                );
-
-                foreach (
-                    KeyValuePair<Type, VisualElement> entry in _namespaceController._namespaceCache
-                )
-                {
-                    typeElements.Add(entry.Value);
-                    string typeDisplayName = NamespaceController.GetTypeDisplayName(entry.Key);
-                    bool shouldDisplay = Array.TrueForAll(
-                        searchTerms,
-                        term => typeDisplayName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                    );
-                    entry.Value.style.display = shouldDisplay
-                        ? DisplayStyle.Flex
-                        : DisplayStyle.None;
-                }
-            }
-            finally
-            {
-                int hiddenNamespaces = 0;
-                foreach (
-                    VisualElement parent in _namespaceController
-                        ._namespaceCache.Values.Select(value => value.parent?.parent)
-                        .Where(parent => parent != null)
-                        .Distinct()
-                )
-                {
-                    bool allInvisible = parent
-                        .IterateChildrenRecursively()
-                        .Where(typeElements.Contains)
-                        .All(child => child.style.display == DisplayStyle.None);
-                    parent.style.display = allInvisible ? DisplayStyle.None : DisplayStyle.Flex;
-                    if (allInvisible)
-                    {
-                        hiddenNamespaces++;
-                    }
-                }
-
-                HiddenNamespaces = hiddenNamespaces;
-            }
-        }
-
-        internal void PerformSearch(string searchText)
-        {
-            searchText = searchText?.Trim();
-            if (string.Equals(searchText, _lastSearchString, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            _lastSearchString = searchText;
-            _searchPopover.Clear();
-            _currentSearchResultItems.Clear();
-            _searchHighlightIndex = -1;
-
-            if (!_isSearchCachePopulated || string.IsNullOrWhiteSpace(searchText))
-            {
-                CloseActivePopover();
-                return;
-            }
-
-            string[] searchTerms = searchText.Split(
-                new[] { ' ' },
-                StringSplitOptions.RemoveEmptyEntries
-            );
-            if (searchTerms.Length == 0)
-            {
-                CloseActivePopover();
-                return;
-            }
-
-            if (_assetService == null)
-            {
-                CloseActivePopover();
-                return;
-            }
-
-            List<(DataAssetMetadata metadata, SearchResultMatchInfo match)> results =
-                new List<(DataAssetMetadata metadata, SearchResultMatchInfo match)>();
-            foreach (string guid in _allManagedObjectGuids)
-            {
-                if (string.IsNullOrWhiteSpace(guid))
-                {
-                    continue;
-                }
-
-                if (!_assetService.TryGetAssetByGuid(guid, out DataAssetMetadata metadata))
-                {
-                    continue;
-                }
-
-                SearchResultMatchInfo matchInfo = CheckMatch(metadata, searchTerms);
-                if (!matchInfo.isMatch)
-                {
-                    continue;
-                }
-
-                results.Add((metadata, matchInfo));
-                if (results.Count >= MaxSearchResults)
-                {
-                    break;
-                }
-            }
-            ScrollView scrollView =
-                _searchPopover.Q<ScrollView>("search-scroll")
-                ?? new ScrollView { name = "search-scroll", style = { flexGrow = 1 } };
-            VisualElement listContainer =
-                scrollView.Q<VisualElement>("search-list-content")
-                ?? new VisualElement { name = "search-list-content" };
-            listContainer.Clear();
-
-            if (scrollView.parent != _searchPopover)
-            {
-                _searchPopover.Add(scrollView);
-            }
-
-            if (listContainer.parent != scrollView)
-            {
-                scrollView.Add(listContainer);
-            }
-            if (results.Count > 0)
-            {
-                _searchPopover.style.maxHeight = StyleKeyword.Null;
-                foreach (
-                    (DataAssetMetadata resultMetadata, SearchResultMatchInfo resultInfo) in results
-                )
-                {
-                    List<string> termsMatchingThisObject = resultInfo.AllMatchedTerms.ToList();
-                    VisualElement resultItem = new()
-                    {
-                        name = "result-item",
-                        userData = resultMetadata,
-                    };
-                    resultItem.AddToClassList(SearchResultItemClass);
-                    resultItem.AddToClassList(StyleConstants.ClickableClass);
-                    resultItem.style.flexDirection = FlexDirection.Column;
-                    resultItem.style.paddingBottom = new StyleLength(
-                        new Length(4, LengthUnit.Pixel)
-                    );
-                    resultItem.style.paddingLeft = new StyleLength(new Length(4, LengthUnit.Pixel));
-                    resultItem.style.paddingRight = new StyleLength(
-                        new Length(4, LengthUnit.Pixel)
-                    );
-                    resultItem.style.paddingTop = new StyleLength(new Length(4, LengthUnit.Pixel));
-
-                    // ReSharper disable once HeapView.CanAvoidClosure
-                    resultItem.RegisterCallback<PointerDownEvent>(evt =>
-                    {
-                        if (
-                            evt.button != 0
-                            || resultItem.userData is not DataAssetMetadata clickedMetadata
-                        )
-                        {
-                            return;
-                        }
-
-                        ScriptableObject asset = clickedMetadata.LoadAsset();
-                        if (asset == null)
-                        {
-                            return;
-                        }
-
-                        NavigateToObject(asset);
-                        _searchField.value = string.Empty;
-                        evt.StopPropagation();
-                    });
-
-                    VisualElement mainInfoRow = new()
-                    {
-                        style =
-                        {
-                            flexDirection = FlexDirection.Row,
-                            justifyContent = Justify.SpaceBetween,
-                        },
-                    };
-                    mainInfoRow.AddToClassList(StyleConstants.ClickableClass);
-
-                    Label nameLabel = CreateHighlightedLabel(
-                        resultMetadata.DisplayName,
-                        termsMatchingThisObject,
-                        "result-name-label",
-                        bindToContextHovers: true,
-                        resultItem,
-                        mainInfoRow
-                    );
-                    nameLabel.AddToClassList("search-result-name-label");
-                    nameLabel.AddToClassList(StyleConstants.ClickableClass);
-
-                    Label typeLabel = CreateHighlightedLabel(
-                        resultMetadata.AssetType?.Name,
-                        termsMatchingThisObject,
-                        "result-type-label",
-                        bindToContextHovers: true,
-                        resultItem,
-                        mainInfoRow
-                    );
-                    typeLabel.AddToClassList("search-result-type-label");
-                    typeLabel.AddToClassList(StyleConstants.ClickableClass);
-
-                    mainInfoRow.Add(nameLabel);
-                    mainInfoRow.Add(typeLabel);
-                    resultItem.Add(mainInfoRow);
-
-                    if (!resultInfo.MatchInPrimaryField)
-                    {
-                        VisualElement contextContainer = new() { style = { marginTop = 2 } };
-                        resultItem.Add(contextContainer);
-
-                        IEnumerable<IGrouping<string, MatchDetail>> reflectedDetails = resultInfo
-                            .matchedFields.Where(mf =>
-                                mf.fieldName != MatchSource.ObjectName
-                                && mf.fieldName != MatchSource.TypeName
-                                && mf.fieldName != MatchSource.Guid
-                            )
-                            .GroupBy(mf => mf.fieldName)
-                            .Take(2);
-
-                        foreach (IGrouping<string, MatchDetail> fieldGroup in reflectedDetails)
-                        {
-                            string fieldName = fieldGroup.Key;
-                            string fieldValue = fieldGroup.First().matchedValue;
-                            Label contextLabel = CreateHighlightedLabel(
-                                $"{fieldName}: {fieldValue}",
-                                termsMatchingThisObject,
-                                "search-result-context-label",
-                                bindToContextHovers: true,
-                                resultItem,
-                                mainInfoRow
-                            );
-                            contextContainer.Add(contextLabel);
-                        }
-                    }
-
-                    listContainer.Add(resultItem);
-                    _currentSearchResultItems.Add(resultItem);
-                }
-
-                if (_activePopover != _searchPopover)
-                {
-                    OpenPopover(_searchPopover, _searchField, shouldFocus: false);
-                }
-            }
-            else
-            {
-                listContainer.Add(
-                    new Label("No matching objects found.")
-                    {
-                        style =
-                        {
-                            color = Color.grey,
-                            paddingBottom = 10,
-                            paddingTop = 10,
-                            paddingLeft = 10,
-                            paddingRight = 10,
-                            unityTextAlign = TextAnchor.MiddleCenter,
-                        },
-                    }
-                );
-                _searchPopover.style.maxHeight = StyleKeyword.None;
-            }
-        }
-
-        internal SearchResultMatchInfo CheckMatch(
-            DataAssetMetadata metadata,
-            string[] lowerSearchTerms
-        )
-        {
-            SearchResultMatchInfo resultInfo = new();
-            if (metadata == null || lowerSearchTerms == null || lowerSearchTerms.Length == 0)
-            {
-                return resultInfo;
-            }
-
-            string objectName = metadata.DisplayName ?? string.Empty;
-            string typeName = metadata.AssetType?.Name ?? string.Empty;
-            string guid = metadata.Guid ?? string.Empty;
-            ScriptableObject loadedAsset = null;
-
-            foreach (string term in lowerSearchTerms)
-            {
-                if (string.IsNullOrWhiteSpace(term))
-                {
-                    continue;
-                }
-
-                bool termMatchedThisLoop = false;
-                List<MatchDetail> detailsForThisTerm = new();
-
-                if (
-                    !string.IsNullOrEmpty(objectName)
-                    && objectName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    detailsForThisTerm.Add(
-                        new MatchDetail(term)
-                        {
-                            fieldName = MatchSource.ObjectName,
-                            matchedValue = objectName,
-                        }
-                    );
-                    termMatchedThisLoop = true;
-                }
-
-                if (
-                    !string.IsNullOrEmpty(typeName)
-                    && typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    detailsForThisTerm.Add(
-                        new MatchDetail(term)
-                        {
-                            fieldName = MatchSource.TypeName,
-                            matchedValue = typeName,
-                        }
-                    );
-                    termMatchedThisLoop = true;
-                }
-
-                if (
-                    !string.IsNullOrWhiteSpace(guid)
-                    && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    detailsForThisTerm.Add(
-                        new MatchDetail(term) { fieldName = MatchSource.Guid, matchedValue = guid }
-                    );
-                    termMatchedThisLoop = true;
-                }
-
-                if (!termMatchedThisLoop)
-                {
-                    loadedAsset ??= metadata.LoadAsset();
-                    if (loadedAsset != null)
-                    {
-                        MatchDetail reflectedMatch = SearchStringProperties(
-                            loadedAsset,
-                            term,
-                            0,
-                            2,
-                            new HashSet<object>()
-                        );
-                        if (reflectedMatch != null)
-                        {
-                            reflectedMatch.matchedTerms.Add(term);
-                            detailsForThisTerm.Add(reflectedMatch);
-                            termMatchedThisLoop = true;
-                        }
-                    }
-                }
-
-                if (termMatchedThisLoop)
-                {
-                    resultInfo.isMatch = true;
-                    resultInfo.matchedFields.AddRange(detailsForThisTerm);
-                }
-            }
-
-            return resultInfo;
-        }
-
-        internal Label CreateHighlightedLabel(
-            string fullText,
-            IReadOnlyList<string> termsToHighlight,
-            string baseStyleClass,
-            bool bindToContextHovers = false,
-            params VisualElement[] contexts
-        )
-        {
-            Label label = new();
-            if (!string.IsNullOrWhiteSpace(baseStyleClass))
-            {
-                label.AddToClassList(baseStyleClass);
-            }
-
-            label.enableRichText = true;
-
-            if (
-                string.IsNullOrWhiteSpace(fullText)
-                || termsToHighlight == null
-                || !termsToHighlight.Any()
-            )
-            {
-                label.text = fullText;
-                return label;
-            }
-
-            List<Tuple<int, int>> matches = termsToHighlight
-                .Where(term => !string.IsNullOrWhiteSpace(term))
-                .SelectMany(term =>
-                {
-                    List<Tuple<int, int>> indices = new();
-                    int start = 0;
-                    while (
-                        (start = fullText.IndexOf(term, start, StringComparison.OrdinalIgnoreCase))
-                        >= 0
-                    )
-                    {
-                        indices.Add(Tuple.Create(start, term.Length));
-                        start += term.Length;
-                    }
-
-                    return indices;
-                })
-                .Where(t => t != null)
-                .OrderBy(t => t.Item1)
-                .ToList();
-
-            label.text = GenerateContents(false);
-            label.RegisterCallback<MouseOverEvent>(_ =>
-            {
-                label.text = GenerateContents(true);
-            });
-            label.RegisterCallback<MouseOutEvent>(_ =>
-            {
-                label.text = GenerateContents(false);
-            });
-            if (bindToContextHovers)
-            {
-                foreach (VisualElement context in contexts)
-                {
-                    context.RegisterCallback<MouseOverEvent>(_ =>
-                    {
-                        label.text = GenerateContents(true);
-                    });
-                    context.RegisterCallback<MouseOutEvent>(_ =>
-                    {
-                        label.text = GenerateContents(false);
-                    });
-                }
-            }
-
-            return label;
-
-            string GenerateContents(bool hovering)
-            {
-                CachedStringBuilder.Clear();
-                int currentIndex = 0;
-                bool colorify = !hovering;
-                foreach ((int startIndex, int length) in matches)
-                {
-                    if (startIndex < currentIndex)
-                    {
-                        continue;
-                    }
-
-                    CachedStringBuilder.Append(
-                        EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
-                    );
-                    if (colorify)
-                    {
-                        CachedStringBuilder.Append("<color=yellow>");
-                    }
-
-                    CachedStringBuilder.Append("<b>");
-                    CachedStringBuilder.Append(
-                        EscapeRichText(fullText.Substring(startIndex, length))
-                    );
-                    CachedStringBuilder.Append("</b>");
-                    if (colorify)
-                    {
-                        CachedStringBuilder.Append("</color>");
-                    }
-
-                    currentIndex = startIndex + length;
-                }
-
-                if (currentIndex < fullText.Length)
-                {
-                    CachedStringBuilder.Append(EscapeRichText(fullText.Substring(currentIndex)));
-                }
-
-                return CachedStringBuilder.ToString();
-            }
-        }
-
-        internal static string EscapeRichText(string input)
-        {
-            return string.IsNullOrWhiteSpace(input)
-                ? ""
-                : input.Replace("<", "&lt;").Replace(">", "&gt;");
-        }
-
-        internal static MatchDetail SearchStringProperties(
-            object obj,
-            string searchTerm,
-            int currentDepth,
-            int maxDepth,
-            HashSet<object> visited
-        )
-        {
-            if (obj == null || currentDepth > maxDepth)
-            {
-                return null;
-            }
-
-            Type objType = obj.GetType();
-
-            if (
-                objType.IsPrimitive
-                || objType == typeof(Vector2)
-                || objType == typeof(Vector3)
-                || objType == typeof(Vector4)
-                || objType == typeof(Quaternion)
-                || objType == typeof(Color)
-                || objType == typeof(Rect)
-                || objType == typeof(Bounds)
-            )
-            {
-                return null;
-            }
-
-            if (!objType.IsValueType && !visited.Add(obj))
-            {
-                return null;
-            }
-
-            try
-            {
-                FieldInfo[] fields = objType.GetFields(
-                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic
-                );
-                foreach (FieldInfo field in fields)
-                {
-                    object fieldValue = field.GetValue(obj);
-                    if (fieldValue == null)
-                    {
-                        continue;
-                    }
-
-                    if (field.FieldType == typeof(string))
-                    {
-                        string stringValue = fieldValue as string;
-                        if (
-                            !string.IsNullOrWhiteSpace(stringValue)
-                            && stringValue.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
-                        )
-                        {
-                            return new MatchDetail(searchTerm)
-                            {
-                                fieldName = field.Name,
-                                matchedValue = stringValue,
-                            };
-                        }
-                    }
-                    else if (
-                        (
-                            field.FieldType.IsClass
-                            || field.FieldType is { IsValueType: true, IsPrimitive: false }
-                        ) && !typeof(Object).IsAssignableFrom(field.FieldType)
-                    )
-                    {
-                        MatchDetail nestedMatch = SearchStringProperties(
-                            fieldValue,
-                            searchTerm,
-                            currentDepth + 1,
-                            maxDepth,
-                            visited
-                        );
-                        if (nestedMatch != null)
-                        {
-                            return nestedMatch;
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // Swallow
-            }
-
-            return null;
-        }
-
-        internal void NavigateToObject(ScriptableObject targetObject)
+                internal void NavigateToObject(ScriptableObject targetObject)
         {
             if (targetObject == null)
             {
@@ -2853,9 +2319,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _lastActiveFocusArea = FocusArea.None;
             if (_activePopover == _searchPopover)
             {
-                _currentSearchResultItems.Clear();
-                _searchHighlightIndex = -1;
-                _lastSearchString = null;
+                _searchPopoverController?.ClearResults();
             }
             else if (_activePopover == _typeAddPopover)
             {
@@ -3172,7 +2636,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             )
             {
                 Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                EditorUtility.DisplayDialog(
+                ShowMessageDialog(
                     "Invalid Folder",
                     "The selected folder must be inside the project's 'Assets' directory.",
                     "OK"
@@ -3564,7 +3028,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             )
             {
                 Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                EditorUtility.DisplayDialog(
+                ShowMessageDialog(
                     "Invalid Folder",
                     "The selected folder must be inside the project's 'Assets' directory.",
                     "OK"
@@ -3601,7 +3065,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         + "': "
                         + errorMessage
                 );
-                EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
+                ShowMessageDialog("Invalid Move Operation", errorMessage, "OK");
                 return;
             }
 
@@ -3828,7 +3292,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 )
                 {
                     Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                    EditorUtility.DisplayDialog(
+                    ShowMessageDialog(
                         "Invalid Folder",
                         "The selected folder must be inside the project's 'Assets' directory.",
                         "OK"
@@ -3919,7 +3383,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 )
                 {
                     Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                    EditorUtility.DisplayDialog(
+                    ShowMessageDialog(
                         "Invalid Folder",
                         "The selected folder must be inside the project's 'Assets' directory.",
                         "OK"
@@ -3995,7 +3459,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             _typeSearchField = new TextField { name = "type-search-field" };
             _typeSearchField.AddToClassList("type-search-field");
             _typeSearchField.SetPlaceholderText(SearchPlaceholder, changeValueOnFocus: false);
-            _typeSearchField.RegisterValueChangedCallback(evt => PerformTypeSearch(evt.newValue));
+            _typeSearchField.RegisterValueChangedCallback(evt =>
+                _namespaceController.PerformTypeSearch(evt.newValue)
+            );
             namespaceColumn.Add(_typeSearchField);
 
             ScrollView namespaceScrollView = new(ScrollViewMode.Vertical)
@@ -5477,6 +4943,72 @@ namespace WallstopStudios.DataVisualizer.Editor
             return _namespaceController?.SelectedType;
         }
 
+        private void EnsureDialogService()
+        {
+            if (_dialogService != null)
+            {
+                return;
+            }
+
+            VisualElement root = rootVisualElement;
+            if (root == null)
+            {
+                return;
+            }
+
+            _dialogService = new DialogService(root);
+        }
+
+        private void EnsureDialogSubscriptions()
+        {
+            if (_eventHub == null)
+            {
+                return;
+            }
+
+            _dialogMessageSubscription ??=
+                _eventHub.Subscribe<DialogMessageRequestEvent>(HandleDialogMessageRequested);
+            _dialogConfirmationSubscription ??=
+                _eventHub.Subscribe<DialogConfirmationRequestEvent>(
+                    HandleDialogConfirmationRequested
+                );
+        }
+
+        private void ShowMessageDialog(string title, string message, string closeText = "OK")
+        {
+            EnsureDialogService();
+            _dialogService?.ShowMessage(title, message, closeText);
+        }
+
+        private void ShowConfirmationDialog(
+            string title,
+            string message,
+            string confirmText,
+            string cancelText,
+            Action<bool> onResult
+        )
+        {
+            EnsureDialogService();
+            void HandlePrimary()
+            {
+                onResult?.Invoke(true);
+            }
+
+            void HandleSecondary()
+            {
+                onResult?.Invoke(false);
+            }
+
+            _dialogService?.ShowConfirmation(
+                title,
+                message,
+                confirmText,
+                cancelText,
+                HandlePrimary,
+                HandleSecondary
+            );
+        }
+
         private ScriptableAssetSaveScheduler EnsureSaveScheduler()
         {
             if (_dependencies != null && _dependencies.SaveScheduler != null)
@@ -5512,6 +5044,31 @@ namespace WallstopStudios.DataVisualizer.Editor
             return _saveScheduler;
         }
 
+        private void EnsureProcessorExecutionSubscription()
+        {
+            if (_eventHub == null)
+            {
+                return;
+            }
+
+            _processorExecutionRequestedSubscription ??=
+                _eventHub.Subscribe<ProcessorExecutionRequestedEvent>(
+                    HandleProcessorExecutionRequested
+                );
+            _processorExecutionStartedSubscription ??=
+                _eventHub.Subscribe<ProcessorExecutionStartedEvent>(
+                    HandleProcessorExecutionStarted
+                );
+            _processorExecutionCompletedSubscription ??=
+                _eventHub.Subscribe<ProcessorExecutionCompletedEvent>(
+                    HandleProcessorExecutionCompleted
+                );
+            _processorExecutionFailedSubscription ??=
+                _eventHub.Subscribe<ProcessorExecutionFailedEvent>(
+                    HandleProcessorExecutionFailed
+                );
+        }
+
         private void HandleTypeSelectedEvent(TypeSelectedEvent evt)
         {
             if (evt == null)
@@ -5544,6 +5101,93 @@ namespace WallstopStudios.DataVisualizer.Editor
             BuildObjectsView();
             SelectObject(objectToSelect);
             UpdateLabelAreaAndFilter();
+        }
+
+        private void HandleProcessorExecutionRequested(ProcessorExecutionRequestedEvent evt)
+        {
+            if (evt == null || evt.Processor == null || evt.TargetType == null)
+            {
+                return;
+            }
+
+            RunDataProcessor(evt.Anchor, evt.Processor, evt.TargetType, evt.HighlightColor);
+        }
+
+        private void HandleProcessorExecutionStarted(ProcessorExecutionStartedEvent evt)
+        {
+            if (evt == null)
+            {
+                return;
+            }
+
+            ProcessorPanelState panelState = _sessionState.Processors;
+            panelState.MarkExecutionStarted(
+                evt.Processor?.Name ?? "Processor",
+                evt.ObjectCount,
+                evt.PendingCount
+            );
+            _processorPanelController?.Refresh();
+        }
+
+        private void HandleProcessorExecutionCompleted(ProcessorExecutionCompletedEvent evt)
+        {
+            if (evt == null)
+            {
+                return;
+            }
+
+            ProcessorPanelState panelState = _sessionState.Processors;
+            panelState.MarkExecutionCompleted(evt.DurationSeconds, evt.PendingCount);
+            _processorPanelController?.Refresh();
+            ScheduleRefresh();
+        }
+
+        private void HandleProcessorExecutionFailed(ProcessorExecutionFailedEvent evt)
+        {
+            if (evt == null)
+            {
+                return;
+            }
+
+            string errorMessage = evt.Exception?.Message ?? "Unknown error";
+            ProcessorPanelState panelState = _sessionState.Processors;
+            panelState.MarkExecutionFailed(errorMessage, evt.PendingCount);
+            _processorPanelController?.Refresh();
+            Debug.LogError(
+                $"Error running processor '{evt.Processor?.Name ?? "Processor"}': {evt.Exception}"
+            );
+            ShowMessageDialog(
+                "Processor Error",
+                $"An error occurred while running '{evt.Processor?.Name ?? "Processor"}':\n{errorMessage}",
+                "OK"
+            );
+            ScheduleRefresh();
+        }
+
+        private void HandleDialogMessageRequested(DialogMessageRequestEvent evt)
+        {
+            if (evt == null)
+            {
+                return;
+            }
+
+            ShowMessageDialog(evt.Title, evt.Message, evt.CloseText ?? "OK");
+        }
+
+        private void HandleDialogConfirmationRequested(DialogConfirmationRequestEvent evt)
+        {
+            if (evt == null)
+            {
+                return;
+            }
+
+            ShowConfirmationDialog(
+                evt.Title,
+                evt.Message,
+                string.IsNullOrWhiteSpace(evt.ConfirmText) ? "OK" : evt.ConfirmText,
+                string.IsNullOrWhiteSpace(evt.CancelText) ? "Cancel" : evt.CancelText,
+                evt.OnResult
+            );
         }
 
         private void HandleNamespaceRemovalConfirmed(NamespaceRemovalConfirmedEvent evt)
@@ -6876,7 +6520,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             string originalPath = AssetDatabase.GetAssetPath(originalObject);
             if (string.IsNullOrWhiteSpace(originalPath))
             {
-                EditorUtility.DisplayDialog(
+                ShowMessageDialog(
                     "Error",
                     "Cannot clone object: Original asset path not found.",
                     "OK"
@@ -6887,7 +6531,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             ScriptableObject cloneInstance = Instantiate(originalObject);
             if (cloneInstance == null)
             {
-                EditorUtility.DisplayDialog(
+                ShowMessageDialog(
                     "Error",
                     "Failed to instantiate a clone of the object.",
                     "OK"
@@ -6898,7 +6542,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             string originalDirectory = Path.GetDirectoryName(originalPath);
             if (string.IsNullOrWhiteSpace(originalDirectory))
             {
-                EditorUtility.DisplayDialog(
+                ShowMessageDialog(
                     "Error",
                     "Cannot clone object: Original asset path is invalid.",
                     "OK"
@@ -6990,7 +6634,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             catch (Exception e)
             {
-                EditorUtility.DisplayDialog(
+                ShowMessageDialog(
                     "Error Cloning Asset",
                     $"Failed to create cloned asset at '{uniquePath}': {e.Message}",
                     "OK"

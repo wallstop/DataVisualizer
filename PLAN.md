@@ -62,13 +62,13 @@
 4. Update inspector integration to construct serialized objects via a helper (`InspectorBindingService`), disposing them responsibly and handling Odin integration with feature flags.
 
 ### Priority 5 – Processor Pipeline
-1. [~] Create `ProcessorPanelController` for building the processor list UI, toggles, and execution actions. Controller now owns the processor column UI and refresh logic with state sourced from `ProcessorPanelState`, and initialization now occurs during `OnEnable` to satisfy Unity's constructor restrictions; event hub integration and registry abstraction pending.
-2. [~] Add `IProcessorRegistry` to surface available `IDataProcessor` implementations, caching instances and capabilities (registry now owns discovery while the panel consumes it; further event-driven updates pending).
-3. [~] Introduce `ProcessorExecutionService` to run processors asynchronously or with progress reporting, ensuring results update the state and trigger asset refreshes efficiently (service now owns processor invocation, queues saves/refresh through the shared scheduler; async/progress work outstanding).
+1. [x] Create `ProcessorPanelController` for building the processor list UI, toggles, and execution actions. Controller now owns the processor column UI and refresh logic with state sourced from `ProcessorPanelState`, initialization now occurs during `OnEnable`, and the controller publishes execution requests through the event hub while listening for registry change notifications.
+2. [x] Add `IProcessorRegistry` to surface available `IDataProcessor` implementations, caching instances and capabilities, and emit change notifications consumed by the processor panel.
+3. [x] Introduce `ProcessorExecutionService` to run processors asynchronously or with progress reporting, ensuring results update the state and trigger asset refreshes efficiently (service now queues executions, raises start/complete/failure events, and schedules save/refresh through the shared scheduler).
 4. Incorporate performance telemetry (duration, allocations) via opt-in diagnostics stored in `VisualizerSessionState` for future debugging.
 
 ### Priority 6 – Search and Popovers
-1. Split search responsibilities into `SearchService` (indexing, fuzzy match, highlight data) and `SearchPopoverController` (UI). Use pooled builders and limit allocations during typing.
+1. [x] Split search responsibilities into `SearchService` (indexing, fuzzy match, highlight data) and `SearchPopoverController` (UI). Use pooled builders and limit allocations during typing (implemented service/controller pair and migrated DataVisualizer to delegate search interactions).
 2. Generalize popover handling with a `PopoverManager` managing active popovers, focus restoration, and drag interactions. Replace direct `_activePopover`, `_popoverContext`, `_isDraggingPopover` fields with managed state objects.
 3. Ensure search results and popovers rely on immutable view models for clarity and testability.
 
@@ -82,6 +82,11 @@
 2. Delete legacy helper methods that migrated into services, ensuring old code paths are gone and tests cover new flows.
 3. Review accessibility of new types (`internal sealed` within editor assembly) and ensure runtime contracts remain stable.
 4. Update documentation (`README.md`) and AGENTS guidelines to reflect new architecture and extension points.
+
+### Priority 9 – Dialog and Confirmation UX
+1. [x] Introduce a styled UI Toolkit dialog service (confirmation + message patterns) that renders using the package styles instead of `EditorUtility.DisplayDialog`.
+2. [x] Replace all existing dialog usages with the new service, ensuring behaviors (confirmation, error reporting) remain consistent and support keyboard navigation.
+3. [x] Expose dialog hooks via the event hub so future controllers can trigger confirmations without depending on `DataVisualizer` internals.
 
 ## Testing and Verification Strategy
 - Expand edit mode tests to cover each controller via mocked services, asserting UI state changes without touching `AssetDatabase` when possible.

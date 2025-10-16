@@ -5,41 +5,169 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
     using UnityEditor;
     using UnityEngine;
     using WallstopStudios.DataVisualizer;
+    using WallstopStudios.DataVisualizer.Editor.Events;
 
-    internal sealed class ProcessorExecutionService
+    internal sealed class ProcessorExecutionService : IDisposable
     {
         private readonly ScriptableAssetSaveScheduler _saveScheduler;
+        private readonly DataVisualizerEventHub _eventHub;
+        private readonly Queue<ExecutionRequest> _pendingExecutions = new();
+        private ExecutionRequest _activeRequest;
+        private double _activeStartTime;
+        private bool _updateHookRegistered;
 
-        public ProcessorExecutionService(ScriptableAssetSaveScheduler saveScheduler)
+        private sealed class ExecutionRequest
+        {
+            public ExecutionRequest(
+                IDataProcessor processor,
+                Type targetType,
+                IReadOnlyList<ScriptableObject> objects
+            )
+            {
+                Processor = processor;
+                TargetType = targetType;
+                Objects = objects ?? Array.Empty<ScriptableObject>();
+            }
+
+            public IDataProcessor Processor { get; }
+
+            public Type TargetType { get; }
+
+            public IReadOnlyList<ScriptableObject> Objects { get; }
+        }
+
+        public ProcessorExecutionService(
+            ScriptableAssetSaveScheduler saveScheduler,
+            DataVisualizerEventHub eventHub
+        )
         {
             _saveScheduler = saveScheduler
                 ?? throw new ArgumentNullException(nameof(saveScheduler));
+            _eventHub = eventHub ?? throw new ArgumentNullException(nameof(eventHub));
         }
 
-        public void Execute(
+        public void Dispose()
+        {
+            if (_updateHookRegistered)
+            {
+                EditorApplication.update -= HandleEditorUpdate;
+                _updateHookRegistered = false;
+            }
+
+            _pendingExecutions.Clear();
+            _activeRequest = null;
+        }
+
+        public void EnqueueExecution(
             IDataProcessor processor,
             Type targetType,
             IReadOnlyList<ScriptableObject> objects
         )
         {
-            if (processor == null)
+            if (processor == null || targetType == null || objects == null)
             {
-                throw new ArgumentNullException(nameof(processor));
+                return;
             }
 
-            if (targetType == null)
+            _pendingExecutions.Enqueue(new ExecutionRequest(processor, targetType, objects));
+            if (_activeRequest == null)
             {
-                throw new ArgumentNullException(nameof(targetType));
+                BeginNextExecution();
+            }
+        }
+
+        private void BeginNextExecution()
+        {
+            if (_pendingExecutions.Count == 0)
+            {
+                _activeRequest = null;
+                return;
             }
 
-            if (objects == null)
+            _activeRequest = _pendingExecutions.Dequeue();
+            _activeStartTime = EditorApplication.timeSinceStartup;
+            _eventHub.Publish(
+                new ProcessorExecutionStartedEvent(
+                    _activeRequest.Processor,
+                    _activeRequest.TargetType,
+                    _activeRequest.Objects.Count,
+                    _pendingExecutions.Count
+                )
+            );
+
+            RegisterExecutionUpdate();
+        }
+
+        private void RegisterExecutionUpdate()
+        {
+            if (_updateHookRegistered)
             {
-                throw new ArgumentNullException(nameof(objects));
+                return;
             }
 
-            processor.Process(targetType, objects);
-            _saveScheduler.ScheduleAssetDatabaseSave();
-            _saveScheduler.Schedule(AssetDatabase.Refresh);
+            EditorApplication.update += HandleEditorUpdate;
+            _updateHookRegistered = true;
+        }
+
+        private void HandleEditorUpdate()
+        {
+            if (!_updateHookRegistered)
+            {
+                return;
+            }
+
+            EditorApplication.update -= HandleEditorUpdate;
+            _updateHookRegistered = false;
+
+            ExecuteActiveRequest();
+        }
+
+        private void ExecuteActiveRequest()
+        {
+            ExecutionRequest request = _activeRequest;
+            if (request == null)
+            {
+                BeginNextExecution();
+                return;
+            }
+
+            try
+            {
+                request.Processor.Process(request.TargetType, request.Objects);
+                double durationSeconds = Math.Max(
+                    0d,
+                    EditorApplication.timeSinceStartup - _activeStartTime
+                );
+                _saveScheduler.ScheduleAssetDatabaseSave();
+                _saveScheduler.Schedule(AssetDatabase.Refresh);
+
+                _eventHub.Publish(
+                    new ProcessorExecutionCompletedEvent(
+                        request.Processor,
+                        request.TargetType,
+                        request.Objects.Count,
+                        durationSeconds,
+                        _pendingExecutions.Count
+                    )
+                );
+            }
+            catch (Exception exception)
+            {
+                _eventHub.Publish(
+                    new ProcessorExecutionFailedEvent(
+                        request.Processor,
+                        request.TargetType,
+                        request.Objects.Count,
+                        _pendingExecutions.Count,
+                        exception
+                    )
+                );
+            }
+            finally
+            {
+                _activeRequest = null;
+                BeginNextExecution();
+            }
         }
     }
 }
