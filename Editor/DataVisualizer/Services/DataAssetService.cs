@@ -8,10 +8,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
     internal sealed class DataAssetService : IDataAssetService
     {
         private readonly AssetIndex _assetIndex = new AssetIndex();
-        private readonly Dictionary<string, DataAssetMetadata> _metadataByGuid =
-            new Dictionary<string, DataAssetMetadata>(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, string> _guidByPath =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, DataAssetMetadata> _metadataByGuid = new Dictionary<
+            string,
+            DataAssetMetadata
+        >(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _guidByPath = new Dictionary<string, string>(
+            StringComparer.OrdinalIgnoreCase
+        );
         private readonly HashSet<Type> _trackedTypes = new HashSet<Type>();
         private bool _indexDirty = true;
 
@@ -147,7 +150,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             }
 
             if (
-                _assetIndex.TryGetMetadataByPath(normalizedPath, out AssetIndex.AssetMetadata indexMetadata)
+                _assetIndex.TryGetMetadataByPath(
+                    normalizedPath,
+                    out AssetIndex.AssetMetadata indexMetadata
+                )
             )
             {
                 DataAssetMetadata snapshot = CreateSnapshot(indexMetadata);
@@ -190,12 +196,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             {
                 RemoveCachedEntry(guid);
                 RaiseAssetsChanged(
-                    new DataAssetChangeEventArgs(
-                        false,
-                        Array.Empty<string>(),
-                        new[] { guid },
-                        null
-                    )
+                    new DataAssetChangeEventArgs(false, Array.Empty<string>(), new[] { guid }, null)
                 );
             }
         }
@@ -251,14 +252,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                 }
             }
 
-            RaiseAssetsChanged(
-                new DataAssetChangeEventArgs(
-                    false,
-                    updated,
-                    removed,
-                    type
-                )
-            );
+            RaiseAssetsChanged(new DataAssetChangeEventArgs(false, updated, removed, type));
         }
 
         public void RemoveAsset(string guid)
@@ -271,12 +265,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             _assetIndex.Remove(guid);
             RemoveCachedEntry(guid);
             RaiseAssetsChanged(
-                new DataAssetChangeEventArgs(
-                    false,
-                    Array.Empty<string>(),
-                    new[] { guid },
-                    null
-                )
+                new DataAssetChangeEventArgs(false, Array.Empty<string>(), new[] { guid }, null)
             );
         }
 
@@ -414,9 +403,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                 return null;
             }
 
-            string[] labels = metadata.Labels != null
-                ? metadata.Labels.ToArray()
-                : Array.Empty<string>();
+            string[] labels =
+                metadata.Labels != null ? metadata.Labels.ToArray() : Array.Empty<string>();
 
             DataAssetMetadata snapshot = new DataAssetMetadata(
                 metadata.Guid,

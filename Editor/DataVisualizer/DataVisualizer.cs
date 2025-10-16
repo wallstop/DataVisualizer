@@ -191,14 +191,12 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal readonly List<ScriptableObject> _selectedObjects = new();
         internal IDataAssetService _assetService;
         internal readonly List<string> _allManagedObjectGuids = new();
-        internal readonly List<ScriptableObject> _displayedObjects = new();
-        internal readonly List<DataAssetMetadata> _filteredMetadata = new();
-        internal readonly List<DataAssetMetadata> _displayedMetadata = new();
         internal readonly List<ObjectRowViewModel> _objectRowViewModels = new();
         internal readonly Stack<ObjectRowViewModel> _objectRowViewModelPool = new();
-        internal IReadOnlyList<DataAssetMetadata> FilteredMetadata => _filteredMetadata;
-        internal IReadOnlyList<DataAssetMetadata> DisplayedMetadata => _displayedMetadata;
-        internal int _currentDisplayStartIndex;
+        internal IReadOnlyList<DataAssetMetadata> FilteredMetadata =>
+            _sessionState.Objects.FilteredMetadata;
+        internal IReadOnlyList<DataAssetMetadata> DisplayedMetadata =>
+            _sessionState.Objects.DisplayedMetadata;
         internal readonly List<VisualElement> _currentSearchResultItems = new();
         internal readonly List<VisualElement> _currentTypePopoverItems = new();
 
@@ -256,8 +254,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal readonly List<string> _currentUniqueLabelsForType = new();
 
-        internal readonly List<ScriptableObject> _filteredObjects = new();
-        internal IReadOnlyList<ScriptableObject> FilteredObjects => _filteredObjects;
+        internal IReadOnlyList<ScriptableObject> FilteredObjects =>
+            _sessionState.Objects.FilteredObjects;
         internal readonly Dictionary<string, Color> _textColorCache = new(StringComparer.Ordinal);
 
         internal int _nextColorIndex;
@@ -347,6 +345,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal readonly VisualizerSessionState _sessionState = new();
 
         internal VisualizerSessionState SessionState => _sessionState;
+
+        internal ObjectListState ObjectListState => _sessionState.Objects;
 
         internal IUserStateRepository _userStateRepository;
 
@@ -1846,7 +1846,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 case ProcessorLogic.Filtered:
                 {
-                    toProcess = _filteredObjects.ToArray();
+                    List<ScriptableObject> filteredObjects = ObjectListState.FilteredObjectsBuffer;
+                    toProcess = filteredObjects.ToArray();
                     break;
                 }
                 default:
@@ -5256,13 +5257,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             Type selectedType = _namespaceController.SelectedType;
             TypeLabelFilterConfig config =
                 selectedType != null ? _labelService.GetOrCreateConfig(selectedType) : null;
+            ObjectListState listState = ObjectListState;
 
             if (selectedType == null || config == null)
             {
-                _filteredObjects.Clear();
-                _filteredMetadata.Clear();
+                listState.ClearFiltered();
+                listState.ClearDisplayed();
                 _currentUniqueLabelsForType.Clear();
-                _currentDisplayStartIndex = 0;
                 if (_filterStatusLabel != null)
                 {
                     _filterStatusLabel.style.display = DisplayStyle.None;
@@ -5293,11 +5294,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 config
             );
 
-            _filteredObjects.Clear();
-            _filteredObjects.AddRange(result.FilteredObjects);
+            listState.ClearFiltered();
+            List<ScriptableObject> filteredObjects = listState.FilteredObjectsBuffer;
+            filteredObjects.AddRange(result.FilteredObjects);
 
-            _filteredMetadata.Clear();
-            _filteredMetadata.AddRange(result.FilteredMetadata);
+            List<DataAssetMetadata> filteredMetadata = listState.FilteredMetadataBuffer;
+            filteredMetadata.AddRange(result.FilteredMetadata);
 
             _currentUniqueLabelsForType.Clear();
             foreach (string label in result.UniqueLabels)
@@ -5305,7 +5307,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _currentUniqueLabelsForType.Add(label);
             }
 
-            _currentDisplayStartIndex = 0;
+            listState.SetDisplayStartIndex(0);
 
             if (_filterStatusLabel != null)
             {
@@ -7200,14 +7202,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                         _selectedObjects.Add(cloneAsset);
                     }
 
-                    originalIndex = _filteredObjects.IndexOf(originalObject);
+                    List<ScriptableObject> filteredObjects = ObjectListState.FilteredObjectsBuffer;
+                    originalIndex = filteredObjects.IndexOf(originalObject);
                     if (0 <= originalIndex)
                     {
-                        _filteredObjects.Insert(originalIndex + 1, cloneAsset);
+                        filteredObjects.Insert(originalIndex + 1, cloneAsset);
                     }
                     else
                     {
-                        _filteredObjects.Add(cloneAsset);
+                        filteredObjects.Add(cloneAsset);
                     }
 
                     UpdateAndSaveObjectOrderList(cloneAsset.GetType(), _selectedObjects);
@@ -7315,7 +7318,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            int index = _displayedObjects.IndexOf(dataObject);
+            int index = ObjectListState.DisplayedObjectsBuffer.IndexOf(dataObject);
             if (index >= 0)
             {
                 _objectListView.RefreshItem(index);
@@ -7443,10 +7446,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             _selectedObjects.Clear();
             _selectedObjects.AddRange(sortedObjects);
 
-            _filteredObjects.Clear();
-            _filteredObjects.AddRange(sortedObjects);
-            _filteredMetadata.Clear();
-            _filteredMetadata.AddRange(sortedMetadata);
+            ObjectListState listState = ObjectListState;
+            List<ScriptableObject> filteredObjects = listState.FilteredObjectsBuffer;
+            filteredObjects.Clear();
+            filteredObjects.AddRange(sortedObjects);
+            List<DataAssetMetadata> filteredMetadata = listState.FilteredMetadataBuffer;
+            filteredMetadata.Clear();
+            filteredMetadata.AddRange(sortedMetadata);
         }
 
         internal void LoadScriptableObjectTypes()
@@ -7646,7 +7652,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _isUpdatingListSelection = true;
                 if (_selectedObject != null)
                 {
-                    int displayedIndex = _displayedObjects.IndexOf(_selectedObject);
+                    int displayedIndex = ObjectListState.DisplayedObjectsBuffer.IndexOf(
+                        _selectedObject
+                    );
                     if (displayedIndex >= 0)
                     {
                         _objectListView.SetSelectionWithoutNotify(new int[] { displayedIndex });

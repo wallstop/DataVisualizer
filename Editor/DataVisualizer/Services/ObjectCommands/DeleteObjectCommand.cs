@@ -4,8 +4,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
     using UnityEngine;
     using UnityEngine.UIElements;
 
-    internal sealed class DeleteObjectCommand
-        : ObjectCommandBase<ObjectDeleteRequestedEvent>
+    internal sealed class DeleteObjectCommand : ObjectCommandBase<ObjectDeleteRequestedEvent>
     {
         public DeleteObjectCommand(DataVisualizer dataVisualizer)
             : base(dataVisualizer) { }

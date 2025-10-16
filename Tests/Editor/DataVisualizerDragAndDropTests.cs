@@ -7,6 +7,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
     using Data;
     using NUnit.Framework;
     using Services;
+    using State;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.UIElements;
@@ -160,20 +161,22 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
 
                 dataVisualizer._suppressObjectListReloadForTests = true;
 
-                List<ScriptableObject> displayed = dataVisualizer._displayedObjects;
+                ObjectListState listState = dataVisualizer.ObjectListState;
+                List<ScriptableObject> displayed = listState.DisplayedObjectsBuffer;
                 displayed.Clear();
                 displayed.Add(itemOne);
                 displayed.Add(itemTwo);
                 displayed.Add(itemThree);
 
-                List<ScriptableObject> filtered = dataVisualizer._filteredObjects;
+                List<ScriptableObject> filtered = listState.FilteredObjectsBuffer;
                 filtered.Clear();
                 filtered.AddRange(displayed);
-                dataVisualizer._filteredMetadata.Clear();
+                List<DataAssetMetadata> filteredMetadata = listState.FilteredMetadataBuffer;
+                filteredMetadata.Clear();
                 foreach (ScriptableObject obj in filtered)
                 {
                     string fakePath = $"Assets/TempDataVisualizerDragTests/{obj.name}.asset";
-                    dataVisualizer._filteredMetadata.Add(
+                    filteredMetadata.Add(
                         new DataAssetMetadata(
                             System.Guid.NewGuid().ToString(),
                             fakePath,
@@ -198,7 +201,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 dataVisualizer._inPlaceGhost = ghost;
 
                 dataVisualizer._activeDragType = DataVisualizer.DragType.Object;
-                dataVisualizer._currentDisplayStartIndex = 0;
+                listState.SetDisplayStartIndex(0);
 
                 ListView listView = new()
                 {

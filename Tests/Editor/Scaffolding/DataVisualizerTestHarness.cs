@@ -18,7 +18,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests.Scaffolding
         {
             Window = ScriptableObject.CreateInstance<DataVisualizer>();
             Window.hideFlags = HideFlags.HideAndDontSave;
-            _settingsAssetExistedBefore = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(_settingsAssetPath) != null;
+            _settingsAssetExistedBefore =
+                AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(_settingsAssetPath) != null;
         }
 
         public DataVisualizer Window { get; }
@@ -27,7 +28,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests.Scaffolding
         {
             if (string.IsNullOrWhiteSpace(namespaceKey))
             {
-                throw new ArgumentException("Namespace key cannot be null or whitespace.", nameof(namespaceKey));
+                throw new ArgumentException(
+                    "Namespace key cannot be null or whitespace.",
+                    nameof(namespaceKey)
+                );
             }
 
             if (types == null)

@@ -38,14 +38,22 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 Assert.IsNotNull(eventHub, "Event hub should be initialized.");
 
                 bool eventRaised = false;
-                IDisposable subscription = eventHub.Subscribe<TypeSelectedEvent>(_ => eventRaised = true);
+                IDisposable subscription = eventHub.Subscribe<TypeSelectedEvent>(_ =>
+                    eventRaised = true
+                );
                 try
                 {
                     NamespacePanelController controller = harness.Window._namespacePanelController;
-                    Assert.IsNotNull(controller, "Namespace panel controller should be initialized.");
+                    Assert.IsNotNull(
+                        controller,
+                        "Namespace panel controller should be initialized."
+                    );
 
                     controller.SelectType(typeof(DummyScriptableObject));
-                    Assert.IsTrue(eventRaised, "Selecting a type should publish a TypeSelectedEvent.");
+                    Assert.IsTrue(
+                        eventRaised,
+                        "Selecting a type should publish a TypeSelectedEvent."
+                    );
                 }
                 finally
                 {

@@ -4,8 +4,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
     using UnityEngine;
     using UnityEngine.UIElements;
 
-    internal sealed class MoveObjectCommand
-        : ObjectCommandBase<ObjectMoveRequestedEvent>
+    internal sealed class MoveObjectCommand : ObjectCommandBase<ObjectMoveRequestedEvent>
     {
         public MoveObjectCommand(DataVisualizer dataVisualizer)
             : base(dataVisualizer) { }

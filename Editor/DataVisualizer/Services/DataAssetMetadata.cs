@@ -5,7 +5,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
     using UnityEditor;
     using UnityEngine;
 
-    internal sealed class DataAssetMetadata
+    public sealed class DataAssetMetadata
     {
         public DataAssetMetadata(
             string guid,

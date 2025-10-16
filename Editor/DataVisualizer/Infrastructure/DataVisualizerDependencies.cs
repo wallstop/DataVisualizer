@@ -8,7 +8,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Infrastructure
 
     internal sealed class DataVisualizerDependencies
     {
-        public DataVisualizerDependencies(string userStateFilePath, VisualizerSessionState sessionState)
+        public DataVisualizerDependencies(
+            string userStateFilePath,
+            VisualizerSessionState sessionState
+        )
         {
             if (sessionState == null)
             {

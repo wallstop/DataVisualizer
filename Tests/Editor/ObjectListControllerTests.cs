@@ -239,8 +239,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             dataVisualizer._namespaceOrder["TestNamespace"] = 0;
             dataVisualizer._namespaceController._selectedType = selectedType;
 
-            dataVisualizer._filteredObjects.Clear();
-            dataVisualizer._filteredMetadata.Clear();
+            ObjectListState listState = dataVisualizer.ObjectListState;
+            listState.ClearFiltered();
             dataVisualizer._selectedObjects.Clear();
             List<ScriptableObject> created = new List<ScriptableObject>();
             for (int index = 0; index < 250; index++)
@@ -248,7 +248,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 DummyScriptableObject obj =
                     ScriptableObject.CreateInstance<DummyScriptableObject>();
                 obj.name = $"Item_{index}";
-                dataVisualizer._filteredObjects.Add(obj);
+                listState.FilteredObjectsBuffer.Add(obj);
                 dataVisualizer._selectedObjects.Add(obj);
                 string fakePath = $"Assets/TempDataVisualizerDragTests/Item_{index}.asset";
                 DataAssetMetadata metadata = new DataAssetMetadata(
@@ -260,7 +260,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     System.Array.Empty<string>(),
                     System.DateTime.UtcNow
                 );
-                dataVisualizer._filteredMetadata.Add(metadata);
+                listState.FilteredMetadataBuffer.Add(metadata);
                 created.Add(obj);
             }
 
@@ -273,10 +273,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     if (
                         element is Label label
                         && index >= 0
-                        && index < dataVisualizer._displayedObjects.Count
+                        && index < listState.DisplayedObjects.Count
                     )
                     {
-                        label.text = dataVisualizer._displayedObjects[index]?.name ?? string.Empty;
+                        ScriptableObject displayed = listState.DisplayedObjects[index];
+                        label.text = displayed != null ? displayed.name : string.Empty;
                     }
                 },
             };

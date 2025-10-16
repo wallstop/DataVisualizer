@@ -3,8 +3,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
     using Events;
     using UnityEngine;
 
-    internal sealed class CloneObjectCommand
-        : ObjectCommandBase<ObjectCloneRequestedEvent>
+    internal sealed class CloneObjectCommand : ObjectCommandBase<ObjectCloneRequestedEvent>
     {
         public CloneObjectCommand(DataVisualizer dataVisualizer)
             : base(dataVisualizer) { }

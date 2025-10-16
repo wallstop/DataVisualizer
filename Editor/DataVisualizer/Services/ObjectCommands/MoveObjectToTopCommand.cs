@@ -1,10 +1,11 @@
 namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
 {
+    using System.Collections.Generic;
     using Events;
+    using State;
     using UnityEngine;
 
-    internal sealed class MoveObjectToTopCommand
-        : ObjectCommandBase<ObjectMoveToTopRequestedEvent>
+    internal sealed class MoveObjectToTopCommand : ObjectCommandBase<ObjectMoveToTopRequestedEvent>
     {
         public MoveObjectToTopCommand(DataVisualizer dataVisualizer)
             : base(dataVisualizer) { }
@@ -17,8 +18,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
                 return;
             }
 
-            DataVisualizer._filteredObjects.Remove(dataObject);
-            DataVisualizer._filteredObjects.Insert(0, dataObject);
+            ObjectListState listState = DataVisualizer.ObjectListState;
+            List<ScriptableObject> filteredObjects = listState.FilteredObjectsBuffer;
+            filteredObjects.Remove(dataObject);
+            filteredObjects.Insert(0, dataObject);
             DataVisualizer._selectedObjects.Remove(dataObject);
             DataVisualizer._selectedObjects.Insert(0, dataObject);
             DataVisualizer.UpdateAndSaveObjectOrderList(

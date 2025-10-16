@@ -72,13 +72,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             }
 
             IReadOnlyCollection<string> labels = _assetService.EnumerateLabels(type);
-            List<string> normalized = labels?
-                .Where(label => !string.IsNullOrWhiteSpace(label))
-                .Select(label => label.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(label => label, StringComparer.OrdinalIgnoreCase)
-                .ToList()
-                ?? new List<string>();
+            List<string> normalized =
+                labels
+                    ?.Where(label => !string.IsNullOrWhiteSpace(label))
+                    .Select(label => label.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(label => label, StringComparer.OrdinalIgnoreCase)
+                    .ToList() ?? new List<string>();
 
             _cache[type] = normalized;
             return normalized;

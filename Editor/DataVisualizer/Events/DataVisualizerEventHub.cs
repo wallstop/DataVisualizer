@@ -5,9 +5,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Events
 
     internal sealed class DataVisualizerEventHub
     {
-        private readonly Dictionary<Type, List<Delegate>> _handlers = new Dictionary<Type, List<Delegate>>();
+        private readonly Dictionary<Type, List<Delegate>> _handlers =
+            new Dictionary<Type, List<Delegate>>();
 
-        public IDisposable Subscribe<TEvent>(Action<TEvent> handler) where TEvent : class
+        public IDisposable Subscribe<TEvent>(Action<TEvent> handler)
+            where TEvent : class
         {
             if (handler == null)
             {
@@ -26,7 +28,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Events
             return new Subscription<TEvent>(this, handler);
         }
 
-        public void Unsubscribe<TEvent>(Action<TEvent> handler) where TEvent : class
+        public void Unsubscribe<TEvent>(Action<TEvent> handler)
+            where TEvent : class
         {
             if (handler == null)
             {
@@ -46,7 +49,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Events
             }
         }
 
-        public void Publish<TEvent>(TEvent eventData) where TEvent : class
+        public void Publish<TEvent>(TEvent eventData)
+            where TEvent : class
         {
             Type eventType = typeof(TEvent);
             if (!_handlers.TryGetValue(eventType, out List<Delegate> listeners))
@@ -71,7 +75,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Events
             _handlers.Clear();
         }
 
-        private sealed class Subscription<TEvent> : IDisposable where TEvent : class
+        private sealed class Subscription<TEvent> : IDisposable
+            where TEvent : class
         {
             private readonly DataVisualizerEventHub _hub;
             private Action<TEvent> _handler;

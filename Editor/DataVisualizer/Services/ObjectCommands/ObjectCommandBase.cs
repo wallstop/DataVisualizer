@@ -8,8 +8,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
     {
         protected ObjectCommandBase(DataVisualizer dataVisualizer)
         {
-            DataVisualizer = dataVisualizer
-                ?? throw new ArgumentNullException(nameof(dataVisualizer));
+            DataVisualizer =
+                dataVisualizer ?? throw new ArgumentNullException(nameof(dataVisualizer));
         }
 
         protected DataVisualizer DataVisualizer { get; }

@@ -5,7 +5,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Events
 
     internal sealed class ObjectsRequestedEvent
     {
-        public ObjectsRequestedEvent(Type requestedType, IReadOnlyCollection<string> requestedGuids, bool forceRefresh)
+        public ObjectsRequestedEvent(
+            Type requestedType,
+            IReadOnlyCollection<string> requestedGuids,
+            bool forceRefresh
+        )
         {
             RequestedType = requestedType;
             RequestedGuids = requestedGuids ?? Array.Empty<string>();

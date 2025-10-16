@@ -5,6 +5,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
     using System.ComponentModel;
     using System.Linq;
     using Events;
+    using State;
     using UnityEngine;
     using UnityEngine.UIElements;
     using Utilities;
@@ -343,7 +344,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
-            if (_dataVisualizer._displayedObjects.Count == 0)
+            ObjectListState listState = _dataVisualizer.ObjectListState;
+
+            if (listState.DisplayedObjects.Count == 0)
             {
                 return;
             }
@@ -355,20 +358,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
 
             ScriptableObject previousSelection = _dataVisualizer._selectedObject;
-            int filteredCount = _dataVisualizer._filteredObjects.Count;
-            int displayTargetIndex = Mathf.Clamp(
-                targetIndex,
-                0,
-                _dataVisualizer._displayedObjects.Count
-            );
+            int filteredCount = listState.FilteredObjects.Count;
+            int displayTargetIndex = Mathf.Clamp(targetIndex, 0, listState.DisplayedObjects.Count);
             int globalTargetIndex = Mathf.Clamp(
-                _dataVisualizer._currentDisplayStartIndex + displayTargetIndex,
+                listState.DisplayStartIndex + displayTargetIndex,
                 0,
                 filteredCount
             );
 
             List<ScriptableObject> filteredWithoutDragged = new List<ScriptableObject>(
-                _dataVisualizer._filteredObjects
+                listState.FilteredObjects
             );
             filteredWithoutDragged.Remove(draggedObject);
             globalTargetIndex = Mathf.Clamp(globalTargetIndex, 0, filteredWithoutDragged.Count);
@@ -381,12 +380,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 globalTargetIndex > 0 ? filteredWithoutDragged[globalTargetIndex - 1] : null;
 
             ObjectOrderHelper.ReorderItem(
-                _dataVisualizer._filteredObjects,
+                listState.FilteredObjectsBuffer,
                 draggedObject,
                 insertBefore,
                 insertAfter
             );
-            DataVisualizer.RemoveDuplicateObjects(_dataVisualizer._filteredObjects);
+            DataVisualizer.RemoveDuplicateObjects(listState.FilteredObjectsBuffer);
 
             ObjectOrderHelper.ReorderItem(
                 _dataVisualizer._selectedObjects,
@@ -405,8 +404,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             if (_dataVisualizer._suppressObjectListReloadForTests)
             {
-                _dataVisualizer._displayedObjects.Clear();
-                _dataVisualizer._displayedObjects.AddRange(_dataVisualizer._filteredObjects);
+                listState.ClearDisplayed();
+                listState.DisplayedObjectsBuffer.AddRange(listState.FilteredObjectsBuffer);
+                listState.DisplayedMetadataBuffer.Clear();
+                listState.DisplayedMetadataBuffer.AddRange(listState.FilteredMetadataBuffer);
             }
             else
             {

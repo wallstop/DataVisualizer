@@ -4,6 +4,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
     using Events;
     using NUnit.Framework;
     using Scaffolding;
+    using State;
     using UnityEngine;
     using Object = UnityEngine.Object;
 
@@ -28,11 +29,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             try
             {
                 harness.Window._selectedObjects.Clear();
-                harness.Window._filteredObjects.Clear();
+                ObjectListState listState = harness.Window.ObjectListState;
+                listState.ClearFiltered();
                 harness.Window._selectedObjects.Add(first);
                 harness.Window._selectedObjects.Add(second);
-                harness.Window._filteredObjects.Add(first);
-                harness.Window._filteredObjects.Add(second);
+                listState.FilteredObjectsBuffer.Add(first);
+                listState.FilteredObjectsBuffer.Add(second);
 
                 // Simplify BuildObjectsView path for the test to avoid UI dependencies.
                 harness.Window._objectListView = null;

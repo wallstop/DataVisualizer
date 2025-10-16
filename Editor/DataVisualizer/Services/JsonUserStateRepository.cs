@@ -16,7 +16,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
         {
             if (string.IsNullOrWhiteSpace(userStateFilePath))
             {
-                throw new ArgumentException("User state file path cannot be null or whitespace.", nameof(userStateFilePath));
+                throw new ArgumentException(
+                    "User state file path cannot be null or whitespace.",
+                    nameof(userStateFilePath)
+                );
             }
 
             _userStateFilePath = userStateFilePath;
@@ -54,12 +57,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                     return _userStateCache;
                 }
 
-                DataVisualizerUserState loaded = JsonUtility.FromJson<DataVisualizerUserState>(json);
+                DataVisualizerUserState loaded = JsonUtility.FromJson<DataVisualizerUserState>(
+                    json
+                );
                 _userStateCache = loaded ?? new DataVisualizerUserState();
             }
             catch (Exception exception)
             {
-                Debug.LogError($"Error loading user state from '{_userStateFilePath}': {exception}. Using default state.");
+                Debug.LogError(
+                    $"Error loading user state from '{_userStateFilePath}': {exception}. Using default state."
+                );
                 _userStateCache = new DataVisualizerUserState();
             }
 

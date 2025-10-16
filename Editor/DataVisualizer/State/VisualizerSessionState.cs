@@ -13,6 +13,7 @@ namespace WallstopStudios.DataVisualizer.Editor.State
             Search = new SearchState();
             Popovers = new PopoverState();
             Labels = new LabelFilterState();
+            Objects = new ObjectListState();
         }
 
         public SelectionState Selection { get; }
@@ -24,6 +25,8 @@ namespace WallstopStudios.DataVisualizer.Editor.State
         public PopoverState Popovers { get; }
 
         public LabelFilterState Labels { get; }
+
+        public ObjectListState Objects { get; }
 
         public sealed class SelectionState
         {

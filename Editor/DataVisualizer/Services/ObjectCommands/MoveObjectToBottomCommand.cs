@@ -1,6 +1,8 @@
 namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
 {
+    using System.Collections.Generic;
     using Events;
+    using State;
     using UnityEngine;
 
     internal sealed class MoveObjectToBottomCommand
@@ -19,8 +21,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
 
             DataVisualizer._selectedObjects.Remove(dataObject);
             DataVisualizer._selectedObjects.Add(dataObject);
-            DataVisualizer._filteredObjects.Remove(dataObject);
-            DataVisualizer._filteredObjects.Add(dataObject);
+            ObjectListState listState = DataVisualizer.ObjectListState;
+            List<ScriptableObject> filteredObjects = listState.FilteredObjectsBuffer;
+            filteredObjects.Remove(dataObject);
+            filteredObjects.Add(dataObject);
             DataVisualizer.UpdateAndSaveObjectOrderList(
                 dataObject.GetType(),
                 DataVisualizer._selectedObjects

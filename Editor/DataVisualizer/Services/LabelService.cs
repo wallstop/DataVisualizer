@@ -88,10 +88,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             int totalCount = 0;
             int matchedCount = 0;
 
-            using PooledResource<HashSet<string>> uniqueLabelsLease =
-                Buffers<string>.HashSet.Get(out HashSet<string> uniqueLabelSet);
-            using PooledResource<HashSet<string>> labelSetLease =
-                Buffers<string>.HashSet.Get(out HashSet<string> labelSet);
+            using PooledResource<HashSet<string>> uniqueLabelsLease = Buffers<string>.HashSet.Get(
+                out HashSet<string> uniqueLabelSet
+            );
+            using PooledResource<HashSet<string>> labelSetLease = Buffers<string>.HashSet.Get(
+                out HashSet<string> labelSet
+            );
 
             for (int index = 0; index < availableObjects.Count; index++)
             {
@@ -180,10 +182,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             bool noOrFilter
         )
         {
-            bool matchesAnd = noAndFilter
-                || andLabels.All(label => labelSet.Contains(label));
-            bool matchesOr = noOrFilter
-                || orLabels.Any(label => labelSet.Contains(label));
+            bool matchesAnd = noAndFilter || andLabels.All(label => labelSet.Contains(label));
+            bool matchesOr = noOrFilter || orLabels.Any(label => labelSet.Contains(label));
 
             return combinationType switch
             {

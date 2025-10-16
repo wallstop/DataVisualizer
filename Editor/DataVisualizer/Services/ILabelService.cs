@@ -12,7 +12,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
         void SaveConfig(TypeLabelFilterConfig config);
 
-        void UpdateSessionState(Type type, TypeLabelFilterConfig config, VisualizerSessionState sessionState);
+        void UpdateSessionState(
+            Type type,
+            TypeLabelFilterConfig config,
+            VisualizerSessionState sessionState
+        );
 
         LabelFilterResult ApplyFilter(
             Type type,

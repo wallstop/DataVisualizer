@@ -8,6 +8,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
     using Data;
     using NUnit.Framework;
     using Services;
+    using State;
     using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
@@ -236,7 +237,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             try
             {
                 dataVisualizer.hideFlags = HideFlags.HideAndDontSave;
-                List<ScriptableObject> displayedObjects = dataVisualizer._displayedObjects;
+                ObjectListState listState = dataVisualizer.ObjectListState;
+                List<ScriptableObject> displayedObjects = listState.DisplayedObjectsBuffer;
 
                 DummyScriptableObject selectedObject =
                     ScriptableObject.CreateInstance<DummyScriptableObject>();
@@ -275,7 +277,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             try
             {
                 dataVisualizer.hideFlags = HideFlags.HideAndDontSave;
-                List<ScriptableObject> displayedObjects = dataVisualizer._displayedObjects;
+                ObjectListState listState = dataVisualizer.ObjectListState;
+                List<ScriptableObject> displayedObjects = listState.DisplayedObjectsBuffer;
 
                 DummyScriptableObject selectedObject =
                     ScriptableObject.CreateInstance<DummyScriptableObject>();
@@ -325,7 +328,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             try
             {
                 dataVisualizer.hideFlags = HideFlags.HideAndDontSave;
-                List<ScriptableObject> displayedObjects = dataVisualizer._displayedObjects;
+                ObjectListState listState = dataVisualizer.ObjectListState;
+                List<ScriptableObject> displayedObjects = listState.DisplayedObjectsBuffer;
 
                 DummyScriptableObject selectedObject =
                     ScriptableObject.CreateInstance<DummyScriptableObject>();
