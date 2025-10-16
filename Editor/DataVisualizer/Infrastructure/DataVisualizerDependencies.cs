@@ -28,6 +28,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Infrastructure
 
             UserStateFilePath = userStateFilePath;
             SessionState = sessionState;
+            SaveScheduler = new ScriptableAssetSaveScheduler();
             InitializeRepositories();
             AssetService = new DataAssetService();
         }
@@ -45,6 +46,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Infrastructure
         public DataVisualizerUserState UserState { get; private set; }
 
         public string UserStateFilePath { get; private set; }
+
+        public ScriptableAssetSaveScheduler SaveScheduler { get; }
 
         public void RefreshUserState()
         {
@@ -70,11 +73,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Infrastructure
             UserStateFilePath = userStateFilePath;
             if (persistInSettingsAsset)
             {
-                UserStateRepository = new SettingsAssetStateRepository();
+                UserStateRepository = new SettingsAssetStateRepository(SaveScheduler);
             }
             else
             {
-                UserStateRepository = new JsonUserStateRepository(UserStateFilePath);
+                UserStateRepository = new JsonUserStateRepository(UserStateFilePath, SaveScheduler);
             }
 
             RefreshUserState();
@@ -90,11 +93,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Infrastructure
 
             if (existingSettings.persistStateInSettingsAsset)
             {
-                UserStateRepository = new SettingsAssetStateRepository();
+                UserStateRepository = new SettingsAssetStateRepository(SaveScheduler);
             }
             else
             {
-                UserStateRepository = new JsonUserStateRepository(UserStateFilePath);
+                UserStateRepository = new JsonUserStateRepository(UserStateFilePath, SaveScheduler);
             }
 
             Settings = UserStateRepository.LoadSettings() ?? existingSettings;

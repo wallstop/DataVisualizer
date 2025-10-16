@@ -50,6 +50,11 @@
 3. [x] Refactor object command handlers (clone, rename, move, delete) into dedicated command classes or strategies (`IObjectCommand`) scoped to services for file operations, keeping UI logic clean.
 4. [x] Preserve `ListView` virtualization and pooling while ensuring row binding pulls metadata lazily and reuses row view models to maintain performance.
 
+### Priority 3a – Asset Loading and Persistence Performance
+1. [x] Plan prioritized/paged asset loading so that the currently selected type loads synchronously first while other type asset batches stream in over subsequent editor frames using `EditorApplication.update` (implemented deferred loader that batches initial synchronous loads and queues remaining work per frame).
+2. [x] Extend `IDataAssetService` (and consumers) with paging APIs that cap synchronous loads when asset counts exceed a threshold and enqueue remaining batches for incremental processing (added `GetAssetCount`/`GetAssetsPage` plus DataVisualizer prefetch using page metadata).
+3. [x] Introduce a `ScriptableAssetSaveScheduler` (shared across persistence modes) that batches save operations when writing back to project assets, debounces frequent changes, and exposes manual flush hooks to prevent editor freezes (scheduler now backs both asset and JSON persistence paths with delayed flush and cleanup flush).
+
 ### Priority 4 – Inspector, Labels, and Filters
 1. [x] Extract label management into `LabelPanelController` (UI) and `ILabelService` (data). Consolidate label caches, suggestion popovers, and AND/OR filter logic within these components.
 2. [x] Move label filter state into `LabelFilterState`, stored within `VisualizerSessionState`. Provide change notifications so object list refreshes only when filters change.

@@ -13,6 +13,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
         void ForceRebuild();
 
+        int GetAssetCount(Type type);
+
+        DataAssetPage GetAssetsPage(Type type, int offset, int count);
+
         IReadOnlyList<DataAssetMetadata> GetAssetsForType(Type type);
 
         IReadOnlyList<string> GetGuidsForType(Type type);

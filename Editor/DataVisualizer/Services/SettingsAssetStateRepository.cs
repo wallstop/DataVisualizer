@@ -8,6 +8,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
     {
         private DataVisualizerSettings _settingsCache;
         private DataVisualizerUserState _userStateCache;
+        private readonly ScriptableAssetSaveScheduler _saveScheduler;
+
+        public SettingsAssetStateRepository(ScriptableAssetSaveScheduler saveScheduler)
+        {
+            _saveScheduler = saveScheduler ?? throw new ArgumentNullException(nameof(saveScheduler));
+        }
 
         public DataVisualizerSettings LoadSettings()
         {
@@ -48,7 +54,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
             _settingsCache = settings;
             settings.MarkDirty();
-            AssetDatabase.SaveAssets();
+            if (_saveScheduler != null)
+            {
+                _saveScheduler.ScheduleAssetDatabaseSave();
+            }
+            else
+            {
+                AssetDatabase.SaveAssets();
+            }
         }
 
         public void SaveUserState(DataVisualizerUserState userState)
@@ -66,7 +79,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
             settings.HydrateFrom(userState);
             settings.MarkDirty();
-            AssetDatabase.SaveAssets();
+            if (_saveScheduler != null)
+            {
+                _saveScheduler.ScheduleAssetDatabaseSave();
+            }
+            else
+            {
+                AssetDatabase.SaveAssets();
+            }
             _userStateCache = userState;
         }
     }

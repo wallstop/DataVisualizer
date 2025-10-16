@@ -49,6 +49,65 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             EnsureIndex(true);
         }
 
+        public int GetAssetCount(Type type)
+        {
+            EnsureIndex(false);
+            if (type == null)
+            {
+                return 0;
+            }
+
+            IReadOnlyList<string> guids = _assetIndex.GetGuidsForType(type);
+            if (guids == null)
+            {
+                return 0;
+            }
+
+            return guids.Count;
+        }
+
+        public DataAssetPage GetAssetsPage(Type type, int offset, int count)
+        {
+            EnsureIndex(false);
+            if (type == null || count <= 0)
+            {
+                return new DataAssetPage(type, Array.Empty<DataAssetMetadata>(), 0, 0);
+            }
+
+            IReadOnlyList<string> guids = _assetIndex.GetGuidsForType(type);
+            if (guids == null || guids.Count == 0)
+            {
+                return new DataAssetPage(type, Array.Empty<DataAssetMetadata>(), 0, 0);
+            }
+
+            int clampedOffset = offset < 0 ? 0 : offset;
+            if (clampedOffset >= guids.Count)
+            {
+                return new DataAssetPage(type, Array.Empty<DataAssetMetadata>(), guids.Count, clampedOffset);
+            }
+
+            int available = guids.Count - clampedOffset;
+            int clampedCount = count > available ? available : count;
+
+            List<DataAssetMetadata> pageItems = new List<DataAssetMetadata>(clampedCount);
+            for (int index = 0; index < clampedCount; index++)
+            {
+                string guid = guids[clampedOffset + index];
+                if (string.IsNullOrWhiteSpace(guid))
+                {
+                    continue;
+                }
+
+                DataAssetMetadata snapshot = GetOrCreateMetadataFromIndex(guid);
+                if (snapshot != null)
+                {
+                    pageItems.Add(snapshot);
+                }
+            }
+
+            return new DataAssetPage(type, pageItems, guids.Count, clampedOffset);
+        }
+
         public IReadOnlyList<DataAssetMetadata> GetAssetsForType(Type type)
         {
             EnsureIndex(false);

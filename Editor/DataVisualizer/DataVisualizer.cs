@@ -102,6 +102,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             OR = 3,
         }
 
+        private sealed class DeferredAssetLoadState
+        {
+            public Type Type { get; set; }
+
+            public Queue<string> RemainingGuids { get; set; }
+
+            public int BatchSize { get; set; }
+        }
+
         internal static readonly Color[] PredefinedLabelColors =
         {
             new Color(0.32f, 0.55f, 0.78f),
@@ -198,6 +207,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         [Obsolete("Use HiddenNamespaces property instead")]
         internal int _hiddenNamespaces;
 
+        private const int ImmediateAssetLoadLimit = 200;
+        private const int DeferredAssetLoadBatchSize = 50;
+
         internal readonly List<ScriptableObject> _selectedObjects = new();
         internal IDataAssetService _assetService;
         internal readonly List<string> _allManagedObjectGuids = new();
@@ -209,6 +221,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             _sessionState.Objects.DisplayedMetadata;
         internal readonly List<VisualElement> _currentSearchResultItems = new();
         internal readonly List<VisualElement> _currentTypePopoverItems = new();
+
+        private readonly List<string> _currentTypeGuidOrder = new();
+        private readonly Dictionary<string, int> _currentGuidOrderLookup =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private readonly List<string> _loadedGuidOrder = new();
+        private readonly HashSet<string> _loadedGuidSet =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, DataAssetMetadata> _currentMetadataByGuid =
+            new Dictionary<string, DataAssetMetadata>(StringComparer.OrdinalIgnoreCase);
+        private DeferredAssetLoadState _deferredAssetLoadState;
+        private bool _isDeferredAssetLoadRegistered;
 
         internal NamespaceController _namespaceController;
 
@@ -289,6 +312,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal TextField _typeSearchField;
 
         private LayoutPersistenceService _layoutPersistenceService;
+        private ScriptableAssetSaveScheduler _saveScheduler;
 
         internal int _searchHighlightIndex = -1;
         internal int _typePopoverHighlightIndex = -1;
@@ -581,6 +605,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 SaveUserStateToFile();
             }
+
+            ScriptableAssetSaveScheduler scheduler = GetActiveSaveScheduler();
+            scheduler?.Flush();
+            _userStateDirty = false;
 
             _currentInspectorScriptableObject?.Dispose();
             _currentInspectorScriptableObject = null;
@@ -5398,6 +5426,31 @@ namespace WallstopStudios.DataVisualizer.Editor
             return _namespaceOrder.GetValueOrDefault(namespaceKey, -1);
         }
 
+        private ScriptableAssetSaveScheduler EnsureSaveScheduler()
+        {
+            if (_dependencies != null && _dependencies.SaveScheduler != null)
+            {
+                return _dependencies.SaveScheduler;
+            }
+
+            if (_saveScheduler == null)
+            {
+                _saveScheduler = new ScriptableAssetSaveScheduler();
+            }
+
+            return _saveScheduler;
+        }
+
+        private ScriptableAssetSaveScheduler GetActiveSaveScheduler()
+        {
+            if (_dependencies != null && _dependencies.SaveScheduler != null)
+            {
+                return _dependencies.SaveScheduler;
+            }
+
+            return _saveScheduler;
+        }
+
         private void HandleTypeSelectedEvent(TypeSelectedEvent evt)
         {
             if (evt == null)
@@ -5485,7 +5538,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                         );
                     }
 
-                    _userStateRepository = new JsonUserStateRepository(_userStateFilePath);
+                    ScriptableAssetSaveScheduler scheduler = EnsureSaveScheduler();
+                    _userStateRepository = new JsonUserStateRepository(
+                        _userStateFilePath,
+                        scheduler
+                    );
                 }
             }
 
@@ -6978,9 +7035,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            CancelDeferredAssetLoad();
+
             _selectedObjects.Clear();
             _objectVisualElementMap.Clear();
-            ObjectListState.ClearFiltered();
+
+            ObjectListState listState = ObjectListState;
+            listState.ClearFiltered();
+
+            ResetCurrentTypeCaches();
 
             if (_assetService == null)
             {
@@ -6988,116 +7051,384 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             List<string> customGuidOrder = GetObjectOrderForType(type);
-            Dictionary<string, ScriptableObject> objectsByGuid = new Dictionary<
-                string,
-                ScriptableObject
-            >(StringComparer.OrdinalIgnoreCase);
-            Dictionary<string, DataAssetMetadata> metadataByGuid = new Dictionary<
-                string,
-                DataAssetMetadata
-            >(StringComparer.OrdinalIgnoreCase);
             IReadOnlyList<string> indexedGuids = _assetService.GetGuidsForType(type);
             if (indexedGuids.Count == 0)
             {
                 _assetService.RefreshType(type);
                 indexedGuids = _assetService.GetGuidsForType(type);
             }
-            foreach (string guid in indexedGuids)
+
+            List<string> orderedGuids = BuildOrderedGuidList(customGuidOrder, indexedGuids);
+            if (orderedGuids.Count == 0)
             {
-                if (!_assetService.TryGetAssetByGuid(guid, out DataAssetMetadata metadata))
+                return;
+            }
+
+            _currentTypeGuidOrder.AddRange(orderedGuids);
+            for (int index = 0; index < _currentTypeGuidOrder.Count; index++)
+            {
+                string guid = _currentTypeGuidOrder[index];
+                if (string.IsNullOrWhiteSpace(guid))
                 {
                     continue;
                 }
 
-                ScriptableObject asset = metadata.LoadAsset();
-                if (asset == null)
+                _currentGuidOrderLookup[guid] = index;
+            }
+
+            listState.FilteredObjectsBuffer.Clear();
+            listState.FilteredMetadataBuffer.Clear();
+
+            int immediateTarget = Math.Min(orderedGuids.Count, ImmediateAssetLoadLimit);
+            if (immediateTarget > 0)
+            {
+                DataAssetPage initialPage = _assetService.GetAssetsPage(type, 0, immediateTarget);
+                if (initialPage != null && initialPage.Items != null)
+                {
+                    for (int metadataIndex = 0; metadataIndex < initialPage.Items.Count; metadataIndex++)
+                    {
+                        DataAssetMetadata metadata = initialPage.Items[metadataIndex];
+                        if (metadata == null || string.IsNullOrWhiteSpace(metadata.Guid))
+                        {
+                            continue;
+                        }
+
+                        _currentMetadataByGuid[metadata.Guid] = metadata;
+                    }
+                }
+            }
+            List<string> deferredGuids = new List<string>();
+
+            int loadedCount = 0;
+            for (int index = 0; index < orderedGuids.Count; index++)
+            {
+                string guid = orderedGuids[index];
+                if (string.IsNullOrWhiteSpace(guid))
                 {
                     continue;
                 }
 
-                objectsByGuid[guid] = asset;
-                metadataByGuid[guid] = metadata;
+                if (loadedCount < immediateTarget)
+                {
+                    bool loaded = TryLoadAndInsertAsset(guid);
+                    if (loaded)
+                    {
+                        loadedCount++;
+                    }
+
+                    continue;
+                }
+
+                deferredGuids.Add(guid);
             }
 
-            List<ScriptableObject> sortedObjects = new();
-            List<DataAssetMetadata> sortedMetadata = new();
+            listState.SetDisplayStartIndex(0);
 
-            foreach (string guid in customGuidOrder)
+            if (deferredGuids.Count > 0)
             {
-                if (objectsByGuid.TryGetValue(guid, out ScriptableObject orderedObject))
+                Queue<string> remaining = new Queue<string>();
+                for (int index = 0; index < deferredGuids.Count; index++)
                 {
-                    sortedObjects.Add(orderedObject);
-                    objectsByGuid.Remove(guid);
-                    if (metadataByGuid.TryGetValue(guid, out DataAssetMetadata orderedMetadata))
+                    string guid = deferredGuids[index];
+                    remaining.Enqueue(guid);
+                }
+
+                ScheduleDeferredAssetLoad(type, remaining);
+            }
+        }
+
+        private void ResetCurrentTypeCaches()
+        {
+            _currentTypeGuidOrder.Clear();
+            _currentGuidOrderLookup.Clear();
+            _loadedGuidOrder.Clear();
+            _loadedGuidSet.Clear();
+            _currentMetadataByGuid.Clear();
+        }
+
+        private List<string> BuildOrderedGuidList(
+            IReadOnlyList<string> customGuidOrder,
+            IReadOnlyList<string> indexedGuids
+        )
+        {
+            List<string> ordered = new List<string>();
+            HashSet<string> added = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> indexedLookup = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (indexedGuids != null)
+            {
+                for (int index = 0; index < indexedGuids.Count; index++)
+                {
+                    string guid = indexedGuids[index];
+                    if (string.IsNullOrWhiteSpace(guid))
                     {
-                        sortedMetadata.Add(orderedMetadata);
-                        metadataByGuid.Remove(guid);
+                        continue;
+                    }
+
+                    indexedLookup.Add(guid);
+                }
+            }
+
+            if (customGuidOrder != null)
+            {
+                for (int index = 0; index < customGuidOrder.Count; index++)
+                {
+                    string guid = customGuidOrder[index];
+                    if (string.IsNullOrWhiteSpace(guid))
+                    {
+                        continue;
+                    }
+
+                    if (!indexedLookup.Contains(guid))
+                    {
+                        continue;
+                    }
+
+                    if (added.Add(guid))
+                    {
+                        ordered.Add(guid);
                     }
                 }
             }
 
-            if (objectsByGuid.Count > 0)
+            if (indexedGuids != null)
             {
-                List<KeyValuePair<string, ScriptableObject>> remainingObjects = objectsByGuid
-                    .Select(entry => entry)
-                    .ToList();
-                remainingObjects.Sort(
-                    (lhs, rhs) =>
-                    {
-                        string leftName = lhs.Value != null ? lhs.Value.name : string.Empty;
-                        string rightName = rhs.Value != null ? rhs.Value.name : string.Empty;
-                        int comparison = string.Compare(
-                            leftName,
-                            rightName,
-                            StringComparison.OrdinalIgnoreCase
-                        );
-                        if (comparison != 0)
-                        {
-                            return comparison;
-                        }
-
-                        if (
-                            metadataByGuid.TryGetValue(lhs.Key, out DataAssetMetadata leftMetadata)
-                            && metadataByGuid.TryGetValue(
-                                rhs.Key,
-                                out DataAssetMetadata rightMetadata
-                            )
-                        )
-                        {
-                            return string.Compare(
-                                leftMetadata.Path,
-                                rightMetadata.Path,
-                                StringComparison.OrdinalIgnoreCase
-                            );
-                        }
-
-                        return string.Compare(lhs.Key, rhs.Key, StringComparison.OrdinalIgnoreCase);
-                    }
-                );
-
-                foreach (KeyValuePair<string, ScriptableObject> entry in remainingObjects)
+                for (int index = 0; index < indexedGuids.Count; index++)
                 {
-                    if (entry.Value != null)
+                    string guid = indexedGuids[index];
+                    if (string.IsNullOrWhiteSpace(guid))
                     {
-                        sortedObjects.Add(entry.Value);
-                        if (metadataByGuid.TryGetValue(entry.Key, out DataAssetMetadata metadata))
-                        {
-                            sortedMetadata.Add(metadata);
-                        }
+                        continue;
+                    }
+
+                    if (added.Add(guid))
+                    {
+                        ordered.Add(guid);
                     }
                 }
             }
 
-            _selectedObjects.Clear();
-            _selectedObjects.AddRange(sortedObjects);
+            return ordered;
+        }
+
+        private bool TryLoadAndInsertAsset(string guid)
+        {
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                return false;
+            }
+
+            DataAssetMetadata metadata;
+            if (!_currentMetadataByGuid.TryGetValue(guid, out metadata))
+            {
+                if (_assetService == null)
+                {
+                    return false;
+                }
+
+                if (!_assetService.TryGetAssetByGuid(guid, out metadata))
+                {
+                    return false;
+                }
+
+                _currentMetadataByGuid[guid] = metadata;
+            }
+
+            if (metadata == null)
+            {
+                return false;
+            }
+
+            ScriptableObject asset = metadata.LoadAsset();
+            if (asset == null)
+            {
+                return false;
+            }
+
+            InsertLoadedAsset(guid, asset, metadata);
+            return true;
+        }
+
+        private void InsertLoadedAsset(
+            string guid,
+            ScriptableObject asset,
+            DataAssetMetadata metadata
+        )
+        {
+            if (asset == null || metadata == null || string.IsNullOrWhiteSpace(guid))
+            {
+                return;
+            }
+
+            if (_loadedGuidSet.Contains(guid))
+            {
+                return;
+            }
+
+            int insertionIndex = RegisterLoadedGuid(guid);
+            if (insertionIndex < 0)
+            {
+                insertionIndex = _selectedObjects.Count;
+            }
+
+            if (insertionIndex > _selectedObjects.Count)
+            {
+                insertionIndex = _selectedObjects.Count;
+            }
+
+            _selectedObjects.Insert(insertionIndex, asset);
 
             ObjectListState listState = ObjectListState;
             List<ScriptableObject> filteredObjects = listState.FilteredObjectsBuffer;
-            filteredObjects.Clear();
-            filteredObjects.AddRange(sortedObjects);
+            if (insertionIndex <= filteredObjects.Count)
+            {
+                filteredObjects.Insert(insertionIndex, asset);
+            }
+            else
+            {
+                filteredObjects.Add(asset);
+            }
+
             List<DataAssetMetadata> filteredMetadata = listState.FilteredMetadataBuffer;
-            filteredMetadata.Clear();
-            filteredMetadata.AddRange(sortedMetadata);
+            if (insertionIndex <= filteredMetadata.Count)
+            {
+                filteredMetadata.Insert(insertionIndex, metadata);
+            }
+            else
+            {
+                filteredMetadata.Add(metadata);
+            }
+        }
+
+        private int RegisterLoadedGuid(string guid)
+        {
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                return _loadedGuidOrder.Count;
+            }
+
+            if (_loadedGuidSet.Contains(guid))
+            {
+                return _loadedGuidOrder.IndexOf(guid);
+            }
+
+            int orderIndex = int.MaxValue;
+            if (_currentGuidOrderLookup.TryGetValue(guid, out int lookupIndex))
+            {
+                orderIndex = lookupIndex;
+            }
+
+            int low = 0;
+            int high = _loadedGuidOrder.Count;
+            while (low < high)
+            {
+                int mid = low + ((high - low) / 2);
+                string existingGuid = _loadedGuidOrder[mid];
+                int existingOrderIndex = int.MaxValue;
+                if (_currentGuidOrderLookup.TryGetValue(existingGuid, out int existingLookup))
+                {
+                    existingOrderIndex = existingLookup;
+                }
+
+                if (existingOrderIndex <= orderIndex)
+                {
+                    low = mid + 1;
+                }
+                else
+                {
+                    high = mid;
+                }
+            }
+
+            _loadedGuidOrder.Insert(low, guid);
+            _loadedGuidSet.Add(guid);
+            return low;
+        }
+
+        private void ScheduleDeferredAssetLoad(Type type, Queue<string> remainingGuids)
+        {
+            if (type == null || remainingGuids == null || remainingGuids.Count == 0)
+            {
+                return;
+            }
+
+            _deferredAssetLoadState = new DeferredAssetLoadState
+            {
+                Type = type,
+                RemainingGuids = remainingGuids,
+                BatchSize = DeferredAssetLoadBatchSize,
+            };
+
+            if (!_isDeferredAssetLoadRegistered)
+            {
+                EditorApplication.update += ProcessDeferredAssetLoad;
+                _isDeferredAssetLoadRegistered = true;
+            }
+        }
+
+        private void CancelDeferredAssetLoad()
+        {
+            if (_isDeferredAssetLoadRegistered)
+            {
+                EditorApplication.update -= ProcessDeferredAssetLoad;
+                _isDeferredAssetLoadRegistered = false;
+            }
+
+            _deferredAssetLoadState = null;
+        }
+
+        private void ProcessDeferredAssetLoad()
+        {
+            DeferredAssetLoadState state = _deferredAssetLoadState;
+            if (state == null)
+            {
+                CancelDeferredAssetLoad();
+                return;
+            }
+
+            Type selectedType = _namespaceController != null ? _namespaceController.SelectedType : null;
+            if (selectedType == null || selectedType != state.Type)
+            {
+                CancelDeferredAssetLoad();
+                return;
+            }
+
+            if (state.RemainingGuids == null || state.RemainingGuids.Count == 0)
+            {
+                CancelDeferredAssetLoad();
+                return;
+            }
+
+            int processed = 0;
+            int successful = 0;
+
+            while (processed < state.BatchSize && state.RemainingGuids.Count > 0)
+            {
+                string guid = state.RemainingGuids.Dequeue();
+                if (string.IsNullOrWhiteSpace(guid))
+                {
+                    continue;
+                }
+
+                bool loaded = TryLoadAndInsertAsset(guid);
+                if (loaded)
+                {
+                    successful++;
+                }
+
+                processed++;
+            }
+
+            if (state.RemainingGuids.Count == 0)
+            {
+                CancelDeferredAssetLoad();
+            }
+
+            if (successful > 0)
+            {
+                ApplyLabelFilter(false);
+                BuildObjectsView();
+            }
         }
 
         internal void LoadScriptableObjectTypes()
@@ -7419,9 +7750,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             bool persistInSettingsAsset =
                 existingSettings != null && existingSettings.persistStateInSettingsAsset;
+            ScriptableAssetSaveScheduler scheduler = EnsureSaveScheduler();
             _userStateRepository = persistInSettingsAsset
-                ? new SettingsAssetStateRepository()
-                : new JsonUserStateRepository(_userStateFilePath);
+                ? new SettingsAssetStateRepository(scheduler)
+                : new JsonUserStateRepository(_userStateFilePath, scheduler);
 
             DataVisualizerSettings loadedSettings = _userStateRepository.LoadSettings();
             if (loadedSettings != null)

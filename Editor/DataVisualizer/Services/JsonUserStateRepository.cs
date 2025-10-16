@@ -11,8 +11,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
         private readonly string _userStateFilePath;
         private DataVisualizerSettings _settingsCache;
         private DataVisualizerUserState _userStateCache;
+        private readonly ScriptableAssetSaveScheduler _saveScheduler;
+        private bool _jsonSavePending;
 
-        public JsonUserStateRepository(string userStateFilePath)
+        public JsonUserStateRepository(
+            string userStateFilePath,
+            ScriptableAssetSaveScheduler saveScheduler
+        )
         {
             if (string.IsNullOrWhiteSpace(userStateFilePath))
             {
@@ -23,6 +28,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             }
 
             _userStateFilePath = userStateFilePath;
+            _saveScheduler = saveScheduler ?? throw new ArgumentNullException(nameof(saveScheduler));
         }
 
         public DataVisualizerSettings LoadSettings()
@@ -82,7 +88,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
             _settingsCache = settings;
             settings.MarkDirty();
-            AssetDatabase.SaveAssets();
+            if (_saveScheduler != null)
+            {
+                _saveScheduler.ScheduleAssetDatabaseSave();
+            }
+            else
+            {
+                AssetDatabase.SaveAssets();
+            }
         }
 
         public void SaveUserState(DataVisualizerUserState userState)
@@ -94,6 +107,24 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
             _userStateCache = userState;
 
+            if (_saveScheduler != null)
+            {
+                if (!_jsonSavePending)
+                {
+                    _jsonSavePending = true;
+                    _saveScheduler.Schedule(WriteUserStateToDisk);
+                }
+            }
+            else
+            {
+                WriteUserStateToDisk();
+            }
+        }
+
+        private void WriteUserStateToDisk()
+        {
+            _jsonSavePending = false;
+
             try
             {
                 string directory = Path.GetDirectoryName(_userStateFilePath);
@@ -102,7 +133,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                     Directory.CreateDirectory(directory);
                 }
 
-                string json = JsonUtility.ToJson(userState, true);
+                string json = JsonUtility.ToJson(_userStateCache, true);
                 File.WriteAllText(_userStateFilePath, json);
             }
             catch (Exception exception)
