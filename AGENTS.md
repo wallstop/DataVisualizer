@@ -4,6 +4,11 @@
 - Organize runtime code under `Runtime/` with subfolders such as `DataVisualizer/` for core interfaces like `IDataProcessor` and context types.
 - Place supporting utilities in `Runtime/Helper/` and extensions in `Runtime/Extensions/`.
 - Keep editor-only UI and tooling under `Editor/DataVisualizer/` with the `.asmdef` files `WallstopStudios.DataVisualizer.asmdef` and `WallstopStudios.DataVisualizer.Editor.asmdef` managing dependencies.
+- Treat `Editor/DataVisualizer/DataVisualizer.cs` as a composition root only. Add behaviour to:
+  - `State/` for session data (selection, diagnostics, popovers)
+  - `Services/` for persistence, AssetDatabase interaction, processor execution, etc.
+  - `Controllers/` for UI Toolkit orchestration (namespace, object list, labels, search, drag and drop)
+  - `Events/` for new `DataVisualizerEventHub` contracts when controllers need to communicate
 - Store shared fonts in `Editor/Fonts/` and USS styles in `Editor/DataVisualizer/Styles/`.
 - Update `package.json` whenever the assembly public API changes for Unity 2021.3 projects.
 
@@ -20,6 +25,7 @@
 - Do not use underscores in function names, especially test function names.
 - Do not use regions, anywhere, ever.
 - Avoid `var` wherever possible; use expressive types instead.
+- Controllers and services should communicate by publishing/subscribing to events. Do not introduce new cross-controller method calls or reach into window internals.
 
 ## Testing Guidelines
 - Adopt the Unity Test Framework with runtime tests under `Tests/Runtime` and editor tests under `Tests/Editor`.
@@ -33,6 +39,7 @@
 - Do not use underscores in function names, especially test function names.
 - Do not use regions, anywhere, ever.
 - Avoid `var` wherever possible, use expressive types.
+- When tests need to tweak persistence/services, prefer `DataVisualizer.OverrideUserStateRepositoryForTesting` or dedicated hooks instead of editing internal fields directly.
 
 ## Commit & Pull Request Guidelines
 - Keep commit messages short, present-tense, and imperative (for example, `Add namespace collapse state cache`).

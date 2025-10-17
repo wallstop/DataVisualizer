@@ -79,9 +79,9 @@
 
 ### Priority 8 – Cleanup and API Hardening
 1. [x] Remove obsolete fields and methods from `DataVisualizer`, exposing only minimal internal APIs needed by controllers (dropped `_settings`/`_userState` caches + repository helpers in favor of dependency-backed accessors, added popover/shortcut helpers, and cleaned up namespace controller bootstrap). Update `package.json` if public surface changes.
-2. Delete legacy helper methods that migrated into services, ensuring old code paths are gone and tests cover new flows.
-3. Review accessibility of new types (`internal sealed` within editor assembly) and ensure runtime contracts remain stable.
-4. Update documentation (`README.md`) and AGENTS guidelines to reflect new architecture and extension points.
+2. [x] Delete legacy helper methods that migrated into services, ensuring old code paths are gone and tests cover new flows (window no longer exposes persistence caches/load helpers; tests rely on `OverrideUserStateRepositoryForTesting`).
+3. [x] Review accessibility of new types (`internal sealed` within editor assembly) and ensure runtime contracts remain stable (controllers/services remain internal; runtime interfaces untouched).
+4. [x] Update documentation (`README.md`) and AGENTS guidelines to reflect new architecture and extension points (added architecture overview, extension guidance, and contributor notes).
 
 ### Priority 9 – Dialog and Confirmation UX
 1. [x] Introduce a styled UI Toolkit dialog service (confirmation + message patterns) that renders using the package styles instead of `EditorUtility.DisplayDialog`.
