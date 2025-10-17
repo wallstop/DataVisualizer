@@ -2097,7 +2097,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            dragHandle.AddToClassList("delete-button");
             dragHandle.Clear();
             contentWrapper.Clear();
 
