@@ -16,6 +16,7 @@ namespace WallstopStudios.DataVisualizer.Editor.State
             Objects = new ObjectListState();
             Processors = new ProcessorPanelState();
             Diagnostics = new DiagnosticsState();
+            Drag = new DragState();
         }
 
         public SelectionState Selection { get; }
@@ -33,6 +34,8 @@ namespace WallstopStudios.DataVisualizer.Editor.State
         public ProcessorPanelState Processors { get; }
 
         public DiagnosticsState Diagnostics { get; }
+
+        public DragState Drag { get; }
 
         public sealed class SelectionState
         {
@@ -363,6 +366,103 @@ namespace WallstopStudios.DataVisualizer.Editor.State
 
                 target.Clear();
                 target.AddRange(normalized);
+                return true;
+            }
+        }
+
+        public sealed class DragState
+        {
+            public enum DragOperationKind
+            {
+                None,
+                Namespace,
+                Type,
+                Object,
+            }
+
+            private DragOperationKind _operation = DragOperationKind.None;
+            private bool _altPressed;
+            private bool _controlPressed;
+            private bool _shiftPressed;
+
+            public DragOperationKind Operation
+            {
+                get { return _operation; }
+            }
+
+            public bool AltPressed
+            {
+                get { return _altPressed; }
+            }
+
+            public bool ControlPressed
+            {
+                get { return _controlPressed; }
+            }
+
+            public bool ShiftPressed
+            {
+                get { return _shiftPressed; }
+            }
+
+            public bool IsActive
+            {
+                get { return _operation != DragOperationKind.None; }
+            }
+
+            public bool SetOperation(DragOperationKind operation)
+            {
+                if (_operation == operation)
+                {
+                    return false;
+                }
+
+                _operation = operation;
+                if (operation == DragOperationKind.None)
+                {
+                    _altPressed = false;
+                    _controlPressed = false;
+                    _shiftPressed = false;
+                }
+
+                return true;
+            }
+
+            public bool SetModifiers(bool altPressed, bool controlPressed, bool shiftPressed)
+            {
+                if (!IsActive)
+                {
+                    altPressed = false;
+                    controlPressed = false;
+                    shiftPressed = false;
+                }
+
+                if (
+                    _altPressed == altPressed
+                    && _controlPressed == controlPressed
+                    && _shiftPressed == shiftPressed
+                )
+                {
+                    return false;
+                }
+
+                _altPressed = altPressed;
+                _controlPressed = controlPressed;
+                _shiftPressed = shiftPressed;
+                return true;
+            }
+
+            public bool Clear()
+            {
+                if (!IsActive && !_altPressed && !_controlPressed && !_shiftPressed)
+                {
+                    return false;
+                }
+
+                _operation = DragOperationKind.None;
+                _altPressed = false;
+                _controlPressed = false;
+                _shiftPressed = false;
                 return true;
             }
         }

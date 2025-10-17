@@ -7664,39 +7664,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void OnCapturedPointerMove(PointerMoveEvent evt)
         {
-            if (
-                _draggedElement == null
-                || !_draggedElement.HasPointerCapture(evt.pointerId)
-                || _activeDragType == DragType.None
-            )
-            {
-                return;
-            }
-
-            if (_dragGhost != null)
-            {
-                _dragGhost.style.left = evt.position.x - _dragGhost.resolvedStyle.width / 2;
-                _dragGhost.style.top = evt.position.y - _dragGhost.resolvedStyle.height;
-            }
-
-            if (!_isDragging)
-            {
-                _isDragging = true;
-                string dragText = _draggedData switch
-                {
-                    IDisplayable displayable => displayable.Title,
-                    Object dataObj => dataObj.name,
-                    string nsKey => nsKey,
-                    Type type => NamespaceController.GetTypeDisplayName(type),
-                    _ => "Dragging Item",
-                };
-                StartDragVisuals(evt.position, dragText);
-            }
-
-            if (_isDragging)
-            {
-                UpdateInPlaceGhostPosition(evt.position);
-            }
+            _dragAndDropController?.HandlePointerMove(evt);
         }
 
         internal void OnCapturedPointerUp(PointerUpEvent evt)

@@ -45,7 +45,7 @@
 4. [x] Ensure namespace rebuilds diff against cached state to minimize UI churn, keeping performance characteristics.
 
 ### Priority 3 – Object List and Selection
-1. [~] Introduce `ObjectListController` that owns the `ListView`, pagination header, and drag reorder behavior. It consumes `IDataAssetService` metadata and emits commands (`CloneRequested`, `RenameRequested`, etc.) through the event hub (controller now drives filtered/displayed collections, builds the header/create button, and manages list/pagination UI; staged asset loading hooked into controller state; drag command modelling still pending).
+1. [x] Introduce `ObjectListController` that owns the `ListView`, pagination header, and drag reorder behavior. It consumes `IDataAssetService` metadata and emits commands (`CloneRequested`, `RenameRequested`, etc.) through the event hub (controller now drives filtered/displayed collections, builds the header/create button, manages list/pagination UI, and forwards drag reorder requests via `ObjectReorderRequestedEvent` handled by the object command dispatcher).
 2. [x] Create `ObjectSelectionService` to manage `_selectedObjects`, `_selectedObject`, and associated metadata (GUID tracking, highlight index). This reduces shared mutable collections.
 3. [x] Refactor object command handlers (clone, rename, move, delete) into dedicated command classes or strategies (`IObjectCommand`) scoped to services for file operations, keeping UI logic clean.
 4. [x] Preserve `ListView` virtualization and pooling while ensuring row binding pulls metadata lazily and reuses row view models to maintain performance.
@@ -73,7 +73,7 @@
 3. Ensure search results and popovers rely on immutable view models for clarity and testability.
 
 ### Priority 7 – Drag and Drop, Input, and Layout
-1. [~] Centralize drag state in `DragAndDropController`, coordinating namespace/type/object drags via the event hub. This controller can reuse pooled visuals and handle keyboard modifiers consistently (controller now owns ghost visuals, placeholder sizing for objects/namespaces, and drop execution; event-driven coordination and keyboard modifiers still pending; object drag index regression test coverage added).
+1. [x] Centralize drag state in `DragAndDropController`, coordinating namespace/type/object drags via the event hub. This controller can reuse pooled visuals and handle keyboard modifiers consistently (object drops now emit `ObjectReorderRequestedEvent` + `DragStateChangedEvent`, session state tracks active drag + modifier keys, and holding Shift/Ctrl while dragging snaps objects to the list start/end).
 2. [~] Introduce `InputShortcutController` to register global key bindings and dispatch high-level commands (NextType, PreviousType, ExecuteSearchConfirm) without referencing UI internals (controller now publishes type navigation via the event hub and owns popover escape handling; still relies on window focus state/search methods pending state refactors).
 3. [x] Extract layout persistence (split view widths, window size) into `LayoutPersistenceService`, debouncing writes and exposing load/save methods invoked by the window lifecycle (implemented `LayoutPersistenceService` and migrated `DataVisualizer` to use it for EditorPrefs reads/writes and scheduled saves).
 

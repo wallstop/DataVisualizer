@@ -30,6 +30,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
                 new CloneObjectCommand(dataVisualizer),
                 new RenameObjectCommand(dataVisualizer),
                 new MoveObjectCommand(dataVisualizer),
+                new ReorderObjectCommand(dataVisualizer),
                 new DeleteObjectCommand(dataVisualizer),
             };
 

@@ -4,11 +4,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
     using System.Collections.Generic;
     using System.ComponentModel;
     using System.Linq;
+    using Data;
     using Events;
-    using State;
     using UnityEngine;
     using UnityEngine.UIElements;
-    using Utilities;
+    using WallstopStudios.DataVisualizer.Editor.State;
+    using DragOperationKind = WallstopStudios.DataVisualizer.Editor.State.VisualizerSessionState.DragState.DragOperationKind;
+    using Object = UnityEngine.Object;
 
     internal sealed class DragAndDropController
     {
@@ -50,6 +52,55 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _dataVisualizer._draggedElement.style.visibility = Visibility.Hidden;
             _dataVisualizer._draggedElement.style.display = DisplayStyle.None;
+        }
+
+        public void HandlePointerMove(PointerMoveEvent evt)
+        {
+            if (
+                _dataVisualizer._draggedElement == null
+                || !_dataVisualizer._draggedElement.HasPointerCapture(evt.pointerId)
+            )
+            {
+                return;
+            }
+
+            DataVisualizer.DragType activeDragType = _dataVisualizer._activeDragType;
+            if (activeDragType == DataVisualizer.DragType.None)
+            {
+                SynchronizeDragState(DragOperationKind.None, false, false, false);
+                return;
+            }
+
+            bool altPressed = evt.altKey;
+            bool controlPressed = evt.ctrlKey || evt.commandKey || evt.actionKey;
+            bool shiftPressed = evt.shiftKey;
+
+            if (_dataVisualizer._dragGhost != null)
+            {
+                _dataVisualizer._dragGhost.style.left =
+                    evt.position.x - _dataVisualizer._dragGhost.resolvedStyle.width / 2f;
+                _dataVisualizer._dragGhost.style.top =
+                    evt.position.y - _dataVisualizer._dragGhost.resolvedStyle.height;
+            }
+
+            if (!_dataVisualizer._isDragging)
+            {
+                _dataVisualizer._isDragging = true;
+                string dragText = DetermineDragLabel();
+                StartDragVisuals(evt.position, dragText);
+            }
+
+            if (_dataVisualizer._isDragging)
+            {
+                UpdateInPlaceGhostPosition(evt.position);
+            }
+
+            SynchronizeDragState(
+                MapDragOperation(activeDragType),
+                altPressed,
+                controlPressed,
+                shiftPressed
+            );
         }
 
         public void UpdateInPlaceGhostPosition(Vector2 pointerPosition)
@@ -228,6 +279,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _cachedMarginBottom = 0f;
             _cachedFlexGrow = 0f;
             _cachedFlexShrink = 0f;
+
+            SynchronizeDragState(DragOperationKind.None, false, false, false);
         }
 
         public static int NormalizeGhostInsertIndex(
@@ -267,6 +320,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             int pointerId = evt.pointerId;
             bool performDrop = _dataVisualizer._isDragging;
             DataVisualizer.DragType dropType = _dataVisualizer._activeDragType;
+            bool altPressed = evt.altKey;
+            bool controlPressed = evt.ctrlKey || evt.commandKey || evt.actionKey;
+            bool shiftPressed = evt.shiftKey;
 
             VisualElement draggedElement = _dataVisualizer._draggedElement;
             try
@@ -277,6 +333,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 {
                     return;
                 }
+
+                SynchronizeDragState(
+                    MapDragOperation(dropType),
+                    altPressed,
+                    controlPressed,
+                    shiftPressed
+                );
 
                 switch (dropType)
                 {
@@ -357,7 +420,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
-            ScriptableObject previousSelection = _dataVisualizer._selectedObject;
             int filteredCount = listState.FilteredObjects.Count;
             int displayTargetIndex = Mathf.Clamp(targetIndex, 0, listState.DisplayedObjects.Count);
             int globalTargetIndex = Mathf.Clamp(
@@ -371,64 +433,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             {
                 globalTargetIndex = Mathf.Max(0, globalTargetIndex - 1);
             }
-
-            List<ScriptableObject> filteredWithoutDragged = new List<ScriptableObject>(
-                listState.FilteredObjects
+            VisualizerSessionState.DragState dragState = _dataVisualizer.SessionState.Drag;
+            _eventHub?.Publish(
+                new ObjectReorderRequestedEvent(
+                    selectedType,
+                    draggedObject,
+                    globalTargetIndex,
+                    dragState.AltPressed,
+                    dragState.ControlPressed,
+                    dragState.ShiftPressed
+                )
             );
-            filteredWithoutDragged.Remove(draggedObject);
-            globalTargetIndex = Mathf.Clamp(globalTargetIndex, 0, filteredWithoutDragged.Count);
-
-            ScriptableObject insertBefore =
-                globalTargetIndex < filteredWithoutDragged.Count
-                    ? filteredWithoutDragged[globalTargetIndex]
-                    : null;
-            ScriptableObject insertAfter =
-                globalTargetIndex > 0 ? filteredWithoutDragged[globalTargetIndex - 1] : null;
-
-            ObjectOrderHelper.ReorderItem(
-                listState.FilteredObjectsBuffer,
-                draggedObject,
-                insertBefore,
-                insertAfter
-            );
-            DataVisualizer.RemoveDuplicateObjects(listState.FilteredObjectsBuffer);
-
-            ObjectOrderHelper.ReorderItem(
-                _dataVisualizer._selectedObjects,
-                draggedObject,
-                insertBefore,
-                insertAfter
-            );
-            DataVisualizer.RemoveDuplicateObjects(_dataVisualizer._selectedObjects);
-
-            _dataVisualizer.UpdateAndSaveObjectOrderList(
-                selectedType,
-                _dataVisualizer._selectedObjects
-            );
-
-            string draggedGuid = DataVisualizer.GetAssetGuid(draggedObject);
-
-            if (_dataVisualizer._suppressObjectListReloadForTests)
-            {
-                listState.ClearDisplayed();
-                listState.DisplayedObjectsBuffer.AddRange(listState.FilteredObjectsBuffer);
-                listState.DisplayedMetadataBuffer.Clear();
-                listState.DisplayedMetadataBuffer.AddRange(listState.FilteredMetadataBuffer);
-            }
-            else
-            {
-                _dataVisualizer.LoadObjectTypes(selectedType);
-                _dataVisualizer.ApplyLabelFilter(buildObjectsView: false);
-                _dataVisualizer.BuildObjectsView();
-            }
-
-            ScriptableObject objectToSelect = _dataVisualizer.DeterminePostDropSelection(
-                previousSelection,
-                draggedObject,
-                draggedGuid
-            );
-
-            _dataVisualizer.SelectObject(objectToSelect);
             if (_dataVisualizer._draggedElement != null)
             {
                 _dataVisualizer._draggedElement.style.display = DisplayStyle.Flex;
@@ -753,6 +768,78 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             ghost.style.marginBottom = _cachedMarginBottom;
             ghost.style.flexGrow = _cachedFlexGrow;
             ghost.style.flexShrink = _cachedFlexShrink;
+        }
+
+        private string DetermineDragLabel()
+        {
+            return _dataVisualizer._draggedData switch
+            {
+                IDisplayable displayable => displayable.Title,
+                Object dataObject => dataObject.name,
+                string namespaceKey => namespaceKey,
+                Type type =>
+                    WallstopStudios.DataVisualizer.Editor.NamespaceController.GetTypeDisplayName(
+                        type
+                    ),
+                _ => "Dragging Item",
+            };
+        }
+
+        private static DragOperationKind MapDragOperation(DataVisualizer.DragType dragType)
+        {
+            switch (dragType)
+            {
+                case DataVisualizer.DragType.Namespace:
+                {
+                    return DragOperationKind.Namespace;
+                }
+                case DataVisualizer.DragType.Type:
+                {
+                    return DragOperationKind.Type;
+                }
+                case DataVisualizer.DragType.Object:
+                {
+                    return DragOperationKind.Object;
+                }
+                default:
+                {
+                    return DragOperationKind.None;
+                }
+            }
+        }
+
+        private void SynchronizeDragState(
+            DragOperationKind operation,
+            bool altPressed,
+            bool controlPressed,
+            bool shiftPressed
+        )
+        {
+            VisualizerSessionState.DragState dragState = _dataVisualizer.SessionState.Drag;
+            bool operationChanged = dragState.SetOperation(operation);
+            bool modifiersChanged = dragState.SetModifiers(
+                altPressed,
+                controlPressed,
+                shiftPressed
+            );
+
+            if (operationChanged || modifiersChanged)
+            {
+                PublishDragState(dragState);
+            }
+        }
+
+        private void PublishDragState(VisualizerSessionState.DragState dragState)
+        {
+            _eventHub?.Publish(
+                new DragStateChangedEvent(
+                    dragState.Operation,
+                    dragState.IsActive,
+                    dragState.AltPressed,
+                    dragState.ControlPressed,
+                    dragState.ShiftPressed
+                )
+            );
         }
 
         private void UpdateAndSaveTypeOrder(string namespaceKey, IReadOnlyList<Type> orderedTypes)
