@@ -84,6 +84,22 @@ namespace WallstopStudios.DataVisualizer.Editor.Infrastructure
             RefreshUserState();
         }
 
+        internal void OverrideUserStateForTesting(
+            IUserStateRepository repository,
+            DataVisualizerSettings settings,
+            DataVisualizerUserState userState
+        )
+        {
+            if (repository == null)
+            {
+                throw new ArgumentNullException(nameof(repository));
+            }
+
+            UserStateRepository = repository;
+            Settings = settings ?? new DataVisualizerSettings();
+            UserState = userState ?? new DataVisualizerUserState();
+        }
+
         private void InitializeRepositories()
         {
             DataVisualizerSettings existingSettings = DataVisualizer.LoadOrCreateSettings();

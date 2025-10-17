@@ -2474,10 +2474,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset);
                 localSettings.MarkDirty();
                 AssetDatabase.SaveAssets();
-                if (!newModeIsSettingsAsset)
-                {
-                    SaveUserStateToFile();
-                }
+                _dependencies?.UserStateRepository?.SaveUserState(UserState);
             });
             contentWrapper.Add(prefsToggle);
 
@@ -7757,6 +7754,30 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _dependencies?.UserStateRepository?.SaveUserState(UserState);
         }
+
+#if UNITY_EDITOR
+        internal void OverrideUserStateRepositoryForTesting(
+            IUserStateRepository repository,
+            DataVisualizerSettings settings,
+            DataVisualizerUserState userState
+        )
+        {
+            if (_dependencies == null)
+            {
+                string userStateFilePath = Path.Combine(
+                    Application.persistentDataPath,
+                    UserStateFileName
+                );
+                _dependencies = new DataVisualizerDependencies(
+                    userStateFilePath,
+                    _sessionState,
+                    EnsureSaveScheduler()
+                );
+            }
+
+            _dependencies.OverrideUserStateForTesting(repository, settings, userState);
+        }
+#endif
 
         internal void UpdateAndSaveObjectOrderList(Type type, List<ScriptableObject> orderedObjects)
         {

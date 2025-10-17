@@ -61,11 +61,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
 
                 DataVisualizerUserState userState = new DataVisualizerUserState();
 
-                dataVisualizer._userStateRepository = new StubUserStateRepository
+                StubUserStateRepository repository = new StubUserStateRepository
                 {
                     Settings = settings,
                     UserState = userState,
                 };
+
+                dataVisualizer.OverrideUserStateRepositoryForTesting(
+                    repository,
+                    settings,
+                    userState
+                );
 
                 dataVisualizer._scriptableObjectTypes.Clear();
                 dataVisualizer._namespaceOrder.Clear();

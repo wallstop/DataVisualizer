@@ -58,11 +58,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 {
                     settings.persistStateInSettingsAsset = true;
                     DataVisualizerUserState userState = new DataVisualizerUserState();
-                    dataVisualizer._userStateRepository = new StubUserStateRepository
+                    StubUserStateRepository repository = new StubUserStateRepository
                     {
                         Settings = settings,
                         UserState = userState,
                     };
+
+                    dataVisualizer.OverrideUserStateRepositoryForTesting(
+                        repository,
+                        settings,
+                        userState
+                    );
 
                     Dictionary<string, List<Type>> managedTypes = new Dictionary<
                         string,
@@ -149,11 +155,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 {
                     settings.persistStateInSettingsAsset = true;
                     DataVisualizerUserState userState = new DataVisualizerUserState();
-                    dataVisualizer._userStateRepository = new StubUserStateRepository
+                    StubUserStateRepository repository = new StubUserStateRepository
                     {
                         Settings = settings,
                         UserState = userState,
                     };
+
+                    dataVisualizer.OverrideUserStateRepositoryForTesting(
+                        repository,
+                        settings,
+                        userState
+                    );
 
                     Dictionary<string, List<Type>> managedTypes = new Dictionary<
                         string,

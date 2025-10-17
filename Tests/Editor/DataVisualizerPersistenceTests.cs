@@ -64,7 +64,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     UserState = userState,
                 };
 
-                dataVisualizer._userStateRepository = repository;
+                dataVisualizer.OverrideUserStateRepositoryForTesting(
+                    repository,
+                    repository.Settings,
+                    repository.UserState
+                );
 
                 bool appliedSettings = false;
                 dataVisualizer.PersistSettings(
@@ -104,7 +108,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     UserState = userState,
                 };
 
-                dataVisualizer._userStateRepository = repository;
+                dataVisualizer.OverrideUserStateRepositoryForTesting(
+                    repository,
+                    repository.Settings,
+                    repository.UserState
+                );
 
                 bool appliedUserState = false;
                 dataVisualizer.PersistSettings(
@@ -127,22 +135,31 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
         }
 
         [Test]
-        public void LoadUserStateFromFileUsesRepository()
+        public void MarkUserStateDirtySavesWhenPersistingToFile()
         {
             DataVisualizer dataVisualizer = ScriptableObject.CreateInstance<DataVisualizer>();
             try
             {
+                DataVisualizerSettings settings =
+                    ScriptableObject.CreateInstance<DataVisualizerSettings>();
+                settings.persistStateInSettingsAsset = false;
+                DataVisualizerUserState userState = new DataVisualizerUserState();
+
                 StubUserStateRepository repository = new StubUserStateRepository
                 {
-                    UserState = new DataVisualizerUserState(),
+                    Settings = settings,
+                    UserState = userState,
                 };
 
-                dataVisualizer._userStateRepository = repository;
+                dataVisualizer.OverrideUserStateRepositoryForTesting(
+                    repository,
+                    settings,
+                    userState
+                );
 
-                dataVisualizer.LoadUserStateFromFile();
+                dataVisualizer.MarkUserStateDirty();
 
-                Assert.AreEqual(1, repository.LoadUserStateCallCount);
-                Assert.AreSame(repository.UserState, dataVisualizer.UserState);
+                Assert.AreEqual(1, repository.SaveUserStateCallCount);
             }
             finally
             {
@@ -151,22 +168,31 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
         }
 
         [Test]
-        public void SaveUserStateToFileUsesRepository()
+        public void MarkUserStateDirtyDoesNothingWhenPersistingInSettings()
         {
             DataVisualizer dataVisualizer = ScriptableObject.CreateInstance<DataVisualizer>();
             try
             {
+                DataVisualizerSettings settings =
+                    ScriptableObject.CreateInstance<DataVisualizerSettings>();
+                settings.persistStateInSettingsAsset = true;
                 DataVisualizerUserState userState = new DataVisualizerUserState();
+
                 StubUserStateRepository repository = new StubUserStateRepository
                 {
+                    Settings = settings,
                     UserState = userState,
                 };
 
-                dataVisualizer._userStateRepository = repository;
+                dataVisualizer.OverrideUserStateRepositoryForTesting(
+                    repository,
+                    settings,
+                    userState
+                );
 
-                dataVisualizer.SaveUserStateToFile();
+                dataVisualizer.MarkUserStateDirty();
 
-                Assert.AreEqual(1, repository.SaveUserStateCallCount);
+                Assert.AreEqual(0, repository.SaveUserStateCallCount);
             }
             finally
             {

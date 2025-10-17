@@ -217,15 +217,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                     ScriptableObject.CreateInstance<DataVisualizerSettings>();
                 settings.persistStateInSettingsAsset = true;
                 DataVisualizerUserState userState = new DataVisualizerUserState();
-                dataVisualizer._userStateRepository = new StubUserStateRepository
+                StubUserStateRepository repository = new StubUserStateRepository
                 {
                     Settings = settings,
                     UserState = userState,
                 };
 
-                dataVisualizer._userStateFilePath = Path.Combine(
-                    Application.temporaryCachePath,
-                    "DataVisualizerUserState_Test.json"
+                dataVisualizer.OverrideUserStateRepositoryForTesting(
+                    repository,
+                    settings,
+                    userState
                 );
 
                 Dictionary<string, List<Type>> scriptableTypes = new Dictionary<string, List<Type>>

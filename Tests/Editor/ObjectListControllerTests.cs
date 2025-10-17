@@ -227,7 +227,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 UserState = userState,
             };
 
-            dataVisualizer._userStateRepository = repository;
+            dataVisualizer.OverrideUserStateRepositoryForTesting(
+                repository,
+                repository.Settings,
+                repository.UserState
+            );
 
             selectedType = typeof(DummyScriptableObject);
             dataVisualizer._scriptableObjectTypes.Clear();
