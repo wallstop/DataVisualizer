@@ -399,11 +399,21 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 || _dataVisualizer._draggedData is not ScriptableObject draggedObject
             )
             {
+#if UNITY_EDITOR
+                DataVisualizer.LogReorderDebug(
+                    "PerformObjectDrop aborted: dragged element or data missing"
+                );
+#endif
                 return;
             }
 
             if (_dataVisualizer.GetObjectListContentContainer() == null || targetIndex < 0)
             {
+#if UNITY_EDITOR
+                DataVisualizer.LogReorderDebug(
+                    $"PerformObjectDrop aborted: container null or targetIndex {targetIndex} < 0"
+                );
+#endif
                 return;
             }
 
@@ -411,12 +421,20 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             if (listState.DisplayedObjects.Count == 0)
             {
+#if UNITY_EDITOR
+                DataVisualizer.LogReorderDebug(
+                    "PerformObjectDrop aborted: displayed object list empty"
+                );
+#endif
                 return;
             }
 
             Type selectedType = _dataVisualizer._namespaceController.SelectedType;
             if (selectedType == null)
             {
+#if UNITY_EDITOR
+                DataVisualizer.LogReorderDebug("PerformObjectDrop aborted: no selected type");
+#endif
                 return;
             }
 
@@ -433,6 +451,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             {
                 globalTargetIndex = Mathf.Max(0, globalTargetIndex - 1);
             }
+#if UNITY_EDITOR
+            DataVisualizer.LogReorderDebug(
+                $"Publishing ObjectReorderRequestedEvent type={selectedType.FullName} sourceIndex={sourceIndex} targetIndex={globalTargetIndex}"
+            );
+#endif
             VisualizerSessionState.DragState dragState = _dataVisualizer.SessionState.Drag;
             _eventHub?.Publish(
                 new ObjectReorderRequestedEvent(

@@ -40,6 +40,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
                 IDisposable subscription = command.Subscribe(eventHub);
                 _subscriptions.Add(subscription);
             }
+
+#if UNITY_EDITOR
+            DataVisualizer.LogReorderDebug(
+                "ObjectCommandDispatcher initialized with reorder command subscription"
+            );
+#endif
         }
 
         public void Dispose()

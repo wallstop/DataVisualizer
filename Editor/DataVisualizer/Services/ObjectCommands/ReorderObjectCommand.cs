@@ -16,6 +16,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
         {
             if (evt == null)
             {
+#if UNITY_EDITOR
+                DataVisualizer.LogReorderDebug("ReorderObjectCommand aborted: event was null");
+#endif
                 return;
             }
 
@@ -23,6 +26,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
             Type targetType = evt.TargetType;
             if (draggedObject == null || targetType == null)
             {
+#if UNITY_EDITOR
+                DataVisualizer.LogReorderDebug(
+                    "ReorderObjectCommand aborted: dragged object or target type null"
+                );
+#endif
                 return;
             }
 
@@ -30,12 +38,27 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
             ObjectListState listState = dataVisualizer.ObjectListState;
             if (listState == null)
             {
+#if UNITY_EDITOR
+                DataVisualizer.LogReorderDebug(
+                    "ReorderObjectCommand aborted: object list state null"
+                );
+#endif
                 return;
             }
 
+#if UNITY_EDITOR
+            DataVisualizer.LogReorderDebug(
+                $"ReorderObjectCommand executing for type '{targetType.FullName}'"
+            );
+#endif
             int filteredCount = listState.FilteredObjectsBuffer.Count;
             if (filteredCount == 0)
             {
+#if UNITY_EDITOR
+                DataVisualizer.LogReorderDebug(
+                    "ReorderObjectCommand aborted: filtered object list empty"
+                );
+#endif
                 return;
             }
 
@@ -49,6 +72,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
             int sourceIndex = listState.FilteredObjectsBuffer.IndexOf(draggedObject);
             if (sourceIndex < 0)
             {
+#if UNITY_EDITOR
+                DataVisualizer.LogReorderDebug(
+                    "ReorderObjectCommand aborted: dragged object not found in filtered list"
+                );
+#endif
                 return;
             }
 
