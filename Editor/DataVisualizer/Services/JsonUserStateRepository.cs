@@ -28,7 +28,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             }
 
             _userStateFilePath = userStateFilePath;
-            _saveScheduler = saveScheduler ?? throw new ArgumentNullException(nameof(saveScheduler));
+            _saveScheduler =
+                saveScheduler ?? throw new ArgumentNullException(nameof(saveScheduler));
         }
 
         public DataVisualizerSettings LoadSettings()
@@ -88,14 +89,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
             _settingsCache = settings;
             settings.MarkDirty();
-            if (_saveScheduler != null)
-            {
-                _saveScheduler.ScheduleAssetDatabaseSave();
-            }
-            else
-            {
-                AssetDatabase.SaveAssets();
-            }
+            _saveScheduler.ScheduleAssetDatabaseSave();
         }
 
         public void SaveUserState(DataVisualizerUserState userState)
@@ -114,10 +108,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                     _jsonSavePending = true;
                     _saveScheduler.Schedule(WriteUserStateToDisk);
                 }
-            }
-            else
-            {
-                WriteUserStateToDisk();
             }
         }
 

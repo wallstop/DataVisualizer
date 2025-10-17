@@ -1259,7 +1259,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 try
                 {
                     AssetDatabase.CreateAsset(settings, SettingsDefaultPath);
-                    AssetDatabase.SaveAssets();
+                    DataVisualizer activeWindow = Instance;
+                    if (activeWindow != null)
+                    {
+                        activeWindow.ScheduleAssetDatabaseSave();
+                    }
+                    else
+                    {
+                        using ScriptableAssetSaveScheduler scheduler =
+                            new ScriptableAssetSaveScheduler();
+                        scheduler.ScheduleAssetDatabaseSave();
+                        scheduler.Flush();
+                    }
                     AssetDatabase.Refresh();
                     DataVisualizerSettings newSettings =
                         AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(SettingsDefaultPath);
@@ -2475,9 +2486,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 DataVisualizerSettings localSettings = Settings;
                 localSettings.persistStateInSettingsAsset = newModeIsSettingsAsset;
                 MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset);
-                localSettings.MarkDirty();
-                AssetDatabase.SaveAssets();
-                _dependencies?.UserStateRepository?.SaveUserState(UserState);
+                _dependencies?.UserStateRepository?.SaveSettings(localSettings);
             });
             contentWrapper.Add(prefsToggle);
 
@@ -3045,8 +3054,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Debug.Log($"Updating Data Folder from '{settings.DataFolderPath}' to '{relativePath}'");
             settings._dataFolderPath = relativePath;
-            settings.MarkDirty();
-            AssetDatabase.SaveAssets();
+            _dependencies?.UserStateRepository?.SaveSettings(settings);
             displayField.text = settings.DataFolderPath;
         }
 
@@ -3268,7 +3276,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 creatable = null;
             }
             AssetDatabase.CreateAsset(instance, uniquePath);
-            AssetDatabase.SaveAssets();
+            ScheduleAssetDatabaseSave();
             creatable?.AfterCreate();
             RefreshMetadataForObject(instance);
 
@@ -3344,7 +3352,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             string error = AssetDatabase.RenameAsset(originalPath, newName);
             if (string.IsNullOrWhiteSpace(error))
             {
-                AssetDatabase.SaveAssets();
+                ScheduleAssetDatabaseSave();
                 renamable?.AfterRename(newName);
                 Debug.Log($"Asset renamed successfully to: {newName}");
                 RefreshMetadataForObject(original);
@@ -3434,7 +3442,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
-            AssetDatabase.SaveAssets();
+            ScheduleAssetDatabaseSave();
             if (!string.IsNullOrWhiteSpace(errorMessage))
             {
                 Debug.LogError(
@@ -5454,6 +5462,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             return _saveScheduler;
         }
 
+        internal void ScheduleAssetDatabaseSave()
+        {
+            ScriptableAssetSaveScheduler scheduler = EnsureSaveScheduler();
+            if (scheduler != null)
+            {
+                scheduler.ScheduleAssetDatabaseSave();
+            }
+        }
+
         private ScriptableAssetSaveScheduler GetActiveSaveScheduler()
         {
             if (_dependencies != null && _dependencies.SaveScheduler != null)
@@ -6903,7 +6920,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
                 EditorUtility.SetDirty(_selectedObject);
-                AssetDatabase.SaveAssets();
+                ScheduleAssetDatabaseSave();
                 RefreshMetadataForObject(_selectedObject);
                 PopulateProjectUniqueLabelsCache(force: true);
                 _inspectorNewLabelInput.SetValueWithoutNotify("");
@@ -6937,7 +6954,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     AssetDatabase.SetLabels(_selectedObject, updatedLabels);
                     EditorUtility.SetDirty(_selectedObject);
-                    AssetDatabase.SaveAssets();
+                    ScheduleAssetDatabaseSave();
                     RefreshMetadataForObject(_selectedObject);
                     PopulateProjectUniqueLabelsCache(force: true);
                     PopulateInspectorLabelsUI();
@@ -7026,7 +7043,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     duplicable.BeforeClone(originalObject);
                 }
                 AssetDatabase.CreateAsset(cloneInstance, uniquePath);
-                AssetDatabase.SaveAssets();
+                ScheduleAssetDatabaseSave();
 
                 ScriptableObject cloneAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
                     uniquePath
@@ -8380,8 +8397,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (settings.persistStateInSettingsAsset)
                 {
                     settings.HydrateFrom(imported);
-                    settings.MarkDirty();
-                    AssetDatabase.SaveAssets();
+                    _dependencies?.UserStateRepository?.SaveSettings(settings);
                 }
                 else
                 {
@@ -8499,14 +8515,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (migrateToSettingsAsset)
                 {
                     settings.HydrateFrom(userState);
-                    settings.MarkDirty();
-                    AssetDatabase.SaveAssets();
+                    _dependencies?.UserStateRepository?.SaveSettings(settings);
                     Debug.Log("Migration to Settings Object complete.");
                 }
                 else
                 {
                     userState.HydrateFrom(settings);
-                    MarkUserStateDirty();
+                    _dependencies?.UserStateRepository?.SaveUserState(userState);
+                    _dependencies?.UserStateRepository?.SaveSettings(settings);
                     Debug.Log("Migration to User File complete.");
                 }
             }

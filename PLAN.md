@@ -11,15 +11,15 @@
 
 ## 2. Search & Filtering Improvements
 - [x] Introduce configurable **fuzzy matching** options (threshold, scoring display) leveraging `SearchService`. _(Completed – search popover exposes fuzzy toggle, threshold slider, and confidence badges synced to settings)_
-- [ ] Highlight match quality in the search popover (confidence badges, keyboard shortcut legend).
+- [x] Highlight match quality in the search popover (confidence badges, keyboard shortcut legend). _(Completed – badges rendered per result with confidence legend in popover)_
 - [x] Add quick filters in the namespace pane (namespace + label chips) that sync with `VisualizerSessionState`. _(Completed – namespace chip, label removal actions, and logic toggle update session state)_
 - [x] Expand tests to cover fuzzy search behaviour and combined filters. _(Completed – editor tests validate popover controls and filter chips)_
 
 ## 3. Batched Save/Update Pipeline
-- [ ] Audit all calls to `AssetDatabase.SaveAssets()` and replace them with scheduler-driven hooks.
-- [ ] Extend `ScriptableAssetSaveScheduler` with diagnostics (queued operations, last flush time) and unit tests.
-- [ ] Ensure persistence interfaces (`IUserStateRepository` / settings popover) fully own save semantics; no direct editor API calls from controllers/wrapper window.
-- [ ] Add integration tests that validate debounce/flush behaviour under rapid edits.
+- [x] Audit all calls to `AssetDatabase.SaveAssets()` and replace them with scheduler-driven hooks. _(Completed – runtime paths now queue saves through `ScriptableAssetSaveScheduler`)_
+- [x] Extend `ScriptableAssetSaveScheduler` with diagnostics (queued operations, last flush time) and unit tests. _(Completed – scheduler exposes diagnostics with editor tests)_
+- [x] Ensure persistence interfaces (`IUserStateRepository` / settings popover) fully own save semantics; no direct editor API calls from controllers/wrapper window. _(Completed – settings/user state writes now route through repositories)_
+- [x] Add integration tests that validate debounce/flush behaviour under rapid edits. _(Completed – repository and scheduler tests cover debounced flush)_
 
 ## 4. Undo / Redo Support
 - [ ] Wrap object list operations (create, rename, reorder, label changes) with `Undo.RecordObject` + descriptive action names.

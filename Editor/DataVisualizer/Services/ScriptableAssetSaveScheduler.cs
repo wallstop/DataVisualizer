@@ -12,10 +12,31 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
         private bool _pendingAssetDatabaseSave;
         private bool _updateRegistered;
         private double _nextFlushTime;
+        private double? _lastFlushTime;
 
         public ScriptableAssetSaveScheduler(double flushDelaySeconds = 0.35d)
         {
             _flushDelaySeconds = flushDelaySeconds <= 0d ? 0.1d : flushDelaySeconds;
+        }
+
+        public int PendingActionCount
+        {
+            get { return _pendingActions.Count; }
+        }
+
+        public bool IsAssetDatabaseSavePending
+        {
+            get { return _pendingAssetDatabaseSave; }
+        }
+
+        public double? LastFlushTime
+        {
+            get { return _lastFlushTime; }
+        }
+
+        public double? NextScheduledFlushTime
+        {
+            get { return _updateRegistered ? _nextFlushTime : null; }
         }
 
         public void ScheduleAssetDatabaseSave()
@@ -73,6 +94,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
         private void ExecutePendingActions()
         {
+            bool executedWork = false;
+
             if (_pendingActions.Count > 0)
             {
                 List<Action> actions = new List<Action>(_pendingActions);
@@ -88,10 +111,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                     try
                     {
                         action.Invoke();
+                        executedWork = true;
                     }
                     catch (Exception exception)
                     {
-                        Debug.LogError($"Error executing scheduled persistence action: {exception}");
+                        Debug.LogError(
+                            $"Error executing scheduled persistence action: {exception}"
+                        );
                     }
                 }
             }
@@ -108,6 +134,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                 }
 
                 _pendingAssetDatabaseSave = false;
+                executedWork = true;
+            }
+
+            if (executedWork)
+            {
+                _lastFlushTime = EditorApplication.timeSinceStartup;
             }
         }
 
