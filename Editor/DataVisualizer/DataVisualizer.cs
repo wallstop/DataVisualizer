@@ -259,6 +259,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal TwoPaneSplitView _outerSplitView;
         internal TwoPaneSplitView _innerSplitView;
         internal VisualElement _namespaceColumnElement;
+        internal VisualElement _namespaceFilterContainer;
         internal Label _namespaceColumnLabel;
         internal TextField _assetNameTextField;
         internal VisualElement _objectColumnElement;
@@ -483,6 +484,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _assetService = _dependencies.AssetService;
             _searchService ??= new SearchService(_assetService);
+            UpdateSearchOptionsFromSettings();
             _searchPopoverController ??= new SearchPopoverController(this, _searchService);
             _eventHub = _dependencies.EventHub;
             bool telemetryEnabled =
@@ -2722,6 +2724,151 @@ namespace WallstopStudios.DataVisualizer.Editor
             });
             contentWrapper.Add(defaultLogicField);
 
+            bool fuzzyEnabled = ShouldUseFuzzySearch();
+            ActionButtonToggle fuzzyToggle = new ActionButtonToggle(
+                fuzzyEnabled ? "Disable Fuzzy Search: " : "Enable Fuzzy Search: ",
+                value =>
+                {
+                    if (fuzzyToggle != null)
+                    {
+                        fuzzyToggle.Label = value
+                            ? "Disable Fuzzy Search: "
+                            : "Enable Fuzzy Search: ";
+                    }
+                }
+            )
+            {
+                value = fuzzyEnabled,
+            };
+            fuzzyToggle.AddToClassList("settings-prefs-toggle");
+            contentWrapper.Add(fuzzyToggle);
+
+            Slider fuzzyThresholdSlider = new Slider("Fuzzy Match Threshold", 0.3f, 1f)
+            {
+                value = GetFuzzyMatchThreshold(),
+            };
+            fuzzyThresholdSlider.AddToClassList("settings-slider");
+            fuzzyThresholdSlider.SetEnabled(fuzzyEnabled);
+            contentWrapper.Add(fuzzyThresholdSlider);
+
+            fuzzyToggle.RegisterValueChangedCallback(evt =>
+            {
+                bool newValue = evt.newValue;
+                if (newValue == ShouldUseFuzzySearch())
+                {
+                    return;
+                }
+
+                PersistSettings(
+                    assetSettings =>
+                    {
+                        if (assetSettings.enableFuzzySearch == newValue)
+                        {
+                            return false;
+                        }
+
+                        assetSettings.enableFuzzySearch = newValue;
+                        return true;
+                    },
+                    userState =>
+                    {
+                        if (userState.enableFuzzySearch == newValue)
+                        {
+                            return false;
+                        }
+
+                        userState.enableFuzzySearch = newValue;
+                        return true;
+                    }
+                );
+
+                fuzzyThresholdSlider.SetEnabled(newValue);
+                UpdateSearchOptionsFromSettings();
+            });
+
+            fuzzyThresholdSlider.RegisterValueChangedCallback(evt =>
+            {
+                float newValue = Mathf.Clamp(evt.newValue, 0.3f, 1f);
+                if (Mathf.Approximately(newValue, GetFuzzyMatchThreshold()))
+                {
+                    return;
+                }
+
+                PersistSettings(
+                    assetSettings =>
+                    {
+                        if (Mathf.Approximately(assetSettings.fuzzyMatchThreshold, newValue))
+                        {
+                            return false;
+                        }
+
+                        assetSettings.fuzzyMatchThreshold = newValue;
+                        return true;
+                    },
+                    userState =>
+                    {
+                        if (Mathf.Approximately(userState.fuzzyMatchThreshold, newValue))
+                        {
+                            return false;
+                        }
+
+                        userState.fuzzyMatchThreshold = newValue;
+                        return true;
+                    }
+                );
+
+                UpdateSearchOptionsFromSettings();
+            });
+
+            ActionButtonToggle searchScoresToggle = new ActionButtonToggle(
+                ShouldShowSearchScores() ? "Hide Search Scores: " : "Show Search Scores: ",
+                value =>
+                {
+                    if (searchScoresToggle != null)
+                    {
+                        searchScoresToggle.Label = value
+                            ? "Hide Search Scores: "
+                            : "Show Search Scores: ";
+                    }
+                }
+            )
+            {
+                value = ShouldShowSearchScores(),
+            };
+            searchScoresToggle.AddToClassList("settings-prefs-toggle");
+            searchScoresToggle.RegisterValueChangedCallback(evt =>
+            {
+                bool newValue = evt.newValue;
+                if (newValue == ShouldShowSearchScores())
+                {
+                    return;
+                }
+
+                PersistSettings(
+                    assetSettings =>
+                    {
+                        if (assetSettings.showSearchScores == newValue)
+                        {
+                            return false;
+                        }
+
+                        assetSettings.showSearchScores = newValue;
+                        return true;
+                    },
+                    userState =>
+                    {
+                        if (userState.showSearchScores == newValue)
+                        {
+                            return false;
+                        }
+
+                        userState.showSearchScores = newValue;
+                        return true;
+                    }
+                );
+            });
+            contentWrapper.Add(searchScoresToggle);
+
             VisualElement separator = new()
             {
                 style =
@@ -3691,6 +3838,23 @@ namespace WallstopStudios.DataVisualizer.Editor
             addButtonHeader.Add(_addTypesFromScriptFolderButton);
             namespaceColumn.Add(nsHeader);
 
+            _namespaceFilterContainer = new VisualElement
+            {
+                name = "namespace-filter-container",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    flexWrap = Wrap.Wrap,
+                    gap = 4,
+                    paddingLeft = 6,
+                    paddingRight = 6,
+                    paddingTop = 4,
+                    paddingBottom = 4,
+                },
+            };
+            _namespaceFilterContainer.AddToClassList("namespace-filter-container");
+            namespaceColumn.Add(_namespaceFilterContainer);
+
             _typeSearchField = new TextField { name = "type-search-field" };
             _typeSearchField.AddToClassList("type-search-field");
             _typeSearchField.SetPlaceholderText(SearchPlaceholder, changeValueOnFocus: false);
@@ -4532,6 +4696,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             PopulateLabelPillContainers();
             ApplyLabelFilter();
+            _namespacePanelController?.RenderActiveFilters();
         }
 
         internal void ClearLabelFilterUI()
@@ -4540,6 +4705,18 @@ namespace WallstopStudios.DataVisualizer.Editor
             _andLabelsContainer?.Clear();
             _orLabelsContainer?.Clear();
             _currentUniqueLabelsForType.Clear();
+        }
+
+        internal void ClearAllLabelFilters()
+        {
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null)
+            {
+                return;
+            }
+
+            _labelService?.ClearFilters(selectedType);
+            UpdateLabelAreaAndFilter();
         }
 
         internal List<string> GetCurrentlyAvailableLabels()
@@ -7991,6 +8168,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             return UserState.showShortcutHints;
         }
 
+        internal bool ShouldShowSearchScores()
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                return settings.showSearchScores;
+            }
+
+            return UserState.showSearchScores;
+        }
+
         internal bool ShouldShowDragModifierHints()
         {
             DataVisualizerSettings settings = Settings;
@@ -8000,6 +8188,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             return UserState.showDragModifierHints;
+        }
+
+        internal bool ShouldSelectActiveObject()
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                return settings.selectActiveObject;
+            }
+
+            return UserState.selectActiveObject;
         }
 
         internal ProcessorLogic GetDefaultProcessorLogic()
@@ -8012,6 +8211,37 @@ namespace WallstopStudios.DataVisualizer.Editor
 #pragma warning disable CS0618
             return logic == ProcessorLogic.None ? ProcessorLogic.Filtered : logic;
 #pragma warning restore CS0618
+        }
+
+        internal bool ShouldUseFuzzySearch()
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                return settings.enableFuzzySearch;
+            }
+
+            return UserState.enableFuzzySearch;
+        }
+
+        internal float GetFuzzyMatchThreshold()
+        {
+            DataVisualizerSettings settings = Settings;
+            float threshold = settings.persistStateInSettingsAsset
+                ? settings.fuzzyMatchThreshold
+                : UserState.fuzzyMatchThreshold;
+            return Mathf.Clamp(threshold, 0.3f, 1f);
+        }
+
+        private void UpdateSearchOptionsFromSettings()
+        {
+            if (_searchService == null)
+            {
+                return;
+            }
+
+            _searchService.EnableFuzzyMatching = ShouldUseFuzzySearch();
+            _searchService.FuzzyMatchThreshold = GetFuzzyMatchThreshold();
         }
 
         private void ExportUserStateToJson()
@@ -8159,6 +8389,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 _dependencies?.RefreshUserState();
+                UpdateSearchOptionsFromSettings();
                 ReloadUiFromPersistence();
             }
             catch (Exception exception)

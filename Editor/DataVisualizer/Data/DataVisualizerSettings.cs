@@ -156,7 +156,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             showDragModifierHints = userState.showDragModifierHints;
             defaultProcessorLogic = userState.defaultProcessorLogic;
             enableFuzzySearch = userState.enableFuzzySearch;
-            fuzzyMatchThreshold = userState.fuzzyMatchThreshold;
+            fuzzyMatchThreshold = Mathf.Clamp(userState.fuzzyMatchThreshold, 0.3f, 1f);
             showSearchScores = userState.showSearchScores;
             MarkDirty();
         }

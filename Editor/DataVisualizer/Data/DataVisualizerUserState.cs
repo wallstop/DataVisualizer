@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using UnityEngine;
     using Data;
 
     [Serializable]
@@ -65,7 +66,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             showDragModifierHints = settings.showDragModifierHints;
             defaultProcessorLogic = settings.defaultProcessorLogic;
             enableFuzzySearch = settings.enableFuzzySearch;
-            fuzzyMatchThreshold = settings.fuzzyMatchThreshold;
+            fuzzyMatchThreshold = Mathf.Clamp(settings.fuzzyMatchThreshold, 0.3f, 1f);
             showSearchScores = settings.showSearchScores;
         }
 

@@ -16,6 +16,7 @@ Open the gear icon to configure the tooling:
 - Toggle persistence mode (Settings asset vs. per-user JSON), enable/disable shortcut and drag hints, and set the default processor logic.
 - Export or import user state as JSON to share presets across machines; the import flow reloads the window automatically.
 - Reset user state – useful when onboarding a teammate or clearing stale preferences.
+- Configure search behaviour (fuzzy matching threshold, result scoring) to tune responsiveness vs. strictness for large datasets.
 
 ## Architectural Overview
 

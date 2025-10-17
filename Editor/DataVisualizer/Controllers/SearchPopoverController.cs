@@ -184,6 +184,27 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 typeLabel.AddToClassList(Styles.StyleConstants.ClickableClass);
                 row.Add(typeLabel);
 
+                if (_dataVisualizer.ShouldShowSearchScores())
+                {
+                    int percent = Mathf.RoundToInt(result.MatchInfo.highestScore * 100f);
+                    Label scoreLabel = new Label($"{percent}%")
+                    {
+                        style =
+                        {
+                            unityFontStyleAndWeight = FontStyle.Bold,
+                            color =
+                                percent >= 90
+                                    ? new Color(0.2f, 0.7f, 0.2f)
+                                    : new Color(0.6f, 0.6f, 0.6f),
+                            marginLeft = 6,
+                            minWidth = 40,
+                            unityTextAlign = TextAnchor.MiddleRight,
+                        },
+                    };
+                    scoreLabel.AddToClassList("search-result-score-label");
+                    row.Add(scoreLabel);
+                }
+
                 resultItem.Add(row);
 
                 if (!matchInfo.MatchInPrimaryField)

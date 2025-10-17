@@ -61,6 +61,102 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             WireNamespaceInteractions();
             SynchronizeNamespaceState();
+            RenderActiveFilters();
+        }
+
+        internal void RenderActiveFilters()
+        {
+            VisualElement filterContainer = _dataVisualizer._namespaceFilterContainer;
+            if (filterContainer == null)
+            {
+                return;
+            }
+
+            filterContainer.Clear();
+
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null)
+            {
+                filterContainer.style.display = DisplayStyle.None;
+                return;
+            }
+
+            VisualizerSessionState.LabelFilterState labelsState = _sessionState.Labels;
+            if (labelsState.AndLabels.Count == 0 && labelsState.OrLabels.Count == 0)
+            {
+                filterContainer.style.display = DisplayStyle.None;
+                return;
+            }
+
+            filterContainer.style.display = DisplayStyle.Flex;
+
+            Label title = new Label("Active Filters:")
+            {
+                style = { unityFontStyleAndWeight = FontStyle.Bold, marginRight = 4 },
+            };
+            filterContainer.Add(title);
+
+            AddFilterChips(filterContainer, "AND", labelsState.AndLabels, "and");
+            AddFilterChips(filterContainer, "OR", labelsState.OrLabels, "or");
+
+            Label combinationLabel = new Label(
+                labelsState.CombinationType == LabelCombinationType.Or ? "Logic: OR" : "Logic: AND"
+            )
+            {
+                style =
+                {
+                    unityFontStyleAndWeight = FontStyle.Italic,
+                    color = new Color(0.6f, 0.6f, 0.6f),
+                    marginLeft = 4,
+                },
+            };
+            filterContainer.Add(combinationLabel);
+
+            Button clearButton = new Button(() => _dataVisualizer.ClearAllLabelFilters())
+            {
+                text = "Clear",
+                tooltip = "Remove all label filters",
+            };
+            clearButton.AddToClassList("namespace-filter-clear-button");
+            clearButton.AddToClassList(StyleConstants.ClickableClass);
+            filterContainer.Add(clearButton);
+        }
+
+        private static void AddFilterChips(
+            VisualElement container,
+            string prefix,
+            IReadOnlyList<string> labels,
+            string styleSuffix
+        )
+        {
+            if (labels == null || labels.Count == 0)
+            {
+                return;
+            }
+
+            for (int index = 0; index < labels.Count; index++)
+            {
+                string labelText = labels[index];
+                if (string.IsNullOrWhiteSpace(labelText))
+                {
+                    continue;
+                }
+
+                Label chip = new Label($"{prefix}: {labelText}")
+                {
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Normal,
+                        paddingLeft = 6,
+                        paddingRight = 6,
+                        paddingTop = 2,
+                        paddingBottom = 2,
+                    },
+                };
+                chip.AddToClassList("namespace-filter-chip");
+                chip.AddToClassList($"namespace-filter-chip-{styleSuffix}");
+                container.Add(chip);
+            }
         }
 
         public void ToggleNamespaceCollapse(string namespaceKey)

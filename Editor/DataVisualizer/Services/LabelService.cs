@@ -173,6 +173,41 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             return _assetService.EnumerateLabels(type);
         }
 
+        public void ClearFilters(Type type)
+        {
+            if (type == null)
+            {
+                return;
+            }
+
+            TypeLabelFilterConfig config = GetOrCreateConfig(type);
+            if (config == null)
+            {
+                return;
+            }
+
+            bool changed = false;
+            if (config.andLabels.Count > 0)
+            {
+                config.andLabels.Clear();
+                changed = true;
+            }
+
+            if (config.orLabels.Count > 0)
+            {
+                config.orLabels.Clear();
+                changed = true;
+            }
+
+            if (!changed)
+            {
+                return;
+            }
+
+            SaveConfig(config);
+            UpdateSessionState(type, config, _sessionState);
+        }
+
         private static bool EvaluateMatch(
             HashSet<string> labelSet,
             IReadOnlyList<string> andLabels,

@@ -26,18 +26,29 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
         private readonly IDataAssetService _assetService;
         private readonly List<string> _managedGuids = new List<string>();
+        private bool _enableFuzzyMatching = true;
+        private float _fuzzyMatchThreshold = 0.6f;
 
         public SearchService(IDataAssetService assetService)
         {
             _assetService = assetService ?? throw new ArgumentNullException(nameof(assetService));
         }
 
+        public bool EnableFuzzyMatching
+        {
+            get { return _enableFuzzyMatching; }
+            set { _enableFuzzyMatching = value; }
+        }
+
+        public float FuzzyMatchThreshold
+        {
+            get { return _fuzzyMatchThreshold; }
+            set { _fuzzyMatchThreshold = Mathf.Clamp01(value); }
+        }
+
         public IReadOnlyList<string> AllManagedGuids
         {
-            get
-            {
-                return _managedGuids;
-            }
+            get { return _managedGuids; }
         }
 
         public void PopulateSearchCache(IEnumerable<Type> managedTypes, bool forceRebuild)
@@ -47,9 +58,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                 return;
             }
 
-            List<Type> typeList = managedTypes != null
-                ? managedTypes.Where(type => type != null).Distinct().ToList()
-                : new List<Type>();
+            List<Type> typeList =
+                managedTypes != null
+                    ? managedTypes.Where(type => type != null).Distinct().ToList()
+                    : new List<Type>();
 
             _assetService.ConfigureTrackedTypes(typeList);
             if (forceRebuild)
@@ -128,13 +140,27 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                 }
             }
 
+            results.Sort(
+                (lhs, rhs) =>
+                {
+                    int scoreCompare = rhs.MatchInfo.highestScore.CompareTo(
+                        lhs.MatchInfo.highestScore
+                    );
+                    if (scoreCompare != 0)
+                    {
+                        return scoreCompare;
+                    }
+
+                    string leftName = lhs.Metadata?.DisplayName ?? string.Empty;
+                    string rightName = rhs.Metadata?.DisplayName ?? string.Empty;
+                    return string.Compare(leftName, rightName, StringComparison.OrdinalIgnoreCase);
+                }
+            );
+
             return results;
         }
 
-        private static SearchResultMatchInfo CheckMatch(
-            DataAssetMetadata metadata,
-            string[] searchTerms
-        )
+        private SearchResultMatchInfo CheckMatch(DataAssetMetadata metadata, string[] searchTerms)
         {
             SearchResultMatchInfo matchInfo = new SearchResultMatchInfo();
             if (metadata == null || searchTerms == null || searchTerms.Length == 0)
@@ -146,6 +172,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             string typeName = metadata.AssetType?.Name ?? string.Empty;
             string guid = metadata.Guid ?? string.Empty;
             ScriptableObject loadedAsset = null;
+            float highestScore = 0f;
 
             for (int termIndex = 0; termIndex < searchTerms.Length; termIndex++)
             {
@@ -158,47 +185,29 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                 bool termMatched = false;
                 List<MatchDetail> termDetails = new List<MatchDetail>();
 
-                if (
-                    !string.IsNullOrEmpty(objectName)
-                    && objectName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    MatchDetail detail = new MatchDetail(term)
-                    {
-                        fieldName = MatchSource.ObjectName,
-                        matchedValue = objectName,
-                    };
-                    termDetails.Add(detail);
-                    termMatched = true;
-                }
+                termMatched |= TryAddContainsMatch(
+                    objectName,
+                    term,
+                    MatchSource.ObjectName,
+                    termDetails,
+                    ref highestScore
+                );
 
-                if (
-                    !string.IsNullOrEmpty(typeName)
-                    && typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    MatchDetail detail = new MatchDetail(term)
-                    {
-                        fieldName = MatchSource.TypeName,
-                        matchedValue = typeName,
-                    };
-                    termDetails.Add(detail);
-                    termMatched = true;
-                }
+                termMatched |= TryAddContainsMatch(
+                    typeName,
+                    term,
+                    MatchSource.TypeName,
+                    termDetails,
+                    ref highestScore
+                );
 
-                if (
-                    !string.IsNullOrWhiteSpace(guid)
-                    && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    MatchDetail detail = new MatchDetail(term)
-                    {
-                        fieldName = MatchSource.Guid,
-                        matchedValue = guid,
-                    };
-                    termDetails.Add(detail);
-                    termMatched = true;
-                }
+                termMatched |= TryAddContainsMatch(
+                    guid,
+                    term,
+                    MatchSource.Guid,
+                    termDetails,
+                    ref highestScore
+                );
 
                 if (!termMatched)
                 {
@@ -215,10 +224,31 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                         if (reflectedMatch != null)
                         {
                             reflectedMatch.matchedTerms.Add(term);
+                            reflectedMatch.score = 1f;
                             termDetails.Add(reflectedMatch);
                             termMatched = true;
+                            highestScore = Mathf.Max(highestScore, reflectedMatch.score);
                         }
                     }
+                }
+
+                if (!termMatched && _enableFuzzyMatching)
+                {
+                    termMatched |= TryAddFuzzyMatch(
+                        objectName,
+                        term,
+                        MatchSource.ObjectName,
+                        termDetails,
+                        ref highestScore
+                    );
+
+                    termMatched |= TryAddFuzzyMatch(
+                        typeName,
+                        term,
+                        MatchSource.TypeName,
+                        termDetails,
+                        ref highestScore
+                    );
                 }
 
                 if (termMatched)
@@ -228,7 +258,141 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                 }
             }
 
+            matchInfo.highestScore = highestScore;
             return matchInfo;
+        }
+
+        private bool TryAddContainsMatch(
+            string source,
+            string term,
+            string fieldName,
+            List<MatchDetail> details,
+            ref float highestScore
+        )
+        {
+            if (string.IsNullOrEmpty(source) || string.IsNullOrWhiteSpace(term))
+            {
+                return false;
+            }
+
+            if (!source.Contains(term, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            MatchDetail detail = new MatchDetail(term)
+            {
+                fieldName = fieldName,
+                matchedValue = source,
+                score = 1f,
+            };
+            details.Add(detail);
+            highestScore = Mathf.Max(highestScore, detail.score);
+            return true;
+        }
+
+        private bool TryAddFuzzyMatch(
+            string source,
+            string term,
+            string fieldName,
+            List<MatchDetail> details,
+            ref float highestScore
+        )
+        {
+            if (!_enableFuzzyMatching)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(term))
+            {
+                return false;
+            }
+
+            float score = CalculateFuzzyScore(source, term);
+            if (score < _fuzzyMatchThreshold)
+            {
+                return false;
+            }
+
+            MatchDetail detail = new MatchDetail(term)
+            {
+                fieldName = fieldName,
+                matchedValue = source,
+                score = score,
+            };
+            details.Add(detail);
+            highestScore = Mathf.Max(highestScore, score);
+            return true;
+        }
+
+        private static float CalculateFuzzyScore(string source, string term)
+        {
+            if (string.IsNullOrEmpty(source) && string.IsNullOrEmpty(term))
+            {
+                return 1f;
+            }
+
+            if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(term))
+            {
+                return 0f;
+            }
+
+            string lowerSource = source.ToLowerInvariant();
+            string lowerTerm = term.ToLowerInvariant();
+
+            int distance = ComputeLevenshteinDistance(lowerSource, lowerTerm);
+            int maxLength = Mathf.Max(lowerSource.Length, lowerTerm.Length);
+            if (maxLength == 0)
+            {
+                return 1f;
+            }
+
+            return 1f - distance / (float)maxLength;
+        }
+
+        private static int ComputeLevenshteinDistance(string source, string target)
+        {
+            int sourceLength = source.Length;
+            int targetLength = target.Length;
+
+            if (sourceLength == 0)
+            {
+                return targetLength;
+            }
+
+            if (targetLength == 0)
+            {
+                return sourceLength;
+            }
+
+            int[] previous = new int[targetLength + 1];
+            int[] current = new int[targetLength + 1];
+
+            for (int index = 0; index <= targetLength; index++)
+            {
+                previous[index] = index;
+            }
+
+            for (int sourceIndex = 1; sourceIndex <= sourceLength; sourceIndex++)
+            {
+                current[0] = sourceIndex;
+                for (int targetIndex = 1; targetIndex <= targetLength; targetIndex++)
+                {
+                    int cost = source[sourceIndex - 1] == target[targetIndex - 1] ? 0 : 1;
+
+                    current[targetIndex] = Math.Min(
+                        Math.Min(current[targetIndex - 1] + 1, previous[targetIndex] + 1),
+                        previous[targetIndex - 1] + cost
+                    );
+                }
+
+                int[] temp = previous;
+                previous = current;
+                current = temp;
+            }
+
+            return previous[targetLength];
         }
 
         private static MatchDetail SearchStringProperties(
@@ -291,6 +455,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                             {
                                 fieldName = field.Name,
                                 matchedValue = stringValue,
+                                score = 1f,
                             };
                             return detail;
                         }
