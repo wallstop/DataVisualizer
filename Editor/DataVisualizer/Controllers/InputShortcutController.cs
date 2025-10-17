@@ -70,14 +70,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
-            if (_dataVisualizer._activePopover == _dataVisualizer._inspectorLabelSuggestionsPopover)
+            if (_dataVisualizer.IsPopoverActive(DataVisualizer.InspectorLabelSuggestionsPopoverId))
             {
                 _dataVisualizer.HandleNewLabelInputKeyDown(evt);
                 return;
             }
 
-            VisualElement activePopover =
-                _dataVisualizer._activeNestedPopover ?? _dataVisualizer._activePopover;
+            VisualElement activePopover = _dataVisualizer.GetActivePopoverElement();
             if (activePopover != null && activePopover.style.display == DisplayStyle.Flex)
             {
                 switch (evt.keyCode)
@@ -95,21 +94,21 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     case KeyCode.KeypadEnter:
                     {
                         if (
-                            _dataVisualizer._lastActiveFocusArea
+                            _dataVisualizer.GetLastActiveFocusArea()
                             == DataVisualizer.FocusArea.SearchResultsPopover
                         )
                         {
-                            _dataVisualizer._lastEnterPressed = Time.realtimeSinceStartup;
+                            _dataVisualizer.RecordEnterPressed();
                             _dataVisualizer.HandleSearchKeyDown(evt);
                             return;
                         }
 
                         if (
-                            _dataVisualizer._lastActiveFocusArea
+                            _dataVisualizer.GetLastActiveFocusArea()
                             == DataVisualizer.FocusArea.AddTypePopover
                         )
                         {
-                            _dataVisualizer._lastEnterPressed = Time.realtimeSinceStartup;
+                            _dataVisualizer.RecordEnterPressed();
                             _dataVisualizer.HandleTypePopoverKeyDown(evt);
                             return;
                         }
@@ -149,7 +148,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 case KeyCode.DownArrow:
                 {
                     bool navigationHandled = false;
-                    switch (_dataVisualizer._lastActiveFocusArea)
+                    switch (_dataVisualizer.GetLastActiveFocusArea())
                     {
                         case DataVisualizer.FocusArea.TypeList:
                         {
@@ -172,7 +171,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 case KeyCode.UpArrow:
                 {
                     bool navigationHandled = false;
-                    switch (_dataVisualizer._lastActiveFocusArea)
+                    switch (_dataVisualizer.GetLastActiveFocusArea())
                     {
                         case DataVisualizer.FocusArea.TypeList:
                         {
@@ -202,8 +201,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
-            VisualElement activePopover =
-                _dataVisualizer._activeNestedPopover ?? _dataVisualizer._activePopover;
+            VisualElement activePopover = _dataVisualizer.GetActivePopoverElement();
             if (activePopover == null || activePopover.style.display != DisplayStyle.Flex)
             {
                 return;

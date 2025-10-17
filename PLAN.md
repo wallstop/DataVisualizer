@@ -74,11 +74,11 @@
 
 ### Priority 7 – Drag and Drop, Input, and Layout
 1. [x] Centralize drag state in `DragAndDropController`, coordinating namespace/type/object drags via the event hub. This controller can reuse pooled visuals and handle keyboard modifiers consistently (object drops now emit `ObjectReorderRequestedEvent` + `DragStateChangedEvent`, session state tracks active drag + modifier keys, and holding Shift/Ctrl while dragging snaps objects to the list start/end).
-2. [~] Introduce `InputShortcutController` to register global key bindings and dispatch high-level commands (NextType, PreviousType, ExecuteSearchConfirm) without referencing UI internals (controller now publishes type navigation via the event hub and owns popover escape handling; still relies on window focus state/search methods pending state refactors).
+2. [x] Introduce `InputShortcutController` to register global key bindings and dispatch high-level commands (NextType, PreviousType, ExecuteSearchConfirm) without referencing UI internals (controller now uses popover IDs tracked in session state, relies on DataVisualizer helpers instead of private fields, and continues to publish type navigation while handling popover escape/enter behavior).
 3. [x] Extract layout persistence (split view widths, window size) into `LayoutPersistenceService`, debouncing writes and exposing load/save methods invoked by the window lifecycle (implemented `LayoutPersistenceService` and migrated `DataVisualizer` to use it for EditorPrefs reads/writes and scheduled saves).
 
 ### Priority 8 – Cleanup and API Hardening
-1. [~] Remove obsolete fields and methods from `DataVisualizer`, exposing only minimal internal APIs needed by controllers (replaced obsolete `_settings` and `_userState` caches with internal session-driven state; legacy helpers still being trimmed). Update `package.json` if public surface changes.
+1. [x] Remove obsolete fields and methods from `DataVisualizer`, exposing only minimal internal APIs needed by controllers (dropped `_settings`/`_userState` caches + repository helpers in favor of dependency-backed accessors, added popover/shortcut helpers, and cleaned up namespace controller bootstrap). Update `package.json` if public surface changes.
 2. Delete legacy helper methods that migrated into services, ensuring old code paths are gone and tests cover new flows.
 3. Review accessibility of new types (`internal sealed` within editor assembly) and ensure runtime contracts remain stable.
 4. Update documentation (`README.md`) and AGENTS guidelines to reflect new architecture and extension points.

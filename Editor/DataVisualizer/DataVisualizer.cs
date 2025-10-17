@@ -48,6 +48,17 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal const string SettingsDefaultPath = "Assets/Editor/DataVisualizerSettings.asset";
         internal const string UserStateFileName = "DataVisualizerUserState.json";
 
+        internal const string SearchPopoverId = "search-popover";
+        internal const string TypeAddPopoverId = "type-add-popover";
+        internal const string InspectorLabelSuggestionsPopoverId =
+            "inspector-label-suggestions-popover";
+        internal const string SettingsPopoverId = "settings-popover";
+        internal const string CreatePopoverId = "create-popover";
+        internal const string RenamePopoverId = "rename-popover";
+        internal const string ConfirmDeletePopoverId = "confirm-delete-popover";
+        internal const string ConfirmActionPopoverId = "confirm-action-popover";
+        internal const string ConfirmNamespaceAddPopoverId = "confirm-namespace-add-popover";
+
         internal const string NamespaceItemClass = "namespace-item";
         internal const string NamespaceGroupHeaderClass = "namespace-group-header";
         internal const string NamespaceIndicatorClass = "namespace-indicator";
@@ -127,46 +138,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal static readonly StringBuilder CachedStringBuilder = new();
 
-        internal DataVisualizerUserState UserState
-        {
-            get
-            {
-                DataVisualizerUserState dependencyState = _dependencies?.UserState;
-                if (dependencyState != null)
-                {
-                    return dependencyState;
-                }
+        internal DataVisualizerUserState UserState =>
+            _dependencies?.UserState ?? _fallbackUserState;
 
-                if (_userStateCache != null)
-                {
-                    return _userStateCache;
-                }
-
-                LoadUserStateFromFile();
-                return _userStateCache;
-            }
-        }
-
-        internal DataVisualizerSettings Settings
-        {
-            get
-            {
-                DataVisualizerSettings dependencySettings = _dependencies?.Settings;
-                if (dependencySettings != null)
-                {
-                    return dependencySettings;
-                }
-
-                if (_settingsCache != null)
-                {
-                    return _settingsCache;
-                }
-
-                EnsureUserStateRepository();
-                _settingsCache = _userStateRepository?.LoadSettings() ?? LoadOrCreateSettings();
-                return _settingsCache;
-            }
-        }
+        internal DataVisualizerSettings Settings =>
+            _dependencies?.Settings ?? LoadOrCreateSettings();
 
         internal TypeLabelFilterConfig CurrentTypeLabelFilterConfig =>
             LoadOrCreateLabelFilterConfig(_namespaceController.SelectedType);
@@ -369,13 +345,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal bool _isUpdatingListSelection;
 
-        internal string _userStateFilePath;
-
-        internal bool _userStateDirty;
-
-        private DataVisualizerSettings _settingsCache;
-        private DataVisualizerUserState _userStateCache;
-
         internal List<Type> _relevantScriptableObjectTypes;
 
         internal float? _lastAddTypeClicked;
@@ -391,12 +360,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 #endif
 
         internal readonly VisualizerSessionState _sessionState = new();
+        private readonly DataVisualizerUserState _fallbackUserState = new();
 
         internal VisualizerSessionState SessionState => _sessionState;
 
         internal ObjectListState ObjectListState => _sessionState.Objects;
-
-        internal IUserStateRepository _userStateRepository;
 
         internal NamespacePanelController _namespacePanelController;
         internal ObjectListController _objectListController;
@@ -486,18 +454,21 @@ namespace WallstopStudios.DataVisualizer.Editor
 #if ODIN_INSPECTOR
             _odinPropertyTree = null;
 #endif
-            _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
+            string userStateFilePath = Path.Combine(
+                Application.persistentDataPath,
+                UserStateFileName
+            );
             if (
                 _dependencies == null
                 || !string.Equals(
                     _dependencies.UserStateFilePath,
-                    _userStateFilePath,
+                    userStateFilePath,
                     StringComparison.Ordinal
                 )
             )
             {
                 _dependencies = new DataVisualizerDependencies(
-                    _userStateFilePath,
+                    userStateFilePath,
                     _sessionState,
                     EnsureSaveScheduler()
                 );
@@ -507,18 +478,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                 bool persistInSettingsAsset =
                     _dependencies.Settings != null
                     && _dependencies.Settings.persistStateInSettingsAsset;
-                _dependencies.UpdatePersistenceStrategy(persistInSettingsAsset, _userStateFilePath);
+                _dependencies.UpdatePersistenceStrategy(persistInSettingsAsset, userStateFilePath);
             }
 
             _assetService = _dependencies.AssetService;
             _searchService ??= new SearchService(_assetService);
             _searchPopoverController ??= new SearchPopoverController(this, _searchService);
             _eventHub = _dependencies.EventHub;
-            _userStateRepository = _dependencies.UserStateRepository;
-            _settingsCache = _dependencies.Settings;
-            _userStateCache = _dependencies.UserState;
             bool telemetryEnabled =
-                _settingsCache != null && _settingsCache.enableProcessorTelemetry;
+                _dependencies.Settings != null && _dependencies.Settings.enableProcessorTelemetry;
             _sessionState.Diagnostics.SetProcessorTelemetryEnabled(telemetryEnabled);
             if (_layoutPersistenceService == null)
             {
@@ -666,14 +634,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _layoutPersistenceService.StopTrackingSplitViewWidths();
             }
-            if (!Settings.persistStateInSettingsAsset && _userStateDirty)
-            {
-                SaveUserStateToFile();
-            }
-
             ScriptableAssetSaveScheduler scheduler = GetActiveSaveScheduler();
             scheduler?.Flush();
-            _userStateDirty = false;
+            if (!Settings.persistStateInSettingsAsset)
+            {
+                _dependencies?.UserStateRepository?.SaveUserState(UserState);
+            }
 
             if (_ownsSaveScheduler && _saveScheduler != null)
             {
@@ -1085,8 +1051,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 if (settingsApplier != null && settingsApplier(settings))
                 {
-                    EnsureUserStateRepository();
-                    _userStateRepository.SaveSettings(settings);
+                    _dependencies?.UserStateRepository?.SaveSettings(settings);
                 }
             }
             else
@@ -1094,8 +1059,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 DataVisualizerUserState userState = UserState;
                 if (userStateApplier != null && userStateApplier(userState))
                 {
-                    _userStateDirty = true;
-                    SaveUserStateToFile();
+                    _dependencies?.UserStateRepository?.SaveUserState(userState);
                 }
             }
         }
@@ -1625,33 +1589,33 @@ namespace WallstopStudios.DataVisualizer.Editor
             _outerSplitView.Add(_innerSplitView);
             root.Add(_outerSplitView);
 
-            _settingsPopover = CreatePopoverBase("settings-popover");
+            _settingsPopover = CreatePopoverBase(SettingsPopoverId);
             BuildSettingsPopoverContent();
             root.Add(_settingsPopover);
 
-            _createPopover = CreatePopoverBase("create-popover");
+            _createPopover = CreatePopoverBase(CreatePopoverId);
             _objectListController.ConfigureCreateButton(
                 BuildCreatePopoverContent,
                 (popover, trigger) => OpenPopover(popover, trigger),
                 _createPopover
             );
             root.Add(_createPopover);
-            _renamePopover = CreatePopoverBase("rename-popover");
+            _renamePopover = CreatePopoverBase(RenamePopoverId);
             root.Add(_renamePopover);
-            _confirmDeletePopover = CreatePopoverBase("confirm-delete-popover");
+            _confirmDeletePopover = CreatePopoverBase(ConfirmDeletePopoverId);
             root.Add(_confirmDeletePopover);
-            _confirmActionPopover = CreatePopoverBase("confirm-action-popover");
+            _confirmActionPopover = CreatePopoverBase(ConfirmActionPopoverId);
             root.Add(_confirmActionPopover);
-            _searchPopover = new VisualElement { name = "search-popover" };
-            _searchPopover.AddToClassList("search-popover");
+            _searchPopover = new VisualElement { name = SearchPopoverId };
+            _searchPopover.AddToClassList(SearchPopoverId);
             root.Add(_searchPopover);
             _searchPopoverController?.Attach(_searchField, _searchPopover);
 
-            _typeAddPopover = new VisualElement { name = "type-add-popover" };
-            _typeAddPopover.AddToClassList("type-add-popover");
+            _typeAddPopover = new VisualElement { name = TypeAddPopoverId };
+            _typeAddPopover.AddToClassList(TypeAddPopoverId);
 
             _inspectorLabelSuggestionsPopover = CreatePopoverBase(
-                "inspector-label-suggestions-popover"
+                InspectorLabelSuggestionsPopoverId
             );
             root.Add(_inspectorLabelSuggestionsPopover);
             _inspectorLabelSuggestionsPopover.style.width = StyleKeyword.Auto;
@@ -1673,7 +1637,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             root.Add(_typeAddPopover);
 
-            _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
+            _confirmNamespaceAddPopover = CreatePopoverBase(ConfirmNamespaceAddPopoverId);
             root.Add(_confirmNamespaceAddPopover);
 
             BuildNamespaceView();
@@ -2157,6 +2121,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _activeNestedPopover.style.display = DisplayStyle.None;
             _activeNestedPopover = null;
+            _sessionState.Popovers.SetActiveNestedPopover(null);
         }
 
         internal void OpenPopover(
@@ -2200,10 +2165,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (isNested)
             {
                 _activeNestedPopover = popover;
+                _sessionState.Popovers.SetActiveNestedPopover(popover.name ?? string.Empty);
             }
             else
             {
                 _activePopover = popover;
+                _sessionState.Popovers.SetActivePopover(popover.name ?? string.Empty);
             }
 
             triggerElement
@@ -2345,6 +2312,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             CloseNestedPopover();
+            _sessionState.Popovers.SetActivePopover(null);
 
             if (_activePopover == null)
             {
@@ -5327,27 +5295,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _eventHub ??= new DataVisualizerEventHub();
 
-            if (_userStateRepository == null)
-            {
-                EnsureUserStateRepository();
-                if (_userStateRepository == null)
-                {
-                    if (string.IsNullOrWhiteSpace(_userStateFilePath))
-                    {
-                        _userStateFilePath = Path.Combine(
-                            Application.persistentDataPath,
-                            UserStateFileName
-                        );
-                    }
-
-                    ScriptableAssetSaveScheduler scheduler = EnsureSaveScheduler();
-                    _userStateRepository = new JsonUserStateRepository(
-                        _userStateFilePath,
-                        scheduler
-                    );
-                }
-            }
-
             _assetService ??= new DataAssetService();
 
             EnsureTypeSelectedSubscription();
@@ -7529,49 +7476,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             BuildInspectorView();
         }
 
-        private void EnsureUserStateRepository()
-        {
-            if (_userStateRepository != null)
-            {
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(_userStateFilePath))
-            {
-                _userStateFilePath = Path.Combine(
-                    Application.persistentDataPath,
-                    UserStateFileName
-                );
-            }
-
-            DataVisualizerSettings existingSettings = _settingsCache;
-            if (existingSettings == null)
-            {
-                existingSettings = _dependencies?.Settings ?? DataVisualizer.LoadOrCreateSettings();
-                _settingsCache = existingSettings;
-            }
-
-            bool persistInSettingsAsset =
-                existingSettings != null && existingSettings.persistStateInSettingsAsset;
-            ScriptableAssetSaveScheduler scheduler = EnsureSaveScheduler();
-            _userStateRepository = persistInSettingsAsset
-                ? new SettingsAssetStateRepository(scheduler)
-                : new JsonUserStateRepository(_userStateFilePath, scheduler);
-
-            DataVisualizerSettings loadedSettings = _userStateRepository.LoadSettings();
-            if (loadedSettings != null)
-            {
-                _settingsCache = loadedSettings;
-            }
-
-            if (_userStateCache == null)
-            {
-                _userStateCache =
-                    _userStateRepository.LoadUserState() ?? new DataVisualizerUserState();
-                _userStateDirty = false;
-            }
-        }
-
         private void EnsureLabelSubsystems()
         {
             if (_labelService == null)
@@ -7783,6 +7687,42 @@ namespace WallstopStudios.DataVisualizer.Editor
             return FindObjectByGuid(_selectedObjects, draggedGuid) ?? draggedObject;
         }
 
+        internal bool IsPopoverActive(string popoverId)
+        {
+            if (string.IsNullOrWhiteSpace(popoverId))
+            {
+                return false;
+            }
+
+            VisualizerSessionState.PopoverState popovers = _sessionState.Popovers;
+            return string.Equals(
+                    popovers.ActiveNestedPopoverId,
+                    popoverId,
+                    StringComparison.Ordinal
+                ) || string.Equals(popovers.ActivePopoverId, popoverId, StringComparison.Ordinal);
+        }
+
+        internal string GetActivePopoverId()
+        {
+            VisualizerSessionState.PopoverState popovers = _sessionState.Popovers;
+            return popovers.ActiveNestedPopoverId ?? popovers.ActivePopoverId;
+        }
+
+        internal VisualElement GetActivePopoverElement()
+        {
+            return _activeNestedPopover ?? _activePopover;
+        }
+
+        internal FocusArea GetLastActiveFocusArea()
+        {
+            return _lastActiveFocusArea;
+        }
+
+        internal void RecordEnterPressed()
+        {
+            _lastEnterPressed = Time.realtimeSinceStartup;
+        }
+
         internal void StartDragVisuals(Vector2 currentPosition, string dragText)
         {
             _dragAndDropController?.StartDragVisuals(currentPosition, dragText);
@@ -7807,30 +7747,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             return DragAndDropController.NormalizeGhostInsertIndex(container, ghost, desiredIndex);
         }
 
-        internal void LoadUserStateFromFile()
-        {
-            EnsureUserStateRepository();
-            _userStateCache =
-                _userStateRepository?.LoadUserState() ?? new DataVisualizerUserState();
-            _userStateDirty = false;
-        }
-
-        internal void SaveUserStateToFile()
-        {
-            EnsureUserStateRepository();
-            if (_userStateCache == null)
-            {
-                LoadUserStateFromFile();
-                if (_userStateCache == null)
-                {
-                    return;
-                }
-            }
-
-            _userStateRepository.SaveUserState(_userStateCache);
-            _userStateDirty = false;
-        }
-
         internal void MarkUserStateDirty()
         {
             DataVisualizerSettings settings = Settings;
@@ -7839,8 +7755,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _userStateDirty = true;
-            SaveUserStateToFile();
+            _dependencies?.UserStateRepository?.SaveUserState(UserState);
         }
 
         internal void UpdateAndSaveObjectOrderList(Type type, List<ScriptableObject> orderedObjects)
