@@ -52,20 +52,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
                 return;
             }
 
+#if UNITY_EDITOR
+            DataVisualizer.LogReorderDebug(
+                $"Object drop request for type '{targetType.FullName}' currentIndex={sourceIndex} targetIndex={targetIndex}"
+            );
+            dataVisualizer.LogObjectOrder(
+                "Filtered objects before drop",
+                listState.FilteredObjectsBuffer
+            );
+#endif
             List<ScriptableObject> filteredWithoutDragged = new List<ScriptableObject>(
                 listState.FilteredObjectsBuffer
             );
             filteredWithoutDragged.Remove(draggedObject);
-            targetIndex = Mathf.Clamp(targetIndex, 0, filteredWithoutDragged.Count);
-
-            if (evt.ShiftPressed)
-            {
-                targetIndex = 0;
-            }
-            else if (evt.ControlPressed)
-            {
-                targetIndex = filteredWithoutDragged.Count;
-            }
 
             ScriptableObject insertBefore =
                 targetIndex < filteredWithoutDragged.Count
@@ -90,24 +89,32 @@ namespace WallstopStudios.DataVisualizer.Editor.Services.ObjectCommands
             );
             DataVisualizer.RemoveDuplicateObjects(dataVisualizer._selectedObjects);
 
+            targetIndex = Mathf.Clamp(targetIndex, 0, filteredWithoutDragged.Count);
+
             dataVisualizer.UpdateAndSaveObjectOrderList(
                 targetType,
-                dataVisualizer._selectedObjects
+                listState.FilteredObjectsBuffer
             );
 
             if (dataVisualizer._suppressObjectListReloadForTests)
             {
                 listState.ClearDisplayed();
                 listState.DisplayedObjectsBuffer.AddRange(listState.FilteredObjectsBuffer);
-                listState.DisplayedMetadataBuffer.Clear();
-                listState.DisplayedMetadataBuffer.AddRange(listState.FilteredMetadataBuffer);
             }
-            else
-            {
-                dataVisualizer.LoadObjectTypes(targetType);
-                dataVisualizer.ApplyLabelFilter(buildObjectsView: false);
-                dataVisualizer.BuildObjectsView();
-            }
+
+            dataVisualizer.LoadObjectTypes(targetType);
+            dataVisualizer.ApplyLabelFilter(buildObjectsView: false);
+            dataVisualizer.BuildObjectsView();
+#if UNITY_EDITOR
+            dataVisualizer.LogObjectOrder(
+                "Selected objects after drop",
+                dataVisualizer._selectedObjects
+            );
+            dataVisualizer.LogObjectOrder(
+                "Filtered objects after drop",
+                listState.FilteredObjectsBuffer
+            );
+#endif
 
             string draggedGuid = DataVisualizer.GetAssetGuid(draggedObject);
             ScriptableObject objectToSelect = dataVisualizer.DeterminePostDropSelection(

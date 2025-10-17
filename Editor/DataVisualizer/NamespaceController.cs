@@ -182,8 +182,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void UpdateNamespaceVisibility()
         {
             HashSet<VisualElement> namespaceContainers = _namespaceCache
-                .Values
-                .Select(element => element.parent?.parent)
+                .Values.Select(element => element.parent?.parent)
                 .Where(element => element != null)
                 .ToHashSet();
 
@@ -248,11 +247,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         public void Build(DataVisualizer dataVisualizer, ref VisualElement namespaceListContainer)
         {
             HashSet<Type> currentTypes = _managedTypes.SelectMany(x => x.Value).ToHashSet();
-            if (currentTypes.SetEquals(_namespaceCache.Keys))
-            {
-                return;
-            }
-
             if (!currentTypes.Contains(_selectedType))
             {
                 _selectedType = null;

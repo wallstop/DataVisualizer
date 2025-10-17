@@ -2456,7 +2456,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             DataVisualizerSettings settings = Settings;
             bool persistInSettingsAsset = settings.persistStateInSettingsAsset;
 
-            ActionButtonToggle prefsToggle = new ActionButtonToggle(
+            ActionButtonToggle prefsToggle = null;
+            prefsToggle = new ActionButtonToggle(
                 persistInSettingsAsset
                     ? "Persist State in UserState: "
                     : "Persist State in Settings Asset: ",
@@ -2492,7 +2493,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             bool selectActiveObject = ShouldSelectActiveObject();
 
-            ActionButtonToggle selectionToggle = new ActionButtonToggle(
+            ActionButtonToggle selectionToggle = null;
+            selectionToggle = new ActionButtonToggle(
                 selectActiveObject ? "Don't Select Active Object: " : "Select Active Object: ",
                 value =>
                 {
@@ -2542,7 +2544,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             });
             contentWrapper.Add(selectionToggle);
 
-            ActionButtonToggle telemetryToggle = new ActionButtonToggle(
+            ActionButtonToggle telemetryToggle = null;
+            telemetryToggle = new ActionButtonToggle(
                 settings.enableProcessorTelemetry
                     ? "Disable Processor Telemetry: "
                     : "Enable Processor Telemetry: ",
@@ -2596,7 +2599,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             contentWrapper.Add(telemetryToggle);
 
             bool shortcutHintsEnabled = ShouldShowShortcutHints();
-            ActionButtonToggle shortcutToggle = new ActionButtonToggle(
+            ActionButtonToggle shortcutToggle = null;
+            shortcutToggle = new ActionButtonToggle(
                 shortcutHintsEnabled ? "Hide Shortcut Hints: " : "Show Shortcut Hints: ",
                 value =>
                 {
@@ -2645,56 +2649,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             });
             contentWrapper.Add(shortcutToggle);
 
-            bool dragHintsEnabled = ShouldShowDragModifierHints();
-            ActionButtonToggle dragHintsToggle = new ActionButtonToggle(
-                dragHintsEnabled ? "Hide Drag Modifier Hints: " : "Show Drag Modifier Hints: ",
-                value =>
-                {
-                    if (dragHintsToggle != null)
-                    {
-                        dragHintsToggle.Label = value
-                            ? "Hide Drag Modifier Hints: "
-                            : "Show Drag Modifier Hints: ";
-                    }
-                }
-            )
-            {
-                value = dragHintsEnabled,
-            };
-            dragHintsToggle.AddToClassList("settings-prefs-toggle");
-            dragHintsToggle.RegisterValueChangedCallback(evt =>
-            {
-                bool newValue = evt.newValue;
-                if (newValue == ShouldShowDragModifierHints())
-                {
-                    return;
-                }
-
-                PersistSettings(
-                    assetSettings =>
-                    {
-                        if (assetSettings.showDragModifierHints == newValue)
-                        {
-                            return false;
-                        }
-
-                        assetSettings.showDragModifierHints = newValue;
-                        return true;
-                    },
-                    userState =>
-                    {
-                        if (userState.showDragModifierHints == newValue)
-                        {
-                            return false;
-                        }
-
-                        userState.showDragModifierHints = newValue;
-                        return true;
-                    }
-                );
-            });
-            contentWrapper.Add(dragHintsToggle);
-
             EnumField defaultLogicField = new EnumField(
                 "Default Processor Logic",
                 GetDefaultProcessorLogic()
@@ -2734,7 +2688,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             contentWrapper.Add(defaultLogicField);
 
             bool fuzzyEnabled = ShouldUseFuzzySearch();
-            ActionButtonToggle fuzzyToggle = new ActionButtonToggle(
+            ActionButtonToggle fuzzyToggle = null;
+            fuzzyToggle = new ActionButtonToggle(
                 fuzzyEnabled ? "Disable Fuzzy Search: " : "Enable Fuzzy Search: ",
                 value =>
                 {
@@ -2829,7 +2784,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 UpdateSearchOptionsFromSettings();
             });
 
-            ActionButtonToggle searchScoresToggle = new ActionButtonToggle(
+            ActionButtonToggle searchScoresToggle = null;
+            searchScoresToggle = new ActionButtonToggle(
                 ShouldShowSearchScores() ? "Hide Search Scores: " : "Show Search Scores: ",
                 value =>
                 {
@@ -3276,6 +3232,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 creatable = null;
             }
             AssetDatabase.CreateAsset(instance, uniquePath);
+            RegisterCreatedObjectUndo(instance, "Create Data Object");
             ScheduleAssetDatabaseSave();
             creatable?.AfterCreate();
             RefreshMetadataForObject(instance);
@@ -3348,6 +3305,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 renamable = null;
             }
+
+            RegisterObjectUndo(original, "Rename Data Object");
 
             string error = AssetDatabase.RenameAsset(originalPath, newName);
             if (string.IsNullOrWhiteSpace(error))
@@ -3441,6 +3400,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            RegisterObjectUndo(dataObject, "Move Data Object");
             string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
             ScheduleAssetDatabaseSave();
             if (!string.IsNullOrWhiteSpace(errorMessage))
@@ -3846,22 +3806,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             addButtonHeader.Add(_addTypesFromScriptFolderButton);
             namespaceColumn.Add(nsHeader);
 
-            _namespaceFilterContainer = new VisualElement
-            {
-                name = "namespace-filter-container",
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    flexWrap = Wrap.Wrap,
-                    gap = 4,
-                    paddingLeft = 6,
-                    paddingRight = 6,
-                    paddingTop = 4,
-                    paddingBottom = 4,
-                },
-            };
-            _namespaceFilterContainer.AddToClassList("namespace-filter-container");
-            namespaceColumn.Add(_namespaceFilterContainer);
+            _namespaceFilterContainer = null;
 
             _typeSearchField = new TextField { name = "type-search-field" };
             _typeSearchField.AddToClassList("type-search-field");
@@ -5123,6 +5068,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void SaveLabelFilterConfig(TypeLabelFilterConfig config)
         {
+            RegisterSettingsUndo("Update Label Filters");
             PersistSettings(
                 settings =>
                 {
@@ -5469,6 +5415,153 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 scheduler.ScheduleAssetDatabaseSave();
             }
+        }
+
+        internal IUndoService UndoService => _dependencies?.UndoService;
+
+#if UNITY_EDITOR
+        private const string ReorderDebugPrefKey = "WallstopStudios.DataVisualizer.ReorderDebug";
+
+        internal static bool IsReorderDebugEnabled()
+        {
+            return EditorPrefs.GetBool(ReorderDebugPrefKey, false);
+        }
+
+        internal static void SetReorderDebugEnabled(bool enabled)
+        {
+            EditorPrefs.SetBool(ReorderDebugPrefKey, enabled);
+        }
+
+        internal static void LogReorderDebug(string message)
+        {
+            if (!IsReorderDebugEnabled())
+            {
+                return;
+            }
+
+            Debug.Log("[DataVisualizer][Reorder] " + message);
+        }
+
+        [MenuItem("Wallstop Studios/Data Visualizer/Toggle Reorder Debug Logging")]
+        private static void ToggleReorderDebugLoggingMenu()
+        {
+            bool enabled = IsReorderDebugEnabled();
+            SetReorderDebugEnabled(!enabled);
+            Debug.Log(
+                "[DataVisualizer][Reorder] Debug logging " + (!enabled ? "enabled" : "disabled")
+            );
+        }
+
+        internal void LogTypeOrder(string context, IReadOnlyList<Type> types)
+        {
+            if (!IsReorderDebugEnabled() || types == null)
+            {
+                return;
+            }
+
+            StringBuilder builder = new StringBuilder();
+            builder.Append(context).Append(": ");
+            for (int index = 0; index < types.Count; index++)
+            {
+                Type type = types[index];
+                builder
+                    .Append('[')
+                    .Append(index)
+                    .Append(']')
+                    .Append(' ')
+                    .Append(type != null ? type.FullName : "<null>");
+                if (index < types.Count - 1)
+                {
+                    builder.Append(", ");
+                }
+            }
+
+            LogReorderDebug(builder.ToString());
+        }
+
+        internal void LogObjectOrder(string context, IReadOnlyList<ScriptableObject> objects)
+        {
+            if (!IsReorderDebugEnabled() || objects == null)
+            {
+                return;
+            }
+
+            StringBuilder builder = new StringBuilder();
+            builder.Append(context).Append(": ");
+            for (int index = 0; index < objects.Count; index++)
+            {
+                ScriptableObject obj = objects[index];
+                string guid = GetAssetGuid(obj);
+                builder
+                    .Append('[')
+                    .Append(index)
+                    .Append(']')
+                    .Append(' ')
+                    .Append(obj != null ? obj.name : "<null>")
+                    .Append(" (")
+                    .Append(!string.IsNullOrWhiteSpace(guid) ? guid : "no-guid")
+                    .Append(')');
+                if (index < objects.Count - 1)
+                {
+                    builder.Append(", ");
+                }
+            }
+
+            LogReorderDebug(builder.ToString());
+        }
+#endif
+
+        private void RegisterCreatedObjectUndo(UnityEngine.Object target, string actionName)
+        {
+            UndoService?.RegisterCreatedObject(target, actionName);
+        }
+
+        private void RegisterObjectUndo(UnityEngine.Object target, string actionName)
+        {
+            UndoService?.RecordObject(target, actionName);
+        }
+
+        private void RegisterSettingsUndo(string actionName)
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings != null && settings.persistStateInSettingsAsset)
+            {
+                UndoService?.RecordSettings(settings, actionName);
+            }
+        }
+
+        internal void SetCurrentGuidOrder(IEnumerable<string> guids)
+        {
+            _currentTypeGuidOrder.Clear();
+            _currentGuidOrderLookup.Clear();
+
+            if (guids == null)
+            {
+                return;
+            }
+
+            int index = 0;
+            foreach (string guid in guids)
+            {
+                if (string.IsNullOrWhiteSpace(guid))
+                {
+                    continue;
+                }
+
+                _currentTypeGuidOrder.Add(guid);
+                _currentGuidOrderLookup[guid] = index++;
+            }
+        }
+
+        internal DataAssetMetadata GetCachedMetadata(string guid)
+        {
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                return null;
+            }
+
+            _currentMetadataByGuid.TryGetValue(guid, out DataAssetMetadata metadata);
+            return metadata;
         }
 
         private ScriptableAssetSaveScheduler GetActiveSaveScheduler()
@@ -5856,6 +5949,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+#if UNITY_EDITOR
+            LogTypeOrder(
+                $"HandleTypeReorderRequested before ({evt.NamespaceKey}, current={currentIndex}, target={evt.TargetIndex})",
+                types
+            );
+#endif
             int targetIndex = Mathf.Clamp(evt.TargetIndex, 0, Mathf.Max(0, types.Count - 1));
             if (targetIndex == currentIndex)
             {
@@ -5871,6 +5970,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             UpdateAndSaveTypeOrder(evt.NamespaceKey, types);
             SyncNamespaceChanges();
+#if UNITY_EDITOR
+            LogTypeOrder($"HandleTypeReorderRequested after ({evt.NamespaceKey})", types);
+#endif
         }
 
         private bool RemoveManagedType(Type type)
@@ -6918,6 +7020,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             try
             {
+                RegisterObjectUndo(_selectedObject, "Add Label to Data Object");
                 AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
                 EditorUtility.SetDirty(_selectedObject);
                 ScheduleAssetDatabaseSave();
@@ -6952,6 +7055,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 try
                 {
+                    RegisterObjectUndo(_selectedObject, "Remove Label from Data Object");
                     AssetDatabase.SetLabels(_selectedObject, updatedLabels);
                     EditorUtility.SetDirty(_selectedObject);
                     ScheduleAssetDatabaseSave();
@@ -7043,6 +7147,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     duplicable.BeforeClone(originalObject);
                 }
                 AssetDatabase.CreateAsset(cloneInstance, uniquePath);
+                RegisterCreatedObjectUndo(cloneInstance, "Clone Data Object");
                 ScheduleAssetDatabaseSave();
 
                 ScriptableObject cloneAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
@@ -7642,7 +7747,24 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 List<string> customTypeNameOrder = GetTypeOrderForNamespace(key);
                 types.Sort(
-                    (lhs, rhs) => CompareUsingCustomOrder(lhs.Name, rhs.Name, customTypeNameOrder)
+                    (lhs, rhs) =>
+                    {
+                        int customOrderComparison = CompareUsingCustomOrder(
+                            lhs.FullName,
+                            rhs.FullName,
+                            customTypeNameOrder
+                        );
+                        if (customOrderComparison != 0)
+                        {
+                            return customOrderComparison;
+                        }
+
+                        return string.Compare(
+                            lhs.Name,
+                            rhs.Name,
+                            StringComparison.OrdinalIgnoreCase
+                        );
+                    }
                 );
             }
 
@@ -8060,6 +8182,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal void UpdateAndSaveTypeOrder(string namespaceKey, List<Type> orderedTypes)
         {
             List<string> newTypeNameOrder = orderedTypes.Select(t => t.FullName).ToList();
+#if UNITY_EDITOR
+            LogReorderDebug(
+                $"UpdateAndSaveTypeOrder ({namespaceKey}): {string.Join(", ", newTypeNameOrder)}"
+            );
+#endif
             SetTypeOrderForNamespace(namespaceKey, newTypeNameOrder);
         }
 
@@ -8478,6 +8605,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+#if UNITY_EDITOR
+            LogObjectOrder(
+                $"UpdateAndSaveObjectOrderList before persistence ({type.FullName})",
+                orderedObjects
+            );
+#endif
             List<string> orderedGuids = new();
             foreach (ScriptableObject obj in orderedObjects)
             {
@@ -8504,6 +8637,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             SetObjectOrderForType(type.FullName, orderedGuids);
+#if UNITY_EDITOR
+            LogReorderDebug(
+                $"Persisted order for {type.FullName}: {string.Join(", ", orderedGuids)}"
+            );
+#endif
         }
 
         internal void MigratePersistenceState(bool migrateToSettingsAsset)
@@ -8650,6 +8788,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            RegisterSettingsUndo("Reorder Data Objects");
             PersistSettings(
                 settings =>
                 {
@@ -8818,7 +8957,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void SetTypeOrderForNamespace(string namespaceKey, List<string> typeNames)
         {
-            if (string.IsNullOrWhiteSpace(namespaceKey) || typeNames == null)
+            if (string.IsNullOrWhiteSpace(namespaceKey))
             {
                 return;
             }
@@ -8827,25 +8966,31 @@ namespace WallstopStudios.DataVisualizer.Editor
                 settings =>
                 {
                     List<string> entryList = settings.GetOrCreateTypeOrderList(namespaceKey);
-                    if (entryList.SequenceEqual(typeNames))
-                    {
-                        return false;
-                    }
-
                     entryList.Clear();
-                    entryList.AddRange(typeNames);
+                    if (typeNames != null)
+                    {
+                        entryList.AddRange(typeNames);
+                    }
+#if UNITY_EDITOR
+                    LogReorderDebug(
+                        $"Persisted type order for namespace '{namespaceKey}' (settings) => {string.Join(", ", entryList)}"
+                    );
+#endif
                     return true;
                 },
                 userState =>
                 {
                     List<string> entryList = userState.GetOrCreateTypeOrderList(namespaceKey);
-                    if (entryList.SequenceEqual(typeNames))
-                    {
-                        return false;
-                    }
-
                     entryList.Clear();
-                    entryList.AddRange(typeNames);
+                    if (typeNames != null)
+                    {
+                        entryList.AddRange(typeNames);
+                    }
+#if UNITY_EDITOR
+                    LogReorderDebug(
+                        $"Persisted type order for namespace '{namespaceKey}' (user) => {string.Join(", ", entryList)}"
+                    );
+#endif
                     return true;
                 }
             );

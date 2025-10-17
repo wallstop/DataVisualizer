@@ -1,6 +1,8 @@
 #pragma warning disable CS0618 // Type or member is obsolete
 namespace WallstopStudios.DataVisualizer.Editor.Tests
 {
+    using System;
+    using System.Collections.Generic;
     using Controllers;
     using Data;
     using NUnit.Framework;

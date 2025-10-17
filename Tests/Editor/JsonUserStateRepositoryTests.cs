@@ -5,8 +5,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
     using System.IO;
     using Data;
     using NUnit.Framework;
-    using Services;
     using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor.Services;
     using Object = UnityEngine.Object;
 
     [TestFixture]

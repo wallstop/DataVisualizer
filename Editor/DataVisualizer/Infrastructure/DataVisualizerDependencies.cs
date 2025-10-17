@@ -40,6 +40,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Infrastructure
 
         public DataVisualizerEventHub EventHub { get; } = new DataVisualizerEventHub();
 
+        public IUndoService UndoService { get; } = new UndoService();
+
         public IUserStateRepository UserStateRepository { get; private set; }
 
         public DataVisualizerSettings Settings { get; private set; }

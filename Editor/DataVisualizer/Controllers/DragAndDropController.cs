@@ -535,6 +535,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
+#if UNITY_EDITOR
+            DataVisualizer.LogReorderDebug(
+                $"Type drop request for namespace '{namespaceKey}' currentIndex={currentIndex} targetIndex={targetIndex}"
+            );
+            _dataVisualizer.LogTypeOrder("Type order before drop", types);
+#endif
             if (currentIndex < targetIndex)
             {
                 targetIndex--;
@@ -546,6 +552,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             UpdateAndSaveTypeOrder(namespaceKey, types);
             _dataVisualizer._namespacePanelController?.BuildNamespaceView();
+#if UNITY_EDITOR
+            _dataVisualizer.LogTypeOrder("Type order after drop", types);
+#endif
             _eventHub?.Publish(
                 new TypeReorderRequestedEvent(namespaceKey, draggedType, targetIndex)
             );
@@ -783,16 +792,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     ),
                 _ => "Dragging Item",
             };
-
-            if (!_dataVisualizer.ShouldShowDragModifierHints())
-            {
-                return baseLabel;
-            }
-
-            if (_dataVisualizer._activeDragType == DataVisualizer.DragType.Object)
-            {
-                return baseLabel + "  (Shift → top, Ctrl/Cmd → bottom)";
-            }
 
             return baseLabel;
         }

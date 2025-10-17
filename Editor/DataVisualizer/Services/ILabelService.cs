@@ -26,6 +26,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
         IReadOnlyCollection<string> GetAvailableLabels(Type type);
 
+        void ClearFilters(Type type);
+
         LabelSuggestionProvider SuggestionProvider { get; }
     }
 }
