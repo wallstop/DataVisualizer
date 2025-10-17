@@ -2,6 +2,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 {
     using System;
     using Styles;
+    using UnityEditor;
     using UnityEngine;
     using UnityEngine.UIElements;
 

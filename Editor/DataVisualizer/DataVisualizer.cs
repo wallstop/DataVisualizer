@@ -25,9 +25,9 @@ namespace WallstopStudios.DataVisualizer.Editor
     using UnityEditor.UIElements;
     using UnityEngine;
     using UnityEngine.UIElements;
-    using Utilities;
     using Helper;
     using Helper.Pooling;
+    using Utilities;
     using Infrastructure;
     using Events;
     using Controllers;

@@ -205,8 +205,12 @@
     margin-left: 10px;
 }
 
+.clickable {
+    cursor: pointer;
+}
+
 .clickable:hover {
-    cursor: link;
+    cursor: pointer;
 }
 
 .object-item:hover {
@@ -296,7 +300,7 @@
 .type-item:hover {
     background-color: rgba(200, 200, 200, 0);
     border-color: lightgreen;
-    cursor: link;
+    cursor: pointer;
 }
 
 .type-item.selected {
@@ -464,7 +468,7 @@
 }
 
 .action-button:hover {
-    cursor: link;
+    cursor: pointer;
     background-color: rgba(255, 255, 255, 0.9);
 }
 
@@ -497,6 +501,7 @@
 }
 
 .go-button:hover {
+    cursor: pointer;
     border-color: black;
     color: black;
     padding: 0 5px;
@@ -602,6 +607,7 @@
 }
 
 .dialog-secondary-button:hover {
+    cursor: pointer;
     background-color: rgba(255, 255, 255, 0.12);
     color: rgba(255, 255, 255, 0.95);
 }
@@ -616,6 +622,7 @@
 }
 
 .dialog-primary-button:hover {
+    cursor: pointer;
     background-color: rgba(255, 255, 255, 0.18);
 }
 
@@ -625,6 +632,7 @@
 }
 
 .dialog-danger-button:hover {
+    cursor: pointer;
     background-color: rgba(255, 102, 102, 0.25);
     color: rgb(255, 230, 210);
 }
@@ -1044,7 +1052,7 @@
 }
 
 .label-pill {
-    cursor: pan;
+    cursor: pointer;
     padding: 0 4px;
     height: 22px;
     margin: 2px;
@@ -1057,7 +1065,7 @@
 }
 
 .label-pill.non-draggable {
-    cursor: arrow;
+    cursor: default;
 }
 
 .label-pill-container {
@@ -1113,7 +1121,7 @@
 }
 
 .label-pill-container.clickable {
-    cursor: move-arrow;
+    cursor: pointer;
 }
 
 .label-pill-container:active {
