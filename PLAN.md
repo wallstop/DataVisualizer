@@ -21,11 +21,11 @@
 - [x] Ensure persistence interfaces (`IUserStateRepository` / settings popover) fully own save semantics; no direct editor API calls from controllers/wrapper window. _(Completed – settings/user state writes now route through repositories)_
 - [x] Add integration tests that validate debounce/flush behaviour under rapid edits. _(Completed – repository and scheduler tests cover debounced flush)_
 
-## 4. Undo / Redo Support
 - [x] Wrap object list operations (create, rename, reorder, label changes) with `Undo.RecordObject` + descriptive action names. _(Completed – assets and settings route through centralized undo helpers)_
 - [x] Provide helper APIs for services/controllers to register undo steps without depending on `DataVisualizer` internals. _(Completed – shared `IUndoService` available via dependencies)_
 - [x] Verify undo/redo flows for labels, namespace changes, and processor-triggered modifications. _(Completed – editor undo tests cover label and rename scenarios)_
 - [x] Add automated edit-mode tests exercising the undo stack where feasible. _(Completed – Undo integration tests added)_
+- [ ] Persist & restore object selection on re-open (investigating drag/drop side-effects).
 
 ## 5. Test Coverage Expansion
 - [ ] Build controller-focused unit tests using `DataVisualizer.OverrideUserStateRepositoryForTesting` and event hub assertions.

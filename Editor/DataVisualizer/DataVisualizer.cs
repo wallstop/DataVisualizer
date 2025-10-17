@@ -1342,6 +1342,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             if (_scriptableObjectTypes.Count == 0)
             {
+#if UNITY_EDITOR
+                LogReorderDebug("RestorePreviousSelection aborted: No scriptable object types loaded");
+#endif
                 return;
             }
 
@@ -1370,6 +1373,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     if (entry.Value < bestIndex)
                     {
                         bestNamespace = entry.Key;
+                        bestIndex = entry.Value;
                     }
                 }
 
@@ -1382,6 +1386,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (typesInNamespace is not { Count: > 0 })
             {
+#if UNITY_EDITOR
+                LogReorderDebug("RestorePreviousSelection aborted: No types in namespace");
+#endif
                 return;
             }
 
@@ -1396,6 +1403,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             selectedType ??= typesInNamespace[0];
+#if UNITY_EDITOR
+            LogReorderDebug(
+                $"RestorePreviousSelection selecting type '{selectedType.FullName}'"
+            );
+#endif
             LoadObjectTypes(selectedType);
             BuildNamespaceView();
             BuildObjectsView();
@@ -1466,6 +1478,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 objectToSelect = _selectedObjects[0];
             }
 
+#if UNITY_EDITOR
+            LogReorderDebug(
+                $"RestorePreviousSelection object selection guid={savedObjectGuid ?? "<none>"}, found={(objectToSelect != null ? objectToSelect.name : "<null>")}, totalLoaded={_selectedObjects.Count}"
+            );
+#endif
             SelectObject(objectToSelect);
             if (objectToSelect == null)
             {
@@ -7919,6 +7936,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             string selectedObjectGuid = _objectSelectionService.ResolveGuid(dataObject);
             _objectSelectionService.SynchronizeSelection(_selectedObjects, dataObject);
+#if UNITY_EDITOR
+            LogReorderDebug(
+                $"SelectObject called with {(dataObject != null ? dataObject.name : "<null>")} guid={(selectedObjectGuid ?? "<none>")}"
+            );
+#endif
 
             ListView listView = _objectListController?.ListView;
             if (listView != null)
@@ -7995,6 +8017,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     string typeName = _selectedObject.GetType().FullName;
                     SetLastSelectedObjectGuidForType(typeName, selectedObjectGuid);
+#if UNITY_EDITOR
+                    LogReorderDebug(
+                        $"Persisted last selected object for {typeName}: {(selectedObjectGuid ?? "<none>")}"
+                    );
+#endif
                 }
             }
             catch (Exception e)
@@ -8861,14 +8888,34 @@ namespace WallstopStudios.DataVisualizer.Editor
                 string sessionGuid = _sessionState.Selection.PrimarySelectedObjectGuid;
                 if (!string.IsNullOrWhiteSpace(sessionGuid))
                 {
+#if UNITY_EDITOR
+                    LogReorderDebug(
+                        $"GetLastSelectedObjectGuidForType({typeName}) returning session guid {sessionGuid}"
+                    );
+#endif
                     return sessionGuid;
                 }
             }
 
             DataVisualizerSettings settings = Settings;
-            return settings.persistStateInSettingsAsset
-                ? settings.GetLastObjectForType(typeName)
-                : UserState.GetLastObjectForType(typeName);
+            if (settings.persistStateInSettingsAsset)
+            {
+                string value = settings.GetLastObjectForType(typeName);
+#if UNITY_EDITOR
+                LogReorderDebug(
+                    $"GetLastSelectedObjectGuidForType({typeName}) from settings => {value ?? "<none>"}"
+                );
+#endif
+                return value;
+            }
+
+            string userValue = UserState.GetLastObjectForType(typeName);
+#if UNITY_EDITOR
+            LogReorderDebug(
+                $"GetLastSelectedObjectGuidForType({typeName}) from user state => {userValue ?? "<none>"}"
+            );
+#endif
+            return userValue;
         }
 
         internal void SetLastSelectedObjectGuidForType(string typeName, string objectGuid)
