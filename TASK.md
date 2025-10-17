@@ -6,4 +6,4 @@
 
 ## Highlight Reset State warning confirmation
 - Status: Completed
-- Notes: Styled the reset button with warning colors and re-used the standard confirmation overlay with a bold "DANGER" action label; dialog now stays above the settings popover and supports dragging.
+- Notes: Styled the reset button with warning colors and re-used the standard confirmation overlay with a bold "DANGER" action label; dialog now stays above the settings popover, supports dragging, and closes when you click outside it.

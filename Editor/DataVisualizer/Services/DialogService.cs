@@ -250,6 +250,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
             evt.StopPropagation();
             evt.PreventDefault();
+            InvokeSecondary();
         }
 
         private void HandleDialogPointerDown(PointerDownEvent evt)
