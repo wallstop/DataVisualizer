@@ -445,6 +445,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void OnEnable()
         {
+            s_reorderDebugCache = null;
             _nextColorIndex = 0;
             Instance = this;
             _isSearchCachePopulated = false;
@@ -5422,13 +5423,21 @@ namespace WallstopStudios.DataVisualizer.Editor
 #if UNITY_EDITOR
         private const string ReorderDebugPrefKey = "WallstopStudios.DataVisualizer.ReorderDebug";
 
+        private static bool? s_reorderDebugCache;
+
         internal static bool IsReorderDebugEnabled()
         {
-            return EditorPrefs.GetBool(ReorderDebugPrefKey, false);
+            if (!s_reorderDebugCache.HasValue)
+            {
+                s_reorderDebugCache = EditorPrefs.GetBool(ReorderDebugPrefKey, false);
+            }
+
+            return s_reorderDebugCache.Value;
         }
 
         internal static void SetReorderDebugEnabled(bool enabled)
         {
+            s_reorderDebugCache = enabled;
             EditorPrefs.SetBool(ReorderDebugPrefKey, enabled);
         }
 
