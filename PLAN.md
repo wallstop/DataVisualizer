@@ -65,7 +65,7 @@
 1. [x] Create `ProcessorPanelController` for building the processor list UI, toggles, and execution actions. Controller now owns the processor column UI and refresh logic with state sourced from `ProcessorPanelState`, initialization now occurs during `OnEnable`, and the controller publishes execution requests through the event hub while listening for registry change notifications.
 2. [x] Add `IProcessorRegistry` to surface available `IDataProcessor` implementations, caching instances and capabilities, and emit change notifications consumed by the processor panel.
 3. [x] Introduce `ProcessorExecutionService` to run processors asynchronously or with progress reporting, ensuring results update the state and trigger asset refreshes efficiently (service now queues executions, raises start/complete/failure events, and schedules save/refresh through the shared scheduler).
-4. Incorporate performance telemetry (duration, allocations) via opt-in diagnostics stored in `VisualizerSessionState` for future debugging.
+4. [x] Incorporate performance telemetry (duration, allocations) via opt-in diagnostics stored in `VisualizerSessionState` for future debugging (DiagnosticsState now records processor execution samples with duration + allocated bytes, DataVisualizer persists the opt-in toggle through settings/user state, and processor events publish the telemetry payloads).
 
 ### Priority 6 – Search and Popovers
 1. [x] Split search responsibilities into `SearchService` (indexing, fuzzy match, highlight data) and `SearchPopoverController` (UI). Use pooled builders and limit allocations during typing (implemented service/controller pair and migrated DataVisualizer to delegate search interactions).

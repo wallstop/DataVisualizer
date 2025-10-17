@@ -20,6 +20,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         public List<string> managedTypeNames = new();
         public List<TypeLabelFilterConfig> labelFilterConfigs = new();
         public List<ProcessorState> processorStates = new();
+        public bool enableProcessorTelemetry;
 
         public void HydrateFrom(DataVisualizerSettings settings)
         {
@@ -50,6 +51,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             processorStates =
                 settings.processorStates?.Select(state => state.Clone()).ToList()
                 ?? new List<ProcessorState>();
+            enableProcessorTelemetry = settings.enableProcessorTelemetry;
         }
 
         public List<string> GetOrCreateObjectOrderList(string typeFullName)

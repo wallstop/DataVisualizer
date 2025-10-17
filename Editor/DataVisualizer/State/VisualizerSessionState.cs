@@ -15,6 +15,7 @@ namespace WallstopStudios.DataVisualizer.Editor.State
             Labels = new LabelFilterState();
             Objects = new ObjectListState();
             Processors = new ProcessorPanelState();
+            Diagnostics = new DiagnosticsState();
         }
 
         public SelectionState Selection { get; }
@@ -30,6 +31,8 @@ namespace WallstopStudios.DataVisualizer.Editor.State
         public ObjectListState Objects { get; }
 
         public ProcessorPanelState Processors { get; }
+
+        public DiagnosticsState Diagnostics { get; }
 
         public sealed class SelectionState
         {

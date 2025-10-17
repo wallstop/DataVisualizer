@@ -10,7 +10,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Events
             Type targetType,
             int objectCount,
             int pendingCount,
-            Exception exception
+            Exception exception,
+            double durationSeconds,
+            long allocatedBytes
         )
         {
             Processor = processor;
@@ -18,6 +20,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Events
             ObjectCount = objectCount;
             PendingCount = pendingCount;
             Exception = exception;
+            DurationSeconds = durationSeconds;
+            AllocatedBytes = allocatedBytes;
         }
 
         public IDataProcessor Processor { get; }
@@ -29,5 +33,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Events
         public int PendingCount { get; }
 
         public Exception Exception { get; }
+
+        public double DurationSeconds { get; }
+
+        public long AllocatedBytes { get; }
     }
 }

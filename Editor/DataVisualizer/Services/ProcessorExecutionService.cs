@@ -41,8 +41,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             DataVisualizerEventHub eventHub
         )
         {
-            _saveScheduler = saveScheduler
-                ?? throw new ArgumentNullException(nameof(saveScheduler));
+            _saveScheduler =
+                saveScheduler ?? throw new ArgumentNullException(nameof(saveScheduler));
             _eventHub = eventHub ?? throw new ArgumentNullException(nameof(eventHub));
         }
 
@@ -131,12 +131,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                 return;
             }
 
+            long initialAllocatedBytes = GC.GetTotalMemory(false);
             try
             {
                 request.Processor.Process(request.TargetType, request.Objects);
                 double durationSeconds = Math.Max(
                     0d,
                     EditorApplication.timeSinceStartup - _activeStartTime
+                );
+                long finalAllocatedBytes = GC.GetTotalMemory(false);
+                long allocatedBytes = CalculateAllocatedBytes(
+                    initialAllocatedBytes,
+                    finalAllocatedBytes
                 );
                 _saveScheduler.ScheduleAssetDatabaseSave();
                 _saveScheduler.Schedule(AssetDatabase.Refresh);
@@ -147,19 +153,31 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                         request.TargetType,
                         request.Objects.Count,
                         durationSeconds,
-                        _pendingExecutions.Count
+                        _pendingExecutions.Count,
+                        allocatedBytes
                     )
                 );
             }
             catch (Exception exception)
             {
+                double durationSeconds = Math.Max(
+                    0d,
+                    EditorApplication.timeSinceStartup - _activeStartTime
+                );
+                long finalAllocatedBytes = GC.GetTotalMemory(false);
+                long allocatedBytes = CalculateAllocatedBytes(
+                    initialAllocatedBytes,
+                    finalAllocatedBytes
+                );
                 _eventHub.Publish(
                     new ProcessorExecutionFailedEvent(
                         request.Processor,
                         request.TargetType,
                         request.Objects.Count,
                         _pendingExecutions.Count,
-                        exception
+                        exception,
+                        durationSeconds,
+                        allocatedBytes
                     )
                 );
             }
@@ -168,6 +186,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                 _activeRequest = null;
                 BeginNextExecution();
             }
+        }
+
+        private static long CalculateAllocatedBytes(long beforeBytes, long afterBytes)
+        {
+            if (afterBytes <= beforeBytes)
+            {
+                return 0L;
+            }
+
+            return afterBytes - beforeBytes;
         }
     }
 }

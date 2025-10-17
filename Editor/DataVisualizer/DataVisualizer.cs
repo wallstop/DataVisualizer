@@ -257,11 +257,14 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal readonly List<VisualElement> _currentTypePopoverItems = new();
 
         private readonly List<string> _currentTypeGuidOrder = new();
-        private readonly Dictionary<string, int> _currentGuidOrderLookup =
-            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, int> _currentGuidOrderLookup = new Dictionary<
+            string,
+            int
+        >(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _loadedGuidOrder = new();
-        private readonly HashSet<string> _loadedGuidSet =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _loadedGuidSet = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase
+        );
         private readonly Dictionary<string, DataAssetMetadata> _currentMetadataByGuid =
             new Dictionary<string, DataAssetMetadata>(StringComparer.OrdinalIgnoreCase);
         private DeferredAssetLoadState _deferredAssetLoadState;
@@ -514,6 +517,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             _userStateRepository = _dependencies.UserStateRepository;
             _settingsCache = _dependencies.Settings;
             _userStateCache = _dependencies.UserState;
+            bool telemetryEnabled =
+                _settingsCache != null && _settingsCache.enableProcessorTelemetry;
+            _sessionState.Diagnostics.SetProcessorTelemetryEnabled(telemetryEnabled);
             if (_layoutPersistenceService == null)
             {
                 _layoutPersistenceService = new LayoutPersistenceService(
@@ -741,7 +747,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             label.enableRichText = true;
 
-            if (string.IsNullOrEmpty(fullText) || termsToHighlight == null || termsToHighlight.Count == 0)
+            if (
+                string.IsNullOrEmpty(fullText)
+                || termsToHighlight == null
+                || termsToHighlight.Count == 0
+            )
             {
                 label.text = EscapeRichText(fullText);
                 return label;
@@ -839,7 +849,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 int searchIndex = 0;
                 while (searchIndex < fullText.Length)
                 {
-                    int foundIndex = fullText.IndexOf(term, searchIndex, StringComparison.OrdinalIgnoreCase);
+                    int foundIndex = fullText.IndexOf(
+                        term,
+                        searchIndex,
+                        StringComparison.OrdinalIgnoreCase
+                    );
                     if (foundIndex < 0)
                     {
                         break;
@@ -850,16 +864,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            matches.Sort((lhs, rhs) =>
-            {
-                int comparison = lhs.start.CompareTo(rhs.start);
-                if (comparison != 0)
+            matches.Sort(
+                (lhs, rhs) =>
                 {
-                    return comparison;
-                }
+                    int comparison = lhs.start.CompareTo(rhs.start);
+                    if (comparison != 0)
+                    {
+                        return comparison;
+                    }
 
-                return rhs.length.CompareTo(lhs.length);
-            });
+                    return rhs.length.CompareTo(lhs.length);
+                }
+            );
 
             List<(int start, int length)> filtered = new List<(int start, int length)>();
             int currentEnd = -1;
@@ -1903,22 +1919,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             BuildAndOpenConfirmationPopover(
                 message,
                 "Run",
-                () =>
-                    _processorExecutionService.EnqueueExecution(
-                        processor,
-                        targetType,
-                        toProcess
-                    ),
+                () => _processorExecutionService.EnqueueExecution(processor, targetType, toProcess),
                 anchor
             );
         }
 
-                internal void HandleSearchKeyDown(KeyDownEvent evt)
+        internal void HandleSearchKeyDown(KeyDownEvent evt)
         {
             _searchPopoverController?.HandleKeyDown(evt);
         }
 
-                internal void NavigateToObject(ScriptableObject targetObject)
+        internal void NavigateToObject(ScriptableObject targetObject)
         {
             if (targetObject == null)
             {
@@ -2535,6 +2546,48 @@ namespace WallstopStudios.DataVisualizer.Editor
                 AssetDatabase.SaveAssets();
             });
             contentWrapper.Add(selectionToggle);
+
+            ActionButtonToggle telemetryToggle = null;
+            telemetryToggle = new ActionButtonToggle(
+                settings.enableProcessorTelemetry
+                    ? "Disable Processor Telemetry: "
+                    : "Enable Processor Telemetry: ",
+                value =>
+                {
+                    if (telemetryToggle != null)
+                    {
+                        telemetryToggle.Label = value
+                            ? "Disable Processor Telemetry: "
+                            : "Enable Processor Telemetry: ";
+                    }
+                }
+            )
+            {
+                value = settings.enableProcessorTelemetry,
+            };
+            telemetryToggle.AddToClassList("settings-prefs-toggle");
+            telemetryToggle.RegisterValueChangedCallback(evt =>
+            {
+                bool newEnableTelemetry = evt.newValue;
+                bool previousEnableTelemetry = Settings.enableProcessorTelemetry;
+                if (newEnableTelemetry == previousEnableTelemetry)
+                {
+                    return;
+                }
+
+                DataVisualizerSettings localSettings = Settings;
+                localSettings.enableProcessorTelemetry = newEnableTelemetry;
+                _sessionState.Diagnostics.SetProcessorTelemetryEnabled(newEnableTelemetry);
+                DataVisualizerUserState localUserState = UserState;
+                if (localUserState != null)
+                {
+                    localUserState.enableProcessorTelemetry = newEnableTelemetry;
+                }
+
+                AssetDatabase.SaveAssets();
+                MarkUserStateDirty();
+            });
+            contentWrapper.Add(telemetryToggle);
 
             VisualElement dataFolderContainer = new()
             {
@@ -4966,12 +5019,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _dialogMessageSubscription ??=
-                _eventHub.Subscribe<DialogMessageRequestEvent>(HandleDialogMessageRequested);
-            _dialogConfirmationSubscription ??=
-                _eventHub.Subscribe<DialogConfirmationRequestEvent>(
-                    HandleDialogConfirmationRequested
-                );
+            _dialogMessageSubscription ??= _eventHub.Subscribe<DialogMessageRequestEvent>(
+                HandleDialogMessageRequested
+            );
+            _dialogConfirmationSubscription ??= _eventHub.Subscribe<DialogConfirmationRequestEvent>(
+                HandleDialogConfirmationRequested
+            );
         }
 
         private void ShowMessageDialog(string title, string message, string closeText = "OK")
@@ -5064,9 +5117,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     HandleProcessorExecutionCompleted
                 );
             _processorExecutionFailedSubscription ??=
-                _eventHub.Subscribe<ProcessorExecutionFailedEvent>(
-                    HandleProcessorExecutionFailed
-                );
+                _eventHub.Subscribe<ProcessorExecutionFailedEvent>(HandleProcessorExecutionFailed);
         }
 
         private void HandleTypeSelectedEvent(TypeSelectedEvent evt)
@@ -5138,6 +5189,14 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             ProcessorPanelState panelState = _sessionState.Processors;
             panelState.MarkExecutionCompleted(evt.DurationSeconds, evt.PendingCount);
+            RecordProcessorExecutionTelemetry(
+                evt.Processor,
+                evt.TargetType,
+                evt.ObjectCount,
+                true,
+                evt.DurationSeconds,
+                evt.AllocatedBytes
+            );
             _processorPanelController?.Refresh();
             ScheduleRefresh();
         }
@@ -5152,6 +5211,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             string errorMessage = evt.Exception?.Message ?? "Unknown error";
             ProcessorPanelState panelState = _sessionState.Processors;
             panelState.MarkExecutionFailed(errorMessage, evt.PendingCount);
+            RecordProcessorExecutionTelemetry(
+                evt.Processor,
+                evt.TargetType,
+                evt.ObjectCount,
+                false,
+                evt.DurationSeconds,
+                evt.AllocatedBytes
+            );
             _processorPanelController?.Refresh();
             Debug.LogError(
                 $"Error running processor '{evt.Processor?.Name ?? "Processor"}': {evt.Exception}"
@@ -5162,6 +5229,35 @@ namespace WallstopStudios.DataVisualizer.Editor
                 "OK"
             );
             ScheduleRefresh();
+        }
+
+        private void RecordProcessorExecutionTelemetry(
+            IDataProcessor processor,
+            Type targetType,
+            int objectCount,
+            bool succeeded,
+            double durationSeconds,
+            long allocatedBytes
+        )
+        {
+            DiagnosticsState diagnostics = _sessionState.Diagnostics;
+            if (diagnostics == null || !diagnostics.ProcessorTelemetryEnabled)
+            {
+                return;
+            }
+
+            string processorName = processor?.Name ?? "Processor";
+            string targetTypeName = targetType != null ? targetType.FullName : string.Empty;
+            ProcessorExecutionTelemetry telemetry = new ProcessorExecutionTelemetry(
+                processorName,
+                targetTypeName,
+                objectCount,
+                succeeded,
+                durationSeconds,
+                allocatedBytes,
+                DateTime.UtcNow
+            );
+            diagnostics.RecordProcessorExecution(telemetry);
         }
 
         private void HandleDialogMessageRequested(DialogMessageRequestEvent evt)
@@ -6531,11 +6627,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             ScriptableObject cloneInstance = Instantiate(originalObject);
             if (cloneInstance == null)
             {
-                ShowMessageDialog(
-                    "Error",
-                    "Failed to instantiate a clone of the object.",
-                    "OK"
-                );
+                ShowMessageDialog("Error", "Failed to instantiate a clone of the object.", "OK");
                 return;
             }
 
@@ -6791,7 +6883,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 DataAssetPage initialPage = _assetService.GetAssetsPage(type, 0, immediateTarget);
                 if (initialPage != null && initialPage.Items != null)
                 {
-                    for (int metadataIndex = 0; metadataIndex < initialPage.Items.Count; metadataIndex++)
+                    for (
+                        int metadataIndex = 0;
+                        metadataIndex < initialPage.Items.Count;
+                        metadataIndex++
+                    )
                     {
                         DataAssetMetadata metadata = initialPage.Items[metadataIndex];
                         if (metadata == null || string.IsNullOrWhiteSpace(metadata.Guid))
@@ -7092,7 +7188,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            Type selectedType = _namespaceController != null ? _namespaceController.SelectedType : null;
+            Type selectedType =
+                _namespaceController != null ? _namespaceController.SelectedType : null;
             if (selectedType == null || selectedType != state.Type)
             {
                 CancelDeferredAssetLoad();

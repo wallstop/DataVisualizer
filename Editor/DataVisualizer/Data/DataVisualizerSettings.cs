@@ -34,6 +34,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         [Tooltip("If true, when selecting an Object, it will be selected in the Inspector.")]
         public bool selectActiveObject;
 
+        [Tooltip("If true, capture processor execution telemetry for diagnostics.")]
+        public bool enableProcessorTelemetry;
+
         [Header("Saved State (Internal - Use only if EditorPrefs is disabled)")]
         [SerializeField]
         [ReadOnly]
@@ -126,6 +129,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             processorStates =
                 userState.processorStates?.Select(state => state.Clone()).ToList()
                 ?? new List<ProcessorState>();
+            enableProcessorTelemetry = userState.enableProcessorTelemetry;
             MarkDirty();
         }
 
