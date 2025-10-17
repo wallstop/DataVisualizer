@@ -580,6 +580,25 @@
     padding: 1px 6px;
 }
 
+.settings-reset-button {
+    color: rgb(255, 210, 140);
+    border-color: rgb(255, 128, 64);
+    -unity-font-style: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.25px;
+    border-radius: 4px;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    min-width: 110px;
+}
+
+.settings-reset-button:hover {
+    background-color: rgba(255, 128, 64, 0.2);
+    color: rgb(255, 234, 190);
+}
+
 .clone-button {
     border-color: rgb(102, 179, 102);
     color: rgb(102, 179, 102);

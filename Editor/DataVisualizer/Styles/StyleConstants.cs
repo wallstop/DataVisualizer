@@ -24,7 +24,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
 
         public const string ActionButtonClass = "action-button";
         public const string DeleteButtonClass = "delete-button";
-
         public const string ClickableClass = "clickable";
         public const string BoldClass = "bold";
 

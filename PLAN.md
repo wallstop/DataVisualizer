@@ -8,6 +8,7 @@
 - [x] Surface **user-state export/import** to JSON (read/write through `IUserStateRepository`) with validation + success/failure dialogs.
 - [x] Add **Reset to defaults** and per-section apply buttons; ensure all changes route through scheduler-backed save APIs.
 - [x] Document the settings schema and update README/AGENTS with the new UX.
+- [x] Highlight the **Reset State** action with warning styling and a danger-themed confirmation dialog.
 
 ## 2. Search & Filtering Improvements
 - [x] Introduce configurable **fuzzy matching** options (threshold, scoring display) leveraging `SearchService`. _(Completed – search popover exposes fuzzy toggle, threshold slider, and confidence badges synced to settings)_

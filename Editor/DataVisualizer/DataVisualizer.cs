@@ -1343,7 +1343,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (_scriptableObjectTypes.Count == 0)
             {
 #if UNITY_EDITOR
-                LogReorderDebug("RestorePreviousSelection aborted: No scriptable object types loaded");
+                LogReorderDebug(
+                    "RestorePreviousSelection aborted: No scriptable object types loaded"
+                );
 #endif
                 return;
             }
@@ -1404,9 +1406,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             selectedType ??= typesInNamespace[0];
 #if UNITY_EDITOR
-            LogReorderDebug(
-                $"RestorePreviousSelection selecting type '{selectedType.FullName}'"
-            );
+            LogReorderDebug($"RestorePreviousSelection selecting type '{selectedType.FullName}'");
 #endif
             LoadObjectTypes(selectedType);
             BuildNamespaceView();
@@ -8536,8 +8536,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             ShowConfirmationDialog(
                 "Reset User State",
-                "Resetting clears selections, ordering, and label filters. Continue?",
-                "Reset",
+                "This action wipes saved selections, ordering, and label filters. This cannot be undone.",
+                "DANGER",
                 "Cancel",
                 confirmed =>
                 {

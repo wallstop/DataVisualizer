@@ -1,9 +1,9 @@
 namespace WallstopStudios.DataVisualizer.Editor.Services
 {
     using System;
+    using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
-    using Styles;
 
     internal sealed class DialogService : IDisposable
     {
@@ -60,6 +60,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
         )
         {
             EnsureOverlay();
+            _overlay?.BringToFront();
 
             _titleLabel.text = string.IsNullOrWhiteSpace(title) ? "" : title.Trim();
             _titleLabel.style.display = string.IsNullOrWhiteSpace(_titleLabel.text)
@@ -155,35 +156,27 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
             _titleLabel = new Label
             {
-                style =
-                {
-                    unityFontStyleAndWeight = FontStyle.Bold,
-                    fontSize = 14,
-                },
+                style = { unityFontStyleAndWeight = FontStyle.Bold, fontSize = 14 },
             };
             _titleLabel.AddToClassList(StyleConstants.BoldClass);
             dialog.Add(_titleLabel);
 
             _messageLabel = new Label
             {
-                style =
-                {
-                    whiteSpace = WhiteSpace.Normal,
-                    unityTextAlign = TextAnchor.UpperLeft,
-                },
+                style = { whiteSpace = WhiteSpace.Normal, unityTextAlign = TextAnchor.UpperLeft },
             };
             dialog.Add(_messageLabel);
 
             VisualElement buttonRow = new VisualElement
             {
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    justifyContent = Justify.FlexEnd,
-                },
+                style = { flexDirection = FlexDirection.Row, justifyContent = Justify.FlexEnd },
             };
 
-            _secondaryButton = CreateButton("Cancel", InvokeSecondary, StyleConstants.ClickableClass);
+            _secondaryButton = CreateButton(
+                "Cancel",
+                InvokeSecondary,
+                StyleConstants.ClickableClass
+            );
             buttonRow.Add(_secondaryButton);
 
             _primaryButton = CreateButton("OK", InvokePrimary, StyleConstants.ActionButtonClass);
@@ -196,10 +189,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
 
         private static Button CreateButton(string text, Action onClick, string styleClass)
         {
-            Button button = new Button(() => onClick?.Invoke())
-            {
-                text = text,
-            };
+            Button button = new Button(() => onClick?.Invoke()) { text = text };
             button.AddToClassList("dialog-button");
             if (!string.IsNullOrWhiteSpace(styleClass))
             {
