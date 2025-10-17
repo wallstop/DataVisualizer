@@ -9,6 +9,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
     {
         private readonly VisualElement _root;
         private VisualElement _overlay;
+        private VisualElement _dialogContainer;
         private Label _titleLabel;
         private Label _messageLabel;
         private Button _primaryButton;
@@ -16,6 +17,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
         private Action _onPrimary;
         private Action _onSecondary;
         private bool _isShowing;
+        private bool _isDragging;
+        private Vector2 _dragStartMousePosition;
+        private Vector2 _dialogStartPosition;
+        private int _activePointerId = -1;
 
         public DialogService(VisualElement hostRoot)
         {
@@ -82,11 +87,29 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             _onPrimary = onPrimary;
             _onSecondary = onSecondary;
 
+            _secondaryButton.AddToClassList(StyleConstants.DialogSecondaryButtonClass);
+            _primaryButton.RemoveFromClassList(StyleConstants.ActionButtonClass);
+            _primaryButton.AddToClassList(StyleConstants.DialogPrimaryButtonClass);
+            _primaryButton.RemoveFromClassList(StyleConstants.DialogDangerButtonClass);
+            if (
+                !string.IsNullOrWhiteSpace(_primaryButton.text)
+                && string.Equals(
+                    _primaryButton.text.Trim(),
+                    "DANGER",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                _primaryButton.AddToClassList(StyleConstants.DialogDangerButtonClass);
+            }
+
             _primaryButton.focusable = true;
             _primaryButton.Focus();
 
             _overlay.style.display = DisplayStyle.Flex;
             _overlay.RegisterCallback<KeyDownEvent>(HandleKeyDown, TrickleDown.TrickleDown);
+            _overlay.BringToFront();
+            _dialogContainer?.BringToFront();
 
             _isShowing = true;
         }
@@ -133,6 +156,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                     display = DisplayStyle.None,
                 },
             };
+            _overlay.RegisterCallback<PointerDownEvent>(HandleOverlayPointerDown);
 
             VisualElement dialog = new VisualElement
             {
@@ -153,6 +177,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
                 },
             };
             dialog.AddToClassList("dialog-container");
+            dialog.RegisterCallback<PointerDownEvent>(HandleDialogPointerDown);
+            _dialogContainer = dialog;
 
             _titleLabel = new Label
             {
@@ -179,7 +205,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             );
             buttonRow.Add(_secondaryButton);
 
-            _primaryButton = CreateButton("OK", InvokePrimary, StyleConstants.ActionButtonClass);
+            _primaryButton = CreateButton("OK", InvokePrimary, StyleConstants.ClickableClass);
             buttonRow.Add(_primaryButton);
 
             dialog.Add(buttonRow);
@@ -203,6 +229,219 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             button.style.paddingBottom = 4;
             button.style.marginLeft = 4;
             return button;
+        }
+
+        private void HandleOverlayPointerDown(PointerDownEvent evt)
+        {
+            if (_dialogContainer != null)
+            {
+                VisualElement targetElement = evt.target as VisualElement;
+                VisualElement current = targetElement;
+                while (current != null)
+                {
+                    if (current == _dialogContainer)
+                    {
+                        return;
+                    }
+
+                    current = current.parent;
+                }
+            }
+
+            evt.StopPropagation();
+            evt.PreventDefault();
+        }
+
+        private void HandleDialogPointerDown(PointerDownEvent evt)
+        {
+            if (_dialogContainer == null || evt.button != 0)
+            {
+                return;
+            }
+
+            if (IsWithinButton(evt.target as VisualElement))
+            {
+                evt.StopPropagation();
+                return;
+            }
+
+            EnsureAbsoluteDialogPosition();
+
+            _isDragging = true;
+            _dragStartMousePosition = evt.position;
+            _dialogStartPosition = new Vector2(GetCurrentDialogLeft(), GetCurrentDialogTop());
+
+            _activePointerId = evt.pointerId;
+            _dialogContainer.CapturePointer(_activePointerId);
+            _dialogContainer.RegisterCallback<PointerMoveEvent>(HandleDialogPointerMove);
+            _dialogContainer.RegisterCallback<PointerUpEvent>(HandleDialogPointerUp);
+            _dialogContainer.RegisterCallback<PointerCaptureOutEvent>(
+                HandleDialogPointerCaptureOut
+            );
+            evt.StopPropagation();
+        }
+
+        private void HandleDialogPointerMove(PointerMoveEvent evt)
+        {
+            if (
+                !_isDragging
+                || _dialogContainer == null
+                || !_dialogContainer.HasPointerCapture(_activePointerId)
+            )
+            {
+                return;
+            }
+
+            Vector2 delta = (Vector2)evt.position - _dragStartMousePosition;
+            float targetLeft = _dialogStartPosition.x + delta.x;
+            float targetTop = _dialogStartPosition.y + delta.y;
+
+            Rect overlayBounds = _overlay?.worldBound ?? _root.worldBound;
+            float overlayWidth = overlayBounds.width;
+            float overlayHeight = overlayBounds.height;
+
+            float dialogWidth = _dialogContainer.resolvedStyle.width;
+            float dialogHeight = _dialogContainer.resolvedStyle.height;
+            if (float.IsNaN(dialogWidth) || dialogWidth <= 0)
+            {
+                dialogWidth = 320f;
+            }
+
+            if (float.IsNaN(dialogHeight) || dialogHeight <= 0)
+            {
+                dialogHeight = 180f;
+            }
+
+            float clampedLeft = Mathf.Clamp(
+                targetLeft,
+                0f,
+                Mathf.Max(0f, overlayWidth - dialogWidth)
+            );
+            float clampedTop = Mathf.Clamp(
+                targetTop,
+                0f,
+                Mathf.Max(0f, overlayHeight - dialogHeight)
+            );
+
+            _dialogContainer.style.left = clampedLeft;
+            _dialogContainer.style.top = clampedTop;
+            evt.StopPropagation();
+        }
+
+        private void HandleDialogPointerUp(PointerUpEvent evt)
+        {
+            StopDragging();
+            evt.StopPropagation();
+        }
+
+        private void HandleDialogPointerCaptureOut(PointerCaptureOutEvent _)
+        {
+            StopDragging();
+        }
+
+        private void StopDragging()
+        {
+            if (_dialogContainer == null)
+            {
+                return;
+            }
+
+            if (_activePointerId >= 0 && _dialogContainer.HasPointerCapture(_activePointerId))
+            {
+                _dialogContainer.ReleasePointer(_activePointerId);
+            }
+
+            _dialogContainer.UnregisterCallback<PointerMoveEvent>(HandleDialogPointerMove);
+            _dialogContainer.UnregisterCallback<PointerUpEvent>(HandleDialogPointerUp);
+            _dialogContainer.UnregisterCallback<PointerCaptureOutEvent>(
+                HandleDialogPointerCaptureOut
+            );
+
+            _isDragging = false;
+            _activePointerId = -1;
+        }
+
+        private void EnsureAbsoluteDialogPosition()
+        {
+            if (_dialogContainer == null || _overlay == null)
+            {
+                return;
+            }
+
+            if (_dialogContainer.style.position == Position.Absolute)
+            {
+                return;
+            }
+
+            Rect world = _dialogContainer.worldBound;
+            Vector2 local = _overlay.WorldToLocal(world.position);
+
+            _dialogContainer.style.position = Position.Absolute;
+            _dialogContainer.style.left = local.x;
+            _dialogContainer.style.top = local.y;
+            _dialogContainer.style.marginLeft = 0;
+            _dialogContainer.style.marginTop = 0;
+            _dialogContainer.style.marginRight = 0;
+            _dialogContainer.style.marginBottom = 0;
+        }
+
+        private float GetCurrentDialogLeft()
+        {
+            if (_dialogContainer == null)
+            {
+                return 0f;
+            }
+
+            float left = _dialogContainer.resolvedStyle.left;
+            if (float.IsNaN(left))
+            {
+                StyleLength styleLeft = _dialogContainer.style.left;
+                if (styleLeft.keyword == StyleKeyword.Undefined)
+                {
+                    return 0f;
+                }
+
+                return styleLeft.value.value;
+            }
+
+            return left;
+        }
+
+        private float GetCurrentDialogTop()
+        {
+            if (_dialogContainer == null)
+            {
+                return 0f;
+            }
+
+            float top = _dialogContainer.resolvedStyle.top;
+            if (float.IsNaN(top))
+            {
+                StyleLength styleTop = _dialogContainer.style.top;
+                if (styleTop.keyword == StyleKeyword.Undefined)
+                {
+                    return 0f;
+                }
+
+                return styleTop.value.value;
+            }
+
+            return top;
+        }
+
+        private static bool IsWithinButton(VisualElement element)
+        {
+            while (element != null)
+            {
+                if (element is Button)
+                {
+                    return true;
+                }
+
+                element = element.parent;
+            }
+
+            return false;
         }
 
         private void InvokePrimary()
@@ -241,6 +480,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Services
             _isShowing = false;
             _onPrimary = null;
             _onSecondary = null;
+            StopDragging();
         }
     }
 }

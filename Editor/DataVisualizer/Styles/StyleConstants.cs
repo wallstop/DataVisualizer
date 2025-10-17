@@ -27,6 +27,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
         public const string ClickableClass = "clickable";
         public const string BoldClass = "bold";
 
+        public const string DialogPrimaryButtonClass = "dialog-primary-button";
+        public const string DialogSecondaryButtonClass = "dialog-secondary-button";
+        public const string DialogDangerButtonClass = "dialog-danger-button";
+
         public const string ArrowCollapsed = "►";
         public const string ArrowExpanded = "▼";
 

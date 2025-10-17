@@ -586,17 +586,47 @@
     -unity-font-style: bold;
     text-transform: uppercase;
     letter-spacing: 0.25px;
-    border-radius: 4px;
-    padding-left: 10px;
-    padding-right: 10px;
-    padding-top: 4px;
-    padding-bottom: 4px;
-    min-width: 110px;
 }
 
 .settings-reset-button:hover {
     background-color: rgba(255, 128, 64, 0.2);
     color: rgb(255, 234, 190);
+}
+
+.dialog-secondary-button {
+    border-radius: 4px;
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.75);
+    padding: 4px 10px;
+    min-width: 90px;
+}
+
+.dialog-secondary-button:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.dialog-primary-button {
+    border-radius: 4px;
+    border-color: rgba(255, 255, 255, 0.35);
+    color: rgb(255, 255, 255);
+    padding: 4px 12px;
+    min-width: 110px;
+    font-weight: bold;
+}
+
+.dialog-primary-button:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+.dialog-danger-button {
+    border-color: rgb(255, 102, 102);
+    color: rgb(255, 210, 180);
+}
+
+.dialog-danger-button:hover {
+    background-color: rgba(255, 102, 102, 0.25);
+    color: rgb(255, 230, 210);
 }
 
 .clone-button {
