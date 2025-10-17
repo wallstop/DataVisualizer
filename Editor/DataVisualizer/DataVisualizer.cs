@@ -8421,6 +8421,17 @@ namespace WallstopStudios.DataVisualizer.Editor
         }
 
 #if UNITY_EDITOR
+        internal void OverrideSearchServiceForTesting(SearchService searchService)
+        {
+            if (searchService == null)
+            {
+                throw new ArgumentNullException(nameof(searchService));
+            }
+
+            _searchService = searchService;
+            UpdateSearchOptionsFromSettings();
+        }
+
         internal void OverrideUserStateRepositoryForTesting(
             IUserStateRepository repository,
             DataVisualizerSettings settings,

@@ -76,15 +76,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             filterContainer.Clear();
 
-            Type selectedType = _namespaceController.SelectedType;
-            if (selectedType == null)
-            {
-                filterContainer.style.display = DisplayStyle.None;
-                return;
-            }
-
             VisualizerSessionState.LabelFilterState labelsState = _sessionState.Labels;
-            if (labelsState.AndLabels.Count == 0 && labelsState.OrLabels.Count == 0)
+            string selectedNamespaceKey = _sessionState.Selection.SelectedNamespaceKey;
+            bool hasNamespaceFilter = !string.IsNullOrWhiteSpace(selectedNamespaceKey);
+            bool hasLabelFilters =
+                labelsState.AndLabels.Count > 0 || labelsState.OrLabels.Count > 0;
+
+            if (!hasNamespaceFilter && !hasLabelFilters)
             {
                 filterContainer.style.display = DisplayStyle.None;
                 return;
@@ -98,37 +96,49 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             };
             filterContainer.Add(title);
 
-            AddFilterChips(filterContainer, "AND", labelsState.AndLabels, "and");
-            AddFilterChips(filterContainer, "OR", labelsState.OrLabels, "or");
-
-            Label combinationLabel = new Label(
-                labelsState.CombinationType == LabelCombinationType.Or ? "Logic: OR" : "Logic: AND"
-            )
+            if (hasNamespaceFilter)
             {
-                style =
-                {
-                    unityFontStyleAndWeight = FontStyle.Italic,
-                    color = new Color(0.6f, 0.6f, 0.6f),
-                    marginLeft = 4,
-                },
-            };
-            filterContainer.Add(combinationLabel);
+                Button namespaceChip = CreateNamespaceChip(selectedNamespaceKey);
+                filterContainer.Add(namespaceChip);
+            }
 
-            Button clearButton = new Button(() => _dataVisualizer.ClearAllLabelFilters())
+            if (hasLabelFilters)
+            {
+                AddFilterChips(
+                    filterContainer,
+                    "AND",
+                    labelsState.AndLabels,
+                    "and",
+                    DataVisualizer.LabelFilterSection.AND
+                );
+                AddFilterChips(
+                    filterContainer,
+                    "OR",
+                    labelsState.OrLabels,
+                    "or",
+                    DataVisualizer.LabelFilterSection.OR
+                );
+
+                Button combinationButton = CreateCombinationToggle(labelsState.CombinationType);
+                filterContainer.Add(combinationButton);
+            }
+
+            Button clearButton = new Button(() => ClearAllFilters())
             {
                 text = "Clear",
-                tooltip = "Remove all label filters",
+                tooltip = "Remove namespace and label filters",
             };
             clearButton.AddToClassList("namespace-filter-clear-button");
             clearButton.AddToClassList(StyleConstants.ClickableClass);
             filterContainer.Add(clearButton);
         }
 
-        private static void AddFilterChips(
+        private void AddFilterChips(
             VisualElement container,
             string prefix,
             IReadOnlyList<string> labels,
-            string styleSuffix
+            string styleSuffix,
+            DataVisualizer.LabelFilterSection section
         )
         {
             if (labels == null || labels.Count == 0)
@@ -144,21 +154,151 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     continue;
                 }
 
-                Label chip = new Label($"{prefix}: {labelText}")
+                string buttonText = $"{prefix}: {labelText}";
+                Button chip = new Button(() => HandleLabelChipClicked(labelText, section))
                 {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Normal,
-                        paddingLeft = 6,
-                        paddingRight = 6,
-                        paddingTop = 2,
-                        paddingBottom = 2,
-                    },
+                    text = buttonText,
+                    tooltip = $"Remove '{labelText}' from {prefix} filters",
                 };
                 chip.AddToClassList("namespace-filter-chip");
                 chip.AddToClassList($"namespace-filter-chip-{styleSuffix}");
+                chip.AddToClassList(StyleConstants.ClickableClass);
                 container.Add(chip);
             }
+        }
+
+        private Button CreateNamespaceChip(string namespaceKey)
+        {
+            string displayText = namespaceKey ?? string.Empty;
+            Button chip = new Button(() => ClearNamespaceSelection())
+            {
+                text = $"Namespace: {displayText}",
+                tooltip = $"Clear namespace filter '{displayText}'",
+            };
+            chip.AddToClassList("namespace-filter-chip");
+            chip.AddToClassList("namespace-filter-chip-namespace");
+            chip.AddToClassList(StyleConstants.ClickableClass);
+            return chip;
+        }
+
+        private Button CreateCombinationToggle(LabelCombinationType combinationType)
+        {
+            bool isOr = combinationType == LabelCombinationType.Or;
+            string buttonText = isOr ? "Logic: OR" : "Logic: AND";
+            Button toggle = new Button(() => ToggleCombinationType())
+            {
+                text = buttonText,
+                tooltip = "Toggle between AND (intersection) and OR (union) label matching",
+            };
+            toggle.AddToClassList("namespace-filter-chip");
+            toggle.AddToClassList("namespace-filter-chip-logic");
+            toggle.AddToClassList(StyleConstants.ClickableClass);
+            return toggle;
+        }
+
+        private void HandleLabelChipClicked(
+            string labelText,
+            DataVisualizer.LabelFilterSection section
+        )
+        {
+            if (string.IsNullOrWhiteSpace(labelText))
+            {
+                return;
+            }
+
+            _dataVisualizer.RemoveLabelFromFilter(labelText, section);
+            RenderActiveFilters();
+        }
+
+        private void ToggleCombinationType()
+        {
+            TypeLabelFilterConfig config = _dataVisualizer.CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                return;
+            }
+
+            LabelCombinationType next =
+                config.combinationType == LabelCombinationType.And
+                    ? LabelCombinationType.Or
+                    : LabelCombinationType.And;
+
+            if (config.combinationType == next)
+            {
+                return;
+            }
+
+            config.combinationType = next;
+            _dataVisualizer.SaveLabelFilterConfig(config);
+            _dataVisualizer.ApplyLabelFilter();
+            RenderActiveFilters();
+        }
+
+        private void ClearNamespaceSelection()
+        {
+            ClearNamespaceSelectionInternal();
+        }
+
+        private bool ClearNamespaceSelectionInternal()
+        {
+            string selectedNamespaceKey = _sessionState.Selection.SelectedNamespaceKey;
+            if (string.IsNullOrWhiteSpace(selectedNamespaceKey))
+            {
+                return false;
+            }
+
+            _namespaceController.SelectType(_dataVisualizer, null);
+            _sessionState.Selection.SetSelectedNamespace(null);
+            _sessionState.Selection.SetSelectedType(null);
+            _sessionState.Selection.SetPrimarySelectedObject(null);
+
+            _dataVisualizer.PersistSettings(
+                settings =>
+                {
+                    bool updated = false;
+                    if (!string.IsNullOrWhiteSpace(settings.lastSelectedNamespaceKey))
+                    {
+                        settings.lastSelectedNamespaceKey = null;
+                        updated = true;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(settings.lastSelectedTypeName))
+                    {
+                        settings.lastSelectedTypeName = null;
+                        updated = true;
+                    }
+
+                    return updated;
+                },
+                userState =>
+                {
+                    bool updated = false;
+                    if (!string.IsNullOrWhiteSpace(userState.lastSelectedNamespaceKey))
+                    {
+                        userState.lastSelectedNamespaceKey = null;
+                        updated = true;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(userState.lastSelectedTypeName))
+                    {
+                        userState.lastSelectedTypeName = null;
+                        updated = true;
+                    }
+
+                    return updated;
+                }
+            );
+
+            _eventHub.Publish(new TypeSelectedEvent(null, null));
+            _dataVisualizer.BuildObjectsView();
+            _dataVisualizer.UpdateLabelAreaAndFilter();
+            return true;
+        }
+
+        private void ClearAllFilters()
+        {
+            _dataVisualizer.ClearAllLabelFilters();
+            ClearNamespaceSelectionInternal();
         }
 
         public void ToggleNamespaceCollapse(string namespaceKey)

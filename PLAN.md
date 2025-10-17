@@ -10,10 +10,10 @@
 - [x] Document the settings schema and update README/AGENTS with the new UX.
 
 ## 2. Search & Filtering Improvements
-- [ ] Introduce configurable **fuzzy matching** options (threshold, scoring display) leveraging `SearchService`. _(In progress – wiring search popover controls + confidence badges)_
+- [x] Introduce configurable **fuzzy matching** options (threshold, scoring display) leveraging `SearchService`. _(Completed – search popover exposes fuzzy toggle, threshold slider, and confidence badges synced to settings)_
 - [ ] Highlight match quality in the search popover (confidence badges, keyboard shortcut legend).
-- [ ] Add quick filters in the namespace pane (namespace + label chips) that sync with `VisualizerSessionState`.
-- [ ] Expand tests to cover fuzzy search behaviour and combined filters.
+- [x] Add quick filters in the namespace pane (namespace + label chips) that sync with `VisualizerSessionState`. _(Completed – namespace chip, label removal actions, and logic toggle update session state)_
+- [x] Expand tests to cover fuzzy search behaviour and combined filters. _(Completed – editor tests validate popover controls and filter chips)_
 
 ## 3. Batched Save/Update Pipeline
 - [ ] Audit all calls to `AssetDatabase.SaveAssets()` and replace them with scheduler-driven hooks.
