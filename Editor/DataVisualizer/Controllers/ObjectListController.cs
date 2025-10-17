@@ -372,10 +372,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             if (_listView != null)
             {
-                _listView.itemsSource = null;
-                _listView.itemsSource = _dataVisualizer._objectRowViewModels;
-                _listView.RefreshItems();
-                _listView.Rebuild();
+                bool previousUpdatingSelection = _dataVisualizer._isUpdatingListSelection;
+                _dataVisualizer._isUpdatingListSelection = true;
+                try
+                {
+                    _listView.itemsSource = null;
+                    _listView.itemsSource = _dataVisualizer._objectRowViewModels;
+                    _listView.RefreshItems();
+                    _listView.Rebuild();
+                }
+                finally
+                {
+                    _dataVisualizer._isUpdatingListSelection = previousUpdatingSelection;
+                }
             }
 
             UpdateCreateButtonState();
