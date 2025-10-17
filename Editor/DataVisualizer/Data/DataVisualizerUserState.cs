@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Data;
 
     [Serializable]
     public sealed class DataVisualizerUserState
@@ -21,6 +22,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         public List<TypeLabelFilterConfig> labelFilterConfigs = new();
         public List<ProcessorState> processorStates = new();
         public bool enableProcessorTelemetry;
+        public bool selectActiveObject;
+        public bool showShortcutHints = true;
+        public bool showDragModifierHints = true;
+        public ProcessorLogic defaultProcessorLogic = ProcessorLogic.Filtered;
+        public bool enableFuzzySearch = true;
+        public float fuzzyMatchThreshold = 0.6f;
+        public bool showSearchScores = true;
 
         public void HydrateFrom(DataVisualizerSettings settings)
         {
@@ -52,6 +60,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 settings.processorStates?.Select(state => state.Clone()).ToList()
                 ?? new List<ProcessorState>();
             enableProcessorTelemetry = settings.enableProcessorTelemetry;
+            selectActiveObject = settings.selectActiveObject;
+            showShortcutHints = settings.showShortcutHints;
+            showDragModifierHints = settings.showDragModifierHints;
+            defaultProcessorLogic = settings.defaultProcessorLogic;
+            enableFuzzySearch = settings.enableFuzzySearch;
+            fuzzyMatchThreshold = settings.fuzzyMatchThreshold;
+            showSearchScores = settings.showSearchScores;
         }
 
         public List<string> GetOrCreateObjectOrderList(string typeFullName)

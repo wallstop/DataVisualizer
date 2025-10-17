@@ -9,6 +9,14 @@ Data management tooling for Unity projects built on ScriptableObject workflows.
 2. From Unity, open **Package Manager → + → Add package from disk…** and select `package.json` in this folder. The package can also be imported via CLI: `unity -projectPath <your-project> -importPackage <path-to-repo>`.
 3. Open the window from **Tools → Wallstop Studios → Data Visualizer**.
 
+## Settings & Preferences
+
+Open the gear icon to configure the tooling:
+
+- Toggle persistence mode (Settings asset vs. per-user JSON), enable/disable shortcut and drag hints, and set the default processor logic.
+- Export or import user state as JSON to share presets across machines; the import flow reloads the window automatically.
+- Reset user state – useful when onboarding a teammate or clearing stale preferences.
+
 ## Architectural Overview
 
 The editor window is intentionally thin. It composes a set of testable building blocks that live under `Editor/DataVisualizer/`:
@@ -37,6 +45,7 @@ The editor window is intentionally thin. It composes a set of testable building 
   ```
 - Run edit-mode tests from Unity or via CLI: `unity -projectPath <project> -runTests -testPlatform EditMode`.
 - Tests live under `Tests/Editor` (window/controllers/services) and `Tests/Runtime` (shared runtime contracts).
+- `DataVisualizer.OverrideUserStateRepositoryForTesting` and `DataVisualizerDependencies.OverrideUserStateForTesting` help inject fakes without touching internals.
 
 ## Contributing
 

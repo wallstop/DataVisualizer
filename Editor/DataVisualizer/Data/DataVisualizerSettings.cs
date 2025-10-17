@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Data;
     using Helper;
     using UnityEditor;
     using UnityEngine;
@@ -36,6 +37,26 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
         [Tooltip("If true, capture processor execution telemetry for diagnostics.")]
         public bool enableProcessorTelemetry;
+
+        [Header("Experience")]
+        [Tooltip("Display keyboard shortcut hints in popovers and helper UI.")]
+        public bool showShortcutHints = true;
+
+        [Tooltip("Display drag modifier hints when reordering objects.")]
+        public bool showDragModifierHints = true;
+
+        [Tooltip("Default processor logic applied the first time a type is opened.")]
+        public ProcessorLogic defaultProcessorLogic = ProcessorLogic.Filtered;
+
+        [Tooltip("Enable fuzzy matching for search queries.")]
+        public bool enableFuzzySearch = true;
+
+        [Range(0.3f, 1f)]
+        [Tooltip("Similarity required (0-1) for fuzzy matches to be considered.")]
+        public float fuzzyMatchThreshold = 0.6f;
+
+        [Tooltip("Display match confidence scores in the search popover.")]
+        public bool showSearchScores = true;
 
         [Header("Saved State (Internal - Use only if EditorPrefs is disabled)")]
         [SerializeField]
@@ -130,6 +151,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 userState.processorStates?.Select(state => state.Clone()).ToList()
                 ?? new List<ProcessorState>();
             enableProcessorTelemetry = userState.enableProcessorTelemetry;
+            selectActiveObject = userState.selectActiveObject;
+            showShortcutHints = userState.showShortcutHints;
+            showDragModifierHints = userState.showDragModifierHints;
+            defaultProcessorLogic = userState.defaultProcessorLogic;
+            enableFuzzySearch = userState.enableFuzzySearch;
+            fuzzyMatchThreshold = userState.fuzzyMatchThreshold;
+            showSearchScores = userState.showSearchScores;
             MarkDirty();
         }
 

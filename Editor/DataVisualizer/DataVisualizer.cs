@@ -2441,9 +2441,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             dragHandle.Add(closeButton);
 
             DataVisualizerSettings settings = Settings;
-            ActionButtonToggle prefsToggle = null;
-            prefsToggle = new ActionButtonToggle(
-                settings.persistStateInSettingsAsset
+            bool persistInSettingsAsset = settings.persistStateInSettingsAsset;
+
+            ActionButtonToggle prefsToggle = new ActionButtonToggle(
+                persistInSettingsAsset
                     ? "Persist State in UserState: "
                     : "Persist State in Settings Asset: ",
                 value =>
@@ -2457,7 +2458,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             )
             {
-                value = settings.persistStateInSettingsAsset,
+                value = persistInSettingsAsset,
             };
             prefsToggle.AddToClassList("settings-prefs-toggle");
             prefsToggle.RegisterValueChangedCallback(evt =>
@@ -2478,11 +2479,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             });
             contentWrapper.Add(prefsToggle);
 
-            ActionButtonToggle selectionToggle = null;
-            selectionToggle = new ActionButtonToggle(
-                settings.selectActiveObject
-                    ? "Don't Select Active Object: "
-                    : "Select Active Object: ",
+            bool selectActiveObject = ShouldSelectActiveObject();
+
+            ActionButtonToggle selectionToggle = new ActionButtonToggle(
+                selectActiveObject ? "Don't Select Active Object: " : "Select Active Object: ",
                 value =>
                 {
                     if (selectionToggle != null)
@@ -2494,26 +2494,44 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             )
             {
-                value = settings.selectActiveObject,
+                value = selectActiveObject,
             };
             selectionToggle.AddToClassList("settings-prefs-toggle");
             selectionToggle.RegisterValueChangedCallback(evt =>
             {
                 bool newSelectActiveObject = evt.newValue;
-                bool previousSelectActiveObject = Settings.selectActiveObject;
+                bool previousSelectActiveObject = ShouldSelectActiveObject();
                 if (newSelectActiveObject == previousSelectActiveObject)
                 {
                     return;
                 }
 
-                DataVisualizerSettings localSettings = Settings;
-                localSettings.selectActiveObject = newSelectActiveObject;
-                AssetDatabase.SaveAssets();
+                PersistSettings(
+                    assetSettings =>
+                    {
+                        if (assetSettings.selectActiveObject == newSelectActiveObject)
+                        {
+                            return false;
+                        }
+
+                        assetSettings.selectActiveObject = newSelectActiveObject;
+                        return true;
+                    },
+                    userState =>
+                    {
+                        if (userState.selectActiveObject == newSelectActiveObject)
+                        {
+                            return false;
+                        }
+
+                        userState.selectActiveObject = newSelectActiveObject;
+                        return true;
+                    }
+                );
             });
             contentWrapper.Add(selectionToggle);
 
-            ActionButtonToggle telemetryToggle = null;
-            telemetryToggle = new ActionButtonToggle(
+            ActionButtonToggle telemetryToggle = new ActionButtonToggle(
                 settings.enableProcessorTelemetry
                     ? "Disable Processor Telemetry: "
                     : "Enable Processor Telemetry: ",
@@ -2540,19 +2558,181 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return;
                 }
 
-                DataVisualizerSettings localSettings = Settings;
-                localSettings.enableProcessorTelemetry = newEnableTelemetry;
                 _sessionState.Diagnostics.SetProcessorTelemetryEnabled(newEnableTelemetry);
-                DataVisualizerUserState localUserState = UserState;
-                if (localUserState != null)
-                {
-                    localUserState.enableProcessorTelemetry = newEnableTelemetry;
-                }
+                PersistSettings(
+                    assetSettings =>
+                    {
+                        if (assetSettings.enableProcessorTelemetry == newEnableTelemetry)
+                        {
+                            return false;
+                        }
 
-                AssetDatabase.SaveAssets();
-                MarkUserStateDirty();
+                        assetSettings.enableProcessorTelemetry = newEnableTelemetry;
+                        return true;
+                    },
+                    userState =>
+                    {
+                        if (userState.enableProcessorTelemetry == newEnableTelemetry)
+                        {
+                            return false;
+                        }
+
+                        userState.enableProcessorTelemetry = newEnableTelemetry;
+                        return true;
+                    }
+                );
             });
             contentWrapper.Add(telemetryToggle);
+
+            bool shortcutHintsEnabled = ShouldShowShortcutHints();
+            ActionButtonToggle shortcutToggle = new ActionButtonToggle(
+                shortcutHintsEnabled ? "Hide Shortcut Hints: " : "Show Shortcut Hints: ",
+                value =>
+                {
+                    if (shortcutToggle != null)
+                    {
+                        shortcutToggle.Label = value
+                            ? "Hide Shortcut Hints: "
+                            : "Show Shortcut Hints: ";
+                    }
+                }
+            )
+            {
+                value = shortcutHintsEnabled,
+            };
+            shortcutToggle.AddToClassList("settings-prefs-toggle");
+            shortcutToggle.RegisterValueChangedCallback(evt =>
+            {
+                bool newValue = evt.newValue;
+                if (newValue == ShouldShowShortcutHints())
+                {
+                    return;
+                }
+
+                PersistSettings(
+                    assetSettings =>
+                    {
+                        if (assetSettings.showShortcutHints == newValue)
+                        {
+                            return false;
+                        }
+
+                        assetSettings.showShortcutHints = newValue;
+                        return true;
+                    },
+                    userState =>
+                    {
+                        if (userState.showShortcutHints == newValue)
+                        {
+                            return false;
+                        }
+
+                        userState.showShortcutHints = newValue;
+                        return true;
+                    }
+                );
+            });
+            contentWrapper.Add(shortcutToggle);
+
+            bool dragHintsEnabled = ShouldShowDragModifierHints();
+            ActionButtonToggle dragHintsToggle = new ActionButtonToggle(
+                dragHintsEnabled ? "Hide Drag Modifier Hints: " : "Show Drag Modifier Hints: ",
+                value =>
+                {
+                    if (dragHintsToggle != null)
+                    {
+                        dragHintsToggle.Label = value
+                            ? "Hide Drag Modifier Hints: "
+                            : "Show Drag Modifier Hints: ";
+                    }
+                }
+            )
+            {
+                value = dragHintsEnabled,
+            };
+            dragHintsToggle.AddToClassList("settings-prefs-toggle");
+            dragHintsToggle.RegisterValueChangedCallback(evt =>
+            {
+                bool newValue = evt.newValue;
+                if (newValue == ShouldShowDragModifierHints())
+                {
+                    return;
+                }
+
+                PersistSettings(
+                    assetSettings =>
+                    {
+                        if (assetSettings.showDragModifierHints == newValue)
+                        {
+                            return false;
+                        }
+
+                        assetSettings.showDragModifierHints = newValue;
+                        return true;
+                    },
+                    userState =>
+                    {
+                        if (userState.showDragModifierHints == newValue)
+                        {
+                            return false;
+                        }
+
+                        userState.showDragModifierHints = newValue;
+                        return true;
+                    }
+                );
+            });
+            contentWrapper.Add(dragHintsToggle);
+
+            EnumField defaultLogicField = new EnumField(
+                "Default Processor Logic",
+                GetDefaultProcessorLogic()
+            );
+            defaultLogicField.AddToClassList("settings-enum-field");
+            defaultLogicField.RegisterValueChangedCallback(evt =>
+            {
+                ProcessorLogic newLogic = (ProcessorLogic)evt.newValue;
+                if (newLogic == GetDefaultProcessorLogic())
+                {
+                    return;
+                }
+
+                PersistSettings(
+                    assetSettings =>
+                    {
+                        if (assetSettings.defaultProcessorLogic == newLogic)
+                        {
+                            return false;
+                        }
+
+                        assetSettings.defaultProcessorLogic = newLogic;
+                        return true;
+                    },
+                    userState =>
+                    {
+                        if (userState.defaultProcessorLogic == newLogic)
+                        {
+                            return false;
+                        }
+
+                        userState.defaultProcessorLogic = newLogic;
+                        return true;
+                    }
+                );
+            });
+            contentWrapper.Add(defaultLogicField);
+
+            VisualElement separator = new()
+            {
+                style =
+                {
+                    height = 1,
+                    marginTop = 8,
+                    marginBottom = 8,
+                    backgroundColor = new Color(0f, 0f, 0f, 0.25f),
+                },
+            };
+            contentWrapper.Add(separator);
 
             VisualElement dataFolderContainer = new()
             {
@@ -2596,6 +2776,43 @@ namespace WallstopStudios.DataVisualizer.Editor
             selectFolderButton.AddToClassList(StyleConstants.ClickableClass);
             dataFolderContainer.Add(selectFolderButton);
             contentWrapper.Add(dataFolderContainer);
+
+            VisualElement exportImportRow = new()
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    justifyContent = Justify.SpaceBetween,
+                    marginTop = 8,
+                },
+            };
+
+            Button exportButton = new(() => ExportUserStateToJson())
+            {
+                text = "Export User State…",
+            };
+            exportButton.AddToClassList("settings-export-button");
+            exportButton.AddToClassList(StyleConstants.ClickableClass);
+            exportImportRow.Add(exportButton);
+
+            Button importButton = new(() => ImportUserStateFromJson())
+            {
+                text = "Import User State…",
+            };
+            importButton.AddToClassList("settings-import-button");
+            importButton.AddToClassList(StyleConstants.ClickableClass);
+            exportImportRow.Add(importButton);
+
+            Button resetButton = new(() => ResetUserStateToDefaults())
+            {
+                text = "Reset State",
+                tooltip = "Restore user-specific state to defaults",
+            };
+            resetButton.AddToClassList("settings-reset-button");
+            resetButton.AddToClassList(StyleConstants.ClickableClass);
+            exportImportRow.Add(resetButton);
+
+            contentWrapper.Add(exportImportRow);
         }
 
         internal void SelectDataFolderForPopover(Label displayField)
@@ -4626,7 +4843,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                     );
                     if (state == null)
                     {
-                        state = new ProcessorState { typeFullName = type.FullName };
+                        state = new ProcessorState
+                        {
+                            typeFullName = type.FullName,
+                            logic = GetDefaultProcessorLogic(),
+                        };
                         settings.processorStates.Add(state);
                         dirty = true;
                     }
@@ -4649,7 +4870,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                     );
                     if (state == null)
                     {
-                        state = new ProcessorState { typeFullName = type.FullName };
+                        state = new ProcessorState
+                        {
+                            typeFullName = type.FullName,
+                            logic = GetDefaultProcessorLogic(),
+                        };
                         userState.processorStates.Add(state);
                         dirty = true;
                     }
@@ -7403,7 +7628,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (elementToScroll != null)
             {
-                if (Settings.selectActiveObject)
+                if (ShouldSelectActiveObject())
                 {
                     Selection.activeObject = _selectedObject;
                 }
@@ -7434,7 +7659,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                 }
             }
-            else if (Settings.selectActiveObject && _selectedObject != null)
+            else if (ShouldSelectActiveObject() && _selectedObject != null)
             {
                 Selection.activeObject = _selectedObject;
             }
@@ -7753,6 +7978,215 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _dependencies?.UserStateRepository?.SaveUserState(UserState);
+        }
+
+        internal bool ShouldShowShortcutHints()
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                return settings.showShortcutHints;
+            }
+
+            return UserState.showShortcutHints;
+        }
+
+        internal bool ShouldShowDragModifierHints()
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                return settings.showDragModifierHints;
+            }
+
+            return UserState.showDragModifierHints;
+        }
+
+        internal ProcessorLogic GetDefaultProcessorLogic()
+        {
+            DataVisualizerSettings settings = Settings;
+            ProcessorLogic logic = settings.persistStateInSettingsAsset
+                ? settings.defaultProcessorLogic
+                : UserState.defaultProcessorLogic;
+
+#pragma warning disable CS0618
+            return logic == ProcessorLogic.None ? ProcessorLogic.Filtered : logic;
+#pragma warning restore CS0618
+        }
+
+        private void ExportUserStateToJson()
+        {
+            try
+            {
+                string path = EditorUtility.SaveFilePanel(
+                    "Export Data Visualizer User State",
+                    Application.dataPath,
+                    "DataVisualizerUserState",
+                    "json"
+                );
+
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return;
+                }
+
+                DataVisualizerUserState snapshot = UserState ?? new DataVisualizerUserState();
+                string json = JsonUtility.ToJson(snapshot, true);
+                File.WriteAllText(path, json);
+                ShowMessageDialog(
+                    "Export Complete",
+                    $"User state exported to:\n{path.Replace(Application.dataPath, "Assets")}"
+                );
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                ShowMessageDialog(
+                    "Export Failed",
+                    "An error occurred while exporting user state. Check the console for details.",
+                    "OK"
+                );
+            }
+        }
+
+        private void ImportUserStateFromJson()
+        {
+            string path = EditorUtility.OpenFilePanel(
+                "Import Data Visualizer User State",
+                Application.dataPath,
+                "json"
+            );
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            string json;
+            try
+            {
+                json = File.ReadAllText(path);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                ShowMessageDialog(
+                    "Import Failed",
+                    "Unable to read the selected file. Check the console for details.",
+                    "OK"
+                );
+                return;
+            }
+
+            DataVisualizerUserState imported;
+            try
+            {
+                imported = JsonUtility.FromJson<DataVisualizerUserState>(json);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                ShowMessageDialog(
+                    "Import Failed",
+                    "The file does not contain valid Data Visualizer user state data.",
+                    "OK"
+                );
+                return;
+            }
+
+            if (imported == null)
+            {
+                ShowMessageDialog(
+                    "Import Failed",
+                    "The file does not contain valid Data Visualizer user state data.",
+                    "OK"
+                );
+                return;
+            }
+
+            ShowConfirmationDialog(
+                "Import User State",
+                "Importing will overwrite your current user-specific preferences (selection, ordering, labels). Continue?",
+                "Import",
+                "Cancel",
+                confirmed =>
+                {
+                    if (!confirmed)
+                    {
+                        return;
+                    }
+
+                    ApplyImportedUserState(imported);
+                    ShowMessageDialog("Import Complete", "User state imported successfully.");
+                }
+            );
+        }
+
+        private void ResetUserStateToDefaults()
+        {
+            ShowConfirmationDialog(
+                "Reset User State",
+                "Resetting clears selections, ordering, and label filters. Continue?",
+                "Reset",
+                "Cancel",
+                confirmed =>
+                {
+                    if (!confirmed)
+                    {
+                        return;
+                    }
+
+                    ApplyImportedUserState(new DataVisualizerUserState());
+                    ShowMessageDialog("Reset Complete", "User state reset to defaults.");
+                }
+            );
+        }
+
+        private void ApplyImportedUserState(DataVisualizerUserState imported)
+        {
+            try
+            {
+                DataVisualizerSettings settings = Settings;
+                if (settings.persistStateInSettingsAsset)
+                {
+                    settings.HydrateFrom(imported);
+                    settings.MarkDirty();
+                    AssetDatabase.SaveAssets();
+                }
+                else
+                {
+                    _dependencies?.UserStateRepository?.SaveUserState(imported);
+                }
+
+                _dependencies?.RefreshUserState();
+                ReloadUiFromPersistence();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                ShowMessageDialog(
+                    "Import Failed",
+                    "Failed to apply imported state. Check the console for details.",
+                    "OK"
+                );
+            }
+        }
+
+        private void ReloadUiFromPersistence()
+        {
+            _sessionState.Processors.Clear();
+            _sessionState.Popovers.Clear();
+            _sessionState.Selection.SetSelectedNamespace(null);
+            _sessionState.Selection.SetSelectedType(null);
+            _sessionState.Selection.SetPrimarySelectedObject(null);
+
+            LoadScriptableObjectTypes();
+            _namespacePanelController?.BuildNamespaceView();
+            _processorPanelController?.RebuildProcessorCache();
+            BuildProcessorColumnView();
+            BuildObjectsView();
+            UpdateLabelAreaAndFilter();
+            RestorePreviousSelection();
         }
 
 #if UNITY_EDITOR

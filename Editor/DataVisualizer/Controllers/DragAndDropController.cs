@@ -772,7 +772,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         private string DetermineDragLabel()
         {
-            return _dataVisualizer._draggedData switch
+            string baseLabel = _dataVisualizer._draggedData switch
             {
                 IDisplayable displayable => displayable.Title,
                 Object dataObject => dataObject.name,
@@ -783,6 +783,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     ),
                 _ => "Dragging Item",
             };
+
+            if (!_dataVisualizer.ShouldShowDragModifierHints())
+            {
+                return baseLabel;
+            }
+
+            if (_dataVisualizer._activeDragType == DataVisualizer.DragType.Object)
+            {
+                return baseLabel + "  (Shift → top, Ctrl/Cmd → bottom)";
+            }
+
+            return baseLabel;
         }
 
         private static DragOperationKind MapDragOperation(DataVisualizer.DragType dragType)

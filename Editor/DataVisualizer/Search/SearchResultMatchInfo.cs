@@ -8,6 +8,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
     {
         public bool isMatch;
         public readonly List<MatchDetail> matchedFields = new();
+        public float highestScore;
 
         public bool MatchInPrimaryField
         {

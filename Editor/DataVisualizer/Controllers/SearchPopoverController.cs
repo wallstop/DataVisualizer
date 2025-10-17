@@ -23,20 +23,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private string _lastSearchText;
         private bool _cachePopulated;
 
-        public SearchPopoverController(
-            DataVisualizer dataVisualizer,
-            SearchService searchService
-        )
+        public SearchPopoverController(DataVisualizer dataVisualizer, SearchService searchService)
         {
             _dataVisualizer =
                 dataVisualizer ?? throw new ArgumentNullException(nameof(dataVisualizer));
-            _searchService = searchService ?? throw new ArgumentNullException(nameof(searchService));
+            _searchService =
+                searchService ?? throw new ArgumentNullException(nameof(searchService));
         }
 
         public void Attach(TextField searchField, VisualElement searchPopover)
         {
             _searchField = searchField ?? throw new ArgumentNullException(nameof(searchField));
-            _searchPopover = searchPopover ?? throw new ArgumentNullException(nameof(searchPopover));
+            _searchPopover =
+                searchPopover ?? throw new ArgumentNullException(nameof(searchPopover));
             EnsureContainers();
         }
 
@@ -82,8 +81,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
-            List<SearchService.SearchMatch> results =
-                _searchService.Search(terms, DataVisualizer.MaxSearchResults);
+            List<SearchService.SearchMatch> results = _searchService.Search(
+                terms,
+                DataVisualizer.MaxSearchResults
+            );
             EnsureContainers();
             _listContainer.Clear();
 
@@ -115,8 +116,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 DataAssetMetadata metadata = result.Metadata;
                 SearchResultMatchInfo matchInfo = result.MatchInfo;
                 List<string> highlightTerms = matchInfo
-                    .AllMatchedTerms
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    .AllMatchedTerms.ToHashSet(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
                 VisualElement resultItem = new VisualElement
@@ -193,11 +193,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                         style = { marginTop = 2 },
                     };
 
-                    IEnumerable<IGrouping<string, MatchDetail>> groups = matchInfo.matchedFields
-                        .Where(mf =>
-                            !string.Equals(mf.fieldName, MatchSource.ObjectName, StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(mf.fieldName, MatchSource.TypeName, StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(mf.fieldName, MatchSource.Guid, StringComparison.OrdinalIgnoreCase)
+                    IEnumerable<IGrouping<string, MatchDetail>> groups = matchInfo
+                        .matchedFields.Where(mf =>
+                            !string.Equals(
+                                mf.fieldName,
+                                MatchSource.ObjectName,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                            && !string.Equals(
+                                mf.fieldName,
+                                MatchSource.TypeName,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                            && !string.Equals(
+                                mf.fieldName,
+                                MatchSource.Guid,
+                                StringComparison.OrdinalIgnoreCase
+                            )
                         )
                         .GroupBy(mf => mf.fieldName)
                         .Take(2);
@@ -225,6 +237,24 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
                 _listContainer.Add(resultItem);
                 _resultItems.Add(resultItem);
+            }
+
+            if (_dataVisualizer.ShouldShowShortcutHints())
+            {
+                Label hintLabel = new("↑/↓ navigate · Enter select · Esc close")
+                {
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Italic,
+                        color = new Color(0.6f, 0.6f, 0.6f),
+                        marginTop = 4,
+                        marginBottom = 2,
+                        marginLeft = 6,
+                        marginRight = 6,
+                    },
+                };
+                hintLabel.AddToClassList("search-shortcut-hint");
+                _listContainer.Add(hintLabel);
             }
 
             _dataVisualizer.OpenPopover(_searchPopover, _searchField, shouldFocus: false);
