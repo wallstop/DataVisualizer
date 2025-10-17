@@ -8233,7 +8233,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             return Mathf.Clamp(threshold, 0.3f, 1f);
         }
 
-        private void UpdateSearchOptionsFromSettings()
+        internal void UpdateSearchOptionsFromSettings()
         {
             if (_searchService == null)
             {

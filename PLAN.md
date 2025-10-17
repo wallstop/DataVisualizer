@@ -1,5 +1,8 @@
 # Data Visualizer Enhancement Roadmap
 
+## 0. Build Health & Compilation
+- [x] Resolve missing `FontStyle` compile reference by importing `UnityEngine` in namespace controller (completed).
+
 ## 1. Settings Experience & State Portability
 - [x] Build a richer **Settings** popover panel (shortcut hints, drag behaviour toggles, processor defaults).
 - [x] Surface **user-state export/import** to JSON (read/write through `IUserStateRepository`) with validation + success/failure dialogs.
@@ -7,7 +10,7 @@
 - [x] Document the settings schema and update README/AGENTS with the new UX.
 
 ## 2. Search & Filtering Improvements
-- [ ] Introduce configurable **fuzzy matching** options (threshold, scoring display) leveraging `SearchService`.
+- [ ] Introduce configurable **fuzzy matching** options (threshold, scoring display) leveraging `SearchService`. _(In progress – wiring search popover controls + confidence badges)_
 - [ ] Highlight match quality in the search popover (confidence badges, keyboard shortcut legend).
 - [ ] Add quick filters in the namespace pane (namespace + label chips) that sync with `VisualizerSessionState`.
 - [ ] Expand tests to cover fuzzy search behaviour and combined filters.

@@ -2,10 +2,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 {
     using System;
     using System.Collections.Generic;
+    using Data;
     using Events;
     using Extensions;
     using State;
     using Styles;
+    using UnityEngine;
     using UnityEngine.UIElements;
 
     internal sealed class NamespacePanelController : IDisposable
