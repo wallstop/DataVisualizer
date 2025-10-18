@@ -26,10 +26,10 @@
 - [x] Provide helper APIs for services/controllers to register undo steps without depending on `DataVisualizer` internals. _(Completed – shared `IUndoService` available via dependencies)_
 - [x] Verify undo/redo flows for labels, namespace changes, and processor-triggered modifications. _(Completed – editor undo tests cover label and rename scenarios)_
 - [x] Add automated edit-mode tests exercising the undo stack where feasible. _(Completed – Undo integration tests added)_
-- [ ] Persist & restore object selection on re-open (investigating drag/drop side-effects).
+- [x] Persist & restore object selection on re-open (investigating drag/drop side-effects). _(Completed – deferred selection now waits for pending GUID load and editor test covers insert path)_
 
 ## 5. Test Coverage Expansion
-- [ ] Build controller-focused unit tests using `DataVisualizer.OverrideUserStateRepositoryForTesting` and event hub assertions.
-- [ ] Add playmode/editmode integration tests covering: settings export/import, fuzzy search, batched saves, undo/redo.
-- [ ] Introduce performance guard tests for paged loading & drag modifiers using `DiagnosticsState`.
-- [ ] Wire tests into CI (document commands + expected outputs).
+- [x] Build controller-focused unit tests using `DataVisualizer.OverrideUserStateRepositoryForTesting` and event hub assertions. _(Completed – drag controller now emits event hub coverage for state changes and reorder events)_
+- [ ] Add playmode/editmode integration tests covering: settings export/import, fuzzy search, batched saves, undo/redo. _(In progress: fuzzy search integration test in place; export/import coverage still outstanding)_
+- [x] Introduce performance guard tests for paged loading & drag modifiers using `DiagnosticsState`. _(Completed – diagnostics trimming and drag modifier state now validated)_
+- [x] Wire tests into CI (document commands + expected outputs). _(Edit/Play Mode suites run via `unity -projectPath <project> -runTests -testPlatform EditMode|PlayMode -logFile -testResults <path>`, expecting `overallResult="Passed"` in the generated `TestResults.xml`)_

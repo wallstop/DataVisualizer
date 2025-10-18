@@ -17,7 +17,6 @@
 
 .object-item {
     padding: 4px 8px;
-    margin: 2px 0;
     border-color: rgba(128, 128, 128, 0.5);
     border-radius: 3px;
     background-color: rgba(80, 80, 80, 0.2);
@@ -445,7 +444,8 @@
 }
 
 #object-list .unity-list-view__item {
-    margin-bottom: 4px;
+    padding-top: 4px;
+    padding-bottom: 4px;
 }
 
 .namespace-scrollview {

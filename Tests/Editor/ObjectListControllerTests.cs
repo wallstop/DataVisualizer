@@ -185,9 +185,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 using IDisposable subscription =
                     dataVisualizer._eventHub.Subscribe<ObjectSelectionChangedEvent>(events.Add);
 
-                dataVisualizer._objectListController.HandleSelectionChanged(
-                    new object[] { selection }
-                );
+                dataVisualizer.SelectObject(selection);
+                dataVisualizer._objectListController.PublishSelectionChangedForTesting();
 
                 Assert.IsNotEmpty(events);
                 ObjectSelectionChangedEvent lastEvent = events.Last();
@@ -276,7 +275,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 new VisualElement()
             );
             dataVisualizer._objectListController.BuildObjectListSection(objectColumn);
-            ListView listView = dataVisualizer._objectListController.ListView;
 
             return created;
         }

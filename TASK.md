@@ -7,3 +7,7 @@
 ## Highlight Reset State warning confirmation
 - Status: Completed
 - Notes: Styled the reset button with warning colors and re-used the standard confirmation overlay with a bold "DANGER" action label; dialog now stays above the settings popover, supports dragging, and closes when you click outside it.
+
+## Object list rendering without ListView
+- Status: Completed
+- Notes: Replaced the virtualized ListView with a scroll view + column, rebuilt row binding manually, and restored consistent spacing and selection visuals while keeping pagination intact.

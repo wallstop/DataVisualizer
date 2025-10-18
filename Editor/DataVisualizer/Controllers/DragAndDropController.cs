@@ -154,22 +154,34 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             if (_dataVisualizer._activeDragType != DataVisualizer.DragType.Namespace)
             {
-                targetIndex = -1;
+                int candidateIndex = 0;
+                int actualChildCount = 0;
+
                 for (int i = 0; i < childCount; ++i)
                 {
                     VisualElement child = container.ElementAt(i);
-                    float midpoint = child.layout.yMin + child.layout.height / 2f;
+                    if (ReferenceEquals(child, _dataVisualizer._inPlaceGhost))
+                    {
+                        continue;
+                    }
+
+                    actualChildCount++;
+
+                    float midpoint = child.layout.yMin + child.layout.height * 0.5f;
                     if (localPointerPos.y < midpoint)
                     {
-                        targetIndex = i;
                         break;
                     }
+
+                    candidateIndex++;
                 }
 
-                if (targetIndex < 0)
+                if (candidateIndex > actualChildCount)
                 {
-                    targetIndex = childCount;
+                    candidateIndex = actualChildCount;
                 }
+
+                targetIndex = candidateIndex;
             }
             else
             {

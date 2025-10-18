@@ -182,5 +182,52 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
 
             Assert.IsFalse(changed);
         }
+
+        [Test]
+        public void DragStateSetModifiersWhenInactiveKeepsFlagsCleared()
+        {
+            VisualizerSessionState state = new VisualizerSessionState();
+            VisualizerSessionState.DragState dragState = state.Drag;
+
+            bool changed = dragState.SetModifiers(true, true, true);
+
+            Assert.IsFalse(changed);
+            Assert.IsFalse(dragState.AltPressed);
+            Assert.IsFalse(dragState.ControlPressed);
+            Assert.IsFalse(dragState.ShiftPressed);
+        }
+
+        [Test]
+        public void DragStateSetModifiersWhenActiveUpdatesFlags()
+        {
+            VisualizerSessionState state = new VisualizerSessionState();
+            VisualizerSessionState.DragState dragState = state.Drag;
+            dragState.SetOperation(VisualizerSessionState.DragState.DragOperationKind.Object);
+
+            bool changed = dragState.SetModifiers(true, false, true);
+
+            Assert.IsTrue(changed);
+            Assert.IsTrue(dragState.AltPressed);
+            Assert.IsFalse(dragState.ControlPressed);
+            Assert.IsTrue(dragState.ShiftPressed);
+        }
+
+        [Test]
+        public void DragStateSetOperationClearsModifiersWhenReset()
+        {
+            VisualizerSessionState state = new VisualizerSessionState();
+            VisualizerSessionState.DragState dragState = state.Drag;
+            dragState.SetOperation(VisualizerSessionState.DragState.DragOperationKind.Object);
+            dragState.SetModifiers(true, true, true);
+
+            bool changed = dragState.SetOperation(
+                VisualizerSessionState.DragState.DragOperationKind.None
+            );
+
+            Assert.IsTrue(changed);
+            Assert.IsFalse(dragState.AltPressed);
+            Assert.IsFalse(dragState.ControlPressed);
+            Assert.IsFalse(dragState.ShiftPressed);
+        }
     }
 }

@@ -5,11 +5,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
     using System.Collections.Generic;
     using System.Linq;
     using System.Reflection;
+    using Controllers;
     using Data;
     using NUnit.Framework;
     using Services;
     using State;
     using Styles;
+    using UnityEditor;
     using UnityEngine;
     using UnityEngine.UIElements;
     using Object = UnityEngine.Object;
@@ -42,6 +44,154 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             public void SaveSettings(DataVisualizerSettings settings) { }
 
             public void SaveUserState(DataVisualizerUserState userState) { }
+        }
+
+        private const string SelectionTestFolderPath = "Assets/TempDataVisualizerSelectionTests";
+
+        private sealed class StubLabelService : ILabelService
+        {
+            private readonly Dictionary<Type, TypeLabelFilterConfig> _configs =
+                new Dictionary<Type, TypeLabelFilterConfig>();
+            private readonly LabelSuggestionProvider _suggestionProvider =
+                new LabelSuggestionProvider(new StubDataAssetService());
+
+            public LabelSuggestionProvider SuggestionProvider
+            {
+                get { return _suggestionProvider; }
+            }
+
+            public TypeLabelFilterConfig GetOrCreateConfig(Type type)
+            {
+                if (type == null)
+                {
+                    return null;
+                }
+
+                if (!_configs.TryGetValue(type, out TypeLabelFilterConfig config))
+                {
+                    config = new TypeLabelFilterConfig { typeFullName = type.FullName };
+                    _configs[type] = config;
+                }
+
+                return config;
+            }
+
+            public void SaveConfig(TypeLabelFilterConfig config) { }
+
+            public void UpdateSessionState(
+                Type type,
+                TypeLabelFilterConfig config,
+                VisualizerSessionState sessionState
+            ) { }
+
+            public LabelFilterResult ApplyFilter(
+                Type type,
+                IReadOnlyList<ScriptableObject> availableObjects,
+                TypeLabelFilterConfig config
+            )
+            {
+                List<ScriptableObject> filteredObjects =
+                    availableObjects != null
+                        ? new List<ScriptableObject>(availableObjects)
+                        : new List<ScriptableObject>();
+                List<DataAssetMetadata> filteredMetadata = new List<DataAssetMetadata>();
+                List<string> uniqueLabels = new List<string>();
+                int totalCount = filteredObjects.Count;
+                int matchedCount = filteredObjects.Count;
+                return new LabelFilterResult(
+                    filteredObjects,
+                    filteredMetadata,
+                    uniqueLabels,
+                    totalCount,
+                    matchedCount,
+                    string.Empty
+                );
+            }
+
+            public IReadOnlyCollection<string> GetAvailableLabels(Type type)
+            {
+                return Array.Empty<string>();
+            }
+
+            public void ClearFilters(Type type) { }
+
+            private sealed class StubDataAssetService : IDataAssetService
+            {
+                public event Action<DataAssetChangeEventArgs> AssetsChanged;
+
+                public void ConfigureTrackedTypes(IEnumerable<Type> types) { }
+
+                public void MarkDirty() { }
+
+                public void ForceRebuild() { }
+
+                public int GetAssetCount(Type type)
+                {
+                    return 0;
+                }
+
+                public DataAssetPage GetAssetsPage(Type type, int offset, int count)
+                {
+                    return new DataAssetPage(type, Array.Empty<DataAssetMetadata>(), 0, 0);
+                }
+
+                public IReadOnlyList<DataAssetMetadata> GetAssetsForType(Type type)
+                {
+                    return Array.Empty<DataAssetMetadata>();
+                }
+
+                public IReadOnlyList<string> GetGuidsForType(Type type)
+                {
+                    return Array.Empty<string>();
+                }
+
+                public IEnumerable<DataAssetMetadata> GetAllAssets()
+                {
+                    return Array.Empty<DataAssetMetadata>();
+                }
+
+                public bool TryGetAssetByGuid(string guid, out DataAssetMetadata metadata)
+                {
+                    metadata = null;
+                    return false;
+                }
+
+                public bool TryGetAssetByPath(string path, out DataAssetMetadata metadata)
+                {
+                    metadata = null;
+                    return false;
+                }
+
+                public void RefreshAsset(string guid) { }
+
+                public void RefreshType(Type type) { }
+
+                public void RemoveAsset(string guid) { }
+
+                public IReadOnlyCollection<string> EnumerateLabels(Type type)
+                {
+                    return Array.Empty<string>();
+                }
+            }
+        }
+
+        [SetUp]
+        public void SelectionSetUp()
+        {
+            if (!AssetDatabase.IsValidFolder(SelectionTestFolderPath))
+            {
+                AssetDatabase.CreateFolder("Assets", "TempDataVisualizerSelectionTests");
+            }
+        }
+
+        [TearDown]
+        public void SelectionTearDown()
+        {
+            if (AssetDatabase.IsValidFolder(SelectionTestFolderPath))
+            {
+                AssetDatabase.DeleteAsset(SelectionTestFolderPath);
+                AssetDatabase.SaveAssets();
+            }
         }
 
         [Test]
@@ -371,6 +521,144 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
             finally
             {
                 Object.DestroyImmediate(dataVisualizer);
+            }
+        }
+
+        [Test]
+        public void RestorePreviousSelectionWhenAssetNotLoadedDefersUntilAssetInserted()
+        {
+            DummyScriptableObject savedObject =
+                ScriptableObject.CreateInstance<DummyScriptableObject>();
+            string assetPath = SelectionTestFolderPath + "/DeferredSelection.asset";
+            AssetDatabase.CreateAsset(savedObject, assetPath);
+            AssetDatabase.SaveAssets();
+            string savedGuid = AssetDatabase.AssetPathToGUID(assetPath);
+
+            DataVisualizer dataVisualizer = ScriptableObject.CreateInstance<DataVisualizer>();
+            DataVisualizerSettings settings = null;
+            try
+            {
+                dataVisualizer.hideFlags = HideFlags.HideAndDontSave;
+
+                settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
+                settings.persistStateInSettingsAsset = true;
+                settings.lastSelectedTypeName = typeof(DummyScriptableObject).FullName;
+                settings.SetLastObjectForType(typeof(DummyScriptableObject).FullName, savedGuid);
+
+                DataVisualizerUserState userState = new DataVisualizerUserState();
+                StubUserStateRepository repository = new StubUserStateRepository
+                {
+                    Settings = settings,
+                    UserState = userState,
+                };
+
+                dataVisualizer.OverrideUserStateRepositoryForTesting(
+                    repository,
+                    settings,
+                    userState
+                );
+
+                Dictionary<string, List<Type>> typeMap = new Dictionary<string, List<Type>>(
+                    StringComparer.Ordinal
+                )
+                {
+                    {
+                        "DummyNamespace",
+                        new List<Type> { typeof(DummyScriptableObject) }
+                    },
+                };
+                Dictionary<string, int> namespaceOrder = new Dictionary<string, int>(
+                    StringComparer.Ordinal
+                )
+                {
+                    { "DummyNamespace", 0 },
+                };
+                dataVisualizer._scriptableObjectTypes = typeMap;
+                dataVisualizer._namespaceOrder = namespaceOrder;
+                dataVisualizer._namespaceController = new NamespaceController(
+                    typeMap,
+                    namespaceOrder
+                )
+                {
+                    _selectedType = typeof(DummyScriptableObject),
+                };
+
+                StubLabelService labelService = new StubLabelService();
+                dataVisualizer._labelService = labelService;
+                dataVisualizer._labelPanelController = new LabelPanelController(
+                    dataVisualizer,
+                    labelService,
+                    dataVisualizer.SessionState
+                );
+
+                dataVisualizer._inspectorContainer = new VisualElement();
+                dataVisualizer._filterStatusLabel = new Label();
+                dataVisualizer._labelFilterSelectionRoot = new VisualElement();
+
+                dataVisualizer._sessionState.Selection.SetSelectedNamespace("DummyNamespace");
+                dataVisualizer._sessionState.Selection.SetSelectedType(
+                    typeof(DummyScriptableObject).FullName
+                );
+                dataVisualizer._sessionState.Selection.SetPrimarySelectedObject(savedGuid);
+
+                dataVisualizer._selectedObjects.Clear();
+                ObjectListState listState = dataVisualizer.ObjectListState;
+                listState.ClearFiltered();
+                listState.ClearDisplayed();
+
+                dataVisualizer.RestorePreviousSelection();
+
+                Assert.AreEqual(savedGuid, dataVisualizer._pendingSelectionGuid);
+                Assert.IsNull(dataVisualizer._selectedObject);
+
+                FieldInfo lookupField = typeof(DataVisualizer).GetField(
+                    "_currentGuidOrderLookup",
+                    BindingFlags.Instance | BindingFlags.NonPublic
+                );
+                Dictionary<string, int> currentLookup =
+                    (Dictionary<string, int>)lookupField.GetValue(dataVisualizer);
+                currentLookup.Clear();
+                currentLookup[savedGuid] = 0;
+
+                MethodInfo insertMethod = typeof(DataVisualizer).GetMethod(
+                    "InsertLoadedAsset",
+                    BindingFlags.Instance | BindingFlags.NonPublic
+                );
+
+                DataAssetMetadata metadata = new DataAssetMetadata(
+                    savedGuid,
+                    assetPath,
+                    typeof(DummyScriptableObject),
+                    typeof(DummyScriptableObject).FullName,
+                    savedObject.name,
+                    Array.Empty<string>(),
+                    DateTime.UtcNow
+                );
+
+                insertMethod.Invoke(
+                    dataVisualizer,
+                    new object[] { savedGuid, savedObject, metadata }
+                );
+
+                Assert.IsNull(dataVisualizer._pendingSelectionGuid);
+                Assert.AreSame(savedObject, dataVisualizer._selectedObject);
+                CollectionAssert.Contains(dataVisualizer._selectedObjects, savedObject);
+            }
+            finally
+            {
+                if (settings != null)
+                {
+                    Object.DestroyImmediate(settings);
+                }
+
+                Object.DestroyImmediate(dataVisualizer);
+                if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(assetPath) != null)
+                {
+                    AssetDatabase.DeleteAsset(assetPath);
+                }
+
+                AssetDatabase.SaveAssets();
+                Object.DestroyImmediate(savedObject);
             }
         }
     }

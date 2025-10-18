@@ -5,6 +5,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
     using System.IO;
     using System.Reflection;
     using Data;
+    using Events;
     using NUnit.Framework;
     using Services;
     using State;
@@ -211,7 +212,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 );
                 dataVisualizer._objectListController.BuildObjectListSection(objectColumn);
                 dataVisualizer.rootVisualElement.Add(objectColumn);
-                ListView listView = dataVisualizer._objectListController.ListView;
 
                 DataVisualizerSettings settings =
                     ScriptableObject.CreateInstance<DataVisualizerSettings>();
@@ -255,7 +255,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 CollectionAssert.AreEqual(new[] { itemTwo, itemThree, itemOne }, filtered);
                 CollectionAssert.AreEqual(new[] { itemTwo, itemThree, itemOne }, displayed);
                 CollectionAssert.AreEqual(new[] { itemTwo, itemThree, itemOne }, selected);
-                Assert.AreEqual(1, listView.selectedIndex);
+                Assert.AreEqual(
+                    1,
+                    dataVisualizer.ObjectListState.DisplayedObjectsBuffer.IndexOf(
+                        dataVisualizer._selectedObject
+                    )
+                );
 
                 MethodInfo makeRowMethod = typeof(DataVisualizer).GetMethod(
                     "MakeObjectRow",
@@ -384,6 +389,183 @@ namespace WallstopStudios.DataVisualizer.Editor.Tests
                 Object.DestroyImmediate(itemOne);
                 Object.DestroyImmediate(itemTwo);
                 Object.DestroyImmediate(itemThree);
+            }
+        }
+
+        [Test]
+        public void CancelDrag_PublishesDragStateChangedEvent()
+        {
+            DataVisualizer dataVisualizer = ScriptableObject.CreateInstance<DataVisualizer>();
+            try
+            {
+                dataVisualizer.hideFlags = HideFlags.HideAndDontSave;
+
+                List<DragStateChangedEvent> receivedEvents = new List<DragStateChangedEvent>();
+                IDisposable subscription = dataVisualizer._eventHub.Subscribe<DragStateChangedEvent>(
+                    evt => receivedEvents.Add(evt)
+                );
+                try
+                {
+                    VisualizerSessionState.DragState dragState = dataVisualizer.SessionState.Drag;
+                    dragState.SetOperation(
+                        VisualizerSessionState.DragState.DragOperationKind.Object
+                    );
+                    dragState.SetModifiers(true, true, true);
+
+                    dataVisualizer._dragGhost = new VisualElement();
+                    dataVisualizer.rootVisualElement.Add(dataVisualizer._dragGhost);
+
+                    dataVisualizer.CancelDrag();
+
+                    Assert.AreEqual(1, receivedEvents.Count);
+                    DragStateChangedEvent evt = receivedEvents[0];
+                    Assert.AreEqual(
+                        VisualizerSessionState.DragState.DragOperationKind.None,
+                        evt.Operation
+                    );
+                    Assert.IsFalse(evt.IsActive);
+                    Assert.IsFalse(evt.AltPressed);
+                    Assert.IsFalse(evt.ControlPressed);
+                    Assert.IsFalse(evt.ShiftPressed);
+                }
+                finally
+                {
+                    subscription.Dispose();
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(dataVisualizer);
+            }
+        }
+
+        [Test]
+        public void PerformObjectDrop_PublishesReorderEventWithModifiers()
+        {
+            DummyScriptableObject itemOne =
+                ScriptableObject.CreateInstance<DummyScriptableObject>();
+            DummyScriptableObject itemTwo =
+                ScriptableObject.CreateInstance<DummyScriptableObject>();
+
+            itemOne.name = "One";
+            itemTwo.name = "Two";
+
+            string itemOnePath = Path.Combine(TestFolderPath, "EventItemOne.asset");
+            string itemTwoPath = Path.Combine(TestFolderPath, "EventItemTwo.asset");
+
+            AssetDatabase.CreateAsset(itemOne, itemOnePath);
+            AssetDatabase.CreateAsset(itemTwo, itemTwoPath);
+            AssetDatabase.SaveAssets();
+
+            DataVisualizer dataVisualizer = ScriptableObject.CreateInstance<DataVisualizer>();
+            DataVisualizerSettings settings = null;
+            try
+            {
+                dataVisualizer.hideFlags = HideFlags.HideAndDontSave;
+                dataVisualizer._suppressObjectListReloadForTests = true;
+
+                ObjectListState listState = dataVisualizer.ObjectListState;
+                listState.FilteredObjectsBuffer.Clear();
+                listState.DisplayedObjectsBuffer.Clear();
+                listState.FilteredMetadataBuffer.Clear();
+                listState.DisplayedMetadataBuffer.Clear();
+                listState.FilteredObjectsBuffer.AddRange(new[] { itemOne, itemTwo });
+                listState.DisplayedObjectsBuffer.AddRange(new[] { itemOne, itemTwo });
+                listState.SetDisplayStartIndex(0);
+
+                dataVisualizer._selectedObjects.Clear();
+                dataVisualizer._selectedObjects.AddRange(new[] { itemOne, itemTwo });
+
+                VisualElement objectColumn = new VisualElement();
+                dataVisualizer._objectListController.ConfigureCreateButton(
+                    _ => { },
+                    (_, _) => { },
+                    new VisualElement()
+                );
+                dataVisualizer._objectListController.BuildObjectListSection(objectColumn);
+                dataVisualizer.rootVisualElement.Add(objectColumn);
+
+                settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
+                settings.persistStateInSettingsAsset = true;
+                DataVisualizerUserState userState = new DataVisualizerUserState();
+                StubUserStateRepository repository = new StubUserStateRepository
+                {
+                    Settings = settings,
+                    UserState = userState,
+                };
+
+                dataVisualizer.OverrideUserStateRepositoryForTesting(
+                    repository,
+                    settings,
+                    userState
+                );
+
+                Dictionary<string, List<Type>> scriptableTypes = new Dictionary<string, List<Type>>
+                {
+                    { "DummyNamespace", new List<Type> { typeof(DummyScriptableObject) } },
+                };
+                Dictionary<string, int> namespaceOrder = new Dictionary<string, int>
+                {
+                    { "DummyNamespace", 0 },
+                };
+
+                dataVisualizer._scriptableObjectTypes = scriptableTypes;
+                dataVisualizer._namespaceOrder = namespaceOrder;
+                dataVisualizer._namespaceController = new NamespaceController(
+                    scriptableTypes,
+                    namespaceOrder
+                )
+                {
+                    _selectedType = typeof(DummyScriptableObject),
+                };
+
+                VisualizerSessionState.DragState dragState = dataVisualizer.SessionState.Drag;
+                dragState.SetOperation(
+                    VisualizerSessionState.DragState.DragOperationKind.Object
+                );
+                dragState.SetModifiers(true, true, false);
+
+                dataVisualizer._draggedData = itemOne;
+                dataVisualizer._draggedElement = new VisualElement();
+                dataVisualizer._inPlaceGhost = new VisualElement { userData = 2 };
+                dataVisualizer._activeDragType = DataVisualizer.DragType.Object;
+
+                List<ObjectReorderRequestedEvent> reorderEvents =
+                    new List<ObjectReorderRequestedEvent>();
+                IDisposable subscription = dataVisualizer._eventHub.Subscribe<
+                    ObjectReorderRequestedEvent
+                >(evt => reorderEvents.Add(evt));
+                try
+                {
+                    dataVisualizer._dragAndDropController.PerformObjectDrop();
+
+                    Assert.AreEqual(1, reorderEvents.Count);
+                    ObjectReorderRequestedEvent evt = reorderEvents[0];
+                    Assert.AreSame(typeof(DummyScriptableObject), evt.TargetType);
+                    Assert.AreSame(itemOne, evt.DraggedObject);
+                    Assert.AreEqual(1, evt.TargetIndex);
+                    Assert.IsTrue(evt.AltPressed);
+                    Assert.IsTrue(evt.ControlPressed);
+                    Assert.IsFalse(evt.ShiftPressed);
+                }
+                finally
+                {
+                    subscription.Dispose();
+                }
+            }
+            finally
+            {
+                if (settings != null)
+                {
+                    Object.DestroyImmediate(settings);
+                }
+
+                Object.DestroyImmediate(dataVisualizer);
+                AssetDatabase.DeleteAsset(itemOnePath);
+                AssetDatabase.DeleteAsset(itemTwoPath);
+                AssetDatabase.SaveAssets();
+                Object.DestroyImmediate(itemOne);
+                Object.DestroyImmediate(itemTwo);
             }
         }
     }

@@ -250,6 +250,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal ScriptableObject _selectedObject;
         internal VisualElement _selectedElement;
+        internal string _pendingSelectionTypeFullName;
+        internal string _pendingSelectionGuid;
         internal VisualElement _selectedNamespaceElement;
 
         internal VisualElement _namespaceListContainer;
@@ -1452,9 +1454,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.FullName);
             }
 
+            ClearPendingSelection();
+
+            bool hasSavedGuid = !string.IsNullOrWhiteSpace(savedObjectGuid);
+            bool hasLoadedObjects = _selectedObjects.Count > 0;
+
             ScriptableObject objectToSelect = null;
 
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && 0 < _selectedObjects.Count)
+            if (hasSavedGuid && hasLoadedObjects)
             {
                 objectToSelect = _selectedObjects.Find(obj =>
                 {
@@ -1473,18 +1480,36 @@ namespace WallstopStudios.DataVisualizer.Editor
                 });
             }
 
-            if (objectToSelect == null && 0 < _selectedObjects.Count)
+            bool pendingSelectionActive = false;
+
+            if (objectToSelect == null)
             {
-                objectToSelect = _selectedObjects[0];
+                if (hasSavedGuid)
+                {
+                    SetPendingSelection(selectedType?.FullName, savedObjectGuid);
+                    pendingSelectionActive = true;
+                }
+                else if (hasLoadedObjects)
+                {
+                    objectToSelect = _selectedObjects[0];
+                }
             }
 
 #if UNITY_EDITOR
             LogReorderDebug(
-                $"RestorePreviousSelection object selection guid={savedObjectGuid ?? "<none>"}, found={(objectToSelect != null ? objectToSelect.name : "<null>")}, totalLoaded={_selectedObjects.Count}"
+                $"RestorePreviousSelection object selection guid={savedObjectGuid ?? "<none>"}, found={(objectToSelect != null ? objectToSelect.name : "<null>")}, totalLoaded={_selectedObjects.Count}, pending={(pendingSelectionActive ? "true" : "false")}"
             );
 #endif
-            SelectObject(objectToSelect);
-            if (objectToSelect == null)
+
+            if (!pendingSelectionActive)
+            {
+                SelectObject(objectToSelect);
+                if (objectToSelect == null)
+                {
+                    _namespaceController.SelectType(this, selectedType);
+                }
+            }
+            else
             {
                 _namespaceController.SelectType(this, selectedType);
             }
@@ -7307,15 +7332,20 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void RefreshSelectedElementVisuals(ScriptableObject dataObject)
         {
-            if (dataObject == null || _objectListController?.ListView == null)
+            if (dataObject == null)
             {
                 return;
             }
 
             int index = ObjectListState.DisplayedObjectsBuffer.IndexOf(dataObject);
-            if (index >= 0)
+            if (index < 0)
             {
-                _objectListController?.RefreshListItem(index);
+                return;
+            }
+
+            if (_objectVisualElementMap.TryGetValue(dataObject, out VisualElement element))
+            {
+                BindObjectRow(element, index);
             }
         }
 
@@ -7592,6 +7622,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             else
             {
                 filteredMetadata.Add(metadata);
+            }
+
+            if (MatchesPendingSelection(asset.GetType().FullName, guid))
+            {
+                ClearPendingSelection();
+                SelectObject(asset);
             }
         }
 
@@ -7941,31 +7977,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
 #endif
 
-            ListView listView = _objectListController?.ListView;
-            if (listView != null)
+            if (dataObject != null)
             {
-                _isUpdatingListSelection = true;
-                if (_selectedObject != null)
-                {
-                    int displayedIndex = ObjectListState.DisplayedObjectsBuffer.IndexOf(
-                        _selectedObject
-                    );
-                    if (displayedIndex >= 0)
-                    {
-                        listView.SetSelectionWithoutNotify(new int[] { displayedIndex });
-                        listView.ScrollToItem(displayedIndex);
-                    }
-                    else
-                    {
-                        listView.ClearSelection();
-                    }
-                }
-                else
-                {
-                    listView.ClearSelection();
-                }
-                _isUpdatingListSelection = false;
-                listView.RefreshItems();
+                ClearPendingSelection();
             }
 
             ApplySelectedElementVisuals();
@@ -8047,6 +8061,55 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             BuildInspectorView();
+        }
+
+        private void SetPendingSelection(string typeFullName, string objectGuid)
+        {
+            _pendingSelectionTypeFullName = string.IsNullOrWhiteSpace(typeFullName)
+                ? null
+                : typeFullName;
+            _pendingSelectionGuid = string.IsNullOrWhiteSpace(objectGuid) ? null : objectGuid;
+        }
+
+        private bool MatchesPendingSelection(string typeFullName, string objectGuid)
+        {
+            if (string.IsNullOrWhiteSpace(_pendingSelectionGuid))
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(objectGuid))
+            {
+                return false;
+            }
+
+            if (
+                !string.Equals(
+                    _pendingSelectionGuid,
+                    objectGuid,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(_pendingSelectionTypeFullName))
+            {
+                return true;
+            }
+
+            return string.Equals(
+                _pendingSelectionTypeFullName,
+                typeFullName,
+                StringComparison.Ordinal
+            );
+        }
+
+        private void ClearPendingSelection()
+        {
+            _pendingSelectionTypeFullName = null;
+            _pendingSelectionGuid = null;
         }
 
         private void EnsureLabelSubsystems()

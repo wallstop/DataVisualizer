@@ -7,7 +7,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
     using Services;
     using State;
     using Styles;
-    using UnityEditor.UIElements;
     using UnityEngine;
     using UnityEngine.UIElements;
 
@@ -27,7 +26,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private Button _nextPageButton;
         private IntegerField _currentPageField;
         private IntegerField _maxPageField;
-        private ListView _listView;
+        private ScrollView _listScrollView;
+        private VisualElement _listContainer;
         private Label _emptyObjectLabel;
 
         public ObjectListController(
@@ -68,17 +68,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             EnsureHeader(objectColumn);
             EnsureLabelsSection(objectColumn);
             EnsurePaginationControls();
-            EnsureListView();
+            EnsureListContainer();
             EnsureEmptyLabel();
 
             AttachElement(_objectPageController, objectColumn);
-            AttachElement(_listView, objectColumn);
+            AttachElement(_listScrollView, objectColumn);
             AttachElement(_emptyObjectLabel, objectColumn);
         }
 
         public void BuildObjectsView()
         {
-            if (_listView == null)
+            if (_listContainer == null)
             {
                 PublishSelectionChanged(null);
                 return;
@@ -181,39 +181,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             BuildObjectsView();
         }
 
-        public void HandleSelectionChanged(IEnumerable<object> selectedItems)
-        {
-            if (_dataVisualizer._isUpdatingListSelection)
-            {
-                return;
-            }
-
-            ScriptableObject firstSelection = null;
-            if (selectedItems != null)
-            {
-                foreach (object item in selectedItems)
-                {
-                    ScriptableObject candidate = item as ScriptableObject;
-                    if (candidate != null)
-                    {
-                        firstSelection = candidate;
-                        break;
-                    }
-                }
-            }
-
-            if (!ReferenceEquals(firstSelection, _dataVisualizer._selectedObject))
-            {
-                _dataVisualizer.SelectObject(firstSelection);
-            }
-            PublishSelectionChanged(_dataVisualizer._selectedObject);
-        }
-
         private void HandleNoSelectedType()
         {
             _objectListState.ClearDisplayed();
             ClearRowViewModels();
-            _listView?.RefreshItems();
+            _listContainer?.Clear();
 
             if (_objectPageController != null)
             {
@@ -226,9 +198,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 _emptyObjectLabel.style.display = DisplayStyle.Flex;
             }
 
-            if (_listView != null)
+            if (_listScrollView != null)
             {
-                _listView.style.display = DisplayStyle.None;
+                _listScrollView.style.display = DisplayStyle.None;
             }
 
             UpdateCreateButtonState();
@@ -238,10 +210,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         {
             _objectListState.ClearDisplayed();
             ClearRowViewModels();
-            if (_listView != null)
+            _listContainer?.Clear();
+            if (_listScrollView != null)
             {
-                _listView.RefreshItems();
-                _listView.style.display = DisplayStyle.None;
+                _listScrollView.style.display = DisplayStyle.None;
             }
             if (_emptyObjectLabel != null)
             {
@@ -262,10 +234,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         {
             _objectListState.ClearDisplayed();
             ClearRowViewModels();
-            if (_listView != null)
+            _listContainer?.Clear();
+            if (_listScrollView != null)
             {
-                _listView.RefreshItems();
-                _listView.style.display = DisplayStyle.None;
+                _listScrollView.style.display = DisplayStyle.None;
             }
             if (_emptyObjectLabel != null)
             {
@@ -288,9 +260,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
         private void PrepareListForDisplay()
         {
-            if (_listView != null)
+            if (_listScrollView != null)
             {
-                _listView.style.display = DisplayStyle.Flex;
+                _listScrollView.style.display = DisplayStyle.Flex;
             }
             if (_emptyObjectLabel != null)
             {
@@ -370,23 +342,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 SynchronizeRowViewModels(_objectListState.DisplayStartIndex);
             }
 
-            if (_listView != null)
-            {
-                bool previousUpdatingSelection = _dataVisualizer._isUpdatingListSelection;
-                _dataVisualizer._isUpdatingListSelection = true;
-                try
-                {
-                    _listView.itemsSource = null;
-                    _listView.itemsSource = _dataVisualizer._objectRowViewModels;
-                    _listView.RefreshItems();
-                    _listView.Rebuild();
-                }
-                finally
-                {
-                    _dataVisualizer._isUpdatingListSelection = previousUpdatingSelection;
-                }
-            }
-
+            RebuildListFromViewModels();
             UpdateCreateButtonState();
         }
 
@@ -403,27 +359,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 int displayedIndex = _objectListState.DisplayedObjectsBuffer.IndexOf(
                     selectedObject
                 );
-                _dataVisualizer._isUpdatingListSelection = true;
-                if (_listView != null)
+                if (displayedIndex >= 0 && _listContainer != null)
                 {
-                    if (displayedIndex >= 0)
+                    if (displayedIndex < _listContainer.childCount)
                     {
-                        _listView.SetSelectionWithoutNotify(new int[] { displayedIndex });
-                        _listView.ScrollToItem(displayedIndex);
-                    }
-                    else
-                    {
-                        _listView.ClearSelection();
+                        VisualElement row = _listContainer[displayedIndex];
+                        _listScrollView?.ScrollTo(row);
                     }
                 }
-
-                _dataVisualizer._isUpdatingListSelection = false;
-                return;
             }
-
-            _dataVisualizer._isUpdatingListSelection = true;
-            _listView?.ClearSelection();
-            _dataVisualizer._isUpdatingListSelection = false;
         }
 
         private void PublishPageChanged(Type selectedType)
@@ -443,6 +387,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 _dataVisualizer._selectedObjects
             );
             _eventHub.Publish(new ObjectSelectionChangedEvent(primarySelection, snapshot));
+        }
+
+        internal void PublishSelectionChangedForTesting()
+        {
+            PublishSelectionChanged(_dataVisualizer._selectedObject);
         }
 
         private void SynchronizeRowViewModels(int startIndex)
@@ -476,32 +425,39 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
         }
 
-        internal ListView ListView => _listView;
-
-        internal ScrollView GetListScrollView()
+        private void RebuildListFromViewModels()
         {
-            return _listView?.Q<ScrollView>();
-        }
-
-        internal VisualElement GetListContentContainer()
-        {
-            ScrollView scrollView = GetListScrollView();
-            if (scrollView != null)
-            {
-                return scrollView.contentContainer;
-            }
-
-            return _listView?.contentContainer;
-        }
-
-        internal void RefreshListItem(int index)
-        {
-            if (_listView == null || index < 0)
+            if (_listContainer == null)
             {
                 return;
             }
 
-            _listView.RefreshItem(index);
+            _listContainer.Clear();
+            IReadOnlyList<ObjectRowViewModel> viewModels = _dataVisualizer._objectRowViewModels;
+            int count = viewModels.Count;
+            for (int index = 0; index < count; index++)
+            {
+                VisualElement row = _dataVisualizer.MakeObjectRow();
+                row.style.marginTop = index == 0 ? 6f : 0f;
+                row.style.marginBottom = 6f;
+                _listContainer.Add(row);
+                _dataVisualizer.BindObjectRow(row, index);
+            }
+
+            if (_listScrollView != null)
+            {
+                _listScrollView.style.display = count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+        }
+
+        internal ScrollView GetListScrollView()
+        {
+            return _listScrollView;
+        }
+
+        internal VisualElement GetListContentContainer()
+        {
+            return _listContainer;
         }
 
         internal void ShowEmptyLabel()
@@ -550,29 +506,33 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _objectPageController.Add(_nextPageButton);
         }
 
-        private void EnsureListView()
+        private void EnsureListContainer()
         {
-            if (_listView != null)
+            if (_listScrollView != null)
             {
                 return;
             }
 
-            _listView = new ListView(
-                _dataVisualizer._objectRowViewModels,
-                itemHeight: 36,
-                makeItem: _dataVisualizer.MakeObjectRow,
-                bindItem: _dataVisualizer.BindObjectRow
-            )
+            _listScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
                 name = "object-list",
                 style = { flexGrow = 1 },
-                selectionType = SelectionType.Single,
-                virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight,
             };
-            _listView.AddToClassList("object-list");
-            _listView.itemsSource = _dataVisualizer._objectRowViewModels;
-            _listView.selectionChanged += HandleSelectionChanged;
-            _listView.unbindItem += _dataVisualizer.UnbindObjectRow;
+            _listScrollView.AddToClassList("object-list");
+            _listScrollView.contentContainer.style.flexDirection = FlexDirection.Column;
+
+            _listContainer = new VisualElement
+            {
+                name = "object-list-container",
+                style =
+                {
+                    flexDirection = FlexDirection.Column,
+                    paddingTop = 0f,
+                    paddingBottom = 6f,
+                },
+            };
+            _listContainer.AddToClassList("object-list-container");
+            _listScrollView.contentContainer.Add(_listContainer);
         }
 
         private void EnsureEmptyLabel()
