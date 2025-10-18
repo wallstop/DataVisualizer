@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
     using System;
     using System.Collections.Generic;
     using System.ComponentModel;
+    using System.Text;
     using System.Linq;
     using Data;
     using Events;
@@ -25,7 +26,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private float _cachedMarginBottom;
         private float _cachedFlexGrow;
         private float _cachedFlexShrink;
-        private VisualElement _lastFirstSlotReferenceElement;
+        private float _cachedLayoutHeight;
+        private VisualElement _referenceWithSuppressedMargin;
+        private VisualElement _previousWithSuppressedMargin;
 
         public DragAndDropController(DataVisualizer dataVisualizer, DataVisualizerEventHub eventHub)
         {
@@ -227,7 +230,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 _dataVisualizer._lastGhostInsertIndex = normalizedIndex;
                 _dataVisualizer._lastGhostParent = container;
 
-                AdjustGhostMargins(container, normalizedIndex);
+                AdjustGhostMargins(container, normalizedIndex, localPointerPos.y);
             }
 
             if (targetIndexValid)
@@ -250,7 +253,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
         }
 
-        private void AdjustGhostMargins(VisualElement container, int normalizedIndex)
+        private void AdjustGhostMargins(
+            VisualElement container,
+            int normalizedIndex,
+            float pointerLocalY
+        )
         {
             if (
                 container == null
@@ -261,7 +268,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
-            VisualElement referenceElement = FindReferenceElement(container);
+            VisualElement referenceElement = GetReferenceElementForGhost(container);
 
             float leadingMargin = _cachedMarginTop;
             float leadingMarginLeft = _cachedMarginLeft;
@@ -272,6 +279,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             if (referenceElement != null)
             {
+                leadingMargin = ResolveMarginTop(referenceElement, leadingMargin);
                 leadingMarginLeft = ResolveMarginLeft(referenceElement, leadingMarginLeft);
                 leadingMarginRight = ResolveMarginRight(referenceElement, leadingMarginRight);
                 leadingMarginBottom = ResolveMarginBottom(referenceElement, leadingMarginBottom);
@@ -279,33 +287,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 leadingWidth = ResolveWidth(referenceElement, leadingWidth);
             }
 
-            bool isFirstSlot = normalizedIndex == 0 && referenceElement != null;
-            if (isFirstSlot)
-            {
-                leadingMargin = ResolveMarginTop(referenceElement, leadingMargin);
-                container.style.paddingTop = new Length(leadingMargin, LengthUnit.Pixel);
-                _dataVisualizer._inPlaceGhost.style.marginTop = new Length(0f, LengthUnit.Pixel);
-                referenceElement.style.marginTop = new Length(0f, LengthUnit.Pixel);
-                _lastFirstSlotReferenceElement = referenceElement;
-            }
-            else
-            {
-                container.style.paddingTop = StyleKeyword.Null;
-                _dataVisualizer._inPlaceGhost.style.marginTop =
-                    new Length(leadingMargin, LengthUnit.Pixel);
-                if (_lastFirstSlotReferenceElement != null)
-                {
-                    _lastFirstSlotReferenceElement.style.marginTop = StyleKeyword.Null;
-                    _lastFirstSlotReferenceElement = null;
-                }
-            }
+            container.style.paddingTop = StyleKeyword.Null;
 
-            _dataVisualizer._inPlaceGhost.style.marginLeft =
-                new Length(leadingMarginLeft, LengthUnit.Pixel);
-            _dataVisualizer._inPlaceGhost.style.marginRight =
-                new Length(leadingMarginRight, LengthUnit.Pixel);
-            _dataVisualizer._inPlaceGhost.style.marginBottom =
-                new Length(leadingMarginBottom, LengthUnit.Pixel);
             _dataVisualizer._inPlaceGhost.style.height =
                 new Length(Mathf.Max(1f, leadingHeight), LengthUnit.Pixel);
             _dataVisualizer._inPlaceGhost.style.minHeight =
@@ -316,22 +299,81 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 new Length(Mathf.Max(1f, leadingWidth), LengthUnit.Pixel);
             _dataVisualizer._inPlaceGhost.style.minWidth =
                 new Length(Mathf.Max(1f, leadingWidth), LengthUnit.Pixel);
+
+            _dataVisualizer._inPlaceGhost.style.marginTop =
+                new Length(leadingMargin, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.marginLeft =
+                new Length(leadingMarginLeft, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.marginRight =
+                new Length(leadingMarginRight, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.marginBottom =
+                new Length(leadingMarginBottom, LengthUnit.Pixel);
+
+            RestoreReferenceMargin();
+            RestorePreviousMargin();
+            int referenceIndex = referenceElement != null ? container.IndexOf(referenceElement) : -1;
+            if (referenceElement != null && referenceIndex >= 0 && referenceIndex == normalizedIndex + 1)
+            {
+                referenceElement.style.marginTop = new Length(0f, LengthUnit.Pixel);
+                _referenceWithSuppressedMargin = referenceElement;
+            }
+
+            VisualElement previousElement = GetPreviousActualElement(container, _dataVisualizer._inPlaceGhost);
+            if (previousElement != null)
+            {
+                previousElement.style.marginBottom = new Length(0f, LengthUnit.Pixel);
+                _previousWithSuppressedMargin = previousElement;
+            }
+
+#if UNITY_EDITOR
+            LogGhostDiagnostics(
+                container,
+                normalizedIndex,
+                pointerLocalY,
+                referenceElement,
+                leadingMargin,
+                leadingMarginLeft,
+                leadingMarginRight,
+                leadingMarginBottom,
+                leadingHeight,
+                leadingHeight
+            );
+#endif
         }
 
-        private VisualElement FindReferenceElement(VisualElement container)
+        private VisualElement GetReferenceElementForGhost(VisualElement container)
         {
+            if (container == null)
+            {
+                return null;
+            }
+
+            VisualElement previous = null;
+            bool ghostSeen = false;
+
             for (int index = 0; index < container.childCount; index++)
             {
                 VisualElement candidate = container.ElementAt(index);
                 if (ReferenceEquals(candidate, _dataVisualizer._inPlaceGhost))
                 {
+                    ghostSeen = true;
                     continue;
                 }
 
-                return candidate;
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                if (ghostSeen)
+                {
+                    return candidate;
+                }
+
+                previous = candidate;
             }
 
-            return null;
+            return previous;
         }
 
         private static float ResolveMarginTop(VisualElement reference, float fallback)
@@ -424,6 +466,34 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             return fallback;
         }
 
+        private static VisualElement GetPreviousActualElement(
+            VisualElement container,
+            VisualElement reference
+        )
+        {
+            if (container == null || reference == null)
+            {
+                return null;
+            }
+
+            int index = container.IndexOf(reference);
+            if (index <= 0)
+            {
+                return null;
+            }
+
+            for (int i = index - 1; i >= 0; i--)
+            {
+                VisualElement candidate = container.ElementAt(i);
+                if (candidate != null && !ReferenceEquals(candidate, reference))
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
         private void ResetContainerPadding()
         {
             if (_dataVisualizer._lastGhostParent != null)
@@ -431,12 +501,79 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 _dataVisualizer._lastGhostParent.style.paddingTop = StyleKeyword.Null;
             }
 
-            if (_lastFirstSlotReferenceElement != null)
+            RestoreReferenceMargin();
+            RestorePreviousMargin();
+        }
+
+        private void RestoreReferenceMargin()
+        {
+            if (_referenceWithSuppressedMargin != null)
             {
-                _lastFirstSlotReferenceElement.style.marginTop = StyleKeyword.Null;
-                _lastFirstSlotReferenceElement = null;
+                _referenceWithSuppressedMargin.style.marginTop = StyleKeyword.Null;
+                _referenceWithSuppressedMargin = null;
             }
         }
+
+        private void RestorePreviousMargin()
+        {
+            if (_previousWithSuppressedMargin != null)
+            {
+                _previousWithSuppressedMargin.style.marginBottom = StyleKeyword.Null;
+                _previousWithSuppressedMargin = null;
+            }
+        }
+
+#if UNITY_EDITOR
+        private void LogGhostDiagnostics(
+            VisualElement container,
+            int normalizedIndex,
+            float pointerLocalY,
+            VisualElement referenceElement,
+            float marginTop,
+            float marginLeft,
+            float marginRight,
+            float marginBottom,
+            float referenceHeight,
+            float appliedHeight
+        )
+        {
+            StringBuilder builder = new StringBuilder();
+            builder.Append("UpdateGhost -> index=")
+                .Append(normalizedIndex)
+                .Append(", pointerY=")
+                .Append(pointerLocalY.ToString("F2"))
+                .Append(", containerChildren=")
+                .Append(container?.childCount ?? -1)
+                .Append(", margins(top,left,right,bottom)= (")
+                .Append(marginTop.ToString("F2"))
+                .Append(", ")
+                .Append(marginLeft.ToString("F2"))
+                .Append(", ")
+                .Append(marginRight.ToString("F2"))
+                .Append(", ")
+                .Append(marginBottom.ToString("F2"))
+                .Append(")")
+                .Append(", ghostHeight=")
+                .Append(appliedHeight.ToString("F2"))
+                .Append(", refName=")
+                .Append(referenceElement?.name ?? "<none>")
+                .Append(", refMargins(top,bottom)= (")
+                .Append(referenceElement != null
+                    ? referenceElement.resolvedStyle.marginTop.ToString()
+                    : "<n/a>")
+                .Append(", ")
+                .Append(referenceElement != null
+                    ? referenceElement.resolvedStyle.marginBottom.ToString()
+                    : "<n/a>")
+                .Append(")")
+                .Append(", refHeight=")
+                .Append(referenceElement != null
+                    ? referenceHeight.ToString("F2")
+                    : "<n/a>");
+
+            DataVisualizer.LogReorderDebug(builder.ToString());
+        }
+#endif
 
         public void CancelDrag()
         {
@@ -807,6 +944,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             _cachedDragWidth = resolvedWidth > 0f ? resolvedWidth : 1f;
             _cachedDragHeight = resolvedHeight > 0f ? resolvedHeight : 1f;
+            _cachedLayoutHeight = resolvedHeight > 0f ? resolvedHeight : 1f;
             _cachedMarginLeft = _dataVisualizer._draggedElement.resolvedStyle.marginLeft;
             _cachedMarginRight = _dataVisualizer._draggedElement.resolvedStyle.marginRight;
             _cachedMarginTop = _dataVisualizer._draggedElement.resolvedStyle.marginTop;
@@ -916,7 +1054,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 {
                     name = "drag-ghost-overlay",
                     pickingMode = PickingMode.Ignore,
+                    style =
+                    {
+                        height = 0f,
+                        marginTop = 0f,
+                        marginBottom = 0f,
+                        marginLeft = 0f,
+                        marginRight = 0f,
+                    },
                 };
+
                 foreach (string className in _dataVisualizer._draggedElement.GetClasses())
                 {
                     _dataVisualizer._inPlaceGhost.AddToClassList(className);
@@ -936,10 +1083,50 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 }
             }
 
-            ApplyCachedSizing(
-                _dataVisualizer._inPlaceGhost,
-                _dataVisualizer._draggedElement?.parent ?? _dataVisualizer.rootVisualElement
-            );
+            float resolvedHeight = _dataVisualizer._draggedElement.resolvedStyle.height;
+            if (float.IsNaN(resolvedHeight) || resolvedHeight <= 0f)
+            {
+                resolvedHeight = _cachedLayoutHeight;
+            }
+
+            _dataVisualizer._inPlaceGhost.style.height =
+                new Length(resolvedHeight, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.minHeight =
+                new Length(resolvedHeight, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.flexBasis =
+                new Length(resolvedHeight, LengthUnit.Pixel);
+
+            float marginTop = _dataVisualizer._draggedElement.resolvedStyle.marginTop;
+            float marginBottom = _dataVisualizer._draggedElement.resolvedStyle.marginBottom;
+            float marginLeft = _dataVisualizer._draggedElement.resolvedStyle.marginLeft;
+            float marginRight = _dataVisualizer._draggedElement.resolvedStyle.marginRight;
+
+            if (float.IsNaN(marginTop))
+            {
+                marginTop = _cachedMarginTop;
+            }
+            if (float.IsNaN(marginBottom))
+            {
+                marginBottom = _cachedMarginBottom;
+            }
+            if (float.IsNaN(marginLeft))
+            {
+                marginLeft = _cachedMarginLeft;
+            }
+            if (float.IsNaN(marginRight))
+            {
+                marginRight = _cachedMarginRight;
+            }
+
+            _dataVisualizer._inPlaceGhost.style.marginTop =
+                new Length(marginTop, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.marginBottom =
+                new Length(marginBottom, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.marginLeft =
+                new Length(marginLeft, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.marginRight =
+                new Length(marginRight, LengthUnit.Pixel);
+
             _dataVisualizer._inPlaceGhost.style.visibility = Visibility.Hidden;
         }
 
