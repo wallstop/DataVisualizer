@@ -27,7 +27,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private float _cachedFlexGrow;
         private float _cachedFlexShrink;
         private float _cachedLayoutHeight;
-        private VisualElement _referenceWithSuppressedMargin;
         private VisualElement _previousWithSuppressedMargin;
 
         public DragAndDropController(DataVisualizer dataVisualizer, DataVisualizerEventHub eventHub)
@@ -279,15 +278,32 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
             if (referenceElement != null)
             {
-                leadingMargin = ResolveMarginTop(referenceElement, leadingMargin);
                 leadingMarginLeft = ResolveMarginLeft(referenceElement, leadingMarginLeft);
                 leadingMarginRight = ResolveMarginRight(referenceElement, leadingMarginRight);
-                leadingMarginBottom = ResolveMarginBottom(referenceElement, leadingMarginBottom);
                 leadingHeight = ResolveHeight(referenceElement, leadingHeight);
                 leadingWidth = ResolveWidth(referenceElement, leadingWidth);
             }
 
-            container.style.paddingTop = StyleKeyword.Null;
+            if (normalizedIndex == 0)
+            {
+                float topMarginSource = referenceElement != null
+                    ? ResolveMarginTop(referenceElement, leadingMargin)
+                    : ResolveMarginTop(container.childCount > 0 ? container.ElementAt(0) : null, leadingMargin);
+
+                container.style.paddingTop = new Length(topMarginSource, LengthUnit.Pixel);
+                leadingMargin = 0f;
+            }
+            else
+            {
+                container.style.paddingTop = StyleKeyword.Null;
+                leadingMargin = referenceElement != null
+                    ? ResolveMarginTop(referenceElement, leadingMargin)
+                    : leadingMargin;
+            }
+
+            leadingMarginBottom = 0f;
+            leadingMarginLeft = 0f;
+            leadingMarginRight = 0f;
 
             _dataVisualizer._inPlaceGhost.style.height =
                 new Length(Mathf.Max(1f, leadingHeight), LengthUnit.Pixel);
@@ -307,18 +323,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _dataVisualizer._inPlaceGhost.style.marginRight =
                 new Length(leadingMarginRight, LengthUnit.Pixel);
             _dataVisualizer._inPlaceGhost.style.marginBottom =
-                new Length(leadingMarginBottom, LengthUnit.Pixel);
+                new Length(0f, LengthUnit.Pixel);
 
-            RestoreReferenceMargin();
             RestorePreviousMargin();
-            int referenceIndex = referenceElement != null ? container.IndexOf(referenceElement) : -1;
-            if (referenceElement != null && referenceIndex >= 0 && referenceIndex == normalizedIndex + 1)
-            {
-                referenceElement.style.marginTop = new Length(0f, LengthUnit.Pixel);
-                _referenceWithSuppressedMargin = referenceElement;
-            }
-
-            VisualElement previousElement = GetPreviousActualElement(container, _dataVisualizer._inPlaceGhost);
+            VisualElement previousElement = GetPreviousElementForGhost(container);
             if (previousElement != null)
             {
                 previousElement.style.marginBottom = new Length(0f, LengthUnit.Pixel);
@@ -466,34 +474,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             return fallback;
         }
 
-        private static VisualElement GetPreviousActualElement(
-            VisualElement container,
-            VisualElement reference
-        )
-        {
-            if (container == null || reference == null)
-            {
-                return null;
-            }
-
-            int index = container.IndexOf(reference);
-            if (index <= 0)
-            {
-                return null;
-            }
-
-            for (int i = index - 1; i >= 0; i--)
-            {
-                VisualElement candidate = container.ElementAt(i);
-                if (candidate != null && !ReferenceEquals(candidate, reference))
-                {
-                    return candidate;
-                }
-            }
-
-            return null;
-        }
-
         private void ResetContainerPadding()
         {
             if (_dataVisualizer._lastGhostParent != null)
@@ -501,17 +481,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 _dataVisualizer._lastGhostParent.style.paddingTop = StyleKeyword.Null;
             }
 
-            RestoreReferenceMargin();
             RestorePreviousMargin();
-        }
-
-        private void RestoreReferenceMargin()
-        {
-            if (_referenceWithSuppressedMargin != null)
-            {
-                _referenceWithSuppressedMargin.style.marginTop = StyleKeyword.Null;
-                _referenceWithSuppressedMargin = null;
-            }
         }
 
         private void RestorePreviousMargin()
@@ -521,6 +491,31 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 _previousWithSuppressedMargin.style.marginBottom = StyleKeyword.Null;
                 _previousWithSuppressedMargin = null;
             }
+        }
+
+        private VisualElement GetPreviousElementForGhost(VisualElement container)
+        {
+            if (container == null)
+            {
+                return null;
+            }
+
+            int ghostIndex = container.IndexOf(_dataVisualizer._inPlaceGhost);
+            if (ghostIndex <= 0)
+            {
+                return null;
+            }
+
+            for (int index = ghostIndex - 1; index >= 0; index--)
+            {
+                VisualElement candidate = container.ElementAt(index);
+                if (!ReferenceEquals(candidate, _dataVisualizer._inPlaceGhost) && candidate != null)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
         }
 
 #if UNITY_EDITOR
