@@ -377,6 +377,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal DragAndDropController _dragAndDropController;
         internal SearchPopoverController _searchPopoverController;
         private Services.ObjectCommands.ObjectCommandDispatcher _objectCommandDispatcher;
+        private DataVisualizerEventHub _objectCommandDispatcherEventHub;
         internal ProcessorPanelController _processorPanelController;
         internal Services.IDataProcessorRegistry _processorRegistry;
         internal Services.ProcessorExecutionService _processorExecutionService;
@@ -634,6 +635,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             CancelDrag();
             _objectCommandDispatcher?.Dispose();
             _objectCommandDispatcher = null;
+            _objectCommandDispatcherEventHub = null;
             _sessionState.Processors.Clear();
             if (_layoutPersistenceService != null)
             {
@@ -5936,12 +5938,23 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             }
 
+            if (
+                _objectCommandDispatcher != null
+                && !ReferenceEquals(_objectCommandDispatcherEventHub, _eventHub)
+            )
+            {
+                _objectCommandDispatcher.Dispose();
+                _objectCommandDispatcher = null;
+                _objectCommandDispatcherEventHub = null;
+            }
+
             if (_objectCommandDispatcher == null)
             {
                 _objectCommandDispatcher = new Services.ObjectCommands.ObjectCommandDispatcher(
                     this,
                     _eventHub
                 );
+                _objectCommandDispatcherEventHub = _eventHub;
             }
         }
 

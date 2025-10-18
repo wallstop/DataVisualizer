@@ -266,7 +266,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
-            VisualElement referenceElement = GetReferenceElementForGhost(container);
+            VisualElement referenceElement = GetNextElementForGhost(container);
 
             float leadingMargin = _cachedMarginTop;
             float leadingMarginLeft = _cachedMarginLeft;
@@ -290,20 +290,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 referenceElement != null
                     ? ResolveMarginBottom(referenceElement, _cachedMarginBottom)
                     : _cachedMarginBottom;
-            float ghostMarginBottom = Mathf.Max(0f, resolvedLeadingMarginBottom);
+            float ghostMarginTop =
+                normalizedIndex == 0 ? Mathf.Max(0f, resolvedLeadingMarginTop) : 0f;
+            float ghostMarginBottom =
+                referenceElement != null ? 0f : Mathf.Max(0f, resolvedLeadingMarginBottom);
 
             leadingMarginLeft = Mathf.Max(0f, resolvedLeadingMarginLeft);
             leadingMarginRight = Mathf.Max(0f, resolvedLeadingMarginRight);
 
-            float containerPaddingTop = Mathf.Max(0f, _cachedMarginTop);
-            if (normalizedIndex == 0)
-            {
-                container.style.paddingTop = new Length(containerPaddingTop, LengthUnit.Pixel);
-            }
-            else
-            {
-                container.style.paddingTop = StyleKeyword.Null;
-            }
+            container.style.paddingTop = StyleKeyword.Null;
 
             _dataVisualizer._inPlaceGhost.style.height = new Length(
                 Mathf.Max(1f, leadingHeight),
@@ -326,7 +321,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 LengthUnit.Pixel
             );
 
-            _dataVisualizer._inPlaceGhost.style.marginTop = new Length(0f, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.marginTop = new Length(
+                ghostMarginTop,
+                LengthUnit.Pixel
+            );
             _dataVisualizer._inPlaceGhost.style.marginLeft = new Length(
                 leadingMarginLeft,
                 LengthUnit.Pixel
@@ -346,7 +344,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 normalizedIndex,
                 pointerLocalY,
                 referenceElement,
-                0f,
+                ghostMarginTop,
                 leadingMarginLeft,
                 leadingMarginRight,
                 ghostMarginBottom,
@@ -356,14 +354,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 #endif
         }
 
-        private VisualElement GetReferenceElementForGhost(VisualElement container)
+        private VisualElement GetNextElementForGhost(VisualElement container)
         {
             if (container == null)
             {
                 return null;
             }
 
-            VisualElement previous = null;
             bool ghostSeen = false;
 
             for (int index = 0; index < container.childCount; index++)
@@ -384,11 +381,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 {
                     return candidate;
                 }
-
-                previous = candidate;
             }
 
-            return previous;
+            return null;
         }
 
         private static float ResolveMarginTop(VisualElement reference, float fallback)
@@ -752,9 +747,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             );
 
             int sourceIndex = listState.FilteredObjectsBuffer.IndexOf(draggedObject);
-            if (sourceIndex >= 0 && sourceIndex < globalTargetIndex)
+            if (sourceIndex >= 0 && globalTargetIndex > sourceIndex)
             {
-                globalTargetIndex = Mathf.Max(0, globalTargetIndex - 1);
+                globalTargetIndex--;
             }
 #if UNITY_EDITOR
             DataVisualizer.LogReorderDebug(
