@@ -290,10 +290,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 referenceElement != null
                     ? ResolveMarginBottom(referenceElement, _cachedMarginBottom)
                     : _cachedMarginBottom;
-            float ghostMarginTop =
-                normalizedIndex == 0 ? Mathf.Max(0f, resolvedLeadingMarginTop) : 0f;
-            float ghostMarginBottom =
-                referenceElement != null ? 0f : Mathf.Max(0f, resolvedLeadingMarginBottom);
+            float ghostMarginTop = normalizedIndex == 0 ? Mathf.Max(0f, _cachedMarginTop) : 0f;
+            float ghostMarginBottom = Mathf.Max(0f, _cachedMarginBottom);
 
             leadingMarginLeft = Mathf.Max(0f, resolvedLeadingMarginLeft);
             leadingMarginRight = Mathf.Max(0f, resolvedLeadingMarginRight);

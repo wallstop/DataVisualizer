@@ -5,7 +5,7 @@
 - [x] Eliminated double-spacing when dropping at index 0 by normalizing container padding and ghost bottom margin.
 - [x] Added temporary suppression of adjacent-row margins to remove earlier spacing flicker (since reverted to simplify logic).
 - [x] Cached layout height/margins to avoid `NaN` ghost dimensions.
-- [x] Simplified ghost spacing so interior placements zero-out the ghost margins while index-0 insertions reuse the cached top spacing, eliminating the doubled gaps around index 0.
+- [x] Simplified ghost spacing so interior placements zero-out the ghost margins while index-0 insertions reuse cached spacing, removing the doubled gaps and jitter around the list head.
 - [x] Reworked ghost margin application to mirror reference row spacing (top/left/right/bottom) instead of zeroing values, preserving consistent gaps across the list.
 - [x] Tuned the drop-index adjustment so same-list reorders land in the intended slot without cancelling the move.
 - [x] Rebound the object command dispatcher whenever the event hub changes so reorder events always reach the command handlers after domain reloads.
@@ -13,6 +13,8 @@
 
 ## Outstanding Issues
 - [ ] Validate the latest margin adjustments in-editor to confirm index-0 hover is stable and no new gaps linger after a drop.
+- [ ] Capture before/after screenshots of drag spacing once verified to document behaviour changes.
+- [ ] `Plan.md` previously tracked broader roadmap tasks—need to reinstate summary once ghost work stabilizes.
 - [ ] Verify the object list visually reorders after drops now that the target index fix is in place.
 - [ ] Capture before/after screenshots of drag spacing once verified to document behaviour changes.
 - [ ] `Plan.md` previously tracked broader roadmap tasks—need to reinstate summary once ghost work stabilizes.
