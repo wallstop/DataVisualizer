@@ -25,6 +25,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private float _cachedMarginBottom;
         private float _cachedFlexGrow;
         private float _cachedFlexShrink;
+        private VisualElement _lastFirstSlotReferenceElement;
 
         public DragAndDropController(DataVisualizer dataVisualizer, DataVisualizerEventHub eventHub)
         {
@@ -155,7 +156,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             if (_dataVisualizer._activeDragType != DataVisualizer.DragType.Namespace)
             {
                 int candidateIndex = 0;
-                int actualChildCount = 0;
 
                 for (int i = 0; i < childCount; ++i)
                 {
@@ -165,8 +165,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                         continue;
                     }
 
-                    actualChildCount++;
-
                     float midpoint = child.layout.yMin + child.layout.height * 0.5f;
                     if (localPointerPos.y < midpoint)
                     {
@@ -174,11 +172,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     }
 
                     candidateIndex++;
-                }
-
-                if (candidateIndex > actualChildCount)
-                {
-                    candidateIndex = actualChildCount;
                 }
 
                 targetIndex = candidateIndex;
@@ -207,7 +200,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 }
             }
 
-            targetIndex = Mathf.Clamp(targetIndex, 0, childCount);
+            targetIndex = Mathf.Clamp(targetIndex, 0, Math.Max(0, childCount - 1));
             int normalizedIndex = NormalizeGhostInsertIndex(
                 container,
                 _dataVisualizer._inPlaceGhost,
@@ -233,6 +226,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 normalizedIndex = insertionIndex;
                 _dataVisualizer._lastGhostInsertIndex = normalizedIndex;
                 _dataVisualizer._lastGhostParent = container;
+
+                AdjustGhostMargins(container, normalizedIndex);
             }
 
             if (targetIndexValid)
@@ -249,8 +244,197 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 
                 _dataVisualizer._inPlaceGhost.style.visibility = Visibility.Hidden;
                 _dataVisualizer._inPlaceGhost.userData = -1;
+                ResetContainerPadding();
                 _dataVisualizer._lastGhostInsertIndex = -1;
                 _dataVisualizer._lastGhostParent = null;
+            }
+        }
+
+        private void AdjustGhostMargins(VisualElement container, int normalizedIndex)
+        {
+            if (
+                container == null
+                || _dataVisualizer._inPlaceGhost == null
+                || _dataVisualizer._activeDragType != DataVisualizer.DragType.Object
+            )
+            {
+                return;
+            }
+
+            VisualElement referenceElement = FindReferenceElement(container);
+
+            float leadingMargin = _cachedMarginTop;
+            float leadingMarginLeft = _cachedMarginLeft;
+            float leadingMarginRight = _cachedMarginRight;
+            float leadingMarginBottom = _cachedMarginBottom;
+            float leadingHeight = _cachedDragHeight;
+            float leadingWidth = _cachedDragWidth;
+
+            if (referenceElement != null)
+            {
+                leadingMarginLeft = ResolveMarginLeft(referenceElement, leadingMarginLeft);
+                leadingMarginRight = ResolveMarginRight(referenceElement, leadingMarginRight);
+                leadingMarginBottom = ResolveMarginBottom(referenceElement, leadingMarginBottom);
+                leadingHeight = ResolveHeight(referenceElement, leadingHeight);
+                leadingWidth = ResolveWidth(referenceElement, leadingWidth);
+            }
+
+            bool isFirstSlot = normalizedIndex == 0 && referenceElement != null;
+            if (isFirstSlot)
+            {
+                leadingMargin = ResolveMarginTop(referenceElement, leadingMargin);
+                container.style.paddingTop = new Length(leadingMargin, LengthUnit.Pixel);
+                _dataVisualizer._inPlaceGhost.style.marginTop = new Length(0f, LengthUnit.Pixel);
+                referenceElement.style.marginTop = new Length(0f, LengthUnit.Pixel);
+                _lastFirstSlotReferenceElement = referenceElement;
+            }
+            else
+            {
+                container.style.paddingTop = StyleKeyword.Null;
+                _dataVisualizer._inPlaceGhost.style.marginTop =
+                    new Length(leadingMargin, LengthUnit.Pixel);
+                if (_lastFirstSlotReferenceElement != null)
+                {
+                    _lastFirstSlotReferenceElement.style.marginTop = StyleKeyword.Null;
+                    _lastFirstSlotReferenceElement = null;
+                }
+            }
+
+            _dataVisualizer._inPlaceGhost.style.marginLeft =
+                new Length(leadingMarginLeft, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.marginRight =
+                new Length(leadingMarginRight, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.marginBottom =
+                new Length(leadingMarginBottom, LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.height =
+                new Length(Mathf.Max(1f, leadingHeight), LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.minHeight =
+                new Length(Mathf.Max(1f, leadingHeight), LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.flexBasis =
+                new Length(Mathf.Max(1f, leadingHeight), LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.width =
+                new Length(Mathf.Max(1f, leadingWidth), LengthUnit.Pixel);
+            _dataVisualizer._inPlaceGhost.style.minWidth =
+                new Length(Mathf.Max(1f, leadingWidth), LengthUnit.Pixel);
+        }
+
+        private VisualElement FindReferenceElement(VisualElement container)
+        {
+            for (int index = 0; index < container.childCount; index++)
+            {
+                VisualElement candidate = container.ElementAt(index);
+                if (ReferenceEquals(candidate, _dataVisualizer._inPlaceGhost))
+                {
+                    continue;
+                }
+
+                return candidate;
+            }
+
+            return null;
+        }
+
+        private static float ResolveMarginTop(VisualElement reference, float fallback)
+        {
+            float resolvedMargin = reference.resolvedStyle.marginTop;
+            if (!float.IsNaN(resolvedMargin))
+            {
+                return resolvedMargin;
+            }
+
+            return fallback > 0f ? fallback : 0f;
+        }
+
+        private static float ResolveMarginLeft(VisualElement reference, float fallback)
+        {
+            float resolvedMargin = reference.resolvedStyle.marginLeft;
+            if (!float.IsNaN(resolvedMargin))
+            {
+                return resolvedMargin;
+            }
+
+            return fallback;
+        }
+
+        private static float ResolveMarginRight(VisualElement reference, float fallback)
+        {
+            float resolvedMargin = reference.resolvedStyle.marginRight;
+            if (!float.IsNaN(resolvedMargin))
+            {
+                return resolvedMargin;
+            }
+
+            return fallback;
+        }
+
+        private static float ResolveMarginBottom(VisualElement reference, float fallback)
+        {
+            float resolvedMargin = reference.resolvedStyle.marginBottom;
+            if (!float.IsNaN(resolvedMargin))
+            {
+                return resolvedMargin;
+            }
+
+            return fallback;
+        }
+
+        private static float ResolveHeight(VisualElement reference, float fallback)
+        {
+            float resolvedHeight = reference.resolvedStyle.height;
+            if (!float.IsNaN(resolvedHeight) && resolvedHeight > 0f)
+            {
+                return resolvedHeight;
+            }
+
+            float layoutHeight = reference.layout.height;
+            if (layoutHeight > 0f)
+            {
+                return layoutHeight;
+            }
+
+            float contentHeight = reference.contentRect.height;
+            if (contentHeight > 0f)
+            {
+                return contentHeight;
+            }
+
+            return fallback;
+        }
+
+        private static float ResolveWidth(VisualElement reference, float fallback)
+        {
+            float resolvedWidth = reference.resolvedStyle.width;
+            if (!float.IsNaN(resolvedWidth) && resolvedWidth > 0f)
+            {
+                return resolvedWidth;
+            }
+
+            float layoutWidth = reference.layout.width;
+            if (layoutWidth > 0f)
+            {
+                return layoutWidth;
+            }
+
+            float contentWidth = reference.contentRect.width;
+            if (contentWidth > 0f)
+            {
+                return contentWidth;
+            }
+
+            return fallback;
+        }
+
+        private void ResetContainerPadding()
+        {
+            if (_dataVisualizer._lastGhostParent != null)
+            {
+                _dataVisualizer._lastGhostParent.style.paddingTop = StyleKeyword.Null;
+            }
+
+            if (_lastFirstSlotReferenceElement != null)
+            {
+                _lastFirstSlotReferenceElement.style.marginTop = StyleKeyword.Null;
+                _lastFirstSlotReferenceElement = null;
             }
         }
 
@@ -282,6 +466,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             _dataVisualizer._draggedData = null;
             _dataVisualizer._activeDragType = DataVisualizer.DragType.None;
             _dataVisualizer.rootVisualElement.RemoveFromClassList("dragging-cursor");
+
+            ResetContainerPadding();
 
             _cachedDragWidth = 0f;
             _cachedDragHeight = 0f;
@@ -765,8 +951,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 width =
                     container?.resolvedStyle.width
                     ?? _dataVisualizer.rootVisualElement.resolvedStyle.width;
-                ghost.style.marginLeft = 0f;
-                ghost.style.marginRight = 0f;
+                ghost.style.marginLeft = new Length(0f, LengthUnit.Pixel);
+                ghost.style.marginRight = new Length(0f, LengthUnit.Pixel);
             }
             else
             {
@@ -781,8 +967,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     width = _dataVisualizer.rootVisualElement.resolvedStyle.width;
                 }
 
-                ghost.style.marginLeft = _cachedMarginLeft;
-                ghost.style.marginRight = _cachedMarginRight;
+                ghost.style.marginLeft = new Length(_cachedMarginLeft, LengthUnit.Pixel);
+                ghost.style.marginRight = new Length(_cachedMarginRight, LengthUnit.Pixel);
             }
 
             if (width <= 0f)
@@ -808,8 +994,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             ghost.style.minHeight = height;
             ghost.style.flexBasis = height;
 
-            ghost.style.marginTop = _cachedMarginTop;
-            ghost.style.marginBottom = _cachedMarginBottom;
+            ghost.style.marginTop = new Length(_cachedMarginTop, LengthUnit.Pixel);
+            ghost.style.marginBottom = new Length(_cachedMarginBottom, LengthUnit.Pixel);
             ghost.style.flexGrow = _cachedFlexGrow;
             ghost.style.flexShrink = _cachedFlexShrink;
         }

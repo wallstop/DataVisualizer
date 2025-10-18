@@ -333,6 +333,7 @@
     opacity: 0.5;
     border-width: 1px;
     border-color: grey;
+    box-sizing: border-box;
 }
 
 .overlay-ghost {
