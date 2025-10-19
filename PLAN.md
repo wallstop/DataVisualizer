@@ -9,6 +9,7 @@
 - [x] Reworked ghost margin application to mirror reference row spacing (top/left/right/bottom) instead of zeroing values, preserving consistent gaps across the list.
 - [x] Tuned the drop-index adjustment so same-list reorders land in the intended slot without cancelling the move.
 - [x] Rebound the object command dispatcher whenever the event hub changes so reorder events always reach the command handlers after domain reloads.
+- [x] Zeroed ghost margins for interior placements while using container padding at index 0, eliminating the extra gap while dragging past the first row.
 - [x] Deferred reorder debug EditorPrefs lookup until OnEnable to stop constructor-time Unity exceptions during window creation.
 
 ## Outstanding Issues

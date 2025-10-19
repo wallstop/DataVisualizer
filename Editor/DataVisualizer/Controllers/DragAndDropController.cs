@@ -27,6 +27,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
         private float _cachedFlexGrow;
         private float _cachedFlexShrink;
         private float _cachedLayoutHeight;
+        private VisualElement _previousWithSuppressedMargin;
 
         public DragAndDropController(DataVisualizer dataVisualizer, DataVisualizerEventHub eventHub)
         {
@@ -266,37 +267,55 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 return;
             }
 
-            VisualElement referenceElement = GetNextElementForGhost(container);
+            RestoreSuppressedMargin();
 
-            float leadingMargin = _cachedMarginTop;
+            VisualElement nextElement = GetNextVisibleElement(container);
+            VisualElement previousElement = GetPreviousVisibleElement(container);
+
             float leadingMarginLeft = _cachedMarginLeft;
             float leadingMarginRight = _cachedMarginRight;
             float leadingHeight = _cachedDragHeight;
             float leadingWidth = _cachedDragWidth;
 
-            float resolvedLeadingMarginTop =
-                referenceElement != null
-                    ? ResolveMarginTop(referenceElement, leadingMargin)
-                    : leadingMargin;
             float resolvedLeadingMarginLeft =
-                referenceElement != null
-                    ? ResolveMarginLeft(referenceElement, leadingMarginLeft)
+                nextElement != null
+                    ? ResolveMarginLeft(nextElement, leadingMarginLeft)
                     : leadingMarginLeft;
             float resolvedLeadingMarginRight =
-                referenceElement != null
-                    ? ResolveMarginRight(referenceElement, leadingMarginRight)
+                nextElement != null
+                    ? ResolveMarginRight(nextElement, leadingMarginRight)
                     : leadingMarginRight;
             float resolvedLeadingMarginBottom =
-                referenceElement != null
-                    ? ResolveMarginBottom(referenceElement, _cachedMarginBottom)
+                nextElement != null
+                    ? ResolveMarginBottom(nextElement, _cachedMarginBottom)
                     : _cachedMarginBottom;
-            float ghostMarginTop = normalizedIndex == 0 ? Mathf.Max(0f, _cachedMarginTop) : 0f;
-            float ghostMarginBottom = Mathf.Max(0f, _cachedMarginBottom);
+
+            float ghostMarginTop = 0f;
+            float ghostMarginBottom =
+                nextElement != null
+                    ? Mathf.Max(0f, ResolveMarginTop(nextElement, _cachedMarginTop))
+                    : Mathf.Max(0f, resolvedLeadingMarginBottom);
 
             leadingMarginLeft = Mathf.Max(0f, resolvedLeadingMarginLeft);
             leadingMarginRight = Mathf.Max(0f, resolvedLeadingMarginRight);
 
-            container.style.paddingTop = StyleKeyword.Null;
+            if (normalizedIndex == 0)
+            {
+                container.style.paddingTop = new Length(
+                    Mathf.Max(0f, _cachedMarginTop),
+                    LengthUnit.Pixel
+                );
+            }
+            else
+            {
+                container.style.paddingTop = StyleKeyword.Null;
+            }
+
+            if (normalizedIndex > 0 && previousElement != null)
+            {
+                _previousWithSuppressedMargin = previousElement;
+                _previousWithSuppressedMargin.style.marginBottom = new Length(0f, LengthUnit.Pixel);
+            }
 
             _dataVisualizer._inPlaceGhost.style.height = new Length(
                 Mathf.Max(1f, leadingHeight),
@@ -341,7 +360,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                 container,
                 normalizedIndex,
                 pointerLocalY,
-                referenceElement,
+                nextElement,
                 ghostMarginTop,
                 leadingMarginLeft,
                 leadingMarginRight,
@@ -352,7 +371,33 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
 #endif
         }
 
-        private VisualElement GetNextElementForGhost(VisualElement container)
+        private VisualElement GetPreviousVisibleElement(VisualElement container)
+        {
+            if (container == null)
+            {
+                return null;
+            }
+
+            for (int index = container.childCount - 1; index >= 0; index--)
+            {
+                VisualElement candidate = container.ElementAt(index);
+                if (ReferenceEquals(candidate, _dataVisualizer._inPlaceGhost))
+                {
+                    break;
+                }
+
+                if (!IsElementVisible(candidate))
+                {
+                    continue;
+                }
+
+                return candidate;
+            }
+
+            return null;
+        }
+
+        private VisualElement GetNextVisibleElement(VisualElement container)
         {
             if (container == null)
             {
@@ -370,7 +415,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
                     continue;
                 }
 
-                if (candidate == null)
+                if (!IsElementVisible(candidate))
                 {
                     continue;
                 }
@@ -382,6 +427,25 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             }
 
             return null;
+        }
+
+        private static bool IsElementVisible(VisualElement element)
+        {
+            if (element == null)
+            {
+                return false;
+            }
+
+            return element.resolvedStyle.display != DisplayStyle.None;
+        }
+
+        private void RestoreSuppressedMargin()
+        {
+            if (_previousWithSuppressedMargin != null)
+            {
+                _previousWithSuppressedMargin.style.marginBottom = StyleKeyword.Null;
+                _previousWithSuppressedMargin = null;
+            }
         }
 
         private static float ResolveMarginTop(VisualElement reference, float fallback)
@@ -480,6 +544,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Controllers
             {
                 _dataVisualizer._lastGhostParent.style.paddingTop = StyleKeyword.Null;
             }
+
+            RestoreSuppressedMargin();
         }
 
 #if UNITY_EDITOR
