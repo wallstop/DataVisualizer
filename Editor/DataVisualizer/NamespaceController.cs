@@ -143,11 +143,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             string namespaceKey = GetNamespaceKey(_selectedType);
             SaveNamespaceAndTypeSelectionState(dataVisualizer, namespaceKey, _selectedType);
-            dataVisualizer.LoadObjectTypes(_selectedType);
-            ScriptableObject objectToSelect = dataVisualizer.DetermineObjectToAutoSelect();
+            dataVisualizer.LoadObjectTypesAsync(_selectedType);
+            // BuildObjectsView will be called by async loader after priority batch loads
+            // We'll select object after first batch is ready
             dataVisualizer.BuildProcessorColumnView();
-            dataVisualizer.BuildObjectsView();
-            dataVisualizer.SelectObject(objectToSelect);
             dataVisualizer.UpdateCreateObjectButtonStyle();
             dataVisualizer.UpdateLabelAreaAndFilter();
         }
