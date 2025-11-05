@@ -3834,6 +3834,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             int index = _selectedObjects.IndexOf(objectToDelete);
             _selectedObjects.Remove(objectToDelete);
             _selectedObjects.RemoveAll(obj => obj == null);
+            _filteredObjects.Remove(objectToDelete);
+            _filteredObjects.RemoveAll(obj => obj == null);
             _objectVisualElementMap.Remove(objectToDelete, out VisualElement visualElement);
             int targetIndex = _selectedObject == objectToDelete ? Mathf.Max(0, index - 1) : 0;
 
@@ -5660,6 +5662,51 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private bool ShouldIncludeInFilteredObjects(ScriptableObject obj)
+        {
+            if (obj == null)
+            {
+                return false;
+            }
+
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                // No filter config means include all objects
+                return true;
+            }
+
+            List<string> andLabels = config.andLabels;
+            List<string> orLabels = config.orLabels;
+
+            bool noAndFilter = andLabels == null || andLabels.Count == 0;
+            bool noOrFilter = orLabels == null || orLabels.Count == 0;
+
+            // If no filters are active, include the object
+            if (noAndFilter && noOrFilter)
+            {
+                return true;
+            }
+
+            // Check labels
+            string[] labels = AssetDatabase.GetLabels(obj);
+            HashSet<string> uniqueLabels = new(labels, StringComparer.Ordinal);
+            Predicate<string> labelMatch = uniqueLabels.Contains;
+
+            bool matchesAnd = noAndFilter || andLabels.TrueForAll(labelMatch);
+            bool matchesOr = noOrFilter || orLabels.Exists(labelMatch);
+
+            switch (config.combinationType)
+            {
+                case LabelCombinationType.And:
+                    return matchesAnd && matchesOr;
+                case LabelCombinationType.Or:
+                    return matchesAnd || matchesOr;
+                default:
+                    return true;
+            }
+        }
+
         private TypeLabelFilterConfig LoadOrCreateLabelFilterConfig(Type type)
         {
             if (type == null)
@@ -6178,8 +6225,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Button goUpButton = new(() =>
             {
-                _filteredObjects.Remove(dataObject);
-                _filteredObjects.Insert(0, dataObject);
+                _selectedObjects.Remove(dataObject);
+                _selectedObjects.Insert(0, dataObject);
                 _filteredObjects.Remove(dataObject);
                 _filteredObjects.Insert(0, dataObject);
                 UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
@@ -7321,6 +7368,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _selectedObjects.Clear();
+            _filteredObjects.Clear();
             _objectVisualElementMap.Clear();
 
             List<string> customGuidOrder = GetObjectOrderForType(type);
@@ -7429,6 +7477,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (!priorityLoad)
             {
                 _selectedObjects.Clear();
+                _filteredObjects.Clear();
                 _objectVisualElementMap.Clear();
             }
 
@@ -7614,7 +7663,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 if (!_selectedObjects.Contains(obj))
                 {
-                    // Find insertion point to maintain sort order
+                    // Find insertion point to maintain sort order in _selectedObjects
                     int insertIndex = _selectedObjects.Count;
                     for (int i = 0; i < _selectedObjects.Count; i++)
                     {
@@ -7625,7 +7674,23 @@ namespace WallstopStudios.DataVisualizer.Editor
                         }
                     }
                     _selectedObjects.Insert(insertIndex, obj);
-                    _filteredObjects.Insert(insertIndex, obj);
+
+                    // For _filteredObjects, we need to check if the object passes the current filter
+                    // and find the correct insertion point in the filtered list
+                    if (ShouldIncludeInFilteredObjects(obj))
+                    {
+                        // Find the correct insertion point in _filteredObjects to maintain sort order
+                        int filteredInsertIndex = _filteredObjects.Count;
+                        for (int i = 0; i < _filteredObjects.Count; i++)
+                        {
+                            if (comparer.Compare(obj, _filteredObjects[i]) < 0)
+                            {
+                                filteredInsertIndex = i;
+                                break;
+                            }
+                        }
+                        _filteredObjects.Insert(filteredInsertIndex, obj);
+                    }
                 }
             }
 
@@ -8346,6 +8411,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             int dataInsertIndex = targetIndex;
             dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _selectedObjects.Count);
             _selectedObjects.Insert(dataInsertIndex, draggedObject);
+
+            // Also update _filteredObjects to maintain consistency
+            int oldFilteredIndex = _filteredObjects.IndexOf(draggedObject);
+            if (0 <= oldFilteredIndex)
+            {
+                _filteredObjects.RemoveAt(oldFilteredIndex);
+                int filteredInsertIndex = targetIndex;
+                filteredInsertIndex = Mathf.Clamp(filteredInsertIndex, 0, _filteredObjects.Count);
+                _filteredObjects.Insert(filteredInsertIndex, draggedObject);
+            }
+
             Type selectedType = _namespaceController.SelectedType;
             if (selectedType != null)
             {
