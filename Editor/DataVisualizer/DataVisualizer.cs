@@ -67,6 +67,12 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const float DefaultOuterSplitWidth = 200f;
         private const float DefaultInnerSplitWidth = 250f;
         private const int MaxObjectsPerPage = 100;
+        private const int AsyncLoadBatchSize = 100;
+        private const int AsyncLoadPriorityBatchSize = 100;
+
+        // Debug logging for testing async loading
+        // Set to true to see detailed loading performance logs in Unity Console
+        private static readonly bool EnableAsyncLoadDebugLog = false;
 
         private enum DragType
         {
@@ -203,6 +209,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Label _namespaceColumnLabel;
         private TextField _assetNameTextField;
         private VisualElement _objectColumnElement;
+        private Label _objectLoadingIndicator;
 
         private VisualElement _settingsPopover;
         private VisualElement _renamePopover;
@@ -314,6 +321,14 @@ namespace WallstopStudios.DataVisualizer.Editor
         private float? _lastEnterPressed;
         private bool _needsRefresh;
 
+        // Async loading state
+        private Type _asyncLoadTargetType;
+        private IVisualElementScheduledItem _asyncLoadTask;
+        private readonly List<string> _pendingObjectGuids = new();
+        private readonly List<string> _pendingSearchCacheGuids = new();
+        private bool _isLoadingObjectsAsync;
+        private bool _isLoadingSearchCacheAsync;
+
         private Label _dataFolderPathDisplay;
 #if ODIN_INSPECTOR
         private PropertyTree _odinPropertyTree;
@@ -397,7 +412,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             rootVisualElement
                 .schedule.Execute(() =>
                 {
-                    PopulateSearchCache();
+                    if (EnableAsyncLoadDebugLog)
+                    {
+                        Debug.Log(
+                            $"[DataVisualizer] OnEnable - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
+                        );
+                    }
+                    // Start async search cache population in background (low priority)
+                    PopulateSearchCacheAsync();
+                    // Restore selection with priority async loading
                     RestorePreviousSelection();
                     StartPeriodicWidthSave();
                 })
@@ -424,6 +447,16 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 Instance = null;
             }
+
+            // Cancel async loading
+            _asyncLoadTask?.Pause();
+            _asyncLoadTask = null;
+            _asyncLoadTargetType = null;
+            _pendingObjectGuids.Clear();
+            _pendingSearchCacheGuids.Clear();
+            _isLoadingObjectsAsync = false;
+            _isLoadingSearchCacheAsync = false;
+            UpdateLoadingIndicator(0, 0); // Hide loading indicator
 
             _isLabelCachePopulated = false;
             _selectedElement = null;
@@ -467,51 +500,144 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void PopulateSearchCache()
         {
+            // Start async loading instead
+            PopulateSearchCacheAsync();
+        }
+
+        private void PopulateSearchCacheAsync()
+        {
+            var cacheStartTime = System.Diagnostics.Stopwatch.StartNew();
             _allManagedObjectsCache.Clear();
+            _pendingSearchCacheGuids.Clear();
+            _isLoadingSearchCacheAsync = true;
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] PopulateSearchCacheAsync START at {System.DateTime.Now:HH:mm:ss.fff}"
+                );
+            }
 
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
+
+            // Collect all GUIDs first (fast, no asset loading)
             foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
             {
                 string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
                 foreach (string guid in guids)
                 {
-                    if (!uniqueGuids.Add(guid))
+                    if (uniqueGuids.Add(guid))
                     {
-                        continue;
-                    }
-
-                    string path = AssetDatabase.GUIDToAssetPath(guid);
-                    if (!string.IsNullOrWhiteSpace(path))
-                    {
-                        ScriptableObject obj =
-                            AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
-
-                        if (obj != null && obj.GetType() == type)
-                        {
-                            _allManagedObjectsCache.Add(obj);
-                        }
+                        _pendingSearchCacheGuids.Add(guid);
                     }
                 }
             }
 
-            _allManagedObjectsCache.Sort(
-                (a, b) =>
-                {
-                    int comparison = string.Compare(a.name, b.name, StringComparison.Ordinal);
-                    if (comparison != 0)
-                    {
-                        return comparison;
-                    }
-
-                    return string.Compare(
-                        a.GetType().FullName,
-                        b.GetType().FullName,
-                        StringComparison.Ordinal
-                    );
-                }
-            );
-
+            // Mark as populated for search functionality (even if not fully loaded yet)
             _isSearchCachePopulated = true;
+            cacheStartTime.Stop();
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] Search cache GUID collection: {_pendingSearchCacheGuids.Count} GUIDs collected in {cacheStartTime.ElapsedMilliseconds}ms"
+                );
+            }
+
+            // Start loading batches
+            if (_pendingSearchCacheGuids.Count > 0)
+            {
+                ContinuePopulatingSearchCache();
+            }
+            else
+            {
+                _isLoadingSearchCacheAsync = false;
+            }
+        }
+
+        private void ContinuePopulatingSearchCache()
+        {
+            if (!_isLoadingSearchCacheAsync || _pendingSearchCacheGuids.Count == 0)
+            {
+                _isLoadingSearchCacheAsync = false;
+                return;
+            }
+
+            int batchSize = Mathf.Min(AsyncLoadBatchSize, _pendingSearchCacheGuids.Count);
+            List<string> batch = _pendingSearchCacheGuids.GetRange(0, batchSize);
+            _pendingSearchCacheGuids.RemoveRange(0, batchSize);
+
+            // Load batch
+            List<ScriptableObject> loadedObjects = new();
+            HashSet<string> seenGuids = new(StringComparer.OrdinalIgnoreCase);
+
+            foreach (string guid in batch)
+            {
+                if (seenGuids.Contains(guid))
+                {
+                    continue;
+                }
+                seenGuids.Add(guid);
+
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                ScriptableObject obj = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+                if (obj != null)
+                {
+                    // Verify it's a managed type
+                    Type objType = obj.GetType();
+                    bool isManagedType = _scriptableObjectTypes
+                        .SelectMany(tuple => tuple.Value)
+                        .Any(type => type == objType);
+
+                    if (isManagedType && !_allManagedObjectsCache.Contains(obj))
+                    {
+                        loadedObjects.Add(obj);
+                    }
+                }
+            }
+
+            // Add to cache maintaining sort order
+            foreach (ScriptableObject obj in loadedObjects)
+            {
+                int insertIndex = _allManagedObjectsCache.BinarySearch(
+                    obj,
+                    Comparer<ScriptableObject>.Create(
+                        (a, b) =>
+                        {
+                            int nameComp = string.Compare(a.name, b.name, StringComparison.Ordinal);
+                            if (nameComp != 0)
+                            {
+                                return nameComp;
+                            }
+                            return string.Compare(
+                                a.GetType().FullName,
+                                b.GetType().FullName,
+                                StringComparison.Ordinal
+                            );
+                        }
+                    )
+                );
+                if (insertIndex < 0)
+                {
+                    insertIndex = ~insertIndex;
+                }
+                _allManagedObjectsCache.Insert(insertIndex, obj);
+            }
+
+            // Continue with next batch
+            if (_pendingSearchCacheGuids.Count > 0)
+            {
+                rootVisualElement.schedule.Execute(ContinuePopulatingSearchCache).ExecuteLater(10);
+            }
+            else
+            {
+                _isLoadingSearchCacheAsync = false;
+            }
         }
 
         public static void SignalRefresh()
@@ -639,7 +765,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (selectedType != null)
             {
-                LoadObjectTypes(selectedType);
+                LoadObjectTypesAsync(selectedType);
             }
             else
             {
@@ -894,9 +1020,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             selectedType ??= typesInNamespace[0];
-            LoadObjectTypes(selectedType);
+
+            // Build namespace view first so type selection is visible
             BuildNamespaceView();
-            BuildObjectsView();
+
+            // Load objects asynchronously with priority batch
+            LoadObjectTypesAsync(selectedType, priorityLoad: false);
 
             VisualElement typeElementToSelect = FindTypeElement(selectedType);
             if (typeElementToSelect != null)
@@ -1156,125 +1285,247 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
             if (!string.IsNullOrWhiteSpace(packageRoot))
             {
-                if (
-                    packageRoot.StartsWith("Packages", StringComparison.OrdinalIgnoreCase)
-                    && !packageRoot.Contains(PackageId, StringComparison.OrdinalIgnoreCase)
-                )
+                // Convert absolute path to Unity relative path if needed
+                string packagePath = null;
+                bool isAbsolutePath = Path.IsPathRooted(packageRoot);
+
+                if (isAbsolutePath)
                 {
-                    int dataVisualizerIndex = packageRoot.LastIndexOf(
-                        "DataVisualizer",
-                        StringComparison.Ordinal
-                    );
-                    if (0 <= dataVisualizerIndex)
+                    // Convert absolute path to Unity relative path
+                    string projectPath = Path.GetDirectoryName(Application.dataPath);
+                    string normalizedProjectPath = projectPath.Replace('\\', '/');
+                    string normalizedPackageRoot = packageRoot.Replace('\\', '/');
+
+                    if (
+                        normalizedPackageRoot.StartsWith(
+                            normalizedProjectPath,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
                     {
-                        packageRoot = packageRoot[..dataVisualizerIndex];
-                        packageRoot += PackageId;
-                    }
-                }
-
-                char pathSeparator = Path.DirectorySeparatorChar;
-                string styleSheetPath =
-                    $"{packageRoot}{pathSeparator}Editor{pathSeparator}DataVisualizer{pathSeparator}Styles{pathSeparator}DataVisualizerStyles.uss";
-                string unityRelativeStyleSheetPath = DirectoryHelper.AbsoluteToUnityRelativePath(
-                    styleSheetPath
-                );
-                unityRelativeStyleSheetPath = unityRelativeStyleSheetPath.SanitizePath();
-
-                const string packageCache = "PackageCache/";
-                int packageCacheIndex;
-                if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
-                {
-                    styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                        unityRelativeStyleSheetPath
-                    );
-                }
-
-                if (styleSheet == null && !string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
-                {
-                    packageCacheIndex = unityRelativeStyleSheetPath.IndexOf(
-                        packageCache,
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                    if (0 <= packageCacheIndex)
-                    {
-                        unityRelativeStyleSheetPath = unityRelativeStyleSheetPath[
-                            (packageCacheIndex + packageCache.Length)..
-                        ];
-                        int forwardIndex = unityRelativeStyleSheetPath.IndexOf(
-                            "/",
-                            StringComparison.Ordinal
-                        );
-                        if (0 <= forwardIndex)
-                        {
-                            unityRelativeStyleSheetPath = unityRelativeStyleSheetPath.Substring(
-                                forwardIndex
-                            );
-                            unityRelativeStyleSheetPath =
-                                "Packages/" + PackageId + "/" + unityRelativeStyleSheetPath;
-                        }
-                        else
-                        {
-                            unityRelativeStyleSheetPath = "Packages/" + unityRelativeStyleSheetPath;
-                        }
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
-                    {
-                        styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                            unityRelativeStyleSheetPath
-                        );
-                        if (styleSheet == null)
-                        {
-                            Debug.LogError(
-                                $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
-                            );
-                        }
+                        // Extract the part after project root
+                        string relativePart = normalizedPackageRoot
+                            .Substring(normalizedProjectPath.Length)
+                            .TrimStart('/');
+                        packagePath = relativePart;
                     }
                     else
                     {
-                        Debug.LogError(
-                            $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
+                        // Not within project, try to find Packages folder in path
+                        int packagesIndex = normalizedPackageRoot.IndexOf(
+                            "/Packages/",
+                            StringComparison.OrdinalIgnoreCase
                         );
-                    }
-                }
-
-                string fontPath =
-                    $"{packageRoot}{pathSeparator}Editor{pathSeparator}Fonts{pathSeparator}IBMPlexMono-Regular.ttf";
-                string unityRelativeFontPath = DirectoryHelper.AbsoluteToUnityRelativePath(
-                    fontPath
-                );
-
-                font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
-                if (font == null)
-                {
-                    packageCacheIndex = unityRelativeFontPath.IndexOf(
-                        packageCache,
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                    if (0 <= packageCacheIndex)
-                    {
-                        unityRelativeFontPath = unityRelativeFontPath[
-                            (packageCacheIndex + packageCache.Length)..
-                        ];
-                        int forwardIndex = unityRelativeFontPath.IndexOf(
-                            "/",
-                            StringComparison.Ordinal
-                        );
-                        if (0 <= forwardIndex)
+                        if (packagesIndex >= 0)
                         {
-                            unityRelativeFontPath = unityRelativeFontPath.Substring(forwardIndex);
-                            unityRelativeFontPath =
-                                "Packages/" + PackageId + "/" + unityRelativeFontPath;
+                            packagePath = normalizedPackageRoot.Substring(packagesIndex + 1); // +1 to include the leading slash
                         }
                         else
                         {
-                            unityRelativeFontPath = "Packages/" + unityRelativeFontPath;
+                            // Just try to extract the folder name
+                            string folderName = Path.GetFileName(packageRoot);
+                            if (
+                                !string.IsNullOrWhiteSpace(folderName)
+                                && folderName.Contains(
+                                    "DataVisualizer",
+                                    StringComparison.OrdinalIgnoreCase
+                                )
+                            )
+                            {
+                                packagePath = $"Packages/{folderName}";
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // Already a Unity relative path
+                    packagePath = packageRoot.Replace('\\', '/');
+                }
+
+                // Ensure it starts with Packages/
+                if (!string.IsNullOrWhiteSpace(packagePath))
+                {
+                    if (!packagePath.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Extract package folder name
+                        string folderName = Path.GetFileName(packagePath);
+                        if (string.IsNullOrWhiteSpace(folderName))
+                        {
+                            folderName = Path.GetFileName(packageRoot);
+                        }
+                        if (!string.IsNullOrWhiteSpace(folderName))
+                        {
+                            packagePath = $"Packages/{folderName}";
                         }
                     }
 
-                    if (!string.IsNullOrWhiteSpace(unityRelativeFontPath))
+                    // Try direct Unity relative paths
+                    string[] styleSheetPathsToTry = new[]
                     {
+                        $"{packagePath}/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss",
+                        $"Packages/{PackageId}/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss",
+                    };
+
+                    foreach (string styleSheetPath in styleSheetPathsToTry)
+                    {
+                        styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(styleSheetPath);
+                        if (styleSheet != null)
+                        {
+                            break;
+                        }
+                    }
+
+                    string[] fontPathsToTry = new[]
+                    {
+                        $"{packagePath}/Editor/Fonts/IBMPlexMono-Regular.ttf",
+                        $"Packages/{PackageId}/Editor/Fonts/IBMPlexMono-Regular.ttf",
+                    };
+
+                    foreach (string fontPath in fontPathsToTry)
+                    {
+                        font = AssetDatabase.LoadAssetAtPath<Font>(fontPath);
+                        if (font != null)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                // Fallback to absolute path conversion if direct paths didn't work
+                if (styleSheet == null || font == null)
+                {
+                    if (
+                        packageRoot.StartsWith("Packages", StringComparison.OrdinalIgnoreCase)
+                        && !packageRoot.Contains(PackageId, StringComparison.OrdinalIgnoreCase)
+                    )
+                    {
+                        int dataVisualizerIndex = packageRoot.LastIndexOf(
+                            "DataVisualizer",
+                            StringComparison.Ordinal
+                        );
+                        if (0 <= dataVisualizerIndex)
+                        {
+                            packageRoot = packageRoot[..dataVisualizerIndex];
+                            packageRoot += PackageId;
+                        }
+                    }
+
+                    char pathSeparator = Path.DirectorySeparatorChar;
+                    if (styleSheet == null)
+                    {
+                        string styleSheetPath =
+                            $"{packageRoot}{pathSeparator}Editor{pathSeparator}DataVisualizer{pathSeparator}Styles{pathSeparator}DataVisualizerStyles.uss";
+                        string unityRelativeStyleSheetPath =
+                            DirectoryHelper.AbsoluteToUnityRelativePath(styleSheetPath);
+                        unityRelativeStyleSheetPath = unityRelativeStyleSheetPath.SanitizePath();
+
+                        const string packageCache = "PackageCache/";
+                        int packageCacheIndex;
+                        if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
+                        {
+                            styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                                unityRelativeStyleSheetPath
+                            );
+                        }
+
+                        if (
+                            styleSheet == null
+                            && !string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath)
+                        )
+                        {
+                            packageCacheIndex = unityRelativeStyleSheetPath.IndexOf(
+                                packageCache,
+                                StringComparison.OrdinalIgnoreCase
+                            );
+                            if (0 <= packageCacheIndex)
+                            {
+                                unityRelativeStyleSheetPath = unityRelativeStyleSheetPath[
+                                    (packageCacheIndex + packageCache.Length)..
+                                ];
+                                int forwardIndex = unityRelativeStyleSheetPath.IndexOf(
+                                    "/",
+                                    StringComparison.Ordinal
+                                );
+                                if (0 <= forwardIndex)
+                                {
+                                    unityRelativeStyleSheetPath =
+                                        unityRelativeStyleSheetPath.Substring(forwardIndex);
+                                    unityRelativeStyleSheetPath =
+                                        "Packages/" + PackageId + "/" + unityRelativeStyleSheetPath;
+                                }
+                                else
+                                {
+                                    unityRelativeStyleSheetPath =
+                                        "Packages/" + unityRelativeStyleSheetPath;
+                                }
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
+                            {
+                                styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                                    unityRelativeStyleSheetPath
+                                );
+                                if (styleSheet == null)
+                                {
+                                    Debug.LogError(
+                                        $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
+                                    );
+                                }
+                            }
+                            else
+                            {
+                                Debug.LogError(
+                                    $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
+                                );
+                            }
+                        }
+                    }
+
+                    if (font == null)
+                    {
+                        string fontPath =
+                            $"{packageRoot}{pathSeparator}Editor{pathSeparator}Fonts{pathSeparator}IBMPlexMono-Regular.ttf";
+                        string unityRelativeFontPath = DirectoryHelper.AbsoluteToUnityRelativePath(
+                            fontPath
+                        );
+
                         font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
+                        if (font == null && !string.IsNullOrWhiteSpace(unityRelativeFontPath))
+                        {
+                            const string packageCache = "PackageCache/";
+                            int packageCacheIndex = unityRelativeFontPath.IndexOf(
+                                packageCache,
+                                StringComparison.OrdinalIgnoreCase
+                            );
+                            if (0 <= packageCacheIndex)
+                            {
+                                unityRelativeFontPath = unityRelativeFontPath[
+                                    (packageCacheIndex + packageCache.Length)..
+                                ];
+                                int forwardIndex = unityRelativeFontPath.IndexOf(
+                                    "/",
+                                    StringComparison.Ordinal
+                                );
+                                if (0 <= forwardIndex)
+                                {
+                                    unityRelativeFontPath = unityRelativeFontPath.Substring(
+                                        forwardIndex
+                                    );
+                                    unityRelativeFontPath =
+                                        "Packages/" + PackageId + "/" + unityRelativeFontPath;
+                                }
+                                else
+                                {
+                                    unityRelativeFontPath = "Packages/" + unityRelativeFontPath;
+                                }
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(unityRelativeFontPath))
+                            {
+                                font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
+                            }
+                        }
                     }
                 }
             }
@@ -2276,7 +2527,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (typeChanged)
             {
-                LoadObjectTypes(targetType);
+                LoadObjectTypesAsync(targetType);
+                // BuildObjectsView will be called by async loader
+                return;
             }
 
             BuildObjectsView();
@@ -4411,7 +4664,29 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement objectHeader = new() { name = "object-header" };
             objectHeader.AddToClassList("object-header");
 
-            objectHeader.Add(new Label("Objects"));
+            VisualElement headerLeft = new()
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    flexGrow = 1,
+                },
+            };
+
+            headerLeft.Add(new Label("Objects"));
+
+            _objectLoadingIndicator = new Label() { name = "object-loading-indicator", text = "" };
+            _objectLoadingIndicator.AddToClassList("loading-indicator");
+            _objectLoadingIndicator.style.display = DisplayStyle.None;
+            _objectLoadingIndicator.style.marginLeft = 8;
+            _objectLoadingIndicator.style.fontSize = 11;
+            _objectLoadingIndicator.style.unityFontStyleAndWeight = FontStyle.Italic;
+            _objectLoadingIndicator.style.color = new Color(0.7f, 0.7f, 0.7f);
+            headerLeft.Add(_objectLoadingIndicator);
+
+            objectHeader.Add(headerLeft);
+
             _createObjectButton = null;
             _createObjectButton = new Button(() =>
             {
@@ -5781,6 +6056,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectListContainer.Add(_emptyObjectLabel);
             if (selectedType != null && _selectedObjects.Count == 0)
             {
+                // Show loading message if async loading is in progress
+                if (_isLoadingObjectsAsync && _asyncLoadTargetType == selectedType)
+                {
+                    _emptyObjectLabel.text = "Loading objects...";
+                }
                 _emptyObjectLabel.style.display = DisplayStyle.Flex;
                 return;
             }
@@ -7112,6 +7392,336 @@ namespace WallstopStudios.DataVisualizer.Editor
             _selectedObjects.Clear();
             _selectedObjects.AddRange(sortedObjects);
             _filteredObjects.AddRange(sortedObjects);
+        }
+
+        internal void LoadObjectTypesAsync(Type type, bool priorityLoad = false)
+        {
+            if (type == null)
+            {
+                return;
+            }
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] LoadObjectTypesAsync START - Type: {type.Name}, Priority: {priorityLoad} at {System.DateTime.Now:HH:mm:ss.fff}"
+                );
+            }
+
+            // Cancel any existing async load for a different type
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType != type)
+            {
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] Cancelling previous async load for {_asyncLoadTargetType?.Name}"
+                    );
+                }
+                _asyncLoadTask?.Pause();
+                _pendingObjectGuids.Clear();
+                UpdateLoadingIndicator(0, 0); // Hide indicator for cancelled load
+            }
+
+            _asyncLoadTargetType = type;
+            _isLoadingObjectsAsync = true;
+
+            // Clear existing if this is a new selection (not a continuation)
+            if (!priorityLoad)
+            {
+                _selectedObjects.Clear();
+                _objectVisualElementMap.Clear();
+            }
+
+            List<string> customGuidOrder = GetObjectOrderForType(type);
+
+            // Get all GUIDs for this type
+            string[] allGuids = AssetDatabase.FindAssets($"t:{type.Name}");
+
+            // Prioritize: custom order first, then remaining
+            List<string> priorityGuids = new();
+            List<string> remainingGuids = new();
+            HashSet<string> customGuidSet = new(customGuidOrder, StringComparer.Ordinal);
+
+            foreach (string guid in allGuids)
+            {
+                if (customGuidSet.Contains(guid))
+                {
+                    priorityGuids.Add(guid);
+                }
+                else
+                {
+                    remainingGuids.Add(guid);
+                }
+            }
+
+            // Ensure custom order is respected
+            List<string> orderedPriorityGuids = customGuidOrder
+                .Where(guid => priorityGuids.Contains(guid))
+                .Concat(priorityGuids.Except(customGuidOrder))
+                .ToList();
+
+            // Load priority batch first (custom ordered items)
+            int priorityBatchSize = Mathf.Min(
+                AsyncLoadPriorityBatchSize,
+                orderedPriorityGuids.Count
+            );
+            List<string> priorityBatch = orderedPriorityGuids.GetRange(0, priorityBatchSize);
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] Loading priority batch: {priorityBatchSize} objects (Total: {allGuids.Length}, Remaining: {allGuids.Length - priorityBatchSize})"
+                );
+            }
+
+            UpdateLoadingIndicator(priorityBatchSize, allGuids.Length);
+            LoadObjectBatch(type, priorityBatch, true);
+
+            // Try to select object after priority batch loads (if restoring selection)
+            if (!priorityLoad)
+            {
+                rootVisualElement
+                    .schedule.Execute(() =>
+                    {
+                        ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
+                        if (objectToSelect != null)
+                        {
+                            SelectObject(objectToSelect);
+                        }
+                        else if (_selectedObjects.Count > 0)
+                        {
+                            SelectObject(_selectedObjects[0]);
+                        }
+                        BuildObjectsView();
+                        UpdateCreateObjectButtonStyle();
+                        UpdateLabelAreaAndFilter();
+                    })
+                    .ExecuteLater(10);
+            }
+
+            // Queue remaining priority items
+            for (int i = priorityBatchSize; i < orderedPriorityGuids.Count; i++)
+            {
+                _pendingObjectGuids.Add(orderedPriorityGuids[i]);
+            }
+
+            // Sort remaining GUIDs for predictable order
+            List<(string guid, string path)> remainingWithPaths = remainingGuids
+                .Select(guid =>
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    return (guid, path);
+                })
+                .Where(x => !string.IsNullOrWhiteSpace(x.path))
+                .OrderBy(x => x.path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            // Load first batch of remaining items if we have space
+            if (priorityBatchSize < AsyncLoadPriorityBatchSize)
+            {
+                int remainingInPriorityBatch = AsyncLoadPriorityBatchSize - priorityBatchSize;
+                int firstRemainingBatch = Mathf.Min(
+                    remainingInPriorityBatch,
+                    remainingWithPaths.Count
+                );
+                List<string> firstRemainingBatchGuids = remainingWithPaths
+                    .GetRange(0, firstRemainingBatch)
+                    .Select(x => x.guid)
+                    .ToList();
+                LoadObjectBatch(type, firstRemainingBatchGuids, true);
+
+                for (int i = firstRemainingBatch; i < remainingWithPaths.Count; i++)
+                {
+                    _pendingObjectGuids.Add(remainingWithPaths[i].guid);
+                }
+            }
+            else
+            {
+                foreach ((string guid, _) in remainingWithPaths)
+                {
+                    _pendingObjectGuids.Add(guid);
+                }
+            }
+
+            // Continue loading remaining batches
+            if (_pendingObjectGuids.Count > 0)
+            {
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] Queued {_pendingObjectGuids.Count} objects for background loading"
+                    );
+                }
+                ContinueLoadingObjects(type);
+            }
+            else
+            {
+                _isLoadingObjectsAsync = false;
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] LoadObjectTypesAsync COMPLETE - All {allGuids.Length} objects loaded immediately"
+                    );
+                }
+                UpdateLoadingIndicator(allGuids.Length, allGuids.Length);
+                BuildObjectsView();
+            }
+        }
+
+        private void LoadObjectBatch(Type type, List<string> guids, bool updateView = false)
+        {
+            var batchStartTime = System.Diagnostics.Stopwatch.StartNew();
+            List<ScriptableObject> loadedObjects = new();
+
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                ScriptableObject asset =
+                    AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+                if (asset != null && asset.GetType() == type)
+                {
+                    loadedObjects.Add(asset);
+                }
+            }
+
+            // Add to selected objects maintaining sort order
+            var comparer = Comparer<ScriptableObject>.Create(
+                (a, b) =>
+                {
+                    int nameComp = string.Compare(
+                        a.name,
+                        b.name,
+                        StringComparison.OrdinalIgnoreCase
+                    );
+                    if (nameComp != 0)
+                    {
+                        return nameComp;
+                    }
+                    return string.Compare(
+                        AssetDatabase.GetAssetPath(a),
+                        AssetDatabase.GetAssetPath(b),
+                        StringComparison.OrdinalIgnoreCase
+                    );
+                }
+            );
+
+            foreach (ScriptableObject obj in loadedObjects)
+            {
+                if (!_selectedObjects.Contains(obj))
+                {
+                    // Find insertion point to maintain sort order
+                    int insertIndex = _selectedObjects.Count;
+                    for (int i = 0; i < _selectedObjects.Count; i++)
+                    {
+                        if (comparer.Compare(obj, _selectedObjects[i]) < 0)
+                        {
+                            insertIndex = i;
+                            break;
+                        }
+                    }
+                    _selectedObjects.Insert(insertIndex, obj);
+                    _filteredObjects.Insert(insertIndex, obj);
+                }
+            }
+
+            batchStartTime.Stop();
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] Loaded batch: {loadedObjects.Count} objects in {batchStartTime.ElapsedMilliseconds}ms (Total loaded: {_selectedObjects.Count})"
+                );
+            }
+
+            // Update loading indicator if async loading is in progress
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType != null)
+            {
+                string[] allGuids = AssetDatabase.FindAssets($"t:{_asyncLoadTargetType.Name}");
+                UpdateLoadingIndicator(_selectedObjects.Count, allGuids.Length);
+            }
+
+            if (updateView)
+            {
+                BuildObjectsView();
+            }
+        }
+
+        private void ContinueLoadingObjects(Type type)
+        {
+            if (
+                !_isLoadingObjectsAsync
+                || _asyncLoadTargetType != type
+                || _pendingObjectGuids.Count == 0
+            )
+            {
+                _isLoadingObjectsAsync = false;
+                if (_pendingObjectGuids.Count == 0)
+                {
+                    BuildObjectsView();
+                }
+                return;
+            }
+
+            int batchSize = Mathf.Min(AsyncLoadBatchSize, _pendingObjectGuids.Count);
+            List<string> batch = _pendingObjectGuids.GetRange(0, batchSize);
+            _pendingObjectGuids.RemoveRange(0, batchSize);
+
+            LoadObjectBatch(type, batch, true);
+
+            if (_pendingObjectGuids.Count > 0)
+            {
+                // Schedule next batch
+                _asyncLoadTask = rootVisualElement.schedule.Execute(() =>
+                    ContinueLoadingObjects(type)
+                );
+                _asyncLoadTask.ExecuteLater(10);
+            }
+            else
+            {
+                _isLoadingObjectsAsync = false;
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] LoadObjectTypesAsync COMPLETE - All objects loaded. Total: {_selectedObjects.Count}"
+                    );
+                }
+                UpdateLoadingIndicator(_selectedObjects.Count, _selectedObjects.Count);
+                BuildObjectsView();
+            }
+        }
+
+        private void UpdateLoadingIndicator(int loadedCount, int totalCount)
+        {
+            if (_objectLoadingIndicator == null)
+            {
+                return;
+            }
+
+            Type selectedType = _namespaceController.SelectedType;
+
+            // Show indicator only if:
+            // 1. We're currently loading objects asynchronously
+            // 2. The type being loaded matches the currently selected type
+            // 3. There are still objects remaining to load
+            if (
+                _isLoadingObjectsAsync
+                && _asyncLoadTargetType == selectedType
+                && selectedType != null
+                && totalCount > loadedCount
+            )
+            {
+                _objectLoadingIndicator.style.display = DisplayStyle.Flex;
+                _objectLoadingIndicator.text = $"Loading... ({loadedCount}/{totalCount})";
+            }
+            else
+            {
+                _objectLoadingIndicator.style.display = DisplayStyle.None;
+                _objectLoadingIndicator.text = "";
+            }
         }
 
         private void LoadScriptableObjectTypes()
