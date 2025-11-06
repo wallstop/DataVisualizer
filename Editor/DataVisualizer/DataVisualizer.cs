@@ -7553,18 +7553,21 @@ namespace WallstopStudios.DataVisualizer.Editor
                 rootVisualElement
                     .schedule.Execute(() =>
                     {
-                        ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
-                        if (objectToSelect != null)
-                        {
-                            SelectObject(objectToSelect);
-                        }
-                        else if (_selectedObjects.Count > 0)
-                        {
-                            SelectObject(_selectedObjects[0]);
-                        }
+                        // Build view FIRST so visual elements are created
                         BuildObjectsView();
                         UpdateCreateObjectButtonStyle();
                         UpdateLabelAreaAndFilter();
+
+                        // Now select the object - this will navigate to correct page if needed
+                        ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
+                        if (objectToSelect != null)
+                        {
+                            SelectObjectAndNavigate(objectToSelect);
+                        }
+                        else if (_selectedObjects.Count > 0)
+                        {
+                            SelectObjectAndNavigate(_selectedObjects[0]);
+                        }
                     })
                     .ExecuteLater(10);
             }
@@ -7920,6 +7923,54 @@ namespace WallstopStudios.DataVisualizer.Editor
                 currentType = currentType.BaseType;
             }
             return false;
+        }
+
+        internal void SelectObjectAndNavigate(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                SelectObject(null);
+                return;
+            }
+
+            // Check if object is in filtered list (it might not be if filters are active)
+            int indexInFiltered = _filteredObjects.IndexOf(dataObject);
+            if (indexInFiltered < 0)
+            {
+                // Object is not in filtered view (hidden by filters)
+                SelectObject(dataObject);
+                return;
+            }
+
+            // Calculate which page the object is on
+            int targetPage = indexInFiltered / MaxObjectsPerPage;
+            Type currentType = _namespaceController.SelectedType;
+            int currentPage = GetCurrentPage(currentType);
+
+            // If object is on a different page, navigate to that page first
+            if (targetPage != currentPage && currentType != null)
+            {
+                SetCurrentPage(currentType, targetPage);
+                // Rebuild view with the new page
+                BuildObjectsView();
+            }
+
+            // Now select the object (it should be in the visual element map)
+            SelectObject(dataObject);
+
+            // Ensure the element scrolls into view after layout
+            if (_selectedElement != null && _objectScrollView != null)
+            {
+                rootVisualElement
+                    .schedule.Execute(() =>
+                    {
+                        if (_selectedElement != null && _objectScrollView != null)
+                        {
+                            _objectScrollView.ScrollTo(_selectedElement);
+                        }
+                    })
+                    .ExecuteLater(10);
+            }
         }
 
         internal void SelectObject(ScriptableObject dataObject)
