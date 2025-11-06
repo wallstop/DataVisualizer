@@ -1255,38 +1255,46 @@ namespace WallstopStudios.DataVisualizer.Editor
             _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
             root.Add(_confirmNamespaceAddPopover);
 
-            // Load types immediately - now fast without CreateInstance validation
-            // This allows namespace/type tree to appear right away
-            if (EnableAsyncLoadDebugLog)
-            {
-                Debug.Log(
-                    $"[DataVisualizer] CreateGUI - Loading types at {System.DateTime.Now:HH:mm:ss.fff}"
-                );
-            }
-
-            LoadScriptableObjectTypes();
-            BuildNamespaceView();
-            BuildProcessorColumnView();
-            BuildObjectsView();
-            BuildInspectorView();
-
-            // Schedule the async initialization after UI is built
+            // CreateGUI is now complete - window structure is ready
+            // Defer ALL content building to next frame so window appears instantly
             rootVisualElement
                 .schedule.Execute(() =>
                 {
                     if (EnableAsyncLoadDebugLog)
                     {
                         Debug.Log(
-                            $"[DataVisualizer] CreateGUI - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
+                            $"[DataVisualizer] CreateGUI - Loading types and building views at {System.DateTime.Now:HH:mm:ss.fff}"
                         );
                     }
-                    // Start async search cache population in background (low priority)
-                    PopulateSearchCacheAsync();
-                    // Restore selection with priority async loading
-                    RestorePreviousSelection();
-                    StartPeriodicWidthSave();
+
+                    // Load types (fast now without CreateInstance)
+                    LoadScriptableObjectTypes();
+
+                    // Build all views - window is already visible at this point
+                    BuildNamespaceView();
+                    BuildProcessorColumnView();
+                    BuildObjectsView();
+                    BuildInspectorView();
+
+                    // Schedule the async initialization after views are built
+                    rootVisualElement
+                        .schedule.Execute(() =>
+                        {
+                            if (EnableAsyncLoadDebugLog)
+                            {
+                                Debug.Log(
+                                    $"[DataVisualizer] CreateGUI - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
+                                );
+                            }
+                            // Start async search cache population in background (low priority)
+                            PopulateSearchCacheAsync();
+                            // Restore selection with priority async loading
+                            RestorePreviousSelection();
+                            StartPeriodicWidthSave();
+                        })
+                        .ExecuteLater(10);
                 })
-                .ExecuteLater(10);
+                .ExecuteLater(1); // Execute on next frame so window renders first
         }
 
         private static void TryLoadStyleSheet(VisualElement root)
