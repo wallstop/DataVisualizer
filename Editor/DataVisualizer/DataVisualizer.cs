@@ -7535,18 +7535,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            // Ensure custom order is respected, with saved object at the front
+            // Ensure custom order is respected, with saved object ALWAYS at the front
             List<string> orderedPriorityGuids = new();
 
-            // Saved object comes first (if it exists and isn't in custom order)
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && !customGuidSet.Contains(savedObjectGuid) && priorityGuids.Contains(savedObjectGuid))
+            // Saved object ALWAYS comes first (critical for restoring selection)
+            // Even if it's in custom order, we need it loaded immediately
+            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && priorityGuids.Contains(savedObjectGuid))
             {
                 orderedPriorityGuids.Add(savedObjectGuid);
             }
 
-            // Then custom order
+            // Then custom order (excluding saved object to avoid duplicates)
             orderedPriorityGuids.AddRange(
-                customGuidOrder.Where(guid => priorityGuids.Contains(guid))
+                customGuidOrder
+                    .Where(guid => priorityGuids.Contains(guid) && guid != savedObjectGuid)
             );
 
             // Then any remaining priority items
@@ -7563,9 +7565,14 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (EnableAsyncLoadDebugLog)
             {
-                string savedObjInfo = !string.IsNullOrWhiteSpace(savedObjectGuid)
-                    ? $" (includes saved object: {savedObjectGuid})"
-                    : "";
+                string savedObjInfo = "";
+                if (!string.IsNullOrWhiteSpace(savedObjectGuid))
+                {
+                    bool savedInBatch = priorityBatch.Contains(savedObjectGuid);
+                    savedObjInfo = savedInBatch
+                        ? $" (saved object {savedObjectGuid} is in priority batch)"
+                        : $" (WARNING: saved object {savedObjectGuid} NOT in priority batch!)";
+                }
                 Debug.Log(
                     $"[DataVisualizer] Loading priority batch: {priorityBatchSize} objects{savedObjInfo} (Total: {allGuids.Length}, Remaining: {allGuids.Length - priorityBatchSize})"
                 );
@@ -7587,6 +7594,21 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                         // Now select the object - this will navigate to correct page if needed
                         ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
+
+                        if (EnableAsyncLoadDebugLog)
+                        {
+                            if (objectToSelect != null)
+                            {
+                                string objPath = AssetDatabase.GetAssetPath(objectToSelect);
+                                string objGuid = AssetDatabase.AssetPathToGUID(objPath);
+                                Debug.Log($"[DataVisualizer] Selecting saved object: {objectToSelect.name} (GUID: {objGuid})");
+                            }
+                            else
+                            {
+                                Debug.LogWarning($"[DataVisualizer] No saved object found, _selectedObjects.Count = {_selectedObjects.Count}");
+                            }
+                        }
+
                         if (objectToSelect != null)
                         {
                             SelectObjectAndNavigate(objectToSelect);
