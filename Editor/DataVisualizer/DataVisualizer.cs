@@ -404,27 +404,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
 
-            LoadScriptableObjectTypes();
+            // Don't load types here - it blocks the UI from appearing
+            // LoadScriptableObjectTypes() is now deferred to CreateGUI
             rootVisualElement.RegisterCallback<KeyDownEvent>(
                 HandleGlobalKeyDown,
                 TrickleDown.TrickleDown
             );
-            rootVisualElement
-                .schedule.Execute(() =>
-                {
-                    if (EnableAsyncLoadDebugLog)
-                    {
-                        Debug.Log(
-                            $"[DataVisualizer] OnEnable - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
-                        );
-                    }
-                    // Start async search cache population in background (low priority)
-                    PopulateSearchCacheAsync();
-                    // Restore selection with priority async loading
-                    RestorePreviousSelection();
-                    StartPeriodicWidthSave();
-                })
-                .ExecuteLater(10);
         }
 
         private void OnDisable()
@@ -1270,10 +1255,46 @@ namespace WallstopStudios.DataVisualizer.Editor
             _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
             root.Add(_confirmNamespaceAddPopover);
 
-            BuildNamespaceView();
-            BuildProcessorColumnView();
-            BuildObjectsView();
-            BuildInspectorView();
+            // Defer type loading to prevent white screen - UI structure is now built
+            // Load types and build views asynchronously so window appears immediately
+            rootVisualElement
+                .schedule.Execute(() =>
+                {
+                    if (EnableAsyncLoadDebugLog)
+                    {
+                        Debug.Log(
+                            $"[DataVisualizer] CreateGUI - Loading types at {System.DateTime.Now:HH:mm:ss.fff}"
+                        );
+                    }
+
+                    // Load ScriptableObject types (this is the slow part)
+                    LoadScriptableObjectTypes();
+
+                    // Now build the views with the loaded types
+                    BuildNamespaceView();
+                    BuildProcessorColumnView();
+                    BuildObjectsView();
+                    BuildInspectorView();
+
+                    // Schedule the async initialization after views are built
+                    rootVisualElement
+                        .schedule.Execute(() =>
+                        {
+                            if (EnableAsyncLoadDebugLog)
+                            {
+                                Debug.Log(
+                                    $"[DataVisualizer] CreateGUI - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
+                                );
+                            }
+                            // Start async search cache population in background (low priority)
+                            PopulateSearchCacheAsync();
+                            // Restore selection with priority async loading
+                            RestorePreviousSelection();
+                            StartPeriodicWidthSave();
+                        })
+                        .ExecuteLater(10);
+                })
+                .ExecuteLater(1); // Execute on next frame to allow UI to render
         }
 
         private static void TryLoadStyleSheet(VisualElement root)
@@ -3631,7 +3652,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            ScriptableObject instance = CreateInstance(type);
+            ScriptableObject instance = ScriptableObject.CreateInstance(type);
             if (instance is ICreatable creatable)
             {
                 creatable.BeforeCreate();
@@ -7872,11 +7893,36 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return false;
             }
 
+            // Additional safety checks before attempting to create instance
+            if (type.IsInterface || type.IsNestedPrivate || type.IsNotPublic)
+            {
+                return false;
+            }
+
+            // Check if type has parameterless constructor
+            if (type.GetConstructor(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    null,
+                    Type.EmptyTypes,
+                    null
+                ) == null)
+            {
+                return false;
+            }
+
             try
             {
-                ScriptableObject instance = CreateInstance(type);
+                ScriptableObject instance = ScriptableObject.CreateInstance(type);
+                if (instance == null)
+                {
+                    return false;
+                }
+
                 try
                 {
+                    // Set HideFlags to prevent Unity from calling lifecycle methods that might log errors
+                    instance.hideFlags = HideFlags.HideAndDontSave;
+
                     using SerializedObject serializedObject = new(instance);
                     using SerializedProperty scriptProperty = serializedObject.FindProperty(
                         "m_Script"
@@ -7892,12 +7938,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     if (instance != null)
                     {
-                        DestroyImmediate(instance);
+                        DestroyImmediate(instance, true);
                     }
                 }
             }
             catch
             {
+                // Silently fail for types that can't be instantiated
                 return false;
             }
         }
