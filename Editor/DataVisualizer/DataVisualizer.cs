@@ -1255,46 +1255,38 @@ namespace WallstopStudios.DataVisualizer.Editor
             _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
             root.Add(_confirmNamespaceAddPopover);
 
-            // Defer type loading to prevent white screen - UI structure is now built
-            // Load types and build views asynchronously so window appears immediately
+            // Load types immediately - now fast without CreateInstance validation
+            // This allows namespace/type tree to appear right away
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] CreateGUI - Loading types at {System.DateTime.Now:HH:mm:ss.fff}"
+                );
+            }
+
+            LoadScriptableObjectTypes();
+            BuildNamespaceView();
+            BuildProcessorColumnView();
+            BuildObjectsView();
+            BuildInspectorView();
+
+            // Schedule the async initialization after UI is built
             rootVisualElement
                 .schedule.Execute(() =>
                 {
                     if (EnableAsyncLoadDebugLog)
                     {
                         Debug.Log(
-                            $"[DataVisualizer] CreateGUI - Loading types at {System.DateTime.Now:HH:mm:ss.fff}"
+                            $"[DataVisualizer] CreateGUI - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
                         );
                     }
-
-                    // Load ScriptableObject types (this is the slow part)
-                    LoadScriptableObjectTypes();
-
-                    // Now build the views with the loaded types
-                    BuildNamespaceView();
-                    BuildProcessorColumnView();
-                    BuildObjectsView();
-                    BuildInspectorView();
-
-                    // Schedule the async initialization after views are built
-                    rootVisualElement
-                        .schedule.Execute(() =>
-                        {
-                            if (EnableAsyncLoadDebugLog)
-                            {
-                                Debug.Log(
-                                    $"[DataVisualizer] CreateGUI - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
-                                );
-                            }
-                            // Start async search cache population in background (low priority)
-                            PopulateSearchCacheAsync();
-                            // Restore selection with priority async loading
-                            RestorePreviousSelection();
-                            StartPeriodicWidthSave();
-                        })
-                        .ExecuteLater(10);
+                    // Start async search cache population in background (low priority)
+                    PopulateSearchCacheAsync();
+                    // Restore selection with priority async loading
+                    RestorePreviousSelection();
+                    StartPeriodicWidthSave();
                 })
-                .ExecuteLater(1); // Execute on next frame to allow UI to render
+                .ExecuteLater(10);
         }
 
         private static void TryLoadStyleSheet(VisualElement root)
@@ -7879,74 +7871,24 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private static bool IsLoadableType(Type type)
         {
-            bool allowed =
-                type != typeof(ScriptableObject)
+            // Fast type validation without expensive CreateInstance calls
+            // This allows namespace/type list to appear immediately
+            return type != typeof(ScriptableObject)
                 && !type.IsAbstract
                 && !type.IsGenericType
+                && !type.IsInterface
+                && !type.IsNestedPrivate
                 && !IsSubclassOf(type, typeof(Editor))
                 && !IsSubclassOf(type, typeof(EditorWindow))
                 && !IsSubclassOf(type, typeof(ScriptableSingleton<>))
                 && type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
                 && type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true;
-            if (!allowed)
-            {
-                return false;
-            }
 
-            // Additional safety checks before attempting to create instance
-            if (type.IsInterface || type.IsNestedPrivate || type.IsNotPublic)
-            {
-                return false;
-            }
-
-            // Check if type has parameterless constructor
-            if (type.GetConstructor(
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                    null,
-                    Type.EmptyTypes,
-                    null
-                ) == null)
-            {
-                return false;
-            }
-
-            try
-            {
-                ScriptableObject instance = ScriptableObject.CreateInstance(type);
-                if (instance == null)
-                {
-                    return false;
-                }
-
-                try
-                {
-                    // Set HideFlags to prevent Unity from calling lifecycle methods that might log errors
-                    instance.hideFlags = HideFlags.HideAndDontSave;
-
-                    using SerializedObject serializedObject = new(instance);
-                    using SerializedProperty scriptProperty = serializedObject.FindProperty(
-                        "m_Script"
-                    );
-                    if (scriptProperty == null)
-                    {
-                        return false;
-                    }
-
-                    return scriptProperty.objectReferenceValue != null;
-                }
-                finally
-                {
-                    if (instance != null)
-                    {
-                        DestroyImmediate(instance, true);
-                    }
-                }
-            }
-            catch
-            {
-                // Silently fail for types that can't be instantiated
-                return false;
-            }
+            // Note: We removed CreateInstance validation because:
+            // 1. It was slow (1-2 seconds for large projects)
+            // 2. It caused "Reset() called with object" errors for some ScriptableObjects
+            // 3. The real validation happens when loading actual assets anyway
+            // 4. Types that can't be instantiated simply won't have any assets to load
         }
 
         private static bool IsSubclassOf(Type typeToCheck, Type baseClass)
