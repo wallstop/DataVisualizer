@@ -7504,13 +7504,24 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             List<string> customGuidOrder = GetObjectOrderForType(type);
 
+            // Get the last selected object's GUID so we can prioritize loading it
+            string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
+
             // Get all GUIDs for this type
             string[] allGuids = AssetDatabase.FindAssets($"t:{type.Name}");
 
-            // Prioritize: custom order first, then remaining
+            // Prioritize: saved object, custom order, then remaining
             List<string> priorityGuids = new();
             List<string> remainingGuids = new();
+
+            // Create a set for fast lookup
             HashSet<string> customGuidSet = new(customGuidOrder, StringComparer.Ordinal);
+
+            // Add saved object to priority if it exists and isn't already in custom order
+            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && !customGuidSet.Contains(savedObjectGuid))
+            {
+                priorityGuids.Add(savedObjectGuid);
+            }
 
             foreach (string guid in allGuids)
             {
@@ -7518,17 +7529,30 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     priorityGuids.Add(guid);
                 }
-                else
+                else if (guid != savedObjectGuid) // Don't add saved object twice
                 {
                     remainingGuids.Add(guid);
                 }
             }
 
-            // Ensure custom order is respected
-            List<string> orderedPriorityGuids = customGuidOrder
-                .Where(guid => priorityGuids.Contains(guid))
-                .Concat(priorityGuids.Except(customGuidOrder))
-                .ToList();
+            // Ensure custom order is respected, with saved object at the front
+            List<string> orderedPriorityGuids = new();
+
+            // Saved object comes first (if it exists and isn't in custom order)
+            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && !customGuidSet.Contains(savedObjectGuid) && priorityGuids.Contains(savedObjectGuid))
+            {
+                orderedPriorityGuids.Add(savedObjectGuid);
+            }
+
+            // Then custom order
+            orderedPriorityGuids.AddRange(
+                customGuidOrder.Where(guid => priorityGuids.Contains(guid))
+            );
+
+            // Then any remaining priority items
+            orderedPriorityGuids.AddRange(
+                priorityGuids.Except(orderedPriorityGuids, StringComparer.Ordinal)
+            );
 
             // Load priority batch first (custom ordered items)
             int priorityBatchSize = Mathf.Min(
@@ -7539,8 +7563,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (EnableAsyncLoadDebugLog)
             {
+                string savedObjInfo = !string.IsNullOrWhiteSpace(savedObjectGuid)
+                    ? $" (includes saved object: {savedObjectGuid})"
+                    : "";
                 Debug.Log(
-                    $"[DataVisualizer] Loading priority batch: {priorityBatchSize} objects (Total: {allGuids.Length}, Remaining: {allGuids.Length - priorityBatchSize})"
+                    $"[DataVisualizer] Loading priority batch: {priorityBatchSize} objects{savedObjInfo} (Total: {allGuids.Length}, Remaining: {allGuids.Length - priorityBatchSize})"
                 );
             }
 
