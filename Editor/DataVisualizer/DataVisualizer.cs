@@ -7726,22 +7726,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                     _selectedObjects.Insert(insertIndex, obj);
 
-                    // For _filteredObjects, we need to check if the object passes the current filter
-                    // and find the correct insertion point in the filtered list
-                    if (ShouldIncludeInFilteredObjects(obj))
-                    {
-                        // Find the correct insertion point in _filteredObjects to maintain sort order
-                        int filteredInsertIndex = _filteredObjects.Count;
-                        for (int i = 0; i < _filteredObjects.Count; i++)
-                        {
-                            if (comparer.Compare(obj, _filteredObjects[i]) < 0)
-                            {
-                                filteredInsertIndex = i;
-                                break;
-                            }
-                        }
-                        _filteredObjects.Insert(filteredInsertIndex, obj);
-                    }
+                    // NOTE: Don't add to _filteredObjects here!
+                    // ApplyLabelFilter() will rebuild it from _selectedObjects
+                    // when BuildObjectsView() is called below.
+                    // This ensures filters are always correctly applied.
                 }
             }
 
@@ -7991,7 +7979,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 rootVisualElement
                     .schedule.Execute(() =>
                     {
-                        if (_selectedElement != null && _objectScrollView != null)
+                        // Verify element is still valid and in the scroll view
+                        if (_selectedElement != null
+                            && _objectScrollView != null
+                            && _selectedElement.parent != null
+                            && _objectScrollView.contentContainer.Contains(_selectedElement))
                         {
                             _objectScrollView.ScrollTo(_selectedElement);
                         }
@@ -8050,7 +8042,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _objectScrollView
                         .schedule.Execute(() =>
                         {
-                            _objectScrollView?.ScrollTo(_selectedElement);
+                            // Verify element is still valid and in the scroll view before scrolling
+                            if (_objectScrollView != null
+                                && _selectedElement != null
+                                && _selectedElement.parent != null
+                                && _objectScrollView.contentContainer.Contains(_selectedElement))
+                            {
+                                _objectScrollView.ScrollTo(_selectedElement);
+                            }
                         })
                         .ExecuteLater(1);
                 }
