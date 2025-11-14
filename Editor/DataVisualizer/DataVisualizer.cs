@@ -69,6 +69,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const float MinNamespacePaneWidth = 320f;
         private const float MinObjectPaneWidth = 220f;
         private const float MinInspectorPaneWidth = 260f;
+        private const float MinWindowWidth =
+            MinNamespacePaneWidth + MinObjectPaneWidth + MinInspectorPaneWidth + 60f;
+        private const float MinWindowHeight = 480f;
         private const int MaxObjectsPerPage = 100;
         private const int AsyncLoadBatchSize = 100;
         private const int AsyncLoadPriorityBatchSize = 100;
@@ -349,6 +352,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             DataVisualizer window = GetWindow<DataVisualizer>("Data Visualizer");
             window.titleContent = new GUIContent("Data Visualizer");
+            window.minSize = new Vector2(MinWindowWidth, MinWindowHeight);
 
             bool initialSizeApplied = EditorPrefs.GetBool(PrefsInitialSizeAppliedKey, false);
             if (initialSizeApplied)
@@ -356,8 +360,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            float width = Mathf.Max(800, window.position.width);
-            float height = Mathf.Max(400, window.position.height);
+            float width = Mathf.Max(MinWindowWidth, window.position.width);
+            float height = Mathf.Max(MinWindowHeight, window.position.height);
             Rect monitorArea = MonitorUtility.GetPrimaryMonitorRect();
 
             float centerX = (monitorArea.width - width) / 2f;
@@ -372,6 +376,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnEnable()
         {
+            minSize = new Vector2(MinWindowWidth, MinWindowHeight);
             _nextColorIndex = 0;
             Instance = this;
             _isSearchCachePopulated = false;
