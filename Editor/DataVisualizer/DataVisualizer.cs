@@ -64,8 +64,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string SearchPlaceholder = "Search...";
 
         private const int MaxSearchResults = 25;
-        private const float DefaultOuterSplitWidth = 200f;
+        private const float DefaultOuterSplitWidth = 350f;
         private const float DefaultInnerSplitWidth = 250f;
+        private const float MinNamespacePaneWidth = 320f;
+        private const float MinObjectPaneWidth = 220f;
+        private const float MinInspectorPaneWidth = 260f;
         private const int MaxObjectsPerPage = 100;
         private const int AsyncLoadBatchSize = 100;
         private const int AsyncLoadPriorityBatchSize = 100;
@@ -931,8 +934,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            float currentOuterWidth = _namespaceColumnElement.resolvedStyle.width;
-            float currentInnerWidth = _objectColumnElement.resolvedStyle.width;
+            float currentOuterWidth = Mathf.Max(
+                _namespaceColumnElement.resolvedStyle.width,
+                MinNamespacePaneWidth
+            );
+            float currentInnerWidth = Mathf.Max(
+                _objectColumnElement.resolvedStyle.width,
+                MinObjectPaneWidth
+            );
 
             if (!Mathf.Approximately(currentOuterWidth, _lastSavedOuterWidth))
             {
@@ -1169,13 +1178,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
             headerRow.Add(_searchField);
 
-            float initialOuterWidth = EditorPrefs.GetFloat(
-                PrefsSplitterOuterKey,
-                DefaultOuterSplitWidth
+            float initialOuterWidth = Mathf.Max(
+                EditorPrefs.GetFloat(PrefsSplitterOuterKey, DefaultOuterSplitWidth),
+                MinNamespacePaneWidth
             );
-            float initialInnerWidth = EditorPrefs.GetFloat(
-                PrefsSplitterInnerKey,
-                DefaultInnerSplitWidth
+            float initialInnerWidth = Mathf.Max(
+                EditorPrefs.GetFloat(PrefsSplitterInnerKey, DefaultInnerSplitWidth),
+                MinObjectPaneWidth
             );
 
             _lastSavedOuterWidth = initialOuterWidth;
@@ -3936,6 +3945,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     borderRightWidth = 1,
                     borderRightColor = Color.gray,
                     height = Length.Percent(100),
+                    minWidth = MinNamespacePaneWidth,
+                    flexShrink = 0,
                 },
             };
 
@@ -4681,6 +4692,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     borderRightColor = Color.gray,
                     flexDirection = FlexDirection.Column,
                     height = Length.Percent(100),
+                    minWidth = MinObjectPaneWidth,
+                    flexShrink = 0,
                 },
             };
 
@@ -5104,7 +5117,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement inspectorColumn = new()
             {
                 name = "inspector-column",
-                style = { flexGrow = 1, height = Length.Percent(100) },
+                style =
+                {
+                    flexGrow = 1,
+                    height = Length.Percent(100),
+                    minWidth = MinInspectorPaneWidth,
+                    flexShrink = 0,
+                },
             };
             _inspectorScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
@@ -7518,7 +7537,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             HashSet<string> customGuidSet = new(customGuidOrder, StringComparer.Ordinal);
 
             // Add saved object to priority if it exists and isn't already in custom order
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && !customGuidSet.Contains(savedObjectGuid))
+            if (
+                !string.IsNullOrWhiteSpace(savedObjectGuid)
+                && !customGuidSet.Contains(savedObjectGuid)
+            )
             {
                 priorityGuids.Add(savedObjectGuid);
             }
@@ -7540,15 +7562,19 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             // Saved object ALWAYS comes first (critical for restoring selection)
             // Even if it's in custom order, we need it loaded immediately
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && priorityGuids.Contains(savedObjectGuid))
+            if (
+                !string.IsNullOrWhiteSpace(savedObjectGuid)
+                && priorityGuids.Contains(savedObjectGuid)
+            )
             {
                 orderedPriorityGuids.Add(savedObjectGuid);
             }
 
             // Then custom order (excluding saved object to avoid duplicates)
             orderedPriorityGuids.AddRange(
-                customGuidOrder
-                    .Where(guid => priorityGuids.Contains(guid) && guid != savedObjectGuid)
+                customGuidOrder.Where(guid =>
+                    priorityGuids.Contains(guid) && guid != savedObjectGuid
+                )
             );
 
             // Then any remaining priority items
@@ -7601,11 +7627,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                             {
                                 string objPath = AssetDatabase.GetAssetPath(objectToSelect);
                                 string objGuid = AssetDatabase.AssetPathToGUID(objPath);
-                                Debug.Log($"[DataVisualizer] Selecting saved object: {objectToSelect.name} (GUID: {objGuid})");
+                                Debug.Log(
+                                    $"[DataVisualizer] Selecting saved object: {objectToSelect.name} (GUID: {objGuid})"
+                                );
                             }
                             else
                             {
-                                Debug.LogWarning($"[DataVisualizer] No saved object found, _selectedObjects.Count = {_selectedObjects.Count}");
+                                Debug.LogWarning(
+                                    $"[DataVisualizer] No saved object found, _selectedObjects.Count = {_selectedObjects.Count}"
+                                );
                             }
                         }
 
@@ -8002,10 +8032,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                     .schedule.Execute(() =>
                     {
                         // Verify element is still valid and in the scroll view
-                        if (_selectedElement != null
+                        if (
+                            _selectedElement != null
                             && _objectScrollView != null
                             && _selectedElement.parent != null
-                            && _objectScrollView.contentContainer.Contains(_selectedElement))
+                            && _objectScrollView.contentContainer.Contains(_selectedElement)
+                        )
                         {
                             _objectScrollView.ScrollTo(_selectedElement);
                         }
@@ -8065,10 +8097,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                         .schedule.Execute(() =>
                         {
                             // Verify element is still valid and in the scroll view before scrolling
-                            if (_objectScrollView != null
+                            if (
+                                _objectScrollView != null
                                 && _selectedElement != null
                                 && _selectedElement.parent != null
-                                && _objectScrollView.contentContainer.Contains(_selectedElement))
+                                && _objectScrollView.contentContainer.Contains(_selectedElement)
+                            )
                             {
                                 _objectScrollView.ScrollTo(_selectedElement);
                             }
