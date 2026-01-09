@@ -1,5 +1,6 @@
 :root {
     font-size: 16px;
+    --dataviz-circle-size: 26px;
 }
 
 * {
@@ -440,12 +441,44 @@
 .action-button {
     flex-shrink: 0;
     font-size: 14px;
+    width: var(--dataviz-circle-size);
+    height: var(--dataviz-circle-size);
+    min-width: var(--dataviz-circle-size);
+    min-height: var(--dataviz-circle-size);
     padding: 0;
-    min-width: 0;
     background-color: transparent;
     border-radius: 50%;
     border-width: 2px;
     -unity-font-style: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -unity-text-align: middle-center;
+}
+
+.icon-button,
+.go-button-disabled {
+    width: var(--dataviz-circle-size);
+    height: var(--dataviz-circle-size);
+    min-width: var(--dataviz-circle-size);
+    min-height: var(--dataviz-circle-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    -unity-text-align: middle-center;
+}
+
+.go-button-disabled {
+    flex-shrink: 0;
+    font-size: 14px;
+    background-color: transparent;
+    border-width: 2px;
+    -unity-font-style: bold;
+    border-color: grey;
+    color: grey;
+    -unity-text-align: middle-center;
 }
 
 .action-button:hover {
@@ -465,26 +498,11 @@
 .go-button {
     border-color: white;
     color: white;
-    padding: 0 5px;
-}
-
-.go-button-disabled {
-    flex-shrink: 0;
-    font-size: 14px;
-    min-width: 0;
-    background-color: transparent;
-    border-radius: 50%;
-    border-width: 2px;
-    -unity-font-style: bold;
-    border-color: grey;
-    color: grey;
-    padding: 0 5px;
 }
 
 .go-button:hover {
     border-color: black;
     color: black;
-    padding: 0 5px;
 }
 
 .create-button {
@@ -494,13 +512,18 @@
     border-color: white;
     border-width: 2px;
     font-size: 26px;
-    padding-bottom: 4px;
     border-radius: 50%;
     width: 27px;
     height: 27px;
-    padding-left: 0;
-    padding-right: 0;
+    min-width: 27px;
+    min-height: 27px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    padding-bottom: 3px;
     margin-bottom: 2px;
+    -unity-text-align: middle-center;
 }
 
 .create-button:hover {
@@ -516,13 +539,18 @@
     border-color: white;
     border-width: 2px;
     font-size: 26px;
-    padding-bottom: 4px;
     border-radius: 50%;
     width: 27px;
     height: 27px;
-    padding-left: 0;
-    padding-right: 0;
+    min-width: 27px;
+    min-height: 27px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    padding-bottom: 3px;
     margin-bottom: 2px;
+    -unity-text-align: middle-center;
 }
 
 .load-from-data-folder-button:hover {
@@ -538,13 +566,18 @@
     border-color: white;
     border-width: 2px;
     font-size: 26px;
-    padding-bottom: 4px;
     border-radius: 50%;
     width: 27px;
     height: 27px;
-    padding-left: 0;
-    padding-right: 0;
+    min-width: 27px;
+    min-height: 27px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    padding-bottom: 3px;
     margin-bottom: 2px;
+    -unity-text-align: middle-center;
 }
 
 .load-from-script-folder-button:hover {
@@ -556,26 +589,20 @@
 .delete-button {
     border-color: rgb(230, 102, 102);
     color: rgb(230, 102, 102);
-    padding: 1px 6px;
 }
 
 .clone-button {
     border-color: rgb(102, 179, 102);
     color: rgb(102, 179, 102);
-    padding-left: 2px;
-    padding-right: 2px;
-    padding-bottom: 2px;
 }
 
 .move-button {
     border-color: goldenrod;
     color: goldenrod;
-    padding: 3px;
-    padding-bottom: 4px;
+    padding-bottom: 3px;
 }
 
 .rename-button {
-    padding: 1px 6px;
     background-color: transparent;
     border-color: rgb(51, 153, 230);
     color: rgb(51, 153, 230);
