@@ -1653,7 +1653,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                             _searchField.value = string.Empty;
                         }
 
-                        evt.PreventDefault();
+                        evt.PreventDefaultCompat();
                         evt.StopPropagation();
                     }
 
@@ -1662,7 +1662,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case KeyCode.Escape:
                 {
                     CloseActivePopover();
-                    evt.PreventDefault();
+                    evt.PreventDefaultCompat();
                     evt.StopPropagation();
                     break;
                 }
@@ -1675,7 +1675,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (highlightChanged)
             {
                 UpdateSearchResultHighlight();
-                evt.PreventDefault();
+                evt.PreventDefaultCompat();
                 evt.StopPropagation();
             }
         }
@@ -2713,7 +2713,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     case KeyCode.Escape:
                     {
                         CloseActivePopover();
-                        evt.PreventDefault();
+                        evt.PreventDefaultCompat();
                         evt.StopPropagation();
                         return;
                     }
@@ -2760,7 +2760,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (evt.keyCode == KeyCode.DownArrow || evt.keyCode == KeyCode.UpArrow)
                 {
-                    evt.PreventDefault();
+                    evt.PreventDefaultCompat();
                     evt.StopPropagation();
                     return;
                 }
@@ -2783,7 +2783,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     if (navigationHandled)
                     {
-                        evt.PreventDefault();
+                        evt.PreventDefaultCompat();
                         evt.StopPropagation();
                     }
 
@@ -2804,7 +2804,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     if (navigationHandled)
                     {
-                        evt.PreventDefault();
+                        evt.PreventDefaultCompat();
                         evt.StopPropagation();
                     }
 
@@ -2826,7 +2826,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case KeyCode.Escape:
                 {
                     CloseActivePopover();
-                    evt.PreventDefault();
+                    evt.PreventDefaultCompat();
                     evt.StopPropagation();
                     return;
                 }
@@ -4241,7 +4241,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                             _typePopoverHighlightIndex
                         ];
                         HandleEnterOnPopoverItem(selectedElement);
-                        evt.PreventDefault();
+                        evt.PreventDefaultCompat();
                         evt.StopPropagation();
                     }
 
@@ -4250,7 +4250,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case KeyCode.Escape:
                 {
                     CloseActivePopover();
-                    evt.PreventDefault();
+                    evt.PreventDefaultCompat();
                     evt.StopPropagation();
                     break;
                 }
@@ -4263,7 +4263,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (highlightChanged)
             {
                 UpdateTypePopoverHighlight();
-                evt.PreventDefault();
+                evt.PreventDefaultCompat();
                 evt.StopPropagation();
             }
         }
@@ -5887,7 +5887,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             VisualElement objectItemRow = new()
             {
-                name = $"object-item-row-{dataObject.GetInstanceID()}",
+                name = $"object-item-row-{dataObject.GetObjectIdString()}",
             };
             objectItemRow.AddToClassList(ObjectItemClass);
             objectItemRow.AddToClassList(StyleConstants.ClickableClass);
@@ -6526,7 +6526,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (evt.keyCode is KeyCode.Return or KeyCode.KeypadEnter)
                 {
                     AddLabelToSelectedAsset();
-                    evt.PreventDefault();
+                    evt.PreventDefaultCompat();
                     evt.StopPropagation();
                 }
                 return;
@@ -6581,14 +6581,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                         CloseActivePopover();
                     }
 
-                    evt.PreventDefault();
+                    evt.PreventDefaultCompat();
                     evt.StopPropagation();
                     break;
                 }
                 case KeyCode.Escape:
                 {
                     CloseActivePopover();
-                    evt.PreventDefault();
+                    evt.PreventDefaultCompat();
                     evt.StopPropagation();
                     break;
                 }
@@ -6601,7 +6601,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (highlightChanged)
             {
                 UpdateLabelSuggestionHighlight();
-                evt.PreventDefault();
+                evt.PreventDefaultCompat();
                 evt.StopPropagation();
             }
         }
