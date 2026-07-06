@@ -1,6 +1,6 @@
 {
   "name": "com.wallstop-studios.data-visualizer",
-  "version": "0.0.35",
+  "version": "0.0.36",
   "displayName": "Data Visualizer",
   "description": "Data Management UI for Unity's Scriptable Objects",
   "dependencies": {},
@@ -16,13 +16,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://https://github.com/wallstop/DataVisualizer.git"
+    "url": "git+https://github.com/wallstop/DataVisualizer.git"
   },
   "bugs": {
-    "url": "https://https://github.com/wallstop/DataVisualizer/issues"
+    "url": "https://github.com/wallstop/DataVisualizer/issues"
   },
   "author": "wallstop studios <wallstop@wallstopstudios.com> (https://wallstopstudios.com)",
-  "homepage": "https://https://github.com/wallstop/DataVisualizer#readme",
+  "homepage": "https://github.com/wallstop/DataVisualizer#readme",
   "main": "README.md",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
