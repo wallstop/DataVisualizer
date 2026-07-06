@@ -5887,7 +5887,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             VisualElement objectItemRow = new()
             {
-                name = $"object-item-row-{dataObject.GetInstanceID()}",
+                name = $"object-item-row-{dataObject.GetObjectIdString()}",
             };
             objectItemRow.AddToClassList(ObjectItemClass);
             objectItemRow.AddToClassList(StyleConstants.ClickableClass);
