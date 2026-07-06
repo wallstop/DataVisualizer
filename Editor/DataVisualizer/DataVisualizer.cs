@@ -277,6 +277,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private TextField _searchField;
         private VisualElement _searchPopover;
         private bool _isSearchCachePopulated;
+
+        // Managed ScriptableObject types for the current search-cache load, computed once per
+        // PopulateSearchCacheAsync run and reused across its batches.
+        private HashSet<Type> _searchCacheManagedTypes;
         private string _lastSearchString;
 
         private Button _addTypeButton;
@@ -526,6 +530,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _isLoadingSearchCacheAsync = true;
             // The cache is being rebuilt; it is not searchable until the batches below finish.
             _isSearchCachePopulated = false;
+            // Managed-type set for this run, computed once and reused across all batches.
+            _searchCacheManagedTypes = new(_scriptableObjectTypes.SelectMany(tuple => tuple.Value));
 
             if (EnableAsyncLoadDebugLog)
             {
@@ -588,9 +594,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Load batch. GUIDs in _pendingSearchCacheGuids are already unique (deduped up front),
             // so no per-batch de-duplication is needed here.
             List<ScriptableObject> loadedObjects = new();
-            HashSet<Type> managedTypes = new(
-                _scriptableObjectTypes.SelectMany(tuple => tuple.Value)
-            );
 
             foreach (string guid in batch)
             {
@@ -603,10 +606,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ScriptableObject obj = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
                 if (obj != null)
                 {
-                    // Verify it's a managed type (O(1) against the precomputed set). No cache
+                    // Verify it's a managed type (O(1) against the set cached for this run). No cache
                     // membership check needed: the cache was cleared and GUIDs are unique, so the
                     // object can't already be present, and Contains() grows costlier as it fills.
-                    if (managedTypes.Contains(obj.GetType()))
+                    if (_searchCacheManagedTypes.Contains(obj.GetType()))
                     {
                         loadedObjects.Add(obj);
                     }
@@ -794,6 +797,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             else if (!selectionTypeChanged)
             {
                 LoadObjectTypesAsync(selectedType);
+            }
+            else
+            {
+                // The refresh resolved a different type (e.g. the previous type was removed); the
+                // SelectType call below will load it. Clear the old type's objects now so the object
+                // column doesn't show the previous type's assets until that async load's view rebuild.
+                _selectedObjects.Clear();
+                _filteredObjects.Clear();
+                _selectedObjectOrderIndex.Clear();
             }
 
             ScriptableObject selectedObject = _selectedObject;
@@ -1386,7 +1398,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         );
                         if (packagesIndex >= 0)
                         {
-                            packagePath = normalizedPackageRoot.Substring(packagesIndex + 1); // +1 to include the leading slash
+                            packagePath = normalizedPackageRoot.Substring(packagesIndex + 1); // +1 to skip the leading slash so the path starts at "Packages/"
                         }
                         else
                         {
@@ -7617,7 +7629,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             }
 
-            UpdateLoadingIndicator(priorityBatchSize, allGuids.Length);
+            // LoadObjectBatch updates the indicator with the real loaded count, so there's no
+            // pre-load UpdateLoadingIndicator here (it briefly showed progress before anything loaded).
             LoadObjectBatch(type, priorityBatch, true);
 
             // Try to select object after priority batch loads (if restoring selection)
@@ -7782,22 +7795,29 @@ namespace WallstopStudios.DataVisualizer.Editor
                     : int.MaxValue;
                 _selectedObjectOrderIndex[obj] = order;
 
-                int insertIndex = _selectedObjects.Count;
-                for (int i = 0; i < _selectedObjects.Count; i++)
+                // Binary search for the insertion point (the list stays sorted by display-order
+                // index), keeping batch insertion O(log n) comparisons instead of a linear scan.
+                int lo = 0;
+                int hi = _selectedObjects.Count;
+                while (lo < hi)
                 {
-                    int existingOrder = _selectedObjectOrderIndex.TryGetValue(
-                        _selectedObjects[i],
-                        out int currentOrder
+                    int mid = (lo + hi) >> 1;
+                    int midOrder = _selectedObjectOrderIndex.TryGetValue(
+                        _selectedObjects[mid],
+                        out int midValue
                     )
-                        ? currentOrder
+                        ? midValue
                         : int.MaxValue;
-                    if (order < existingOrder)
+                    if (midOrder < order)
                     {
-                        insertIndex = i;
-                        break;
+                        lo = mid + 1;
+                    }
+                    else
+                    {
+                        hi = mid;
                     }
                 }
-                _selectedObjects.Insert(insertIndex, obj);
+                _selectedObjects.Insert(lo, obj);
             }
 
             batchStartTime.Stop();
@@ -8558,8 +8578,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _selectedObjects.RemoveAt(oldDataIndex);
-            int dataInsertIndex = targetIndex;
-            dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _selectedObjects.Count);
+            // targetIndex is a child index in _objectListContainer, whose child 0 is the always-
+            // present (hidden) _emptyObjectLabel; subtract it to map to the data-list index.
+            int dataInsertIndex = Mathf.Clamp(targetIndex - 1, 0, _selectedObjects.Count);
             _selectedObjects.Insert(dataInsertIndex, draggedObject);
 
             // Also update _filteredObjects to maintain consistency
@@ -8567,8 +8588,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (0 <= oldFilteredIndex)
             {
                 _filteredObjects.RemoveAt(oldFilteredIndex);
-                int filteredInsertIndex = targetIndex;
-                filteredInsertIndex = Mathf.Clamp(filteredInsertIndex, 0, _filteredObjects.Count);
+                int filteredInsertIndex = Mathf.Clamp(targetIndex - 1, 0, _filteredObjects.Count);
                 _filteredObjects.Insert(filteredInsertIndex, draggedObject);
             }
 
