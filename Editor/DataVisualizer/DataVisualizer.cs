@@ -585,21 +585,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             List<string> batch = _pendingSearchCacheGuids.GetRange(0, batchSize);
             _pendingSearchCacheGuids.RemoveRange(0, batchSize);
 
-            // Load batch
+            // Load batch. GUIDs in _pendingSearchCacheGuids are already unique (deduped up front),
+            // so no per-batch de-duplication is needed here.
             List<ScriptableObject> loadedObjects = new();
-            HashSet<string> seenGuids = new(StringComparer.OrdinalIgnoreCase);
             HashSet<Type> managedTypes = new(
                 _scriptableObjectTypes.SelectMany(tuple => tuple.Value)
             );
 
             foreach (string guid in batch)
             {
-                if (seenGuids.Contains(guid))
-                {
-                    continue;
-                }
-                seenGuids.Add(guid);
-
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 if (string.IsNullOrWhiteSpace(path))
                 {
@@ -609,10 +603,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ScriptableObject obj = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
                 if (obj != null)
                 {
-                    // Verify it's a managed type (O(1) against the precomputed set).
-                    bool isManagedType = managedTypes.Contains(obj.GetType());
-
-                    if (isManagedType && !_allManagedObjectsCache.Contains(obj))
+                    // Verify it's a managed type (O(1) against the precomputed set). No cache
+                    // membership check needed: the cache was cleared and GUIDs are unique, so the
+                    // object can't already be present, and Contains() grows costlier as it fills.
+                    if (managedTypes.Contains(obj.GetType()))
                     {
                         loadedObjects.Add(obj);
                     }
@@ -850,7 +844,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             // priority batch). Otherwise leave it to LoadObjectTypesAsync's generation-guarded
             // deferred auto-select, which restores the real selection once its batch loads instead of
             // persisting a fallback GUID over it.
-            if (selectedObject != null)
+            if (selectedObject != null && _selectedObjects.Contains(selectedObject))
             {
                 SelectObject(selectedObject);
             }
@@ -7675,6 +7669,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                         else if (_selectedObjects.Count > 0)
                         {
                             SelectObjectAndNavigate(_selectedObjects[0]);
+                        }
+                        else
+                        {
+                            // The type has no assets — clear the stale selection and inspector
+                            // instead of leaving the previously selected object showing.
+                            SelectObject(null);
                         }
                     })
                     .ExecuteLater(10);
