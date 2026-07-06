@@ -72,7 +72,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const float MinWindowWidth =
             MinNamespacePaneWidth + MinObjectPaneWidth + MinInspectorPaneWidth + 60f;
         private const float MinWindowHeight = 480f;
-        private const int MaxObjectsPerPage = 100;
         private const int AsyncLoadBatchSize = 100;
         private const int AsyncLoadPriorityBatchSize = 100;
 
@@ -83,7 +82,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private enum DragType
         {
             None = 0,
-            Object = 1,
             Namespace = 2,
             Type = 3,
         }
@@ -181,9 +179,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private readonly Dictionary<string, int> _namespaceOrder = new(StringComparer.Ordinal);
 
-        private readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
-            new();
-
         [Obsolete("Use HiddenNamespaces property instead")]
         private int _hiddenNamespaces;
 
@@ -195,18 +190,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private readonly NamespaceController _namespaceController;
 
         private ScriptableObject _selectedObject;
-        private VisualElement _selectedElement;
         private VisualElement _selectedNamespaceElement;
 
         private VisualElement _namespaceListContainer;
-        private VisualElement _objectPageController;
-        private Button _previousPageButton;
-        private Button _nextPageButton;
-        private IntegerField _currentPageField;
-        private IntegerField _maxPageField;
-        private VisualElement _objectListContainer;
         private VisualElement _inspectorContainer;
-        private ScrollView _objectScrollView;
         private ScrollView _inspectorScrollView;
 
         // Virtualized list of the selected type's objects (replaces the manual ScrollView + paging).
@@ -426,9 +413,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _nextColorIndex = 0;
             Instance = this;
             _isSearchCachePopulated = false;
-            _objectVisualElementMap.Clear();
             _selectedObject = null;
-            _selectedElement = null;
             _selectedObjects.Clear();
 #if ODIN_INSPECTOR
             _odinPropertyTree = null;
@@ -498,7 +483,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             UpdateLoadingIndicator(0, 0); // Hide loading indicator
 
             _isLabelCachePopulated = false;
-            _selectedElement = null;
             _selectedObject = null;
             _scriptableObjectTypes.Clear();
             _namespaceOrder.Clear();
@@ -5009,66 +4993,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             SetupDropTarget(_andLabelsContainer, LabelFilterSection.AND);
             SetupDropTarget(_orLabelsContainer, LabelFilterSection.OR);
 
-            _objectPageController = new VisualElement
-            {
-                name = "object-page-controller",
-                style = { display = DisplayStyle.None },
-            };
-            _objectPageController.AddToClassList("object-page-controller");
-            _previousPageButton = new Button(() =>
-            {
-                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
-                if (currentPage <= 0)
-                {
-                    return;
-                }
-
-                SetCurrentPage(_namespaceController.SelectedType, currentPage - 1);
-                BuildObjectsView();
-            })
-            {
-                text = "←",
-            };
-            _previousPageButton.AddToClassList("go-button-disabled");
-
-            _currentPageField = new IntegerField();
-            _currentPageField.AddToClassList("current-page-field");
-            _currentPageField.RegisterValueChangedCallback(evt =>
-            {
-                int newValue = evt.newValue;
-                newValue = Mathf.Clamp(newValue, 0, _filteredObjects.Count / MaxObjectsPerPage);
-                if (newValue != evt.newValue)
-                {
-                    _currentPageField.SetValueWithoutNotify(newValue);
-                }
-
-                SetCurrentPage(_namespaceController.SelectedType, newValue);
-                BuildObjectsView();
-            });
-            _maxPageField = new IntegerField() { isReadOnly = true };
-            _maxPageField.AddToClassList("max-page-field");
-            _nextPageButton = new Button(() =>
-            {
-                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
-                if (_filteredObjects.Count / MaxObjectsPerPage <= currentPage)
-                {
-                    return;
-                }
-
-                SetCurrentPage(_namespaceController.SelectedType, currentPage + 1);
-                BuildObjectsView();
-            })
-            {
-                text = "→",
-            };
-            _nextPageButton.AddToClassList("go-button-disabled");
-            _objectPageController.Add(_previousPageButton);
-            _objectPageController.Add(_currentPageField);
-            _objectPageController.Add(_maxPageField);
-            _objectPageController.Add(_nextPageButton);
-            // Manual pagination is replaced by the virtualized ListView, so the page controller is
-            // not added to the layout (its fields/handlers are removed in a follow-up cleanup).
-
             _emptyObjectLabel = new Label
             {
                 name = "empty-object-list-label",
@@ -6210,10 +6134,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             _suppressListSelectionCallback = false;
         }
 
-        // Builds the reusable skeleton of an object row (no per-object data). Serves as the ListView
-        // makeItem and is also used by the (legacy) BuildObjectRow path. Button handlers resolve the
-        // current object from the row's userData at click time so the element can be safely reused
-        // across items (as ListView virtualization requires).
+        // Builds the reusable skeleton of an object row (no per-object data) for the ListView's
+        // makeItem. Button handlers resolve the current object from the row's userData at click time
+        // so the element can be safely reused across items (as ListView virtualization requires).
         private VisualElement MakeObjectRow()
         {
             // Outer element: the ListView forces this to fixedItemHeight (FixedHeight virtualization),
@@ -6353,7 +6276,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         }
 
         // Populates a row skeleton for a specific object at a display index. Serves as the ListView
-        // bindItem and is used by the (legacy) BuildObjectRow path.
+        // bindItem.
         private void BindObjectRow(VisualElement row, ScriptableObject dataObject, int index)
         {
             if (row == null || dataObject == null)
@@ -6398,27 +6321,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             // element reuse (applied to the visible box, not the transparent outer slot).
             row.Q<VisualElement>("object-item-box")
                 ?.EnableInClassList(StyleConstants.SelectedClass, _selectedObject == dataObject);
-        }
-
-        private void BuildObjectRow(ScriptableObject dataObject, int index)
-        {
-            if (dataObject == null)
-            {
-                return;
-            }
-
-            VisualElement objectItemRow = MakeObjectRow();
-            objectItemRow.RegisterCallback<PointerDownEvent>(OnObjectPointerDown);
-            BindObjectRow(objectItemRow, dataObject, index);
-
-            _objectVisualElementMap[dataObject] = objectItemRow;
-            _objectListContainer.Add(objectItemRow);
-
-            if (_selectedObject == dataObject)
-            {
-                objectItemRow.AddToClassList(StyleConstants.SelectedClass);
-                _selectedElement = objectItemRow;
-            }
         }
 
         private void MoveObjectToTop(ScriptableObject dataObject)
@@ -6593,7 +6495,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            if (_selectedElement != null)
+            if (_selectedObject != null)
             {
                 try
                 {
@@ -7514,7 +7416,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _selectedObjects.Clear();
             _filteredObjects.Clear();
-            _objectVisualElementMap.Clear();
 
             List<string> customGuidOrder = GetObjectOrderForType(type);
             Dictionary<string, ScriptableObject> objectsByGuid = new();
@@ -7634,7 +7535,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _selectedObjects.Clear();
                 _selectedObjectOrderIndex.Clear();
                 _filteredObjects.Clear();
-                _objectVisualElementMap.Clear();
             }
 
             List<string> customGuidOrder = GetObjectOrderForType(type);
@@ -8326,35 +8226,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void OnObjectPointerDown(PointerDownEvent evt)
-        {
-            VisualElement targetElement = evt.currentTarget as VisualElement;
-            if (targetElement?.userData is not ScriptableObject clickedObject)
-            {
-                return;
-            }
-
-            if (_selectedObject != clickedObject)
-            {
-                SelectObject(clickedObject);
-            }
-
-            if (evt.button == 0)
-            {
-                _lastActiveFocusArea = FocusArea.None;
-                _draggedElement = targetElement;
-                _draggedData = clickedObject;
-                _activeDragType = DragType.Object;
-                _isDragging = false;
-                targetElement.CapturePointer(evt.pointerId);
-                targetElement.Focus();
-                targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
-                targetElement.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
-                targetElement.RegisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
-                evt.StopPropagation();
-            }
-        }
-
         private void OnPointerCaptureOut(PointerCaptureOutEvent evt)
         {
             if (_activeDragType != DragType.None && _draggedElement != null)
@@ -8427,11 +8298,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     switch (dropType)
                     {
-                        case DragType.Object:
-                        {
-                            PerformObjectDrop();
-                            break;
-                        }
                         case DragType.Namespace:
                         {
                             PerformNamespaceDrop();
@@ -8657,71 +8523,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             SetTypeOrderForNamespace(namespaceKey, newTypeNameOrder);
         }
 
-        private void PerformObjectDrop()
-        {
-            int targetIndex = _inPlaceGhost?.userData is int index ? index : -1;
-            _inPlaceGhost?.RemoveFromHierarchy();
-            if (
-                _draggedElement == null
-                || _draggedData is not ScriptableObject draggedObject
-                || _objectListContainer == null
-            )
-            {
-                return;
-            }
-
-            if (targetIndex < 0)
-            {
-                return;
-            }
-
-            int currentIndex = _objectListContainer.IndexOf(_draggedElement);
-            if (currentIndex < 0)
-            {
-                return;
-            }
-
-            if (currentIndex < targetIndex)
-            {
-                targetIndex--;
-            }
-
-            _draggedElement.style.display = DisplayStyle.Flex;
-            _draggedElement.style.opacity = 1.0f;
-            _objectListContainer.Insert(targetIndex, _draggedElement);
-            foreach (VisualElement child in _objectListContainer.Children())
-            {
-                NamespaceController.RecalibrateVisualElements(child, offset: 1);
-            }
-
-            int oldDataIndex = _selectedObjects.IndexOf(draggedObject);
-            if (0 > oldDataIndex)
-            {
-                return;
-            }
-
-            _selectedObjects.RemoveAt(oldDataIndex);
-            // targetIndex is a child index in _objectListContainer, whose child 0 is the always-
-            // present (hidden) _emptyObjectLabel; subtract it to map to the data-list index.
-            int dataInsertIndex = Mathf.Clamp(targetIndex - 1, 0, _selectedObjects.Count);
-            _selectedObjects.Insert(dataInsertIndex, draggedObject);
-
-            // Also update _filteredObjects to maintain consistency
-            int oldFilteredIndex = _filteredObjects.IndexOf(draggedObject);
-            if (0 <= oldFilteredIndex)
-            {
-                _filteredObjects.RemoveAt(oldFilteredIndex);
-                int filteredInsertIndex = Mathf.Clamp(targetIndex - 1, 0, _filteredObjects.Count);
-                _filteredObjects.Insert(filteredInsertIndex, draggedObject);
-            }
-
-            Type selectedType = _namespaceController.SelectedType;
-            if (selectedType != null)
-            {
-                UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
-            }
-        }
-
         private void StartDragVisuals(Vector2 currentPosition, string dragText)
         {
             if (_draggedElement == null || _draggedData == null)
@@ -8828,11 +8629,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement container = null;
             switch (_activeDragType)
             {
-                case DragType.Object:
-                {
-                    container = _objectListContainer.contentContainer;
-                    break;
-                }
                 case DragType.Namespace:
                 {
                     container = _namespaceListContainer;
@@ -9163,75 +8959,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
                 return entry?.ObjectGuids?.ToList() ?? new List<string>();
             }
-        }
-
-        private int GetCurrentPage(Type type)
-        {
-            DataVisualizerSettings settings = Settings;
-            if (settings.persistStateInSettingsAsset)
-            {
-                TypeObjectOrder entry = settings.objectOrders?.Find(o =>
-                    string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
-                );
-                return entry?.page ?? 0;
-            }
-            else
-            {
-                TypeObjectOrder entry = UserState.objectOrders?.Find(o =>
-                    string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
-                );
-                return entry?.page ?? 0;
-            }
-        }
-
-        private void SetCurrentPage(Type type, int page)
-        {
-            PersistSettings(
-                settings =>
-                {
-                    bool dirty = false;
-                    TypeObjectOrder entry = settings.objectOrders?.Find(o =>
-                        string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
-                    );
-                    if (entry == null)
-                    {
-                        entry = new TypeObjectOrder { TypeFullName = type.FullName };
-                        settings.objectOrders ??= new List<TypeObjectOrder>();
-                        settings.objectOrders.Add(entry);
-                        dirty = true;
-                    }
-
-                    if (page != entry.page)
-                    {
-                        dirty = true;
-                        entry.page = page;
-                    }
-
-                    return dirty;
-                },
-                userState =>
-                {
-                    bool dirty = false;
-                    TypeObjectOrder entry = userState.objectOrders?.Find(o =>
-                        string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
-                    );
-                    if (entry == null)
-                    {
-                        entry = new TypeObjectOrder { TypeFullName = type.FullName };
-                        userState.objectOrders ??= new List<TypeObjectOrder>();
-                        userState.objectOrders.Add(entry);
-                        dirty = true;
-                    }
-
-                    if (page != entry.page)
-                    {
-                        dirty = true;
-                        entry.page = page;
-                    }
-
-                    return dirty;
-                }
-            );
         }
 
         private void SetObjectOrderForType(string typeFullName, List<string> objectGuids)
