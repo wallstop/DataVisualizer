@@ -339,6 +339,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         // initial FindAssets so per-batch progress updates never rescan the project.
         private int _asyncLoadTotalCount;
 
+        // Incremented on each fresh (non-continuation) async load. Scheduled callbacks (auto-select,
+        // the background batch pump) capture this at schedule time and no-op if a newer load has
+        // superseded them, so a stale callback can't select the wrong asset or interleave batches.
+        private int _asyncLoadGeneration;
+
         // Canonical display order (asset GUID -> position) for the in-progress async load: saved
         // custom order first, then the remaining assets by path. LoadObjectBatch positions loaded
         // assets by this so user ordering survives batched loading instead of being overwritten by
@@ -583,6 +588,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Load batch
             List<ScriptableObject> loadedObjects = new();
             HashSet<string> seenGuids = new(StringComparer.OrdinalIgnoreCase);
+            HashSet<Type> managedTypes = new(
+                _scriptableObjectTypes.SelectMany(tuple => tuple.Value)
+            );
 
             foreach (string guid in batch)
             {
@@ -601,11 +609,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ScriptableObject obj = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
                 if (obj != null)
                 {
-                    // Verify it's a managed type
-                    Type objType = obj.GetType();
-                    bool isManagedType = _scriptableObjectTypes
-                        .SelectMany(tuple => tuple.Value)
-                        .Any(type => type == objType);
+                    // Verify it's a managed type (O(1) against the precomputed set).
+                    bool isManagedType = managedTypes.Contains(obj.GetType());
 
                     if (isManagedType && !_allManagedObjectsCache.Contains(obj))
                     {
@@ -827,11 +832,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 });
             }
 
-            if (selectedObject == null)
-            {
-                selectedObject = _selectedObjects.FirstOrDefault();
-            }
-
             PopulateSearchCache();
             BuildNamespaceView();
             BuildObjectsView();
@@ -846,7 +846,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            SelectObject(selectedObject);
+            // Only select eagerly if the previously-selected object is already loaded (found in the
+            // priority batch). Otherwise leave it to LoadObjectTypesAsync's generation-guarded
+            // deferred auto-select, which restores the real selection once its batch loads instead of
+            // persisting a fallback GUID over it.
+            if (selectedObject != null)
+            {
+                SelectObject(selectedObject);
+            }
             _namespaceController.SelectType(this, selectedType);
             _needsRefresh = false;
         }
@@ -7475,7 +7482,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             // Cancel any existing async load for a different type
-            if (_isLoadingObjectsAsync && _asyncLoadTargetType != type)
+            // Cancel any in-flight load when starting a fresh one — even for the SAME type (e.g. a
+            // refresh) — otherwise the old scheduled pump and its _pendingObjectGuids interleave with
+            // the new load and corrupt ordering/selection.
+            if (_isLoadingObjectsAsync && !priorityLoad)
             {
                 if (EnableAsyncLoadDebugLog)
                 {
@@ -7487,6 +7497,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _pendingObjectGuids.Clear();
                 UpdateLoadingIndicator(0, 0); // Hide indicator for cancelled load
             }
+
+            // A new generation for this fresh load so any stale scheduled callback no-ops (see field).
+            if (!priorityLoad)
+            {
+                _asyncLoadGeneration++;
+            }
+            int loadGeneration = _asyncLoadGeneration;
 
             _asyncLoadTargetType = type;
             _isLoadingObjectsAsync = true;
@@ -7620,6 +7637,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 rootVisualElement
                     .schedule.Execute(() =>
                     {
+                        if (loadGeneration != _asyncLoadGeneration)
+                        {
+                            return; // a newer load superseded this one
+                        }
+
                         // Build view FIRST so visual elements are created
                         BuildObjectsView();
                         UpdateCreateObjectButtonStyle();
@@ -7711,7 +7733,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         $"[DataVisualizer] Queued {_pendingObjectGuids.Count} objects for background loading"
                     );
                 }
-                ContinueLoadingObjects(type);
+                ContinueLoadingObjects(type, loadGeneration);
             }
             else
             {
@@ -7804,8 +7826,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void ContinueLoadingObjects(Type type)
+        private void ContinueLoadingObjects(Type type, int loadGeneration)
         {
+            if (loadGeneration != _asyncLoadGeneration)
+            {
+                return; // superseded by a newer load, which owns the async state
+            }
+
             if (
                 !_isLoadingObjectsAsync
                 || _asyncLoadTargetType != type
@@ -7830,7 +7857,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 // Schedule next batch
                 _asyncLoadTask = rootVisualElement.schedule.Execute(() =>
-                    ContinueLoadingObjects(type)
+                    ContinueLoadingObjects(type, loadGeneration)
                 );
                 _asyncLoadTask.ExecuteLater(10);
             }

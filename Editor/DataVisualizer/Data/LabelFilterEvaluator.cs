@@ -21,10 +21,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         /// object would pass whenever only the other clause was populated (the historical bug where
         /// OR-mode with only OR labels matched everything).
         /// </summary>
-        public static bool Matches(
-            IReadOnlyCollection<string> objectLabels,
-            TypeLabelFilterConfig config
-        )
+        public static bool Matches(IReadOnlyList<string> objectLabels, TypeLabelFilterConfig config)
         {
             if (config == null)
             {
@@ -40,19 +37,52 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 return true;
             }
 
-            HashSet<string> present =
-                objectLabels as HashSet<string>
-                ?? new HashSet<string>(
-                    objectLabels ?? Array.Empty<string>(),
-                    StringComparer.Ordinal
-                );
-
-            bool andSatisfied = hasAnd && andLabels.TrueForAll(present.Contains);
-            bool orSatisfied = hasOr && orLabels.Exists(present.Contains);
+            IReadOnlyList<string> present = objectLabels ?? Array.Empty<string>();
+            bool andSatisfied = hasAnd && AllPresent(andLabels, present);
+            bool orSatisfied = hasOr && AnyPresent(orLabels, present);
 
             return config.combinationType == LabelCombinationType.Or
                 ? andSatisfied || orSatisfied // at least one ACTIVE clause must match
                 : (!hasAnd || andSatisfied) && (!hasOr || orSatisfied); // every active clause
+
+            // Local, non-capturing helpers keep this allocation-free: Matches runs once per object
+            // during filtering, so a per-call HashSet or closure would add real GC pressure. Asset
+            // label sets are tiny, so linear membership over the provided list is cheap.
+            static bool AllPresent(List<string> required, IReadOnlyList<string> labels)
+            {
+                for (int i = 0; i < required.Count; i++)
+                {
+                    if (!Contains(labels, required[i]))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            static bool AnyPresent(List<string> candidates, IReadOnlyList<string> labels)
+            {
+                for (int i = 0; i < candidates.Count; i++)
+                {
+                    if (Contains(labels, candidates[i]))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            static bool Contains(IReadOnlyList<string> labels, string target)
+            {
+                for (int i = 0; i < labels.Count; i++)
+                {
+                    if (string.Equals(labels[i], target, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
         }
     }
 }
