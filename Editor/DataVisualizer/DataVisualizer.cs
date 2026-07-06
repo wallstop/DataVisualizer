@@ -7281,9 +7281,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        internal ScriptableObject DetermineObjectToAutoSelect()
+        internal ScriptableObject DetermineObjectToAutoSelect(Type selectedType)
         {
-            Type selectedType = _namespaceController.SelectedType;
             if (selectedType == null || _selectedObjects.Count == 0)
             {
                 return null;
@@ -7663,7 +7662,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 UpdateCreateObjectButtonStyle();
                 UpdateLabelAreaAndFilter();
 
-                ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
+                ScriptableObject objectToSelect = DetermineObjectToAutoSelect(type);
 
                 if (EnableAsyncLoadDebugLog)
                 {
@@ -7705,15 +7704,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _pendingObjectGuids.Add(orderedPriorityGuids[i]);
             }
 
-            // Sort remaining GUIDs for predictable order
-            List<(string guid, string path)> remainingWithPaths = remainingGuids
-                .Select(guid =>
-                {
-                    string path = AssetDatabase.GUIDToAssetPath(guid);
-                    return (guid, path);
-                })
-                .Where(x => !string.IsNullOrWhiteSpace(x.path))
-                .OrderBy(x => x.path, StringComparer.OrdinalIgnoreCase)
+            // Order the remaining GUIDs by the canonical display order already computed above rather
+            // than re-deriving asset paths and sorting again (that duplicate work is noticeable on
+            // large projects). _asyncDisplayOrderByGuid was built path-sorted, so order is preserved.
+            List<string> remainingSorted = remainingGuids
+                .OrderBy(guid =>
+                    _asyncDisplayOrderByGuid.TryGetValue(guid, out int order) ? order : int.MaxValue
+                )
                 .ToList();
 
             // Load first batch of remaining items if we have space
@@ -7722,22 +7719,22 @@ namespace WallstopStudios.DataVisualizer.Editor
                 int remainingInPriorityBatch = AsyncLoadPriorityBatchSize - priorityBatchSize;
                 int firstRemainingBatch = Mathf.Min(
                     remainingInPriorityBatch,
-                    remainingWithPaths.Count
+                    remainingSorted.Count
                 );
-                List<string> firstRemainingBatchGuids = remainingWithPaths
-                    .GetRange(0, firstRemainingBatch)
-                    .Select(x => x.guid)
-                    .ToList();
+                List<string> firstRemainingBatchGuids = remainingSorted.GetRange(
+                    0,
+                    firstRemainingBatch
+                );
                 LoadObjectBatch(type, firstRemainingBatchGuids, true);
 
-                for (int i = firstRemainingBatch; i < remainingWithPaths.Count; i++)
+                for (int i = firstRemainingBatch; i < remainingSorted.Count; i++)
                 {
-                    _pendingObjectGuids.Add(remainingWithPaths[i].guid);
+                    _pendingObjectGuids.Add(remainingSorted[i]);
                 }
             }
             else
             {
-                foreach ((string guid, _) in remainingWithPaths)
+                foreach (string guid in remainingSorted)
                 {
                     _pendingObjectGuids.Add(guid);
                 }
