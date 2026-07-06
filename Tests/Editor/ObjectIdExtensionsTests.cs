@@ -35,7 +35,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 );
 #else
                 Assert.IsTrue(
-                    long.TryParse(firstId, out _),
+                    int.TryParse(firstId, out _),
                     "The legacy InstanceID branch must produce a numeric (int) id string."
                 );
 #endif
