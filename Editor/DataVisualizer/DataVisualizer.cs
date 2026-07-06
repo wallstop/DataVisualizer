@@ -8892,13 +8892,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             // If async loading is still in progress, orderedObjects holds only the loaded subset.
-            // Append the not-yet-loaded GUIDs in their intended display order so persisting a reorder
-            // mid-load does not drop them from the saved order.
-            if (
-                _isLoadingObjectsAsync
-                && _asyncLoadTargetType == type
-                && _asyncDisplayOrderByGuid.Count > 0
-            )
+            // Merge the not-yet-loaded GUIDs (in their intended display order) so persisting a reorder
+            // mid-load does not drop them, then rebuild the in-flight order maps from the merged order
+            // so the remaining LoadObjectBatch inserts stay consistent with what the user just saved
+            // (otherwise later batches keep positioning new items by the stale pre-reorder order).
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType == type)
             {
                 HashSet<string> present = new(orderedGuids, StringComparer.Ordinal);
                 foreach (
@@ -8911,6 +8909,30 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         orderedGuids.Add(guid);
                     }
+                }
+
+                _asyncDisplayOrderByGuid.Clear();
+                for (int i = 0; i < orderedGuids.Count; i++)
+                {
+                    _asyncDisplayOrderByGuid[orderedGuids[i]] = i;
+                }
+
+                _selectedObjectOrderIndex.Clear();
+                foreach (ScriptableObject obj in orderedObjects)
+                {
+                    if (obj == null)
+                    {
+                        continue;
+                    }
+
+                    string path = AssetDatabase.GetAssetPath(obj);
+                    string guid = string.IsNullOrWhiteSpace(path)
+                        ? null
+                        : AssetDatabase.AssetPathToGUID(path);
+                    _selectedObjectOrderIndex[obj] =
+                        guid != null && _asyncDisplayOrderByGuid.TryGetValue(guid, out int mapIndex)
+                            ? mapIndex
+                            : int.MaxValue;
                 }
             }
 
