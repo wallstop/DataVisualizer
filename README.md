@@ -1,5 +1,9 @@
 # Data Visualizer
 
+> **🤖 AI Assistance Disclosure**
+>
+> The early versions of Data Visualizer were heavily human-authored. More recent development has been a mix of human effort and AI assistance: human authors lead design, architecture, and review, while AI tools assist with feature development, bug detection, performance optimization, and documentation.
+
 Data Visualizer streamlines working with ScriptableObject-heavy systems by centralizing asset management, inspection, and batch operations in a single window. Instead of hunting through the Project panel and repeatedly switching contexts, you get a namespace-organized view of all your data types with inline editing, batch operations, and workflow automation.
 
 This guide captures the key points from the companion [video walkthrough](https://youtu.be/3oUxUSKNyhw) while keeping the instructions project-agnostic.

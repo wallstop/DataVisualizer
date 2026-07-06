@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This Unity Package Manager module lives at `Packages/com.wallstop-studios.data-visualizer`. Keep runtime-facing APIs, ScriptableObject base classes, and shared attributes inside `Runtime/` so downstream games can include the package without editor baggage. Place editor windows, UI Toolkit layouts, and menu integrations in `Editor/`. Documentation assets (screens, GIFs, and the `README.md`) stay under `docs/`. Tests are not yet checked in; when you add them, mirror Unity’s layout by creating sibling `Tests/EditMode` and `Tests/PlayMode` folders.
+This Unity Package Manager module lives at `Packages/com.wallstop-studios.data-visualizer`. Keep runtime-facing APIs, ScriptableObject base classes, and shared attributes inside `Runtime/` so downstream games can include the package without editor baggage. Place editor windows, UI Toolkit layouts, and menu integrations in `Editor/`. Documentation assets (screens, GIFs, and the `README.md`) stay under `docs/`. EditMode tests live in `Tests/Editor` (`WallstopStudios.DataVisualizer.Tests.Editor.asmdef`); add PlayMode coverage in a sibling `Tests/Runtime` folder mirroring Unity’s layout.
 
 ## Build, Test, and Development Commands
 - `unity -projectPath <path-to-host-project> -batchmode -quit -runTests -testPlatform editmode` runs EditMode coverage and surfaces compilation issues headlessly.
