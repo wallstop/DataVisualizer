@@ -12,11 +12,11 @@
 - Official migration guidance (Unity 6000.5 manual, "Migrate from InstanceID to EntityId"): use `EntityId.ToULong`/`FromULong` for raw values; do not cast to `int`; do not persist `ToString()` output.
 - Failure-mode sweep: no other obsolete InstanceID-family APIs in the package (`InstanceIDToObject`, `InstanceID` types, etc. — zero hits). The Unity 6000.5 RED compile log is the authoritative confirmation.
 
-## Decisions
+## Decisions (final)
 
-- Helper `internal static string GetObjectIdString(this Object obj)` in new `Editor/DataVisualizer/Extensions/ObjectIdExtensions.cs` (testable; keeps `#if` out of the 6000-line `DataVisualizer.cs`). Name deliberately avoids "stable" — instance/entity IDs are per-session only.
-- Test access via `[assembly: InternalsVisibleTo("WallstopStudios.DataVisualizer.Tests.Editor")]`, following the existing `Runtime/DataVisualizer/BaseDataObject.cs` precedent (no AssemblyInfo.cs).
-- Bootstrap `Tests/Editor` (first tests in this package), modeled on the sibling `unity-helpers` package's test asmdef. Single behavior-focused test; no bloat.
+- Helper `GetObjectIdString(this Object obj)` in new `Editor/DataVisualizer/Extensions/ObjectIdExtensions.cs` (testable; keeps `#if` out of the 6000-line `DataVisualizer.cs`). Name deliberately avoids "stable" — instance/entity IDs are per-session only.
+- Helper is **`public`** (not `internal`). The initial plan used `internal` + `[assembly: InternalsVisibleTo("WallstopStudios.DataVisualizer.Tests.Editor")]`, but that was proven non-functional for this editor→test assembly pair (see the Investigation section below) — so the helper is public and there is no `InternalsVisibleTo`.
+- Bootstrap `Tests/Editor` (first tests in this package), modeled on the sibling `unity-helpers` package's test asmdef. Single behavior-focused test; no bloat. The test references only the Editor assembly + `UnityEngine` + NUnit.
 - Version: `0.0.35-rc05.6` → `0.0.35` (stable; user-confirmed).
 
 ## Evidence log
@@ -67,3 +67,7 @@ The test assembly initially failed with CS1061 (cannot see the `internal` helper
 - **2022.3.62f2** — legacy `GetInstanceID` branch: 0 compile errors, **Passed** (1/1). Nearest installed editor to the `"unity": "2021.3"` floor.
 
 MCP note: the live-editor MCP `RunCommand` (execute) capability was **revoked mid-session** ("Connection revoked… Project Settings > AI > Unity MCP"); read-only MCP calls still worked. 6000.4.6f1 coverage was therefore obtained via a clean CLI throwaway project on the same editor binary (identical compiler/runtime) rather than the live editor. The user's live editor will clear its stale CS1061 on its next recompile, since the on-disk source is now correct.
+
+## PR
+
+[wallstop/DataVisualizer#13](https://github.com/wallstop/DataVisualizer/pull/13) — addressed one Copilot review comment (synced the "Decisions" section above to the final `public` choice); Cursor Bugbot passed ("Low Risk").
