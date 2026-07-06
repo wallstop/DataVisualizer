@@ -7652,59 +7652,51 @@ namespace WallstopStudios.DataVisualizer.Editor
             // pre-load UpdateLoadingIndicator here (it briefly showed progress before anything loaded).
             LoadObjectBatch(type, priorityBatch, true);
 
-            // Try to select object after priority batch loads (if restoring selection)
+            // Select the saved/first object synchronously (right after the priority batch) so a type
+            // switch goes straight from the old inspector to the new one in a single frame: the old
+            // type's rows/selection are replaced before anything renders, so there is no stale UI and
+            // no intermediate "loading"/"select an object" flash. Remaining objects keep streaming in
+            // asynchronously below.
             if (!priorityLoad)
             {
-                rootVisualElement
-                    .schedule.Execute(() =>
+                BuildObjectsView();
+                UpdateCreateObjectButtonStyle();
+                UpdateLabelAreaAndFilter();
+
+                ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
+
+                if (EnableAsyncLoadDebugLog)
+                {
+                    if (objectToSelect != null)
                     {
-                        if (loadGeneration != _asyncLoadGeneration)
-                        {
-                            return; // a newer load superseded this one
-                        }
+                        string objPath = AssetDatabase.GetAssetPath(objectToSelect);
+                        string objGuid = AssetDatabase.AssetPathToGUID(objPath);
+                        Debug.Log(
+                            $"[DataVisualizer] Selecting saved object: {objectToSelect.name} (GUID: {objGuid})"
+                        );
+                    }
+                    else
+                    {
+                        Debug.LogWarning(
+                            $"[DataVisualizer] No saved object found, _selectedObjects.Count = {_selectedObjects.Count}"
+                        );
+                    }
+                }
 
-                        // Build view FIRST so visual elements are created
-                        BuildObjectsView();
-                        UpdateCreateObjectButtonStyle();
-                        UpdateLabelAreaAndFilter();
-
-                        // Now select the object - this will navigate to correct page if needed
-                        ScriptableObject objectToSelect = DetermineObjectToAutoSelect();
-
-                        if (EnableAsyncLoadDebugLog)
-                        {
-                            if (objectToSelect != null)
-                            {
-                                string objPath = AssetDatabase.GetAssetPath(objectToSelect);
-                                string objGuid = AssetDatabase.AssetPathToGUID(objPath);
-                                Debug.Log(
-                                    $"[DataVisualizer] Selecting saved object: {objectToSelect.name} (GUID: {objGuid})"
-                                );
-                            }
-                            else
-                            {
-                                Debug.LogWarning(
-                                    $"[DataVisualizer] No saved object found, _selectedObjects.Count = {_selectedObjects.Count}"
-                                );
-                            }
-                        }
-
-                        if (objectToSelect != null)
-                        {
-                            SelectObjectAndNavigate(objectToSelect);
-                        }
-                        else if (_selectedObjects.Count > 0)
-                        {
-                            SelectObjectAndNavigate(_selectedObjects[0]);
-                        }
-                        else
-                        {
-                            // The type has no assets — clear the stale selection and inspector
-                            // instead of leaving the previously selected object showing.
-                            SelectObject(null);
-                        }
-                    })
-                    .ExecuteLater(10);
+                if (objectToSelect != null)
+                {
+                    SelectObjectAndNavigate(objectToSelect);
+                }
+                else if (_selectedObjects.Count > 0)
+                {
+                    SelectObjectAndNavigate(_selectedObjects[0]);
+                }
+                else
+                {
+                    // The type has no assets — clear the stale selection and inspector instead of
+                    // leaving the previously selected object showing.
+                    SelectObject(null);
+                }
             }
 
             // Queue remaining priority items
@@ -8896,6 +8888,29 @@ namespace WallstopStudios.DataVisualizer.Editor
                     Debug.LogWarning(
                         $"Cannot get path/GUID for object '{obj.name}' during order save."
                     );
+                }
+            }
+
+            // If async loading is still in progress, orderedObjects holds only the loaded subset.
+            // Append the not-yet-loaded GUIDs in their intended display order so persisting a reorder
+            // mid-load does not drop them from the saved order.
+            if (
+                _isLoadingObjectsAsync
+                && _asyncLoadTargetType == type
+                && _asyncDisplayOrderByGuid.Count > 0
+            )
+            {
+                HashSet<string> present = new(orderedGuids, StringComparer.Ordinal);
+                foreach (
+                    string guid in _asyncDisplayOrderByGuid
+                        .OrderBy(kvp => kvp.Value)
+                        .Select(kvp => kvp.Key)
+                )
+                {
+                    if (present.Add(guid))
+                    {
+                        orderedGuids.Add(guid);
+                    }
                 }
             }
 
