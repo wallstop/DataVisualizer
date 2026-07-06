@@ -281,6 +281,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         // Managed ScriptableObject types for the current search-cache load, computed once per
         // PopulateSearchCacheAsync run and reused across its batches.
         private HashSet<Type> _searchCacheManagedTypes;
+
+        // Incremented on each PopulateSearchCacheAsync run so stale scheduled batch callbacks from a
+        // superseded run no-op instead of draining the new queue or marking the cache ready early.
+        private int _searchCacheGeneration;
         private string _lastSearchString;
 
         private Button _addTypeButton;
@@ -532,6 +536,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _isSearchCachePopulated = false;
             // Managed-type set for this run, computed once and reused across all batches.
             _searchCacheManagedTypes = new(_scriptableObjectTypes.SelectMany(tuple => tuple.Value));
+            int generation = ++_searchCacheGeneration;
 
             if (EnableAsyncLoadDebugLog)
             {
@@ -570,7 +575,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Start loading batches
             if (_pendingSearchCacheGuids.Count > 0)
             {
-                ContinuePopulatingSearchCache();
+                ContinuePopulatingSearchCache(generation);
             }
             else
             {
@@ -579,8 +584,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void ContinuePopulatingSearchCache()
+        private void ContinuePopulatingSearchCache(int generation)
         {
+            if (generation != _searchCacheGeneration)
+            {
+                return; // superseded by a newer PopulateSearchCacheAsync run
+            }
+
             if (!_isLoadingSearchCacheAsync || _pendingSearchCacheGuids.Count == 0)
             {
                 _isLoadingSearchCacheAsync = false;
@@ -624,7 +634,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Continue with next batch
             if (_pendingSearchCacheGuids.Count > 0)
             {
-                rootVisualElement.schedule.Execute(ContinuePopulatingSearchCache).ExecuteLater(10);
+                rootVisualElement
+                    .schedule.Execute(() => ContinuePopulatingSearchCache(generation))
+                    .ExecuteLater(10);
             }
             else
             {
