@@ -335,6 +335,22 @@ namespace WallstopStudios.DataVisualizer.Editor
         private bool _isLoadingObjectsAsync;
         private bool _isLoadingSearchCacheAsync;
 
+        // Total asset count for the in-progress async load, captured once from the
+        // initial FindAssets so per-batch progress updates never rescan the project.
+        private int _asyncLoadTotalCount;
+
+        // Canonical display order (asset GUID -> position) for the in-progress async load: saved
+        // custom order first, then the remaining assets by path. LoadObjectBatch positions loaded
+        // assets by this so user ordering survives batched loading instead of being overwritten by
+        // an alphabetical sort. Rebuilt at the start of each LoadObjectTypesAsync.
+        private readonly Dictionary<string, int> _asyncDisplayOrderByGuid = new(
+            StringComparer.Ordinal
+        );
+
+        // Display-order index cached per already-inserted object so batch insertion stays cheap
+        // (no per-comparison AssetDatabase calls). Cleared whenever _selectedObjects is reset.
+        private readonly Dictionary<ScriptableObject, int> _selectedObjectOrderIndex = new();
+
         private Label _dataFolderPathDisplay;
 #if ODIN_INSPECTOR
         private PropertyTree _odinPropertyTree;
@@ -503,6 +519,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _allManagedObjectsCache.Clear();
             _pendingSearchCacheGuids.Clear();
             _isLoadingSearchCacheAsync = true;
+            // The cache is being rebuilt; it is not searchable until the batches below finish.
+            _isSearchCachePopulated = false;
 
             if (EnableAsyncLoadDebugLog)
             {
@@ -526,8 +544,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            // Mark as populated for search functionality (even if not fully loaded yet)
-            _isSearchCachePopulated = true;
+            // Do NOT mark the cache populated here — the assets aren't loaded until the batches
+            // below finish. Marking it ready after only collecting GUIDs made PerformSearch run
+            // against an empty/partial cache. It is marked populated on completion instead.
             cacheStartTime.Stop();
 
             if (EnableAsyncLoadDebugLog)
@@ -545,6 +564,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             else
             {
                 _isLoadingSearchCacheAsync = false;
+                _isSearchCachePopulated = true; // nothing to load; the (empty) cache is ready
             }
         }
 
@@ -630,7 +650,24 @@ namespace WallstopStudios.DataVisualizer.Editor
             else
             {
                 _isLoadingSearchCacheAsync = false;
+                _isSearchCachePopulated = true;
+                RefreshActiveSearch();
             }
+        }
+
+        // Re-runs the active search once the search cache finishes loading, so results that were
+        // unavailable while it loaded in the background appear. Only acts while the search popover is
+        // open, so it never reopens a popover the user has dismissed.
+        private void RefreshActiveSearch()
+        {
+            if (_activePopover != _searchPopover || string.IsNullOrWhiteSpace(_lastSearchString))
+            {
+                return;
+            }
+
+            string current = _lastSearchString;
+            _lastSearchString = null; // bypass the no-op guard in PerformSearch
+            PerformSearch(current);
         }
 
         public static void SignalRefresh()
@@ -2558,12 +2595,24 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Type targetType = targetObject.GetType();
             bool typeChanged = _namespaceController.SelectedType != targetType;
-            _namespaceController.SelectType(this, targetType);
 
             if (typeChanged)
             {
-                LoadObjectTypesAsync(targetType);
-                // BuildObjectsView will be called by async loader
+                // Persist the navigation target as this type's last selection so the async loader
+                // both prioritizes loading it and auto-selects it once its batch is in. SelectType
+                // already starts LoadObjectTypesAsync; loading again here (as before) cleared
+                // _selectedObjects mid-flight, interleaved duplicate batches, and left the loader to
+                // auto-select the *previous* saved object instead of the one the user clicked.
+                string targetGuid = AssetDatabase.AssetPathToGUID(
+                    AssetDatabase.GetAssetPath(targetObject)
+                );
+                if (!string.IsNullOrWhiteSpace(targetGuid))
+                {
+                    SetLastSelectedObjectGuidForType(targetType.FullName, targetGuid);
+                }
+
+                _namespaceController.SelectType(this, targetType);
+                CloseActivePopover();
                 return;
             }
 
@@ -5634,45 +5683,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 else
                 {
-                    HashSet<string> uniqueLabels = new(StringComparer.Ordinal);
-                    Predicate<string> labelMatch = uniqueLabels.Contains;
                     foreach (ScriptableObject obj in _selectedObjects)
                     {
-                        if (obj == null)
+                        if (
+                            obj != null
+                            && LabelFilterEvaluator.Matches(AssetDatabase.GetLabels(obj), config)
+                        )
                         {
-                            continue;
-                        }
-
-                        string[] labels = AssetDatabase.GetLabels(obj);
-                        uniqueLabels.Clear();
-                        foreach (string label in labels)
-                        {
-                            uniqueLabels.Add(label);
-                        }
-
-                        bool matchesAnd = noAndFilter || andLabels.TrueForAll(labelMatch);
-                        bool matchesOr = noOrFilter || orLabels.Exists(labelMatch);
-
-                        switch (config.combinationType)
-                        {
-                            case LabelCombinationType.And:
-                            {
-                                if (matchesAnd && matchesOr)
-                                {
-                                    _filteredObjects.Add(obj);
-                                }
-
-                                break;
-                            }
-                            case LabelCombinationType.Or:
-                            {
-                                if (matchesAnd || matchesOr)
-                                {
-                                    _filteredObjects.Add(obj);
-                                }
-
-                                break;
-                            }
+                            _filteredObjects.Add(obj);
                         }
                     }
                 }
@@ -5704,51 +5722,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     BuildObjectsView();
                 }
-            }
-        }
-
-        private bool ShouldIncludeInFilteredObjects(ScriptableObject obj)
-        {
-            if (obj == null)
-            {
-                return false;
-            }
-
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (config == null)
-            {
-                // No filter config means include all objects
-                return true;
-            }
-
-            List<string> andLabels = config.andLabels;
-            List<string> orLabels = config.orLabels;
-
-            bool noAndFilter = andLabels == null || andLabels.Count == 0;
-            bool noOrFilter = orLabels == null || orLabels.Count == 0;
-
-            // If no filters are active, include the object
-            if (noAndFilter && noOrFilter)
-            {
-                return true;
-            }
-
-            // Check labels
-            string[] labels = AssetDatabase.GetLabels(obj);
-            HashSet<string> uniqueLabels = new(labels, StringComparer.Ordinal);
-            Predicate<string> labelMatch = uniqueLabels.Contains;
-
-            bool matchesAnd = noAndFilter || andLabels.TrueForAll(labelMatch);
-            bool matchesOr = noOrFilter || orLabels.Exists(labelMatch);
-
-            switch (config.combinationType)
-            {
-                case LabelCombinationType.And:
-                    return matchesAnd && matchesOr;
-                case LabelCombinationType.Or:
-                    return matchesAnd || matchesOr;
-                default:
-                    return true;
             }
         }
 
@@ -7522,6 +7495,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (!priorityLoad)
             {
                 _selectedObjects.Clear();
+                _selectedObjectOrderIndex.Clear();
                 _filteredObjects.Clear();
                 _objectVisualElementMap.Clear();
             }
@@ -7533,6 +7507,34 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             // Get all GUIDs for this type
             string[] allGuids = AssetDatabase.FindAssets($"t:{type.Name}");
+            _asyncLoadTotalCount = allGuids.Length;
+
+            // Establish the canonical display order for this load: custom-ordered assets first (in
+            // their saved sequence), then everything else by asset path. LoadObjectBatch positions
+            // assets by this map so drag/move ordering is preserved across async batches.
+            _asyncDisplayOrderByGuid.Clear();
+            {
+                HashSet<string> allGuidLookup = new(allGuids, StringComparer.Ordinal);
+                int displayIndex = 0;
+                foreach (string guid in customGuidOrder)
+                {
+                    if (allGuidLookup.Contains(guid) && !_asyncDisplayOrderByGuid.ContainsKey(guid))
+                    {
+                        _asyncDisplayOrderByGuid[guid] = displayIndex++;
+                    }
+                }
+                foreach (
+                    string guid in allGuids
+                        .Where(candidate => !_asyncDisplayOrderByGuid.ContainsKey(candidate))
+                        .OrderBy(
+                            candidate => AssetDatabase.GUIDToAssetPath(candidate),
+                            StringComparer.OrdinalIgnoreCase
+                        )
+                )
+                {
+                    _asyncDisplayOrderByGuid[guid] = displayIndex++;
+                }
+            }
 
             // Prioritize: saved object, custom order, then remaining
             List<string> priorityGuids = new();
@@ -7728,7 +7730,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void LoadObjectBatch(Type type, List<string> guids, bool updateView = false)
         {
             var batchStartTime = System.Diagnostics.Stopwatch.StartNew();
-            List<ScriptableObject> loadedObjects = new();
+            List<(string guid, ScriptableObject asset)> loadedObjects = new();
 
             foreach (string guid in guids)
             {
@@ -7742,52 +7744,43 @@ namespace WallstopStudios.DataVisualizer.Editor
                     AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
                 if (asset != null && asset.GetType() == type)
                 {
-                    loadedObjects.Add(asset);
+                    loadedObjects.Add((guid, asset));
                 }
             }
 
-            // Add to selected objects maintaining sort order
-            var comparer = Comparer<ScriptableObject>.Create(
-                (a, b) =>
-                {
-                    int nameComp = string.Compare(
-                        a.name,
-                        b.name,
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                    if (nameComp != 0)
-                    {
-                        return nameComp;
-                    }
-                    return string.Compare(
-                        AssetDatabase.GetAssetPath(a),
-                        AssetDatabase.GetAssetPath(b),
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                }
-            );
-
-            foreach (ScriptableObject obj in loadedObjects)
+            // Insert into _selectedObjects at each asset's canonical position (custom order first,
+            // then by path) so user ordering survives batched loading. The position index is cached
+            // per object so comparisons stay O(1) with no per-comparison AssetDatabase calls.
+            // NOTE: intentionally does NOT touch _filteredObjects — ApplyLabelFilter() rebuilds that
+            // from _selectedObjects when BuildObjectsView() runs, so active filters stay correct.
+            foreach ((string guid, ScriptableObject obj) in loadedObjects)
             {
-                if (!_selectedObjects.Contains(obj))
+                if (_selectedObjectOrderIndex.ContainsKey(obj))
                 {
-                    // Find insertion point to maintain sort order in _selectedObjects
-                    int insertIndex = _selectedObjects.Count;
-                    for (int i = 0; i < _selectedObjects.Count; i++)
-                    {
-                        if (comparer.Compare(obj, _selectedObjects[i]) < 0)
-                        {
-                            insertIndex = i;
-                            break;
-                        }
-                    }
-                    _selectedObjects.Insert(insertIndex, obj);
-
-                    // NOTE: Don't add to _filteredObjects here!
-                    // ApplyLabelFilter() will rebuild it from _selectedObjects
-                    // when BuildObjectsView() is called below.
-                    // This ensures filters are always correctly applied.
+                    continue;
                 }
+
+                int order = _asyncDisplayOrderByGuid.TryGetValue(guid, out int knownOrder)
+                    ? knownOrder
+                    : int.MaxValue;
+                _selectedObjectOrderIndex[obj] = order;
+
+                int insertIndex = _selectedObjects.Count;
+                for (int i = 0; i < _selectedObjects.Count; i++)
+                {
+                    int existingOrder = _selectedObjectOrderIndex.TryGetValue(
+                        _selectedObjects[i],
+                        out int currentOrder
+                    )
+                        ? currentOrder
+                        : int.MaxValue;
+                    if (order < existingOrder)
+                    {
+                        insertIndex = i;
+                        break;
+                    }
+                }
+                _selectedObjects.Insert(insertIndex, obj);
             }
 
             batchStartTime.Stop();
@@ -7798,11 +7791,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             }
 
-            // Update loading indicator if async loading is in progress
+            // Update loading indicator if async loading is in progress. Uses the count
+            // captured when the load started instead of rescanning the whole project per batch.
             if (_isLoadingObjectsAsync && _asyncLoadTargetType != null)
             {
-                string[] allGuids = AssetDatabase.FindAssets($"t:{_asyncLoadTargetType.Name}");
-                UpdateLoadingIndicator(_selectedObjects.Count, allGuids.Length);
+                UpdateLoadingIndicator(_selectedObjects.Count, _asyncLoadTotalCount);
             }
 
             if (updateView)
