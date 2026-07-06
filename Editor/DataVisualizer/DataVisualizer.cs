@@ -613,33 +613,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            // Add to cache maintaining sort order
-            foreach (ScriptableObject obj in loadedObjects)
-            {
-                int insertIndex = _allManagedObjectsCache.BinarySearch(
-                    obj,
-                    Comparer<ScriptableObject>.Create(
-                        (a, b) =>
-                        {
-                            int nameComp = string.Compare(a.name, b.name, StringComparison.Ordinal);
-                            if (nameComp != 0)
-                            {
-                                return nameComp;
-                            }
-                            return string.Compare(
-                                a.GetType().FullName,
-                                b.GetType().FullName,
-                                StringComparison.Ordinal
-                            );
-                        }
-                    )
-                );
-                if (insertIndex < 0)
-                {
-                    insertIndex = ~insertIndex;
-                }
-                _allManagedObjectsCache.Insert(insertIndex, obj);
-            }
+            // Append this batch. The cache is sorted once when loading completes (below); it isn't
+            // used for search until then, so per-item BinarySearch+Insert would just be wasted
+            // O(n^2) shifting work.
+            _allManagedObjectsCache.AddRange(loadedObjects);
 
             // Continue with next batch
             if (_pendingSearchCacheGuids.Count > 0)
@@ -649,6 +626,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             else
             {
                 _isLoadingSearchCacheAsync = false;
+                // Sort the fully-loaded cache once (search reads it sorted by name then type).
+                _allManagedObjectsCache.Sort(
+                    (a, b) =>
+                    {
+                        int nameComp = string.Compare(a.name, b.name, StringComparison.Ordinal);
+                        return nameComp != 0
+                            ? nameComp
+                            : string.Compare(
+                                a.GetType().FullName,
+                                b.GetType().FullName,
+                                StringComparison.Ordinal
+                            );
+                    }
+                );
                 _isSearchCachePopulated = true;
                 RefreshActiveSearch();
             }
@@ -792,13 +783,17 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            if (selectedType != null)
-            {
-                LoadObjectTypesAsync(selectedType);
-            }
-            else
+            // Load once. For an unchanged type the SelectType call near the end no-ops its own load,
+            // so reload here (a refresh must re-scan). For a changed type, let that single SelectType
+            // call do the load — doing both would load the same type twice.
+            bool selectionTypeChanged = _namespaceController.SelectedType != selectedType;
+            if (selectedType == null)
             {
                 _selectedObjects.Clear();
+            }
+            else if (!selectionTypeChanged)
+            {
+                LoadObjectTypesAsync(selectedType);
             }
 
             ScriptableObject selectedObject = _selectedObject;
