@@ -5,72 +5,10 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
     using UnityEngine.UIElements;
     using UnityEngine.UIElements.Experimental;
 
+    // Instantiated only from C# (never from UXML), so the deprecated UxmlFactory/UxmlTraits
+    // pair is intentionally omitted.
     public sealed class HorizontalToggle : VisualElement
     {
-        public new class UxmlFactory : UxmlFactory<HorizontalToggle, UxmlTraits> { }
-
-        public new class UxmlTraits : VisualElement.UxmlTraits
-        {
-            private readonly UxmlStringAttributeDescription _leftText = new()
-            {
-                name = "left-text",
-                defaultValue = "Left",
-            };
-
-            private readonly UxmlStringAttributeDescription _rightText = new()
-            {
-                name = "right-text",
-                defaultValue = "Right",
-            };
-
-            private readonly UxmlColorAttributeDescription _selectedBackgroundColor = new()
-            {
-                name = "selected-background-color",
-                defaultValue = new Color(0.1f, 0.5f, 0.8f),
-            };
-
-            private readonly UxmlColorAttributeDescription _unselectedBackgroundColor = new()
-            {
-                name = "unselected-background-color",
-                defaultValue = new Color(0.2f, 0.2f, 0.2f),
-            };
-
-            private readonly UxmlColorAttributeDescription _selectedTextColor = new()
-            {
-                name = "selected-text-color",
-                defaultValue = Color.white,
-            };
-
-            private readonly UxmlColorAttributeDescription _unselectedTextColor = new()
-            {
-                name = "unselected-text-color",
-                defaultValue = new Color(0.7f, 0.7f, 0.7f),
-            };
-
-            private readonly UxmlColorAttributeDescription _indicatorColor = new()
-            {
-                name = "indicator-color",
-                defaultValue = new Color(0.15f, 0.65f, 0.95f),
-            };
-
-            public override void Init(VisualElement ve, IUxmlAttributes bag, CreationContext cc)
-            {
-                base.Init(ve, bag, cc);
-                HorizontalToggle ate = ve as HorizontalToggle;
-
-                ate.LeftText = _leftText.GetValueFromBag(bag, cc);
-                ate.RightText = _rightText.GetValueFromBag(bag, cc);
-                ate.SelectedBackgroundColor = _selectedBackgroundColor.GetValueFromBag(bag, cc);
-                ate.UnselectedBackgroundColor = _unselectedBackgroundColor.GetValueFromBag(bag, cc);
-                ate.SelectedTextColor = _selectedTextColor.GetValueFromBag(bag, cc);
-                ate.UnselectedTextColor = _unselectedTextColor.GetValueFromBag(bag, cc);
-                ate.IndicatorColor = _indicatorColor.GetValueFromBag(bag, cc);
-
-                ate.Clear();
-                ate.Initialize();
-            }
-        }
-
         public static readonly string ussClassName = "horizontal-toggle";
         public static readonly string containerUssClassName = ussClassName + "__container";
         public static readonly string labelContainerUssClassName =
