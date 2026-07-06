@@ -209,6 +209,23 @@ namespace WallstopStudios.DataVisualizer.Editor
         private ScrollView _objectScrollView;
         private ScrollView _inspectorScrollView;
 
+        // Virtualized list of the selected type's objects (replaces the manual ScrollView + paging).
+        private ListView _objectListView;
+
+        // Uniform row height for the virtualized object ListView. Measured live: the .object-item
+        // box renders at ~40px; the slot is forced to this height and centers the box, so the extra
+        // 6px becomes a 3px gap above and below each row.
+        private const float ObjectRowFixedHeight = 46f;
+
+        // Guards the ListView selection callback while selection is set programmatically.
+        private bool _suppressListSelectionCallback;
+
+        // Action buttons stop pointer-down here so clicking one doesn't retarget the ListView's
+        // selection (which otherwise drops the current selection when using go-up/go-down/etc.) or
+        // start a row drag from a button.
+        private static readonly EventCallback<PointerDownEvent> StopRowChildPointerDown = evt =>
+            evt.StopPropagation();
+
         private TwoPaneSplitView _outerSplitView;
         private TwoPaneSplitView _innerSplitView;
         private VisualElement _namespaceColumnElement;
@@ -3940,7 +3957,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _selectedObjects.RemoveAll(obj => obj == null);
             _filteredObjects.Remove(objectToDelete);
             _filteredObjects.RemoveAll(obj => obj == null);
-            _objectVisualElementMap.Remove(objectToDelete, out VisualElement visualElement);
+            _selectedObjectOrderIndex.Remove(objectToDelete);
             int targetIndex = _selectedObject == objectToDelete ? Mathf.Max(0, index - 1) : 0;
 
             bool deleted = AssetDatabase.DeleteAsset(path);
@@ -3948,15 +3965,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 Debug.Log($"Asset '{path}' deleted successfully.");
                 AssetDatabase.Refresh();
-                VisualElement parent = visualElement?.parent;
-                visualElement?.RemoveFromHierarchy();
-                if (parent != null)
-                {
-                    foreach (VisualElement child in parent.Children())
-                    {
-                        NamespaceController.RecalibrateVisualElements(child, offset: 1);
-                    }
-                }
+                BuildObjectsView();
                 if (targetIndex < _selectedObjects.Count)
                 {
                     SelectObject(_selectedObjects[targetIndex]);
@@ -3967,7 +3976,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 else
                 {
-                    _emptyObjectLabel.style.display = DisplayStyle.Flex;
                     SelectObject(null);
                 }
             }
@@ -5058,17 +5066,45 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectPageController.Add(_currentPageField);
             _objectPageController.Add(_maxPageField);
             _objectPageController.Add(_nextPageButton);
+            // Manual pagination is replaced by the virtualized ListView, so the page controller is
+            // not added to the layout (its fields/handlers are removed in a follow-up cleanup).
 
-            objectColumn.Add(_objectPageController);
-
-            _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
+            _emptyObjectLabel = new Label
             {
-                name = "object-scrollview",
+                name = "empty-object-list-label",
+                style = { alignSelf = Align.Center, display = DisplayStyle.None },
             };
-            _objectScrollView.AddToClassList("object-scrollview");
-            _objectListContainer = new VisualElement { name = "object-list" };
-            _objectScrollView.Add(_objectListContainer);
-            objectColumn.Add(_objectScrollView);
+            _emptyObjectLabel.AddToClassList("empty-object-list-label");
+            objectColumn.Add(_emptyObjectLabel);
+
+            _objectListView = new ListView
+            {
+                name = "object-listview",
+                itemsSource = _filteredObjects,
+                selectionType = SelectionType.Single,
+                virtualizationMethod = CollectionVirtualizationMethod.FixedHeight,
+                fixedItemHeight = ObjectRowFixedHeight,
+                makeItem = MakeObjectRow,
+                unbindItem = (element, _) => element.userData = null,
+                reorderable = true,
+                // Animated gives the "floaty" reorder feel (rows slide to make room). Its drag-handle
+                // column is hidden via USS (.unity-list-view__reorderable-handle) so it doesn't add the
+                // left gutter the user flagged; the whole row stays draggable.
+                reorderMode = ListViewReorderMode.Animated,
+                showBorder = false,
+                style = { flexGrow = 1 },
+            };
+            _objectListView.bindItem = (element, i) =>
+            {
+                if (i >= 0 && i < _filteredObjects.Count)
+                {
+                    BindObjectRow(element, _filteredObjects[i], i);
+                }
+            };
+            _objectListView.AddToClassList("object-scrollview");
+            _objectListView.RegisterSelectionChangedCompat(OnObjectListSelectionChanged);
+            _objectListView.itemIndexChanged += OnObjectListItemReordered;
+            objectColumn.Add(_objectListView);
             UpdateCreateObjectButtonStyle();
             UpdateLabelAreaAndFilter();
             return objectColumn;
@@ -6120,205 +6156,119 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal void BuildObjectsView()
         {
             _selectedObjects.RemoveAll(obj => obj == null);
-            if (_objectListContainer == null)
+            if (_objectListView == null)
             {
                 return;
             }
 
-            _objectListContainer.Clear();
-            _objectVisualElementMap.Clear();
-            _objectScrollView.scrollOffset = Vector2.zero;
-
             Type selectedType = _namespaceController.SelectedType;
-            _emptyObjectLabel = new Label(
-                $"No objects of type '{selectedType?.Name}' found.\nUse the '+' button above to create one."
-            )
-            {
-                name = "empty-object-list-label",
-                style = { alignSelf = Align.Center },
-            };
-            _emptyObjectLabel.AddToClassList("empty-object-list-label");
-            _objectListContainer.Add(_emptyObjectLabel);
+
+            // Nothing loaded yet (or still loading): show the empty/loading overlay, hide the list.
             if (selectedType != null && _selectedObjects.Count == 0)
             {
-                // Show loading message if async loading is in progress
-                if (_isLoadingObjectsAsync && _asyncLoadTargetType == selectedType)
-                {
-                    _emptyObjectLabel.text = "Loading objects...";
-                }
+                _filteredObjects.Clear();
+                _objectListView.RefreshItems();
+                _objectListView.style.display = DisplayStyle.None;
+                _emptyObjectLabel.text =
+                    _isLoadingObjectsAsync && _asyncLoadTargetType == selectedType
+                        ? "Loading objects..."
+                        : $"No objects of type '{selectedType.Name}' found.\nUse the '+' button above to create one.";
                 _emptyObjectLabel.style.display = DisplayStyle.Flex;
                 return;
             }
 
             ApplyLabelFilter(buildObjectsView: false);
 
-            _emptyObjectLabel.style.display = DisplayStyle.None;
             if (_filteredObjects.Count == 0)
             {
-                // If _selectedObjects has items, then filter is active and hiding all
-                if (_selectedObjects.Count > 0)
-                {
-                    Label noMatchLabel = new(
-                        $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' match the current label filter."
-                    )
-                    {
-                        style = { alignSelf = Align.Center },
-                    };
-                    noMatchLabel.AddToClassList("empty-object-list-label");
-                    _objectListContainer.Add(noMatchLabel);
-                }
-                else
-                {
-                    Label noMatchLabel = new(
-                        $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' found."
-                    )
-                    {
-                        style = { alignSelf = Align.Center },
-                    };
-                    noMatchLabel.AddToClassList("empty-object-list-label");
-                    _objectListContainer.Add(noMatchLabel);
-                }
+                _objectListView.RefreshItems();
+                _objectListView.style.display = DisplayStyle.None;
+                _emptyObjectLabel.text =
+                    _selectedObjects.Count > 0
+                        ? $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' match the current label filter."
+                        : $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' found.";
+                _emptyObjectLabel.style.display = DisplayStyle.Flex;
                 return;
             }
 
-            if (_filteredObjects.Count <= MaxObjectsPerPage)
-            {
-                if (_objectPageController != null)
-                {
-                    _objectPageController.style.display = DisplayStyle.None;
-                }
-                for (int i = 0; i < _filteredObjects.Count; i++)
-                {
-                    BuildObjectRow(_filteredObjects[i], i);
-                }
-            }
-            else
-            {
-                if (_objectPageController != null)
-                {
-                    _objectPageController.style.display = DisplayStyle.Flex;
-                }
+            _emptyObjectLabel.style.display = DisplayStyle.None;
+            _objectListView.style.display = DisplayStyle.Flex;
 
-                _maxPageField.value = _filteredObjects.Count / MaxObjectsPerPage;
-                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
-                currentPage = Mathf.Clamp(
-                    currentPage,
-                    0,
-                    _filteredObjects.Count / MaxObjectsPerPage
-                );
-                _currentPageField.SetValueWithoutNotify(currentPage);
+            // Drag-reorder is only safe (maps 1:1 to the saved order) when no label filter is hiding
+            // items, i.e. the filtered list matches the full list.
+            _objectListView.reorderable = _filteredObjects.Count == _selectedObjects.Count;
 
-                _previousPageButton.EnableInClassList("go-button-disabled", currentPage <= 0);
-                _previousPageButton.EnableInClassList(
-                    StyleConstants.ActionButtonClass,
-                    0 < currentPage
-                );
-                _previousPageButton.EnableInClassList("go-button", 0 < currentPage);
+            _objectListView.RefreshItems();
 
-                _nextPageButton.EnableInClassList(
-                    "go-button-disabled",
-                    _maxPageField.value <= currentPage
-                );
-                _nextPageButton.EnableInClassList(
-                    StyleConstants.ActionButtonClass,
-                    currentPage < _maxPageField.value
-                );
-                _nextPageButton.EnableInClassList("go-button", currentPage < _maxPageField.value);
-
-                int max = Mathf.Min((currentPage + 1) * MaxObjectsPerPage, _filteredObjects.Count);
-                for (int i = currentPage * MaxObjectsPerPage; i < max; i++)
-                {
-                    BuildObjectRow(_filteredObjects[i], i);
-                }
-            }
+            // Re-resolve the selection by identity (indices shift as async batches load).
+            int selectedIndex =
+                _selectedObject != null ? _filteredObjects.IndexOf(_selectedObject) : -1;
+            _suppressListSelectionCallback = true;
+            _objectListView.SetSelectionWithoutNotify(
+                selectedIndex >= 0 ? new[] { selectedIndex } : Array.Empty<int>()
+            );
+            _suppressListSelectionCallback = false;
         }
 
-        private void BuildObjectRow(ScriptableObject dataObject, int index)
+        // Builds the reusable skeleton of an object row (no per-object data). Serves as the ListView
+        // makeItem and is also used by the (legacy) BuildObjectRow path. Button handlers resolve the
+        // current object from the row's userData at click time so the element can be safely reused
+        // across items (as ListView virtualization requires).
+        private VisualElement MakeObjectRow()
         {
-            if (dataObject == null)
-            {
-                return;
-            }
+            // Outer element: the ListView forces this to fixedItemHeight (FixedHeight virtualization),
+            // so it stays a transparent slot that vertically centers the visible box. The box can't
+            // carry its own vertical margin without breaking the ListView's fixed-height scroll math,
+            // so the inter-row gap comes from centering a shorter box inside the taller slot.
+            VisualElement row = new() { name = "object-row-slot" };
+            row.AddToClassList(StyleConstants.ClickableClass);
+            row.style.flexDirection = FlexDirection.Column;
+            row.style.justifyContent = Justify.Center;
+            // Force the slot to the full fixed-item height so the shorter box centers within it
+            // (the ListView otherwise shrinks the slot to the box, leaving no room to center/gap).
+            row.style.height = ObjectRowFixedHeight;
 
-            string dataObjectName;
-            if (dataObject is IDisplayable displayable)
-            {
-                dataObjectName = displayable.Title;
-            }
-            else
-            {
-                dataObjectName = dataObject.name;
-            }
-
-            VisualElement objectItemRow = new()
-            {
-                name = $"object-item-row-{dataObject.GetObjectIdString()}",
-            };
-            objectItemRow.AddToClassList(ObjectItemClass);
-            objectItemRow.AddToClassList(StyleConstants.ClickableClass);
-            objectItemRow.style.flexDirection = FlexDirection.Row;
-            objectItemRow.style.alignItems = Align.Center;
-            objectItemRow.userData = dataObject;
-            objectItemRow.RegisterCallback<PointerDownEvent>(OnObjectPointerDown);
+            VisualElement box = new() { name = "object-item-box" };
+            box.AddToClassList(ObjectItemClass);
+            box.AddToClassList(StyleConstants.ClickableClass);
+            box.style.flexDirection = FlexDirection.Row;
+            box.style.alignItems = Align.Center;
+            row.Add(box);
 
             Button goUpButton = new(() =>
             {
-                _selectedObjects.Remove(dataObject);
-                _selectedObjects.Insert(0, dataObject);
-                _filteredObjects.Remove(dataObject);
-                _filteredObjects.Insert(0, dataObject);
-                UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
-                BuildObjectsView();
+                if (row.userData is ScriptableObject o)
+                {
+                    MoveObjectToTop(o);
+                }
             })
             {
                 name = "go-up-button",
                 text = "↑",
-                tooltip = $"Move {dataObjectName} to top",
             };
-            if (_selectedObjects.Count == 1 || index == 0)
-            {
-                goUpButton.AddToClassList("go-button-disabled");
-            }
-            else
-            {
-                goUpButton.AddToClassList(StyleConstants.ActionButtonClass);
-                goUpButton.AddToClassList("go-button");
-            }
-
-            objectItemRow.Add(goUpButton);
+            goUpButton.RegisterCallback(StopRowChildPointerDown);
+            box.Add(goUpButton);
 
             Button goDownButton = new(() =>
             {
-                _selectedObjects.Remove(dataObject);
-                _selectedObjects.Add(dataObject);
-                _filteredObjects.Remove(dataObject);
-                _filteredObjects.Add(dataObject);
-                UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
-                BuildObjectsView();
+                if (row.userData is ScriptableObject o)
+                {
+                    MoveObjectToBottom(o);
+                }
             })
             {
                 name = "go-down-button",
                 text = "↓",
-                tooltip = $"Move {dataObjectName} to bottom",
             };
-            if (_filteredObjects.Count == 1 || index == _filteredObjects.Count - 1)
-            {
-                goDownButton.AddToClassList("go-button-disabled");
-            }
-            else
-            {
-                goDownButton.AddToClassList(StyleConstants.ActionButtonClass);
-                goDownButton.AddToClassList("go-button");
-            }
-
-            objectItemRow.Add(goDownButton);
+            goDownButton.RegisterCallback(StopRowChildPointerDown);
+            box.Add(goDownButton);
 
             VisualElement contentArea = new() { name = "content" };
             contentArea.AddToClassList(ObjectItemContentClass);
             contentArea.AddToClassList(StyleConstants.ClickableClass);
-            objectItemRow.Add(contentArea);
+            box.Add(contentArea);
 
-            Label titleLabel = new(dataObjectName) { name = "object-item-label" };
+            Label titleLabel = new() { name = "object-item-label" };
             titleLabel.AddToClassList("object-item__label");
             titleLabel.AddToClassList(StyleConstants.ClickableClass);
             contentArea.Add(titleLabel);
@@ -6334,9 +6284,16 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
             actionsArea.AddToClassList(ObjectItemActionsClass);
-            objectItemRow.Add(actionsArea);
+            actionsArea.RegisterCallback(StopRowChildPointerDown);
+            box.Add(actionsArea);
 
-            Button cloneButton = new(() => CloneObject(dataObject))
+            Button cloneButton = new(() =>
+            {
+                if (row.userData is ScriptableObject o)
+                {
+                    CloneObject(o);
+                }
+            })
             {
                 text = "++",
                 tooltip = "Clone Object",
@@ -6346,7 +6303,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             actionsArea.Add(cloneButton);
 
             Button renameButton = null;
-            renameButton = new Button(() => OpenRenamePopover(titleLabel, renameButton, dataObject))
+            renameButton = new Button(() =>
+            {
+                if (row.userData is ScriptableObject o)
+                {
+                    OpenRenamePopover(titleLabel, renameButton, o);
+                }
+            })
             {
                 text = "@",
                 tooltip = "Rename Object",
@@ -6357,76 +6320,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Button moveButton = new(() =>
             {
-                if (dataObject == null)
+                if (row.userData is ScriptableObject o)
                 {
-                    return;
-                }
-
-                string assetPath = AssetDatabase.GetAssetPath(dataObject);
-                string startDirectory = Path.GetDirectoryName(assetPath) ?? string.Empty;
-                string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
-                    title: "Select New Location (Must be inside Assets)",
-                    folder: startDirectory,
-                    defaultName: ""
-                );
-
-                if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
-                {
-                    return;
-                }
-
-                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
-
-                string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
-
-                if (
-                    !selectedAbsolutePath.StartsWith(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                    EditorUtility.DisplayDialog(
-                        "Invalid Folder",
-                        "The selected folder must be inside the project's 'Assets' directory.",
-                        "OK"
-                    );
-                    return;
-                }
-
-                string relativePath;
-                if (
-                    selectedAbsolutePath.Equals(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    relativePath = "Assets";
-                }
-                else
-                {
-                    relativePath =
-                        "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-                    relativePath = relativePath.Replace("//", "/");
-                }
-
-                string targetPath = $"{relativePath}/{dataObject.name}.asset";
-                if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    // Ignore same path operation
-                    return;
-                }
-
-                string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
-                AssetDatabase.SaveAssets();
-                if (!string.IsNullOrWhiteSpace(errorMessage))
-                {
-                    Debug.LogError(
-                        $"Error moving asset {dataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}"
-                    );
-                    EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
+                    MoveObjectToFolder(o);
                 }
             })
             {
@@ -6438,7 +6334,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             actionsArea.Add(moveButton);
 
             Button deleteButton = null;
-            deleteButton = new Button(() => OpenConfirmDeletePopover(deleteButton, dataObject))
+            deleteButton = new Button(() =>
+            {
+                if (row.userData is ScriptableObject o)
+                {
+                    OpenConfirmDeletePopover(deleteButton, o);
+                }
+            })
             {
                 text = "X",
                 tooltip = "Delete Object",
@@ -6447,6 +6349,68 @@ namespace WallstopStudios.DataVisualizer.Editor
             deleteButton.AddToClassList("delete-button");
             actionsArea.Add(deleteButton);
 
+            return row;
+        }
+
+        // Populates a row skeleton for a specific object at a display index. Serves as the ListView
+        // bindItem and is used by the (legacy) BuildObjectRow path.
+        private void BindObjectRow(VisualElement row, ScriptableObject dataObject, int index)
+        {
+            if (row == null || dataObject == null)
+            {
+                return;
+            }
+
+            row.userData = dataObject;
+            row.name = $"object-item-row-{dataObject.GetObjectIdString()}";
+
+            string dataObjectName = dataObject is IDisplayable displayable
+                ? displayable.Title
+                : dataObject.name;
+
+            Label titleLabel = row.Q<Label>("object-item-label");
+            if (titleLabel != null)
+            {
+                titleLabel.text = dataObjectName;
+            }
+
+            Button goUpButton = row.Q<Button>("go-up-button");
+            if (goUpButton != null)
+            {
+                goUpButton.tooltip = $"Move {dataObjectName} to top";
+                bool disabled = _selectedObjects.Count == 1 || index == 0;
+                goUpButton.EnableInClassList("go-button-disabled", disabled);
+                goUpButton.EnableInClassList(StyleConstants.ActionButtonClass, !disabled);
+                goUpButton.EnableInClassList("go-button", !disabled);
+            }
+
+            Button goDownButton = row.Q<Button>("go-down-button");
+            if (goDownButton != null)
+            {
+                goDownButton.tooltip = $"Move {dataObjectName} to bottom";
+                bool disabled = _filteredObjects.Count == 1 || index == _filteredObjects.Count - 1;
+                goDownButton.EnableInClassList("go-button-disabled", disabled);
+                goDownButton.EnableInClassList(StyleConstants.ActionButtonClass, !disabled);
+                goDownButton.EnableInClassList("go-button", !disabled);
+            }
+
+            // Custom green-border selection styling follows the selected object across ListView
+            // element reuse (applied to the visible box, not the transparent outer slot).
+            row.Q<VisualElement>("object-item-box")
+                ?.EnableInClassList(StyleConstants.SelectedClass, _selectedObject == dataObject);
+        }
+
+        private void BuildObjectRow(ScriptableObject dataObject, int index)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            VisualElement objectItemRow = MakeObjectRow();
+            objectItemRow.RegisterCallback<PointerDownEvent>(OnObjectPointerDown);
+            BindObjectRow(objectItemRow, dataObject, index);
+
             _objectVisualElementMap[dataObject] = objectItemRow;
             _objectListContainer.Add(objectItemRow);
 
@@ -6454,6 +6418,147 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 objectItemRow.AddToClassList(StyleConstants.SelectedClass);
                 _selectedElement = objectItemRow;
+            }
+        }
+
+        private void MoveObjectToTop(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            _selectedObjects.Remove(dataObject);
+            _selectedObjects.Insert(0, dataObject);
+            _filteredObjects.Remove(dataObject);
+            _filteredObjects.Insert(0, dataObject);
+            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+            BuildObjectsView();
+            FocusMovedObject(dataObject);
+        }
+
+        private void MoveObjectToBottom(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            _selectedObjects.Remove(dataObject);
+            _selectedObjects.Add(dataObject);
+            _filteredObjects.Remove(dataObject);
+            _filteredObjects.Add(dataObject);
+            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+            BuildObjectsView();
+            FocusMovedObject(dataObject);
+        }
+
+        // Selects the just-moved object, deferred one tick so it wins over the ListView's own
+        // pointer-driven selection for the button click (which can land on the wrong row after the
+        // reorder). Keeps the selection sticky and focuses the item the user acted on.
+        private void FocusMovedObject(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            // Deferred one tick so it runs after the ListView's own pointer-driven selection for the
+            // button click. Always re-selects and scrolls the moved item fully into view — bypassing
+            // SelectObject's already-selected early-out, which would otherwise skip the scroll.
+            rootVisualElement
+                .schedule.Execute(() =>
+                {
+                    if (_objectListView == null)
+                    {
+                        return;
+                    }
+
+                    int index = _filteredObjects.IndexOf(dataObject);
+                    if (index < 0)
+                    {
+                        return;
+                    }
+
+                    if (_selectedObject != dataObject)
+                    {
+                        SelectObject(dataObject);
+                    }
+
+                    _suppressListSelectionCallback = true;
+                    _objectListView.SetSelectionWithoutNotify(new[] { index });
+                    _suppressListSelectionCallback = false;
+                    _objectListView.ScrollToItem(index);
+                })
+                .ExecuteLater(1);
+        }
+
+        private void MoveObjectToFolder(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(dataObject);
+            string startDirectory = Path.GetDirectoryName(assetPath) ?? string.Empty;
+            string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
+                title: "Select New Location (Must be inside Assets)",
+                folder: startDirectory,
+                defaultName: ""
+            );
+
+            if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
+            {
+                return;
+            }
+
+            selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
+
+            string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
+
+            if (
+                !selectedAbsolutePath.StartsWith(
+                    projectAssetsPath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                Debug.LogError("Selected folder must be inside the project's Assets folder.");
+                EditorUtility.DisplayDialog(
+                    "Invalid Folder",
+                    "The selected folder must be inside the project's 'Assets' directory.",
+                    "OK"
+                );
+                return;
+            }
+
+            string relativePath;
+            if (selectedAbsolutePath.Equals(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
+            {
+                relativePath = "Assets";
+            }
+            else
+            {
+                relativePath = "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+                relativePath = relativePath.Replace("//", "/");
+            }
+
+            string targetPath = $"{relativePath}/{dataObject.name}.asset";
+            if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
+            {
+                // Ignore same path operation
+                return;
+            }
+
+            string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
+            AssetDatabase.SaveAssets();
+            if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                Debug.LogError(
+                    $"Error moving asset {dataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}"
+                );
+                EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
             }
         }
 
@@ -7354,15 +7459,17 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void RefreshSelectedElementVisuals(ScriptableObject dataObject)
         {
-            if (
-                dataObject == null
-                || !_objectVisualElementMap.TryGetValue(dataObject, out VisualElement visualElement)
-            )
+            if (dataObject == null || _objectListView == null)
             {
                 return;
             }
 
-            UpdateObjectTitleRepresentation(dataObject, visualElement);
+            int index = _filteredObjects.IndexOf(dataObject);
+            if (index >= 0)
+            {
+                // Re-binds the row (BindObjectRow refreshes the title) without a full rebuild.
+                _objectListView.RefreshItem(index);
+            }
         }
 
         private static void UpdateObjectTitleRepresentation(
@@ -8052,49 +8159,81 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            // Check if object is in filtered list (it might not be if filters are active)
-            int indexInFiltered = _filteredObjects.IndexOf(dataObject);
-            if (indexInFiltered < 0)
-            {
-                // Object is not in filtered view (hidden by filters)
-                SelectObject(dataObject);
-                return;
-            }
-
-            // Calculate which page the object is on
-            int targetPage = indexInFiltered / MaxObjectsPerPage;
-            Type currentType = _namespaceController.SelectedType;
-            int currentPage = GetCurrentPage(currentType);
-
-            // If object is on a different page, navigate to that page first
-            if (targetPage != currentPage && currentType != null)
-            {
-                SetCurrentPage(currentType, targetPage);
-                // Rebuild view with the new page
-                BuildObjectsView();
-            }
-
-            // Now select the object (it should be in the visual element map)
+            // SelectObject drives the ListView selection + ScrollToItem by index; no manual paging.
             SelectObject(dataObject);
 
-            // Ensure the element scrolls into view after layout
-            if (_selectedElement != null && _objectScrollView != null)
+            // Re-scroll once async layout settles (the item may not have had geometry yet).
+            if (_objectListView != null && _filteredObjects.Contains(dataObject))
             {
                 rootVisualElement
                     .schedule.Execute(() =>
                     {
-                        // Verify element is still valid and in the scroll view
-                        if (
-                            _selectedElement != null
-                            && _objectScrollView != null
-                            && _selectedElement.parent != null
-                            && _objectScrollView.contentContainer.Contains(_selectedElement)
-                        )
+                        int i = _filteredObjects.IndexOf(dataObject);
+                        if (i >= 0 && _objectListView != null)
                         {
-                            _objectScrollView.ScrollTo(_selectedElement);
+                            _objectListView.ScrollToItem(i);
                         }
                     })
                     .ExecuteLater(10);
+            }
+        }
+
+        private void OnObjectListSelectionChanged(IEnumerable<object> selection)
+        {
+            if (_suppressListSelectionCallback)
+            {
+                return;
+            }
+
+            ScriptableObject selected = null;
+            foreach (object item in selection)
+            {
+                selected = item as ScriptableObject;
+                break;
+            }
+
+            // Ignore deselect-to-empty (e.g. a click on an action button clearing the ListView
+            // selection) so the current selection stays sticky through reorder/go-up/go-down.
+            if (selected != null)
+            {
+                SelectObject(selected);
+            }
+        }
+
+        // Persists the new order after a ListView drag-reorder. The ListView has already reordered
+        // its itemsSource (_filteredObjects) in place; reorder is only enabled when the filtered
+        // list equals the full list (see BuildObjectsView), so we can persist it directly.
+        private void OnObjectListItemReordered(int fromIndex, int toIndex)
+        {
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null)
+            {
+                return;
+            }
+
+            _selectedObjects.Clear();
+            _selectedObjects.AddRange(_filteredObjects);
+            UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
+
+            if (_selectedObject != null)
+            {
+                int i = _filteredObjects.IndexOf(_selectedObject);
+                if (i >= 0)
+                {
+                    _suppressListSelectionCallback = true;
+                    _objectListView.SetSelectionWithoutNotify(new[] { i });
+                    _suppressListSelectionCallback = false;
+                }
+            }
+
+            // Ensure the dropped item ends up fully in view — drag auto-panning can leave it at the
+            // edge. Deferred so the ListView finishes settling the reordered layout first.
+            if (toIndex >= 0 && toIndex < _filteredObjects.Count)
+            {
+                int scrollIndex = toIndex;
+                rootVisualElement
+                    .schedule.Execute(() => _objectListView.ScrollToItem(scrollIndex))
+                    .ExecuteLater(1);
             }
         }
 
@@ -8105,62 +8244,34 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _selectedElement?.RemoveFromClassList(StyleConstants.SelectedClass);
-            foreach (
-                VisualElement child in _selectedElement?.IterateChildrenRecursively()
-                    ?? Enumerable.Empty<VisualElement>()
-            )
-            {
-                child.EnableInClassList(StyleConstants.ClickableClass, true);
-            }
             _selectedObject = dataObject;
-            _selectedElement = null;
-            if (
-                _selectedObject != null
-                && _objectVisualElementMap.TryGetValue(
-                    _selectedObject,
-                    out VisualElement newSelectedElement
-                )
-            )
+
+            // Drive the ListView's visual selection + scroll by index (it owns the --selected style).
+            if (_objectListView != null)
             {
-                _selectedElement = newSelectedElement;
-                _selectedElement.AddToClassList(StyleConstants.SelectedClass);
-                foreach (VisualElement child in _selectedElement.IterateChildrenRecursively())
+                int index = dataObject != null ? _filteredObjects.IndexOf(dataObject) : -1;
+                _suppressListSelectionCallback = true;
+                if (index >= 0)
                 {
-                    child.EnableInClassList(StyleConstants.ClickableClass, false);
+                    _objectListView.SetSelectionWithoutNotify(new[] { index });
+                    _objectListView.ScrollToItem(index);
                 }
-
-                if (Settings.selectActiveObject)
+                else
                 {
-                    Selection.activeObject = _selectedObject;
+                    _objectListView.SetSelectionWithoutNotify(Array.Empty<int>());
                 }
+                _suppressListSelectionCallback = false;
 
-                Rect targetElementWorldBound = newSelectedElement.worldBound;
-                Rect scrollViewContentViewportWorldBound = _objectScrollView
-                    .contentViewport
-                    .worldBound;
-                bool isElementInView = targetElementWorldBound.Overlaps(
-                    scrollViewContentViewportWorldBound
-                );
+                // Repaint rows so the custom .object-item.selected box style tracks the new selection.
+                // bindItem is the only place that class is applied and the ListView's own --selected
+                // fill is intentionally transparent, so a plain click needs an explicit refresh.
+                // RefreshItems rebinds visible rows only, so it is cheap.
+                _objectListView.RefreshItems();
+            }
 
-                if (!isElementInView)
-                {
-                    _objectScrollView
-                        .schedule.Execute(() =>
-                        {
-                            // Verify element is still valid and in the scroll view before scrolling
-                            if (
-                                _objectScrollView != null
-                                && _selectedElement != null
-                                && _selectedElement.parent != null
-                                && _objectScrollView.contentContainer.Contains(_selectedElement)
-                            )
-                            {
-                                _objectScrollView.ScrollTo(_selectedElement);
-                            }
-                        })
-                        .ExecuteLater(1);
-                }
+            if (_selectedObject != null && Settings.selectActiveObject)
+            {
+                Selection.activeObject = _selectedObject;
             }
 
             try

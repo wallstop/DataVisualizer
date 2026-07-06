@@ -384,7 +384,7 @@
     min-width: 0;
     background-color: rgba(255, 255, 255, 0.1);
     border-radius: 6px;
-    margin: 6px 6px 0;
+    margin: 0 2px;
     overflow: hidden;
 }
 
@@ -426,8 +426,34 @@
     flex-grow: 1;
 }
 
-.object-scrollview > .unity-scroll-view__content-and-vertical-scroll-container {
+/* Descendant (not direct-child): the virtualized ListView nests its scroll container deeper than a
+   raw ScrollView did, so match at any depth to keep the dark, uniform backdrop behind the rows. */
+.object-scrollview .unity-scroll-view__content-and-vertical-scroll-container {
     background-color: rgba(0, 0, 0, 0.4);
+}
+
+/* Hide the Animated reorder-mode drag handle and collapse the gutter its container reserves, so the
+   rows use the full width; the whole row stays draggable. Row-box centering is handled in code by a
+   transparent outer slot (MakeObjectRow). */
+.object-scrollview .unity-list-view__reorderable-handle {
+    display: none;
+    width: 0;
+    min-width: 0;
+}
+
+.object-scrollview .unity-list-view__reorderable-item__container {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* Suppress the ListView's own full-width selection/hover fill so only the per-row box's green
+   .object-item.selected border/background reads as selected. */
+.object-scrollview .unity-collection-view__item--selected {
+    background-color: transparent;
+}
+
+.object-scrollview .unity-collection-view__item:hover {
+    background-color: transparent;
 }
 
 .namespace-scrollview {
@@ -599,7 +625,6 @@
 .move-button {
     border-color: goldenrod;
     color: goldenrod;
-    padding-bottom: 3px;
 }
 
 .rename-button {
