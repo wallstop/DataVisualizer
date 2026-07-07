@@ -7934,23 +7934,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             string matchingGuid = guids.FirstOrDefault(guid =>
                 string.Equals(guid, savedObjectGuid, StringComparison.OrdinalIgnoreCase)
             );
-            string guidToResolve = !string.IsNullOrWhiteSpace(matchingGuid)
-                ? matchingGuid
-                : savedObjectGuid;
-
-            if (!TryResolveAssetGuidForType(guidToResolve, type, out _))
-            {
-                return guids;
-            }
-
             if (!string.IsNullOrWhiteSpace(matchingGuid))
             {
-                normalizedSavedObjectGuid = matchingGuid;
+                normalizedSavedObjectGuid = NormalizeSavedObjectGuidForType(matchingGuid, type);
                 return guids;
             }
 
-            normalizedSavedObjectGuid = guidToResolve;
-            return guids.Append(guidToResolve).ToArray();
+            normalizedSavedObjectGuid = NormalizeSavedObjectGuidForType(savedObjectGuid, type);
+            return normalizedSavedObjectGuid == null
+                ? guids
+                : guids.Append(normalizedSavedObjectGuid).ToArray();
+        }
+
+        private static string NormalizeSavedObjectGuidForType(string assetGuid, Type type)
+        {
+            return TryResolveAssetGuidForType(assetGuid, type, out _) ? assetGuid : null;
         }
 
         private void ContinueLoadingObjects(Type type, int loadGeneration)

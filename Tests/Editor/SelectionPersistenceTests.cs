@@ -237,6 +237,78 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void Should_PreserveSavedGuid_When_FindAssetsAlreadyReturnedIt()
+        {
+            string folderName =
+                "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
+            string folderPath = "Assets/" + folderName;
+            string assetPath = folderPath + "/Selection.asset";
+
+            AssetDatabase.CreateFolder("Assets", folderName);
+            SelectionPersistenceGuidData asset =
+                ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
+
+            try
+            {
+                AssetDatabase.CreateAsset(asset, assetPath);
+                AssetDatabase.SaveAssets();
+
+                string savedGuid = AssetDatabase.AssetPathToGUID(assetPath);
+
+                string[] includedGuids = DataVisualizer.IncludeResolvedSavedObjectGuid(
+                    typeof(SelectionPersistenceGuidData),
+                    savedGuid,
+                    new[] { savedGuid },
+                    out string normalizedSavedObjectGuid
+                );
+
+                CollectionAssert.AreEqual(new[] { savedGuid }, includedGuids);
+                Assert.AreEqual(savedGuid, normalizedSavedObjectGuid);
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(folderPath);
+                AssetDatabase.Refresh();
+            }
+        }
+
+        [Test]
+        public void Should_ClearSavedGuid_When_FindAssetsReturnedWrongExactType()
+        {
+            string folderName =
+                "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
+            string folderPath = "Assets/" + folderName;
+            string assetPath = folderPath + "/Other.asset";
+
+            AssetDatabase.CreateFolder("Assets", folderName);
+            OtherSelectionPersistenceGuidData asset =
+                ScriptableObject.CreateInstance<OtherSelectionPersistenceGuidData>();
+
+            try
+            {
+                AssetDatabase.CreateAsset(asset, assetPath);
+                AssetDatabase.SaveAssets();
+
+                string savedGuid = AssetDatabase.AssetPathToGUID(assetPath);
+
+                string[] includedGuids = DataVisualizer.IncludeResolvedSavedObjectGuid(
+                    typeof(SelectionPersistenceGuidData),
+                    savedGuid,
+                    new[] { savedGuid },
+                    out string normalizedSavedObjectGuid
+                );
+
+                CollectionAssert.AreEqual(new[] { savedGuid }, includedGuids);
+                Assert.IsNull(normalizedSavedObjectGuid);
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(folderPath);
+                AssetDatabase.Refresh();
+            }
+        }
+
+        [Test]
         public void Should_TreatDeletedAssetPathAsRelevant_When_PathIsAsset()
         {
             Assert.IsTrue(
