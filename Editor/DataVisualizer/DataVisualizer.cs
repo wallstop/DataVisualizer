@@ -582,6 +582,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _isLoadingSearchCacheAsync = false;
                 _isSearchCachePopulated = true; // nothing to load; the (empty) cache is ready
+                RefreshActiveSearch(); // resolve any "Building search index…" popover immediately
             }
         }
 
@@ -7490,6 +7491,16 @@ namespace WallstopStudios.DataVisualizer.Editor
                 SelectObject(null);
                 BuildObjectsView();
                 return;
+            }
+
+            // Ignore a stale saved selection (asset deleted/moved so FindAssets no longer returns it)
+            // so it isn't prioritized ahead of real assets, wasting a priority slot loading nothing.
+            if (
+                !string.IsNullOrWhiteSpace(savedObjectGuid)
+                && Array.IndexOf(allGuids, savedObjectGuid) < 0
+            )
+            {
+                savedObjectGuid = null;
             }
 
             // Establish the canonical display order for this load: custom-ordered assets first (in
