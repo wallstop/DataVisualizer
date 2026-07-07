@@ -789,7 +789,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 selectedType != null
                     ? NamespaceController.GetNamespaceKey(selectedType)
                     : string.Empty;
-            string previousTypeName = selectedType?.Name;
+            string previousTypeFullName = selectedType?.FullName;
             string previousObjectGuid = null;
             if (_selectedObject != null)
             {
@@ -821,10 +821,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
                 if (0 < typesInNamespace?.Count)
                 {
-                    if (!string.IsNullOrWhiteSpace(previousTypeName))
+                    if (!string.IsNullOrWhiteSpace(previousTypeFullName))
                     {
-                        selectedType = typesInNamespace.Find(t =>
-                            string.Equals(t.Name, previousTypeName, StringComparison.Ordinal)
+                        selectedType = NamespaceTypeOrder.FindTypeByFullName(
+                            typesInNamespace,
+                            previousTypeFullName
                         );
                     }
 
@@ -4167,6 +4168,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     .Where(type => !currentlyManagedTypes.Contains(type))
                     .Distinct()
                     .ToList();
+                scriptableObjectTypes.Sort(NamespaceTypeOrder.CompareTypesByFullName);
 
                 bool stateChanged = false;
                 foreach (Type typeToAdd in scriptableObjectTypes)
@@ -4257,8 +4259,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     .Where(IsLoadableType)
                     .Where(type => !currentlyManagedTypes.Contains(type))
                     .Distinct()
-                    .OrderBy(type => type.Name)
                     .ToList();
+                scriptableObjectTypes.Sort(NamespaceTypeOrder.CompareTypesByFullName);
 
                 bool stateChanged = false;
                 foreach (Type typeToAdd in scriptableObjectTypes)
@@ -4341,7 +4343,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 HashSet<string> managedTypeFullNames = _namespaceController
                     .GetAllManagedTypeNames()
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    .ToHashSet(StringComparer.Ordinal);
 
                 IOrderedEnumerable<IGrouping<string, Type>> groupedTypes =
                     LoadRelevantScriptableObjectTypes()
@@ -4353,6 +4355,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 foreach (IGrouping<string, Type> group in groupedTypes)
                 {
                     string namespaceKey = group.Key;
+                    List<Type> orderedGroupTypes = group.ToList();
+                    orderedGroupTypes.Sort(NamespaceTypeOrder.CompareTypesByNameThenFullName);
                     List<Type> addableTypes = new();
                     List<VisualElement> typesToShowInGroup = new();
 
@@ -4362,7 +4366,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                             namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
                         );
 
-                    foreach (Type type in group.OrderBy(t => t.Name))
+                    foreach (Type type in orderedGroupTypes)
                     {
                         string typeName = type.Name;
                         bool typeMatchesSearch =
@@ -4398,7 +4402,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                             header.AddToClassList(StyleConstants.ExpandedClass);
                         }
 
-                        foreach (Type type in group.OrderBy(t => t.Name))
+                        foreach (Type type in orderedGroupTypes)
                         {
                             string typeName = type.Name;
                             bool typeMatchesSearch =
@@ -7942,16 +7946,16 @@ namespace WallstopStudios.DataVisualizer.Editor
                 managedTypeFullNames =
                     settings
                         .typeOrders?.SelectMany(order => order.typeNames)
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase)
-                    ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        .ToHashSet(StringComparer.Ordinal)
+                    ?? new HashSet<string>(StringComparer.Ordinal);
             }
             else
             {
                 managedTypeFullNames =
                     UserState
                         .typeOrders?.SelectMany(order => order.typeNames)
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase)
-                    ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        .ToHashSet(StringComparer.Ordinal)
+                    ?? new HashSet<string>(StringComparer.Ordinal);
             }
 
             List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
@@ -7976,9 +7980,14 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             foreach ((string key, List<Type> types) in orderedTypes)
             {
-                List<string> customTypeNameOrder = GetTypeOrderForNamespace(key);
+                List<string> customTypeFullNameOrder = GetTypeOrderForNamespace(key);
                 types.Sort(
-                    (lhs, rhs) => CompareUsingCustomOrder(lhs.Name, rhs.Name, customTypeNameOrder)
+                    (lhs, rhs) =>
+                        NamespaceTypeOrder.CompareTypesByFullNameOrder(
+                            lhs,
+                            rhs,
+                            customTypeFullNameOrder
+                        )
                 );
             }
 
