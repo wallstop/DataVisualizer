@@ -1081,8 +1081,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Build namespace view first so type selection is visible
             BuildNamespaceView();
 
-            // Load objects asynchronously with priority batch
-            LoadObjectTypesAsync(selectedType, priorityLoad: false);
+            // Register the restored type via SelectType, which sets the selected type BEFORE loading.
+            // That way the load's synchronous saved/first-object selection doesn't re-enter SelectType
+            // (which would start a second load), the object list filters correctly for the restored
+            // type, and an empty type shows its empty view rather than a stale one. SelectType also
+            // loads the objects, restores the saved selection, and refreshes the dependent UI.
+            _namespaceController.SelectType(this, selectedType);
 
             VisualElement typeElementToSelect = FindTypeElement(selectedType);
             if (typeElementToSelect != null)
@@ -1117,47 +1121,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                 }
             }
-
-            string savedObjectGuid = null;
-            if (selectedType != null)
-            {
-                savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.FullName);
-            }
-
-            ScriptableObject objectToSelect = null;
-
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && 0 < _selectedObjects.Count)
-            {
-                objectToSelect = _selectedObjects.Find(obj =>
-                {
-                    if (obj == null)
-                    {
-                        return false;
-                    }
-
-                    string path = AssetDatabase.GetAssetPath(obj);
-                    return !string.IsNullOrWhiteSpace(path)
-                        && string.Equals(
-                            AssetDatabase.AssetPathToGUID(path),
-                            savedObjectGuid,
-                            StringComparison.OrdinalIgnoreCase
-                        );
-                });
-            }
-
-            if (objectToSelect == null && 0 < _selectedObjects.Count)
-            {
-                objectToSelect = _selectedObjects[0];
-            }
-
-            SelectObject(objectToSelect);
-            if (objectToSelect == null)
-            {
-                _namespaceController.SelectType(this, selectedType);
-            }
-            UpdateCreateObjectButtonStyle();
-            BuildProcessorColumnView();
-            UpdateLabelAreaAndFilter();
         }
 
         private VisualElement FindTypeElement(Type targetType)
@@ -7544,6 +7507,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Get all GUIDs for this type
             string[] allGuids = AssetDatabase.FindAssets($"t:{type.Name}");
             _asyncLoadTotalCount = allGuids.Length;
+
+            // No assets of this type: skip the async loader entirely so it doesn't flash the
+            // "Loading objects..." overlay before immediately completing. Clear any stale
+            // selection/indicator and show the empty view now.
+            if (allGuids.Length == 0)
+            {
+                _isLoadingObjectsAsync = false;
+                _asyncLoadTargetType = null;
+                _pendingObjectGuids.Clear();
+                UpdateLoadingIndicator(0, 0);
+                SelectObject(null);
+                BuildObjectsView();
+                return;
+            }
 
             // Establish the canonical display order for this load: custom-ordered assets first (in
             // their saved sequence), then everything else by asset path. LoadObjectBatch positions
