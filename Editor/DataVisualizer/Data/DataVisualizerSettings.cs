@@ -96,6 +96,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 #endif
         }
 
+        public bool SetSelectActiveObject(bool value)
+        {
+            if (selectActiveObject == value)
+            {
+                return false;
+            }
+
+            selectActiveObject = value;
+            MarkDirty();
+            return true;
+        }
+
         public void HydrateFrom(DataVisualizerUserState userState)
         {
             if (userState == null)
@@ -197,6 +209,38 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
             );
             return entry != null;
+        }
+
+        public bool SetNamespaceCollapsed(string namespaceKey, bool isCollapsed)
+        {
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return false;
+            }
+
+            namespaceCollapseStates ??= new List<NamespaceCollapseState>();
+            bool changed = NamespaceCollapseState.SetCollapsed(
+                namespaceCollapseStates,
+                namespaceKey,
+                isCollapsed
+            );
+            if (changed)
+            {
+                MarkDirty();
+            }
+
+            return changed;
+        }
+
+        public bool RemoveNamespaceCollapseState(string namespaceKey)
+        {
+            bool changed = NamespaceCollapseState.Remove(namespaceCollapseStates, namespaceKey);
+            if (changed)
+            {
+                MarkDirty();
+            }
+
+            return changed;
         }
 
         internal NamespaceCollapseState GetOrCreateCollapseState(string namespaceKey)

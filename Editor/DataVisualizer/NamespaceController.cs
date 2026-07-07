@@ -692,29 +692,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             dataVisualizer.PersistSettings(
-                settings =>
-                {
-                    bool dirty = !settings.HasCollapseState(namespaceKey);
-                    NamespaceCollapseState entry = settings.GetOrCreateCollapseState(namespaceKey);
-                    if (entry.isCollapsed == isCollapsed)
-                    {
-                        dirty = true;
-                    }
-
-                    entry.isCollapsed = isCollapsed;
-                    return dirty;
-                },
-                userState =>
-                {
-                    bool dirty = !userState.HasCollapseState(namespaceKey);
-                    NamespaceCollapseState entry = userState.GetOrCreateCollapseState(namespaceKey);
-                    if (entry.isCollapsed != isCollapsed)
-                    {
-                        dirty = true;
-                    }
-                    entry.isCollapsed = isCollapsed;
-                    return dirty;
-                }
+                settings => settings.SetNamespaceCollapsed(namespaceKey, isCollapsed),
+                userState => userState.SetNamespaceCollapsed(namespaceKey, isCollapsed)
             );
         }
 
@@ -774,6 +753,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (changed)
             {
+                if (currentManagedList.Count == 0)
+                {
+                    RemoveNamespaceCollapseState(dataVisualizer, namespaceKey);
+                }
+
                 PersistManagedTypesList(dataVisualizer, currentManagedList);
                 DataVisualizer.SignalRefresh();
             }
@@ -802,6 +786,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 dataVisualizer.SetLastSelectedObjectGuidForType(typeName, null);
                 RemoveTypeOrderEntry(dataVisualizer, namespaceKey, typeName);
+                if (currentManagedList.Count == 0)
+                {
+                    RemoveNamespaceCollapseState(dataVisualizer, namespaceKey);
+                }
+
                 PersistManagedTypesList(dataVisualizer, currentManagedList);
                 DataVisualizer.SignalRefresh();
             }
@@ -866,6 +855,22 @@ namespace WallstopStudios.DataVisualizer.Editor
                     );
                     return orderEntry != null && orderEntry.typeNames.Remove(typeName);
                 }
+            );
+        }
+
+        private static void RemoveNamespaceCollapseState(
+            DataVisualizer dataVisualizer,
+            string namespaceKey
+        )
+        {
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return;
+            }
+
+            dataVisualizer.PersistSettings(
+                settings => settings.RemoveNamespaceCollapseState(namespaceKey),
+                userState => userState.RemoveNamespaceCollapseState(namespaceKey)
             );
         }
 

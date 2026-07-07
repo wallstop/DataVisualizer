@@ -767,6 +767,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        public static bool ApplySelectActiveObjectPreference(
+            DataVisualizerSettings settings,
+            bool selectActiveObject
+        )
+        {
+            if (settings == null || !settings.SetSelectActiveObject(selectActiveObject))
+            {
+                return false;
+            }
+
+            AssetDatabase.SaveAssets();
+            return true;
+        }
+
         private void RefreshAllViews()
         {
             Type selectedType = _namespaceController.SelectedType;
@@ -3423,16 +3437,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             selectionToggle.AddToClassList("settings-prefs-toggle");
             selectionToggle.RegisterValueChangedCallback(evt =>
             {
-                bool newSelectActiveObject = evt.newValue;
-                bool previousSelectActiveObject = Settings.selectActiveObject;
-                if (newSelectActiveObject == previousSelectActiveObject)
-                {
-                    return;
-                }
-
-                DataVisualizerSettings localSettings = Settings;
-                localSettings.selectActiveObject = newSelectActiveObject;
-                AssetDatabase.SaveAssets();
+                ApplySelectActiveObjectPreference(Settings, evt.newValue);
             });
             contentWrapper.Add(selectionToggle);
 
@@ -9187,28 +9192,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             PersistSettings(
-                settings =>
-                {
-                    NamespaceCollapseState entry = settings.GetOrCreateCollapseState(namespaceKey);
-                    if (entry.isCollapsed == isCollapsed)
-                    {
-                        return false;
-                    }
-
-                    entry.isCollapsed = isCollapsed;
-                    return true;
-                },
-                userState =>
-                {
-                    NamespaceCollapseState entry = userState.GetOrCreateCollapseState(namespaceKey);
-                    if (entry.isCollapsed == isCollapsed)
-                    {
-                        return false;
-                    }
-
-                    entry.isCollapsed = isCollapsed;
-                    return true;
-                }
+                settings => settings.SetNamespaceCollapsed(namespaceKey, isCollapsed),
+                userState => userState.SetNamespaceCollapsed(namespaceKey, isCollapsed)
             );
         }
 

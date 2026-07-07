@@ -122,6 +122,26 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return entry != null;
         }
 
+        public bool SetNamespaceCollapsed(string namespaceKey, bool isCollapsed)
+        {
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return false;
+            }
+
+            namespaceCollapseStates ??= new List<NamespaceCollapseState>();
+            return NamespaceCollapseState.SetCollapsed(
+                namespaceCollapseStates,
+                namespaceKey,
+                isCollapsed
+            );
+        }
+
+        public bool RemoveNamespaceCollapseState(string namespaceKey)
+        {
+            return NamespaceCollapseState.Remove(namespaceCollapseStates, namespaceKey);
+        }
+
         public NamespaceCollapseState GetOrCreateCollapseState(string namespaceKey)
         {
             NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
