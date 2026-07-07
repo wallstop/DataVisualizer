@@ -2600,6 +2600,24 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            if (!_selectedObjects.Contains(targetObject))
+            {
+                // Same type, but the target's batch has not streamed in yet. Persist it as this type's
+                // last selection and reload with it prioritized so it loads first and is auto-selected —
+                // otherwise SelectObject would update the inspector while its ListView row is missing.
+                string targetGuid = AssetDatabase.AssetPathToGUID(
+                    AssetDatabase.GetAssetPath(targetObject)
+                );
+                if (!string.IsNullOrWhiteSpace(targetGuid))
+                {
+                    SetLastSelectedObjectGuidForType(targetType.FullName, targetGuid);
+                }
+
+                LoadObjectTypesAsync(targetType, priorityLoad: false);
+                CloseActivePopover();
+                return;
+            }
+
             BuildObjectsView();
             SelectObject(targetObject);
             CloseActivePopover();
@@ -7367,87 +7385,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 titleLabel.text = currentTitle;
             }
-        }
-
-        internal void LoadObjectTypes(Type type)
-        {
-            if (type == null)
-            {
-                return;
-            }
-
-            _selectedObjects.Clear();
-            _filteredObjects.Clear();
-
-            List<string> customGuidOrder = GetObjectOrderForType(type);
-            Dictionary<string, ScriptableObject> objectsByGuid = new();
-            string[] assetGuids = AssetDatabase.FindAssets($"t:{type.Name}");
-            foreach (string assetGuid in assetGuids)
-            {
-                string assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
-                if (string.IsNullOrWhiteSpace(assetPath))
-                {
-                    continue;
-                }
-
-                ScriptableObject asset =
-                    AssetDatabase.LoadMainAssetAtPath(assetPath) as ScriptableObject;
-                if (asset == null || asset.GetType() != type)
-                {
-                    continue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(assetGuid))
-                {
-                    objectsByGuid[assetGuid] = asset;
-                }
-            }
-
-            List<ScriptableObject> sortedObjects = new();
-
-            foreach (string guid in customGuidOrder)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (string.IsNullOrWhiteSpace(path))
-                {
-                    continue;
-                }
-
-                ScriptableObject dataObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
-                if (dataObject == null || dataObject.GetType() != type)
-                {
-                    continue;
-                }
-
-                sortedObjects.Add(dataObject);
-                objectsByGuid.Remove(guid);
-            }
-
-            List<ScriptableObject> remainingObjects = objectsByGuid.Values.ToList();
-            remainingObjects.Sort(
-                (a, b) =>
-                {
-                    int comparison = string.Compare(
-                        a.name,
-                        b.name,
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                    if (comparison != 0)
-                    {
-                        return comparison;
-                    }
-                    return string.Compare(
-                        AssetDatabase.GetAssetPath(a),
-                        AssetDatabase.GetAssetPath(b),
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                }
-            );
-            sortedObjects.AddRange(remainingObjects);
-
-            _selectedObjects.Clear();
-            _selectedObjects.AddRange(sortedObjects);
-            _filteredObjects.AddRange(sortedObjects);
         }
 
         internal void LoadObjectTypesAsync(Type type, bool priorityLoad = false)
