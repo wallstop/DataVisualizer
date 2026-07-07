@@ -557,7 +557,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return;
                 }
 
-                SetLastSelectedTypeName(dataVisualizer, typeFullName);
+                SetLastSelectedTypeFullName(dataVisualizer, typeFullName);
             }
             catch (Exception e)
             {
@@ -565,7 +565,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private static void SetLastSelectedTypeName(
+        private static void SetLastSelectedTypeFullName(
             DataVisualizer dataVisualizer,
             string typeFullName
         )
@@ -575,7 +575,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     if (
                         string.Equals(
-                            settings.lastSelectedTypeName,
+                            settings.lastSelectedTypeFullName,
                             typeFullName,
                             StringComparison.Ordinal
                         )
@@ -583,14 +583,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         return false;
                     }
-                    settings.lastSelectedTypeName = typeFullName;
+                    settings.lastSelectedTypeFullName = typeFullName;
                     return true;
                 },
                 userState =>
                 {
                     if (
                         string.Equals(
-                            userState.lastSelectedTypeName,
+                            userState.lastSelectedTypeFullName,
                             typeFullName,
                             StringComparison.Ordinal
                         )
@@ -598,7 +598,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         return false;
                     }
-                    userState.lastSelectedTypeName = typeFullName;
+                    userState.lastSelectedTypeFullName = typeFullName;
                     return true;
                 }
             );
@@ -692,29 +692,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             dataVisualizer.PersistSettings(
-                settings =>
-                {
-                    bool dirty = !settings.HasCollapseState(namespaceKey);
-                    NamespaceCollapseState entry = settings.GetOrCreateCollapseState(namespaceKey);
-                    if (entry.isCollapsed == isCollapsed)
-                    {
-                        dirty = true;
-                    }
-
-                    entry.isCollapsed = isCollapsed;
-                    return dirty;
-                },
-                userState =>
-                {
-                    bool dirty = !userState.HasCollapseState(namespaceKey);
-                    NamespaceCollapseState entry = userState.GetOrCreateCollapseState(namespaceKey);
-                    if (entry.isCollapsed != isCollapsed)
-                    {
-                        dirty = true;
-                    }
-                    entry.isCollapsed = isCollapsed;
-                    return dirty;
-                }
+                settings => settings.SetNamespaceCollapsed(namespaceKey, isCollapsed),
+                userState => userState.SetNamespaceCollapsed(namespaceKey, isCollapsed)
             );
         }
 
@@ -758,6 +737,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             List<string> currentManagedList = GetManagedTypeNames(namespaceKey);
+            List<string> removedTypeNames = new();
             bool changed = false;
             foreach (Type type in typesToRemove)
             {
@@ -768,13 +748,22 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 changed = true;
+                removedTypeNames.Add(typeName);
                 dataVisualizer.SetLastSelectedObjectGuidForType(typeName, null);
                 RemoveTypeOrderEntry(dataVisualizer, namespaceKey, typeName);
             }
 
             if (changed)
             {
-                PersistManagedTypesList(dataVisualizer, currentManagedList);
+                if (currentManagedList.Count == 0)
+                {
+                    RemoveNamespaceCollapseState(dataVisualizer, namespaceKey);
+                }
+
+                PersistManagedTypesList(
+                    dataVisualizer,
+                    RemoveManagedTypeNames(GetAllManagedTypeNames(), removedTypeNames)
+                );
                 DataVisualizer.SignalRefresh();
             }
             else
@@ -802,7 +791,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 dataVisualizer.SetLastSelectedObjectGuidForType(typeName, null);
                 RemoveTypeOrderEntry(dataVisualizer, namespaceKey, typeName);
-                PersistManagedTypesList(dataVisualizer, currentManagedList);
+                if (currentManagedList.Count == 0)
+                {
+                    RemoveNamespaceCollapseState(dataVisualizer, namespaceKey);
+                }
+
+                PersistManagedTypesList(
+                    dataVisualizer,
+                    RemoveManagedTypeNames(GetAllManagedTypeNames(), new[] { typeName })
+                );
                 DataVisualizer.SignalRefresh();
             }
             else
@@ -869,6 +866,22 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
+        private static void RemoveNamespaceCollapseState(
+            DataVisualizer dataVisualizer,
+            string namespaceKey
+        )
+        {
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return;
+            }
+
+            dataVisualizer.PersistSettings(
+                settings => settings.RemoveNamespaceCollapseState(namespaceKey),
+                userState => userState.RemoveNamespaceCollapseState(namespaceKey)
+            );
+        }
+
         internal List<string> GetManagedTypeNames(string namespaceKey)
         {
             return _managedTypes
@@ -881,6 +894,30 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             return _managedTypes
                 .Values.SelectMany(types => types.Select(type => type.FullName))
+                .ToList();
+        }
+
+        public static List<string> RemoveManagedTypeNames(
+            IEnumerable<string> managedTypeNames,
+            IEnumerable<string> typeNamesToRemove
+        )
+        {
+            if (managedTypeNames == null)
+            {
+                return new List<string>();
+            }
+
+            HashSet<string> removedTypeNames = typeNamesToRemove
+                ?.Where(typeName => !string.IsNullOrWhiteSpace(typeName))
+                .ToHashSet(StringComparer.Ordinal);
+            if (removedTypeNames == null || removedTypeNames.Count == 0)
+            {
+                return managedTypeNames.ToList();
+            }
+
+            return managedTypeNames
+                .Where(typeName => !removedTypeNames.Contains(typeName))
+                .Distinct(StringComparer.Ordinal)
                 .ToList();
         }
 

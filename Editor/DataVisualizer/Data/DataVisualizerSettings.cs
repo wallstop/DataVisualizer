@@ -41,7 +41,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
         [SerializeField]
         [ReadOnly]
-        internal string lastSelectedTypeName;
+        [FormerlySerializedAs("lastSelectedTypeName")]
+        internal string lastSelectedTypeFullName;
 
         [SerializeField]
         [ReadOnly]
@@ -96,6 +97,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 #endif
         }
 
+        public bool SetSelectActiveObject(bool value)
+        {
+            if (selectActiveObject == value)
+            {
+                return false;
+            }
+
+            selectActiveObject = value;
+            MarkDirty();
+            return true;
+        }
+
         public void HydrateFrom(DataVisualizerUserState userState)
         {
             if (userState == null)
@@ -104,7 +117,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
 
             lastSelectedNamespaceKey = userState.lastSelectedNamespaceKey;
-            lastSelectedTypeName = userState.lastSelectedTypeName;
+            lastSelectedTypeFullName = userState.lastSelectedTypeFullName;
             namespaceOrder = userState.namespaceOrder?.ToList() ?? new List<string>();
             typeOrders =
                 userState.typeOrders?.Select(order => order.Clone()).ToList()
@@ -144,35 +157,65 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return entry.ObjectGuids;
         }
 
-        internal void SetLastObjectForType(string typeName, string guid)
+        internal bool SetLastObjectForType(string typeFullName, string guid)
         {
-            if (string.IsNullOrWhiteSpace(typeName))
+            if (string.IsNullOrWhiteSpace(typeFullName))
             {
-                return;
+                return false;
             }
 
+            lastObjectSelections ??= new List<LastObjectSelectionEntry>();
+            int existingIndex = lastObjectSelections.FindIndex(e =>
+                string.Equals(e.typeFullName, typeFullName, StringComparison.Ordinal)
+            );
             if (string.IsNullOrWhiteSpace(guid))
             {
-                return;
+                if (existingIndex < 0)
+                {
+                    return false;
+                }
+
+                lastObjectSelections.RemoveAt(existingIndex);
+                MarkDirty();
+                return true;
             }
 
-            lastObjectSelections.RemoveAll(e =>
-                string.Equals(e.typeFullName, typeName, StringComparison.Ordinal)
-            );
-            lastObjectSelections.Add(
-                new LastObjectSelectionEntry { typeFullName = typeName, objectGuid = guid }
-            );
+            if (
+                existingIndex >= 0
+                && string.Equals(
+                    lastObjectSelections[existingIndex].objectGuid,
+                    guid,
+                    StringComparison.Ordinal
+                )
+            )
+            {
+                return false;
+            }
+
+            if (existingIndex >= 0)
+            {
+                lastObjectSelections[existingIndex].objectGuid = guid;
+            }
+            else
+            {
+                lastObjectSelections.Add(
+                    new LastObjectSelectionEntry { typeFullName = typeFullName, objectGuid = guid }
+                );
+            }
+
+            MarkDirty();
+            return true;
         }
 
-        internal string GetLastObjectForType(string typeName)
+        internal string GetLastObjectForType(string typeFullName)
         {
-            if (string.IsNullOrWhiteSpace(typeName))
+            if (string.IsNullOrWhiteSpace(typeFullName))
             {
                 return null;
             }
 
             return lastObjectSelections
-                .Find(e => string.Equals(e.typeFullName, typeName, StringComparison.Ordinal))
+                ?.Find(e => string.Equals(e.typeFullName, typeFullName, StringComparison.Ordinal))
                 ?.objectGuid;
         }
 
@@ -197,6 +240,38 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
             );
             return entry != null;
+        }
+
+        public bool SetNamespaceCollapsed(string namespaceKey, bool isCollapsed)
+        {
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return false;
+            }
+
+            namespaceCollapseStates ??= new List<NamespaceCollapseState>();
+            bool changed = NamespaceCollapseState.SetCollapsed(
+                namespaceCollapseStates,
+                namespaceKey,
+                isCollapsed
+            );
+            if (changed)
+            {
+                MarkDirty();
+            }
+
+            return changed;
+        }
+
+        public bool RemoveNamespaceCollapseState(string namespaceKey)
+        {
+            bool changed = NamespaceCollapseState.Remove(namespaceCollapseStates, namespaceKey);
+            if (changed)
+            {
+                MarkDirty();
+            }
+
+            return changed;
         }
 
         internal NamespaceCollapseState GetOrCreateCollapseState(string namespaceKey)

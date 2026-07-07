@@ -3,12 +3,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using UnityEngine;
+    using UnityEngine.Serialization;
 
     [Serializable]
     public sealed class DataVisualizerUserState
     {
         public string lastSelectedNamespaceKey = string.Empty;
-        public string lastSelectedTypeName = string.Empty;
+
+        [FormerlySerializedAs("lastSelectedTypeName")]
+        public string lastSelectedTypeFullName = string.Empty;
 
         public List<string> namespaceOrder = new();
         public List<NamespaceTypeOrder> typeOrders = new();
@@ -21,6 +25,31 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         public List<TypeLabelFilterConfig> labelFilterConfigs = new();
         public List<ProcessorState> processorStates = new();
 
+        public static DataVisualizerUserState FromJson(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            DataVisualizerUserState userState = JsonUtility.FromJson<DataVisualizerUserState>(json);
+            if (userState == null)
+            {
+                return userState;
+            }
+
+            LegacyUserState legacyUserState = JsonUtility.FromJson<LegacyUserState>(json);
+            if (
+                string.IsNullOrWhiteSpace(userState.lastSelectedTypeFullName)
+                && !string.IsNullOrWhiteSpace(legacyUserState?.lastSelectedTypeName)
+            )
+            {
+                userState.lastSelectedTypeFullName = legacyUserState.lastSelectedTypeName;
+            }
+
+            return userState;
+        }
+
         public void HydrateFrom(DataVisualizerSettings settings)
         {
             if (settings == null)
@@ -29,7 +58,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
 
             lastSelectedNamespaceKey = settings.lastSelectedNamespaceKey;
-            lastSelectedTypeName = settings.lastSelectedTypeName;
+            lastSelectedTypeFullName = settings.lastSelectedTypeFullName;
             namespaceOrder = settings.namespaceOrder?.ToList() ?? new List<string>();
             typeOrders =
                 settings.typeOrders?.Select(order => order.Clone()).ToList()
@@ -67,35 +96,63 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return entry.ObjectGuids;
         }
 
-        public void SetLastObjectForType(string typeName, string guid)
+        public bool SetLastObjectForType(string typeFullName, string guid)
         {
-            if (string.IsNullOrWhiteSpace(typeName))
+            if (string.IsNullOrWhiteSpace(typeFullName))
             {
-                return;
+                return false;
             }
 
+            lastObjectSelections ??= new List<LastObjectSelectionEntry>();
+            int existingIndex = lastObjectSelections.FindIndex(e =>
+                string.Equals(e.typeFullName, typeFullName, StringComparison.Ordinal)
+            );
             if (string.IsNullOrWhiteSpace(guid))
             {
-                return;
+                if (existingIndex < 0)
+                {
+                    return false;
+                }
+
+                lastObjectSelections.RemoveAt(existingIndex);
+                return true;
             }
 
-            lastObjectSelections.RemoveAll(e =>
-                string.Equals(e.typeFullName, typeName, StringComparison.Ordinal)
-            );
-            lastObjectSelections.Add(
-                new LastObjectSelectionEntry { typeFullName = typeName, objectGuid = guid }
-            );
+            if (
+                existingIndex >= 0
+                && string.Equals(
+                    lastObjectSelections[existingIndex].objectGuid,
+                    guid,
+                    StringComparison.Ordinal
+                )
+            )
+            {
+                return false;
+            }
+
+            if (existingIndex >= 0)
+            {
+                lastObjectSelections[existingIndex].objectGuid = guid;
+            }
+            else
+            {
+                lastObjectSelections.Add(
+                    new LastObjectSelectionEntry { typeFullName = typeFullName, objectGuid = guid }
+                );
+            }
+
+            return true;
         }
 
-        public string GetLastObjectForType(string typeName)
+        public string GetLastObjectForType(string typeFullName)
         {
-            if (string.IsNullOrWhiteSpace(typeName))
+            if (string.IsNullOrWhiteSpace(typeFullName))
             {
                 return null;
             }
 
             return lastObjectSelections
-                .Find(e => string.Equals(e.typeFullName, typeName, StringComparison.Ordinal))
+                ?.Find(e => string.Equals(e.typeFullName, typeFullName, StringComparison.Ordinal))
                 ?.objectGuid;
         }
 
@@ -122,6 +179,26 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return entry != null;
         }
 
+        public bool SetNamespaceCollapsed(string namespaceKey, bool isCollapsed)
+        {
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return false;
+            }
+
+            namespaceCollapseStates ??= new List<NamespaceCollapseState>();
+            return NamespaceCollapseState.SetCollapsed(
+                namespaceCollapseStates,
+                namespaceKey,
+                isCollapsed
+            );
+        }
+
+        public bool RemoveNamespaceCollapseState(string namespaceKey)
+        {
+            return NamespaceCollapseState.Remove(namespaceCollapseStates, namespaceKey);
+        }
+
         public NamespaceCollapseState GetOrCreateCollapseState(string namespaceKey)
         {
             NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
@@ -135,6 +212,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             entry = new NamespaceCollapseState { namespaceKey = namespaceKey, isCollapsed = false };
             namespaceCollapseStates.Add(entry);
             return entry;
+        }
+
+        [Serializable]
+        private sealed class LegacyUserState
+        {
+            public string lastSelectedTypeName;
         }
     }
 }
