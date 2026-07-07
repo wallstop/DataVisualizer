@@ -41,7 +41,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
         [SerializeField]
         [ReadOnly]
-        internal string lastSelectedTypeName;
+        [FormerlySerializedAs("lastSelectedTypeName")]
+        internal string lastSelectedTypeFullName;
 
         [SerializeField]
         [ReadOnly]
@@ -116,7 +117,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
 
             lastSelectedNamespaceKey = userState.lastSelectedNamespaceKey;
-            lastSelectedTypeName = userState.lastSelectedTypeName;
+            lastSelectedTypeFullName = userState.lastSelectedTypeFullName;
             namespaceOrder = userState.namespaceOrder?.ToList() ?? new List<string>();
             typeOrders =
                 userState.typeOrders?.Select(order => order.Clone()).ToList()

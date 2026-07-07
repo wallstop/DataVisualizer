@@ -136,6 +136,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
         }
 
+        [TestCase(
+            "{\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\"}",
+            "Example.Namespace.LegacyData"
+        )]
+        [TestCase(
+            "{\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\",\"lastSelectedTypeFullName\":\"Example.Namespace.CurrentData\"}",
+            "Example.Namespace.CurrentData"
+        )]
+        public void Should_MigrateLegacySelectedTypeName_When_LoadingUserStateJson(
+            string json,
+            string expectedTypeFullName
+        )
+        {
+            DataVisualizerUserState userState = DataVisualizerUserState.FromJson(json);
+
+            Assert.AreEqual(expectedTypeFullName, userState.lastSelectedTypeFullName);
+        }
+
         private static void AssertCollapseStateDirtySemantics(
             Func<string, bool, bool> setCollapsed,
             Func<string, bool> removeCollapsed

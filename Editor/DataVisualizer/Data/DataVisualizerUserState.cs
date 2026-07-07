@@ -3,12 +3,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using UnityEngine;
+    using UnityEngine.Serialization;
 
     [Serializable]
     public sealed class DataVisualizerUserState
     {
         public string lastSelectedNamespaceKey = string.Empty;
-        public string lastSelectedTypeName = string.Empty;
+
+        [FormerlySerializedAs("lastSelectedTypeName")]
+        public string lastSelectedTypeFullName = string.Empty;
 
         public List<string> namespaceOrder = new();
         public List<NamespaceTypeOrder> typeOrders = new();
@@ -21,6 +25,31 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         public List<TypeLabelFilterConfig> labelFilterConfigs = new();
         public List<ProcessorState> processorStates = new();
 
+        public static DataVisualizerUserState FromJson(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            DataVisualizerUserState userState = JsonUtility.FromJson<DataVisualizerUserState>(json);
+            if (
+                userState == null
+                || json.Contains("\"lastSelectedTypeFullName\"", StringComparison.Ordinal)
+            )
+            {
+                return userState;
+            }
+
+            LegacyUserState legacyUserState = JsonUtility.FromJson<LegacyUserState>(json);
+            if (!string.IsNullOrWhiteSpace(legacyUserState?.lastSelectedTypeName))
+            {
+                userState.lastSelectedTypeFullName = legacyUserState.lastSelectedTypeName;
+            }
+
+            return userState;
+        }
+
         public void HydrateFrom(DataVisualizerSettings settings)
         {
             if (settings == null)
@@ -29,7 +58,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
 
             lastSelectedNamespaceKey = settings.lastSelectedNamespaceKey;
-            lastSelectedTypeName = settings.lastSelectedTypeName;
+            lastSelectedTypeFullName = settings.lastSelectedTypeFullName;
             namespaceOrder = settings.namespaceOrder?.ToList() ?? new List<string>();
             typeOrders =
                 settings.typeOrders?.Select(order => order.Clone()).ToList()
@@ -183,6 +212,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             entry = new NamespaceCollapseState { namespaceKey = namespaceKey, isCollapsed = false };
             namespaceCollapseStates.Add(entry);
             return entry;
+        }
+
+        [Serializable]
+        private sealed class LegacyUserState
+        {
+            public string lastSelectedTypeName;
         }
     }
 }

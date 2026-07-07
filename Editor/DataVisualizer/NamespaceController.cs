@@ -575,7 +575,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     if (
                         string.Equals(
-                            settings.lastSelectedTypeName,
+                            settings.lastSelectedTypeFullName,
                             typeFullName,
                             StringComparison.Ordinal
                         )
@@ -583,14 +583,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         return false;
                     }
-                    settings.lastSelectedTypeName = typeFullName;
+                    settings.lastSelectedTypeFullName = typeFullName;
                     return true;
                 },
                 userState =>
                 {
                     if (
                         string.Equals(
-                            userState.lastSelectedTypeName,
+                            userState.lastSelectedTypeFullName,
                             typeFullName,
                             StringComparison.Ordinal
                         )
@@ -598,7 +598,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         return false;
                     }
-                    userState.lastSelectedTypeName = typeFullName;
+                    userState.lastSelectedTypeFullName = typeFullName;
                     return true;
                 }
             );

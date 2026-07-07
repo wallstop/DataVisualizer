@@ -8913,7 +8913,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 try
                 {
                     string json = File.ReadAllText(_userStateFilePath);
-                    _userState = JsonUtility.FromJson<DataVisualizerUserState>(json);
+                    _userState = DataVisualizerUserState.FromJson(json);
                     if (_userState == null)
                     {
                         Debug.LogWarning(
@@ -9142,8 +9142,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             DataVisualizerSettings settings = Settings;
             return settings.persistStateInSettingsAsset
-                ? settings.lastSelectedTypeName
-                : UserState.lastSelectedTypeName;
+                ? settings.lastSelectedTypeFullName
+                : UserState.lastSelectedTypeFullName;
         }
 
         private string GetLastSelectedObjectGuidForType(string typeFullName)
