@@ -67,24 +67,52 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return entry.ObjectGuids;
         }
 
-        public void SetLastObjectForType(string typeName, string guid)
+        public bool SetLastObjectForType(string typeName, string guid)
         {
             if (string.IsNullOrWhiteSpace(typeName))
             {
-                return;
+                return false;
             }
 
-            if (string.IsNullOrWhiteSpace(guid))
-            {
-                return;
-            }
-
-            lastObjectSelections.RemoveAll(e =>
+            lastObjectSelections ??= new List<LastObjectSelectionEntry>();
+            int existingIndex = lastObjectSelections.FindIndex(e =>
                 string.Equals(e.typeFullName, typeName, StringComparison.Ordinal)
             );
-            lastObjectSelections.Add(
-                new LastObjectSelectionEntry { typeFullName = typeName, objectGuid = guid }
-            );
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                if (existingIndex < 0)
+                {
+                    return false;
+                }
+
+                lastObjectSelections.RemoveAt(existingIndex);
+                return true;
+            }
+
+            if (
+                existingIndex >= 0
+                && string.Equals(
+                    lastObjectSelections[existingIndex].objectGuid,
+                    guid,
+                    StringComparison.Ordinal
+                )
+            )
+            {
+                return false;
+            }
+
+            if (existingIndex >= 0)
+            {
+                lastObjectSelections[existingIndex].objectGuid = guid;
+            }
+            else
+            {
+                lastObjectSelections.Add(
+                    new LastObjectSelectionEntry { typeFullName = typeName, objectGuid = guid }
+                );
+            }
+
+            return true;
         }
 
         public string GetLastObjectForType(string typeName)
@@ -95,7 +123,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
 
             return lastObjectSelections
-                .Find(e => string.Equals(e.typeFullName, typeName, StringComparison.Ordinal))
+                ?.Find(e => string.Equals(e.typeFullName, typeName, StringComparison.Ordinal))
                 ?.objectGuid;
         }
 

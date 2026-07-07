@@ -17,7 +17,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             string[] movedFromAssetPaths
         )
         {
-            if (deletedAssets.Length <= 0)
+            if (
+                importedAssets.Length <= 0
+                && deletedAssets.Length <= 0
+                && movedAssets.Length <= 0
+                && movedFromAssetPaths.Length <= 0
+            )
             {
                 return;
             }
@@ -31,16 +36,25 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             HashSet<Type> relevantTypes = window
                 ._scriptableObjectTypes.SelectMany(x => x.Value)
                 .ToHashSet();
-            if (deletedAssets.Any(asset => IsRelevantAsset(relevantTypes, asset)))
+            if (
+                deletedAssets.Any(IsDeletedAssetPathRelevant)
+                || importedAssets.Any(asset => IsRelevantAsset(relevantTypes, asset))
+                || movedAssets.Any(asset => IsRelevantAsset(relevantTypes, asset))
+                || movedFromAssetPaths.Any(IsDeletedAssetPathRelevant)
+            )
             {
                 EditorApplication.delayCall += DataVisualizer.SignalRefresh;
             }
         }
 
+        public static bool IsDeletedAssetPathRelevant(string path)
+        {
+            return path?.EndsWith(".asset", StringComparison.OrdinalIgnoreCase) == true;
+        }
+
         internal static bool IsRelevantAsset(HashSet<Type> relevantTypes, string path)
         {
-            bool isAsset = path.EndsWith(".asset", StringComparison.OrdinalIgnoreCase);
-            if (!isAsset)
+            if (!IsDeletedAssetPathRelevant(path))
             {
                 return false;
             }

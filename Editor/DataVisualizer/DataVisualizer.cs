@@ -42,9 +42,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string SettingsDefaultPath = "Assets/Editor/DataVisualizerSettings.asset";
         private const string UserStateFileName = "DataVisualizerUserState.json";
 
-        private const string NamespaceItemClass = "namespace-item";
         private const string NamespaceGroupHeaderClass = "namespace-group-header";
-        private const string NamespaceIndicatorClass = "namespace-indicator";
         private const string ObjectItemClass = "object-item";
         private const string ObjectItemContentClass = "object-item-content";
         private const string ObjectItemActionsClass = "object-item-actions";
@@ -802,36 +800,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             LoadScriptableObjectTypes();
 
-            int namespaceIndex = -1;
-            if (!string.IsNullOrWhiteSpace(previousNamespaceKey))
-            {
-                namespaceIndex = _namespaceOrder.GetValueOrDefault(previousNamespaceKey, -1);
-            }
-
-            if (namespaceIndex < 0 && 0 < _scriptableObjectTypes.Count)
-            {
-                namespaceIndex = 0;
-            }
-
-            if (0 <= namespaceIndex)
-            {
-                List<Type> typesInNamespace = _scriptableObjectTypes.GetValueOrDefault(
-                    previousNamespaceKey,
-                    null
-                );
-                if (0 < typesInNamespace?.Count)
-                {
-                    if (!string.IsNullOrWhiteSpace(previousTypeFullName))
-                    {
-                        selectedType = NamespaceTypeOrder.FindTypeByFullName(
-                            typesInNamespace,
-                            previousTypeFullName
-                        );
-                    }
-
-                    selectedType ??= typesInNamespace[0];
-                }
-            }
+            selectedType = ResolveSelectedTypeByFullName(
+                _scriptableObjectTypes,
+                _namespaceOrder,
+                previousNamespaceKey,
+                previousTypeFullName
+            );
 
             // Load once. For an unchanged type the SelectType call near the end no-ops its own load,
             // so reload here (a refresh must re-scan). For a changed type, let that single SelectType
@@ -908,15 +882,23 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private VisualElement FindAncestorNamespaceGroup(VisualElement startingElement)
         {
+            return FindAncestorNamespaceGroup(startingElement, _namespaceListContainer);
+        }
+
+        public static VisualElement FindAncestorNamespaceGroup(
+            VisualElement startingElement,
+            VisualElement namespaceListContainer
+        )
+        {
             if (startingElement == null)
             {
                 return null;
             }
 
             VisualElement currentElement = startingElement;
-            while (currentElement != null && currentElement != _namespaceListContainer)
+            while (currentElement != null && currentElement != namespaceListContainer)
             {
-                if (currentElement.ClassListContains("object-item"))
+                if (currentElement.ClassListContains(StyleConstants.NamespaceItemClass))
                 {
                     return currentElement;
                 }
@@ -925,6 +907,107 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             return null;
+        }
+
+        public static string FindFirstNamespaceKeyByOrder(
+            IReadOnlyDictionary<string, int> namespaceOrder
+        )
+        {
+            if (namespaceOrder == null || namespaceOrder.Count == 0)
+            {
+                return null;
+            }
+
+            string firstNamespaceKey = null;
+            int firstNamespaceIndex = int.MaxValue;
+            foreach (KeyValuePair<string, int> entry in namespaceOrder)
+            {
+                if (
+                    entry.Value < firstNamespaceIndex
+                    || (
+                        entry.Value == firstNamespaceIndex
+                        && (
+                            firstNamespaceKey == null
+                            || string.CompareOrdinal(entry.Key, firstNamespaceKey) < 0
+                        )
+                    )
+                )
+                {
+                    firstNamespaceKey = entry.Key;
+                    firstNamespaceIndex = entry.Value;
+                }
+            }
+
+            return firstNamespaceKey;
+        }
+
+        public static Type ResolveSelectedTypeByFullName(
+            IReadOnlyDictionary<string, List<Type>> typesByNamespace,
+            IReadOnlyDictionary<string, int> namespaceOrder,
+            string savedNamespaceKey,
+            string savedTypeFullName
+        )
+        {
+            if (typesByNamespace == null || typesByNamespace.Count == 0)
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(savedTypeFullName))
+            {
+                Type savedType = NamespaceTypeOrder.FindTypeByFullName(
+                    typesByNamespace.Values.SelectMany(types => types ?? Enumerable.Empty<Type>()),
+                    savedTypeFullName
+                );
+                if (savedType != null)
+                {
+                    return savedType;
+                }
+            }
+
+            if (
+                !string.IsNullOrWhiteSpace(savedNamespaceKey)
+                && typesByNamespace.TryGetValue(savedNamespaceKey, out List<Type> savedTypes)
+                && savedTypes is { Count: > 0 }
+            )
+            {
+                return savedTypes[0];
+            }
+
+            string firstOrderedNamespaceKey = FindFirstNamespaceKeyByOrder(namespaceOrder);
+            if (
+                !string.IsNullOrWhiteSpace(firstOrderedNamespaceKey)
+                && typesByNamespace.TryGetValue(
+                    firstOrderedNamespaceKey,
+                    out List<Type> firstOrderedTypes
+                )
+                && firstOrderedTypes is { Count: > 0 }
+            )
+            {
+                return firstOrderedTypes[0];
+            }
+
+            foreach (
+                string namespaceKey in (namespaceOrder ?? new Dictionary<string, int>())
+                    .OrderBy(entry => entry.Value)
+                    .ThenBy(entry => entry.Key, StringComparer.Ordinal)
+                    .Select(entry => entry.Key)
+            )
+            {
+                if (
+                    typesByNamespace.TryGetValue(namespaceKey, out List<Type> orderedTypes)
+                    && orderedTypes is { Count: > 0 }
+                )
+                {
+                    return orderedTypes[0];
+                }
+            }
+
+            return typesByNamespace
+                .OrderBy(entry => entry.Key, StringComparer.Ordinal)
+                .Select(entry => entry.Value)
+                .FirstOrDefault(types => types is { Count: > 0 })
+                ?.FirstOrDefault();
         }
 
         private void ExpandNamespaceGroupIfNeeded(VisualElement namespaceGroupItem, bool saveState)
@@ -1060,57 +1143,17 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            string savedNamespaceKey = GetLastSelectedNamespaceKey();
-            List<Type> typesInNamespace;
-            int namespaceIndex = -1;
+            Type selectedType = ResolveSelectedTypeByFullName(
+                _scriptableObjectTypes,
+                _namespaceOrder,
+                GetLastSelectedNamespaceKey(),
+                GetLastSelectedTypeName()
+            );
 
-            if (!string.IsNullOrWhiteSpace(savedNamespaceKey))
-            {
-                namespaceIndex = _namespaceOrder.GetValueOrDefault(savedNamespaceKey, -1);
-            }
-
-            if (0 <= namespaceIndex)
-            {
-                typesInNamespace = _scriptableObjectTypes.GetValueOrDefault(
-                    savedNamespaceKey,
-                    null
-                );
-            }
-            else if (0 < _namespaceOrder.Count)
-            {
-                int bestIndex = _scriptableObjectTypes.Count;
-                string bestNamespace = null;
-                foreach (KeyValuePair<string, int> entry in _namespaceOrder)
-                {
-                    if (entry.Value < bestIndex)
-                    {
-                        bestNamespace = entry.Key;
-                    }
-                }
-
-                typesInNamespace = _scriptableObjectTypes.GetValueOrDefault(bestNamespace, null);
-            }
-            else
-            {
-                typesInNamespace = null;
-            }
-
-            if (typesInNamespace is not { Count: > 0 })
+            if (selectedType == null)
             {
                 return;
             }
-
-            string savedTypeName = GetLastSelectedTypeName();
-            Type selectedType = null;
-
-            if (!string.IsNullOrWhiteSpace(savedTypeName))
-            {
-                selectedType = typesInNamespace.Find(t =>
-                    string.Equals(t.FullName, savedTypeName, StringComparison.Ordinal)
-                );
-            }
-
-            selectedType ??= typesInNamespace[0];
 
             // Build namespace view first so type selection is visible
             BuildNamespaceView();
@@ -1125,34 +1168,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement typeElementToSelect = FindTypeElement(selectedType);
             if (typeElementToSelect != null)
             {
-                VisualElement ancestorGroup = null;
-                VisualElement currentElement = typeElementToSelect;
-                while (currentElement != null && currentElement != _namespaceListContainer)
-                {
-                    if (currentElement.ClassListContains(NamespaceItemClass))
-                    {
-                        ancestorGroup = currentElement;
-                        break;
-                    }
-
-                    currentElement = currentElement.parent;
-                }
-
+                VisualElement ancestorGroup = FindAncestorNamespaceGroup(typeElementToSelect);
                 if (ancestorGroup != null)
                 {
-                    Label indicator = ancestorGroup.Q<Label>(className: NamespaceIndicatorClass);
-                    VisualElement typesContainer = ancestorGroup.Q<VisualElement>(
-                        $"types-container-{ancestorGroup.userData as string}"
-                    );
-
-                    if (
-                        indicator != null
-                        && typesContainer != null
-                        && typesContainer.style.display == DisplayStyle.None
-                    )
-                    {
-                        ApplyNamespaceCollapsedState(indicator, typesContainer, false, false);
-                    }
+                    ExpandNamespaceGroupIfNeeded(ancestorGroup, false);
                 }
             }
         }
@@ -4002,10 +4021,23 @@ namespace WallstopStudios.DataVisualizer.Editor
             _filteredObjects.RemoveAll(obj => obj == null);
             _selectedObjectOrderIndex.Remove(objectToDelete);
             int targetIndex = _selectedObject == objectToDelete ? Mathf.Max(0, index - 1) : 0;
+            string deletedTypeFullName = objectToDelete.GetType().FullName;
+            string deletedGuid = AssetDatabase.AssetPathToGUID(path);
 
             bool deleted = AssetDatabase.DeleteAsset(path);
             if (deleted)
             {
+                if (
+                    string.Equals(
+                        GetLastSelectedObjectGuidForType(deletedTypeFullName),
+                        deletedGuid,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    SetLastSelectedObjectGuidForType(deletedTypeFullName, null);
+                }
+
                 Debug.Log($"Asset '{path}' deleted successfully.");
                 AssetDatabase.Refresh();
                 BuildObjectsView();
@@ -7513,7 +7545,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
 
             // Get all GUIDs for this type
-            string[] allGuids = AssetDatabase.FindAssets($"t:{type.Name}");
+            string[] allGuids = IncludeResolvedSavedObjectGuid(
+                type,
+                savedObjectGuid,
+                AssetDatabase.FindAssets($"t:{type.Name}"),
+                out string normalizedSavedObjectGuid
+            );
+            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && normalizedSavedObjectGuid == null)
+            {
+                SetLastSelectedObjectGuidForType(type.FullName, null);
+            }
+            savedObjectGuid = normalizedSavedObjectGuid;
             _asyncLoadTotalCount = allGuids.Length;
             _asyncLoadSkippedCount = 0;
 
@@ -7529,18 +7571,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 SelectObject(null);
                 BuildObjectsView();
                 return;
-            }
-
-            // Ignore a stale saved selection (asset deleted/moved so FindAssets no longer returns it)
-            // so it isn't prioritized ahead of real assets, wasting a priority slot loading nothing.
-            // Case-insensitive so a valid saved GUID is never dropped over casing and then wrongly
-            // de-prioritized (which would fall back to the first asset and overwrite the saved id).
-            if (
-                !string.IsNullOrWhiteSpace(savedObjectGuid)
-                && !allGuids.Contains(savedObjectGuid, StringComparer.OrdinalIgnoreCase)
-            )
-            {
-                savedObjectGuid = null;
             }
 
             // Establish the canonical display order for this load: custom-ordered assets first (in
@@ -7857,6 +7887,70 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 BuildObjectsView();
             }
+        }
+
+        public static bool TryResolveAssetGuidForType(
+            string assetGuid,
+            Type type,
+            out string assetPath
+        )
+        {
+            assetPath = null;
+            if (string.IsNullOrWhiteSpace(assetGuid) || type == null)
+            {
+                return false;
+            }
+
+            assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                assetPath = null;
+                return false;
+            }
+
+            ScriptableObject asset =
+                AssetDatabase.LoadMainAssetAtPath(assetPath) as ScriptableObject;
+            if (asset == null || asset.GetType() != type)
+            {
+                assetPath = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        public static string[] IncludeResolvedSavedObjectGuid(
+            Type type,
+            string savedObjectGuid,
+            IEnumerable<string> discoveredGuids,
+            out string normalizedSavedObjectGuid
+        )
+        {
+            normalizedSavedObjectGuid = null;
+            string[] guids =
+                discoveredGuids?.Where(guid => !string.IsNullOrWhiteSpace(guid)).ToArray()
+                ?? Array.Empty<string>();
+
+            string matchingGuid = guids.FirstOrDefault(guid =>
+                string.Equals(guid, savedObjectGuid, StringComparison.OrdinalIgnoreCase)
+            );
+            string guidToResolve = !string.IsNullOrWhiteSpace(matchingGuid)
+                ? matchingGuid
+                : savedObjectGuid;
+
+            if (!TryResolveAssetGuidForType(guidToResolve, type, out _))
+            {
+                return guids;
+            }
+
+            if (!string.IsNullOrWhiteSpace(matchingGuid))
+            {
+                normalizedSavedObjectGuid = matchingGuid;
+                return guids;
+            }
+
+            normalizedSavedObjectGuid = guidToResolve;
+            return guids.Append(guidToResolve).ToArray();
         }
 
         private void ContinueLoadingObjects(Type type, int loadGeneration)
@@ -9073,16 +9167,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             PersistSettings(
-                settings =>
-                {
-                    settings.SetLastObjectForType(typeName, objectGuid);
-                    return true;
-                },
-                userState =>
-                {
-                    userState.SetLastObjectForType(typeName, objectGuid);
-                    return true;
-                }
+                settings => settings.SetLastObjectForType(typeName, objectGuid),
+                userState => userState.SetLastObjectForType(typeName, objectGuid)
             );
         }
 
