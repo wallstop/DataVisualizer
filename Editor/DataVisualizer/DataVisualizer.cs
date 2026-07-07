@@ -342,8 +342,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         // Async loading state
         private Type _asyncLoadTargetType;
         private IVisualElementScheduledItem _asyncLoadTask;
-        private readonly List<string> _pendingObjectGuids = new();
-        private readonly List<string> _pendingSearchCacheGuids = new();
+        private readonly Queue<string> _pendingObjectGuids = new();
+        private readonly Queue<string> _pendingSearchCacheGuids = new();
         private bool _isLoadingObjectsAsync;
         private bool _isLoadingSearchCacheAsync;
 
@@ -556,7 +556,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     if (uniqueGuids.Add(guid))
                     {
-                        _pendingSearchCacheGuids.Add(guid);
+                        _pendingSearchCacheGuids.Enqueue(guid);
                     }
                 }
             }
@@ -599,8 +599,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             int batchSize = Mathf.Min(AsyncLoadBatchSize, _pendingSearchCacheGuids.Count);
-            List<string> batch = _pendingSearchCacheGuids.GetRange(0, batchSize);
-            _pendingSearchCacheGuids.RemoveRange(0, batchSize);
+            List<string> batch = DequeueBatch(_pendingSearchCacheGuids, batchSize);
 
             // Load batch. GUIDs in _pendingSearchCacheGuids are already unique (deduped up front),
             // so no per-batch de-duplication is needed here.
@@ -674,6 +673,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             string current = _lastSearchString;
             _lastSearchString = null; // bypass the no-op guard in PerformSearch
             PerformSearch(current);
+        }
+
+        // Removes and returns up to batchSize items from the front of the queue. A Queue keeps this
+        // O(batchSize) instead of the O(n) element shift List.RemoveRange(0, batchSize) incurs each
+        // batch (which compounds to O(n^2) over a full drain on large projects).
+        private static List<string> DequeueBatch(Queue<string> queue, int batchSize)
+        {
+            List<string> batch = new(batchSize);
+            for (int i = 0; i < batchSize && queue.Count > 0; i++)
+            {
+                batch.Add(queue.Dequeue());
+            }
+
+            return batch;
         }
 
         public static void SignalRefresh()
@@ -2092,9 +2105,28 @@ namespace WallstopStudios.DataVisualizer.Editor
             _currentSearchResultItems.Clear();
             _searchHighlightIndex = -1;
 
-            if (!_isSearchCachePopulated || string.IsNullOrWhiteSpace(searchText))
+            if (string.IsNullOrWhiteSpace(searchText))
             {
                 CloseActivePopover();
+                return;
+            }
+
+            if (!_isSearchCachePopulated)
+            {
+                // The search cache is still populating in the background. Keep the popover open with a
+                // status line instead of dismissing the user's query; RefreshActiveSearch re-runs this
+                // search automatically once the cache is ready.
+                Label buildingLabel = new("Building search index…")
+                {
+                    style =
+                    {
+                        unityTextAlign = TextAnchor.MiddleCenter,
+                        paddingTop = 8,
+                        paddingBottom = 8,
+                    },
+                };
+                _searchPopover.Add(buildingLabel);
+                OpenPopover(_searchPopover, _searchField, shouldFocus: false);
                 return;
             }
 
@@ -3733,6 +3765,19 @@ namespace WallstopStudios.DataVisualizer.Editor
             CloseActivePopover();
             if (type == _namespaceController.SelectedType)
             {
+                if (_isLoadingObjectsAsync)
+                {
+                    // A load is still streaming assets in by canonical order. Give the new instance an
+                    // order past all of them so it sorts to the end and the loader's binary-search
+                    // inserts stay consistent (they assume _selectedObjects is ordered by this index).
+                    _selectedObjectOrderIndex[instance] = int.MaxValue;
+                    string instanceGuid = AssetDatabase.AssetPathToGUID(uniquePath);
+                    if (!string.IsNullOrWhiteSpace(instanceGuid))
+                    {
+                        _asyncDisplayOrderByGuid[instanceGuid] = int.MaxValue;
+                    }
+                }
+
                 _selectedObjects.Add(instance);
                 BuildObjectsView();
             }
@@ -7519,9 +7564,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             // Saved object ALWAYS comes first (critical for restoring selection)
             // Even if it's in custom order, we need it loaded immediately
+            // O(1) membership for the ordering below instead of repeated O(n) List.Contains scans.
+            HashSet<string> priorityGuidSet = new(priorityGuids, StringComparer.Ordinal);
+
             if (
                 !string.IsNullOrWhiteSpace(savedObjectGuid)
-                && priorityGuids.Contains(savedObjectGuid)
+                && priorityGuidSet.Contains(savedObjectGuid)
             )
             {
                 orderedPriorityGuids.Add(savedObjectGuid);
@@ -7530,7 +7578,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Then custom order (excluding saved object to avoid duplicates)
             orderedPriorityGuids.AddRange(
                 customGuidOrder.Where(guid =>
-                    priorityGuids.Contains(guid) && guid != savedObjectGuid
+                    priorityGuidSet.Contains(guid) && guid != savedObjectGuid
                 )
             );
 
@@ -7615,7 +7663,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Queue remaining priority items
             for (int i = priorityBatchSize; i < orderedPriorityGuids.Count; i++)
             {
-                _pendingObjectGuids.Add(orderedPriorityGuids[i]);
+                _pendingObjectGuids.Enqueue(orderedPriorityGuids[i]);
             }
 
             // Order the remaining GUIDs by the canonical display order already computed above rather
@@ -7643,14 +7691,14 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 for (int i = firstRemainingBatch; i < remainingSorted.Count; i++)
                 {
-                    _pendingObjectGuids.Add(remainingSorted[i]);
+                    _pendingObjectGuids.Enqueue(remainingSorted[i]);
                 }
             }
             else
             {
                 foreach (string guid in remainingSorted)
                 {
-                    _pendingObjectGuids.Add(guid);
+                    _pendingObjectGuids.Enqueue(guid);
                 }
             }
 
@@ -7785,8 +7833,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             int batchSize = Mathf.Min(AsyncLoadBatchSize, _pendingObjectGuids.Count);
-            List<string> batch = _pendingObjectGuids.GetRange(0, batchSize);
-            _pendingObjectGuids.RemoveRange(0, batchSize);
+            List<string> batch = DequeueBatch(_pendingObjectGuids, batchSize);
 
             LoadObjectBatch(type, batch, true);
 
