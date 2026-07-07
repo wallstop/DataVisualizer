@@ -24,6 +24,19 @@
   "author": "wallstop studios <wallstop@wallstopstudios.com> (https://wallstopstudios.com)",
   "homepage": "https://github.com/wallstop/DataVisualizer#readme",
   "main": "README.md",
+  "files": [
+    "Editor",
+    "Editor.meta",
+    "Runtime",
+    "Runtime.meta",
+    "Tests",
+    "Tests.meta",
+    "docs",
+    "docs.meta",
+    "README.md.meta",
+    "LICENSE.meta",
+    "package.json.meta"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   }
