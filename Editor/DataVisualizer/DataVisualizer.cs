@@ -351,6 +351,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         // initial FindAssets so per-batch progress updates never rescan the project.
         private int _asyncLoadTotalCount;
 
+        // GUIDs FindAssets returned for the loading type that resolve to a missing asset or a subclass
+        // the exact-type load skips; subtracted from the indicator total so it reflects only loadable
+        // assets and doesn't appear stuck below 100%.
+        private int _asyncLoadSkippedCount;
+
         // Incremented on each fresh (non-continuation) async load. Scheduled callbacks (auto-select,
         // the background batch pump) capture this at schedule time and no-op if a newer load has
         // superseded them, so a stale callback can't select the wrong asset or interleave batches.
@@ -7478,6 +7483,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Get all GUIDs for this type
             string[] allGuids = AssetDatabase.FindAssets($"t:{type.Name}");
             _asyncLoadTotalCount = allGuids.Length;
+            _asyncLoadSkippedCount = 0;
 
             // No assets of this type: skip the async loader entirely so it doesn't flash the
             // "Loading objects..." overlay before immediately completing. Clear any stale
@@ -7495,9 +7501,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             // Ignore a stale saved selection (asset deleted/moved so FindAssets no longer returns it)
             // so it isn't prioritized ahead of real assets, wasting a priority slot loading nothing.
+            // Case-insensitive so a valid saved GUID is never dropped over casing and then wrongly
+            // de-prioritized (which would fall back to the first asset and overwrite the saved id).
             if (
                 !string.IsNullOrWhiteSpace(savedObjectGuid)
-                && Array.IndexOf(allGuids, savedObjectGuid) < 0
+                && !allGuids.Contains(savedObjectGuid, StringComparer.OrdinalIgnoreCase)
             )
             {
                 savedObjectGuid = null;
@@ -7799,11 +7807,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             }
 
+            // Skipped = GUIDs in this batch that resolved to a missing/mismatched-type asset. Track
+            // them so the indicator total below reflects only loadable assets.
+            _asyncLoadSkippedCount += guids.Count - loadedObjects.Count;
+
             // Update loading indicator if async loading is in progress. Uses the count
             // captured when the load started instead of rescanning the whole project per batch.
             if (_isLoadingObjectsAsync && _asyncLoadTargetType != null)
             {
-                UpdateLoadingIndicator(_selectedObjects.Count, _asyncLoadTotalCount);
+                UpdateLoadingIndicator(
+                    _selectedObjects.Count,
+                    _asyncLoadTotalCount - _asyncLoadSkippedCount
+                );
             }
 
             if (updateView)
