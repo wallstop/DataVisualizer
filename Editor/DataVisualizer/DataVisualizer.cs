@@ -64,14 +64,24 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string SearchPlaceholder = "Search...";
 
         private const int MaxSearchResults = 25;
-        private const float DefaultOuterSplitWidth = 200f;
+        private const float DefaultOuterSplitWidth = 350f;
         private const float DefaultInnerSplitWidth = 250f;
-        private const int MaxObjectsPerPage = 100;
+        private const float MinNamespacePaneWidth = 320f;
+        private const float MinObjectPaneWidth = 220f;
+        private const float MinInspectorPaneWidth = 260f;
+        private const float MinWindowWidth =
+            MinNamespacePaneWidth + MinObjectPaneWidth + MinInspectorPaneWidth + 60f;
+        private const float MinWindowHeight = 480f;
+        private const int AsyncLoadBatchSize = 100;
+        private const int AsyncLoadPriorityBatchSize = 100;
+
+        // Debug logging for testing async loading
+        // Set to true to see detailed loading performance logs in Unity Console
+        private static readonly bool EnableAsyncLoadDebugLog = false;
 
         private enum DragType
         {
             None = 0,
-            Object = 1,
             Namespace = 2,
             Type = 3,
         }
@@ -169,9 +179,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private readonly Dictionary<string, int> _namespaceOrder = new(StringComparer.Ordinal);
 
-        private readonly Dictionary<ScriptableObject, VisualElement> _objectVisualElementMap =
-            new();
-
         [Obsolete("Use HiddenNamespaces property instead")]
         private int _hiddenNamespaces;
 
@@ -183,19 +190,28 @@ namespace WallstopStudios.DataVisualizer.Editor
         private readonly NamespaceController _namespaceController;
 
         private ScriptableObject _selectedObject;
-        private VisualElement _selectedElement;
         private VisualElement _selectedNamespaceElement;
 
         private VisualElement _namespaceListContainer;
-        private VisualElement _objectPageController;
-        private Button _previousPageButton;
-        private Button _nextPageButton;
-        private IntegerField _currentPageField;
-        private IntegerField _maxPageField;
-        private VisualElement _objectListContainer;
         private VisualElement _inspectorContainer;
-        private ScrollView _objectScrollView;
         private ScrollView _inspectorScrollView;
+
+        // Virtualized list of the selected type's objects (replaces the manual ScrollView + paging).
+        private ListView _objectListView;
+
+        // Uniform row height for the virtualized object ListView. Measured live: the .object-item
+        // box renders at ~40px; the slot is forced to this height and centers the box, so the extra
+        // 6px becomes a 3px gap above and below each row.
+        private const float ObjectRowFixedHeight = 46f;
+
+        // Guards the ListView selection callback while selection is set programmatically.
+        private bool _suppressListSelectionCallback;
+
+        // Action buttons stop pointer-down here so clicking one doesn't retarget the ListView's
+        // selection (which otherwise drops the current selection when using go-up/go-down/etc.) or
+        // start a row drag from a button.
+        private static readonly EventCallback<PointerDownEvent> StopRowChildPointerDown = evt =>
+            evt.StopPropagation();
 
         private TwoPaneSplitView _outerSplitView;
         private TwoPaneSplitView _innerSplitView;
@@ -203,6 +219,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Label _namespaceColumnLabel;
         private TextField _assetNameTextField;
         private VisualElement _objectColumnElement;
+        private Label _objectLoadingIndicator;
 
         private VisualElement _settingsPopover;
         private VisualElement _renamePopover;
@@ -264,6 +281,14 @@ namespace WallstopStudios.DataVisualizer.Editor
         private TextField _searchField;
         private VisualElement _searchPopover;
         private bool _isSearchCachePopulated;
+
+        // Managed ScriptableObject types for the current search-cache load, computed once per
+        // PopulateSearchCacheAsync run and reused across its batches.
+        private HashSet<Type> _searchCacheManagedTypes;
+
+        // Incremented on each PopulateSearchCacheAsync run so stale scheduled batch callbacks from a
+        // superseded run no-op instead of draining the new queue or marking the cache ready early.
+        private int _searchCacheGeneration;
         private string _lastSearchString;
 
         private Button _addTypeButton;
@@ -314,6 +339,40 @@ namespace WallstopStudios.DataVisualizer.Editor
         private float? _lastEnterPressed;
         private bool _needsRefresh;
 
+        // Async loading state
+        private Type _asyncLoadTargetType;
+        private IVisualElementScheduledItem _asyncLoadTask;
+        private readonly Queue<string> _pendingObjectGuids = new();
+        private readonly Queue<string> _pendingSearchCacheGuids = new();
+        private bool _isLoadingObjectsAsync;
+        private bool _isLoadingSearchCacheAsync;
+
+        // Total asset count for the in-progress async load, captured once from the
+        // initial FindAssets so per-batch progress updates never rescan the project.
+        private int _asyncLoadTotalCount;
+
+        // GUIDs FindAssets returned for the loading type that resolve to a missing asset or a subclass
+        // the exact-type load skips; subtracted from the indicator total so it reflects only loadable
+        // assets and doesn't appear stuck below 100%.
+        private int _asyncLoadSkippedCount;
+
+        // Incremented on each fresh (non-continuation) async load. Scheduled callbacks (auto-select,
+        // the background batch pump) capture this at schedule time and no-op if a newer load has
+        // superseded them, so a stale callback can't select the wrong asset or interleave batches.
+        private int _asyncLoadGeneration;
+
+        // Canonical display order (asset GUID -> position) for the in-progress async load: saved
+        // custom order first, then the remaining assets by path. LoadObjectBatch positions loaded
+        // assets by this so user ordering survives batched loading instead of being overwritten by
+        // an alphabetical sort. Rebuilt at the start of each LoadObjectTypesAsync.
+        private readonly Dictionary<string, int> _asyncDisplayOrderByGuid = new(
+            StringComparer.Ordinal
+        );
+
+        // Display-order index cached per already-inserted object so batch insertion stays cheap
+        // (no per-comparison AssetDatabase calls). Cleared whenever _selectedObjects is reset.
+        private readonly Dictionary<ScriptableObject, int> _selectedObjectOrderIndex = new();
+
         private Label _dataFolderPathDisplay;
 #if ODIN_INSPECTOR
         private PropertyTree _odinPropertyTree;
@@ -331,6 +390,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             DataVisualizer window = GetWindow<DataVisualizer>("Data Visualizer");
             window.titleContent = new GUIContent("Data Visualizer");
+            window.minSize = new Vector2(MinWindowWidth, MinWindowHeight);
 
             bool initialSizeApplied = EditorPrefs.GetBool(PrefsInitialSizeAppliedKey, false);
             if (initialSizeApplied)
@@ -338,8 +398,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            float width = Mathf.Max(800, window.position.width);
-            float height = Mathf.Max(400, window.position.height);
+            float width = Mathf.Max(MinWindowWidth, window.position.width);
+            float height = Mathf.Max(MinWindowHeight, window.position.height);
             Rect monitorArea = MonitorUtility.GetPrimaryMonitorRect();
 
             float centerX = (monitorArea.width - width) / 2f;
@@ -354,12 +414,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnEnable()
         {
+            minSize = new Vector2(MinWindowWidth, MinWindowHeight);
             _nextColorIndex = 0;
             Instance = this;
             _isSearchCachePopulated = false;
-            _objectVisualElementMap.Clear();
             _selectedObject = null;
-            _selectedElement = null;
             _selectedObjects.Clear();
 #if ODIN_INSPECTOR
             _odinPropertyTree = null;
@@ -389,19 +448,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
 
-            LoadScriptableObjectTypes();
+            // Don't load types here - it blocks the UI from appearing
+            // LoadScriptableObjectTypes() is now deferred to CreateGUI
             rootVisualElement.RegisterCallback<KeyDownEvent>(
                 HandleGlobalKeyDown,
                 TrickleDown.TrickleDown
             );
-            rootVisualElement
-                .schedule.Execute(() =>
-                {
-                    PopulateSearchCache();
-                    RestorePreviousSelection();
-                    StartPeriodicWidthSave();
-                })
-                .ExecuteLater(10);
         }
 
         private void OnDisable()
@@ -425,8 +477,17 @@ namespace WallstopStudios.DataVisualizer.Editor
                 Instance = null;
             }
 
+            // Cancel async loading
+            _asyncLoadTask?.Pause();
+            _asyncLoadTask = null;
+            _asyncLoadTargetType = null;
+            _pendingObjectGuids.Clear();
+            _pendingSearchCacheGuids.Clear();
+            _isLoadingObjectsAsync = false;
+            _isLoadingSearchCacheAsync = false;
+            UpdateLoadingIndicator(0, 0); // Hide loading indicator
+
             _isLabelCachePopulated = false;
-            _selectedElement = null;
             _selectedObject = null;
             _scriptableObjectTypes.Clear();
             _namespaceOrder.Clear();
@@ -467,51 +528,171 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void PopulateSearchCache()
         {
+            // Start async loading instead
+            PopulateSearchCacheAsync();
+        }
+
+        private void PopulateSearchCacheAsync()
+        {
+            var cacheStartTime = System.Diagnostics.Stopwatch.StartNew();
             _allManagedObjectsCache.Clear();
+            _pendingSearchCacheGuids.Clear();
+            _isLoadingSearchCacheAsync = true;
+            // The cache is being rebuilt; it is not searchable until the batches below finish.
+            _isSearchCachePopulated = false;
+            // Managed-type set for this run, computed once and reused across all batches.
+            _searchCacheManagedTypes = new(_scriptableObjectTypes.SelectMany(tuple => tuple.Value));
+            int generation = ++_searchCacheGeneration;
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] PopulateSearchCacheAsync START at {System.DateTime.Now:HH:mm:ss.fff}"
+                );
+            }
 
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
+
+            // Collect all GUIDs first (fast, no asset loading)
             foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
             {
                 string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
                 foreach (string guid in guids)
                 {
-                    if (!uniqueGuids.Add(guid))
+                    if (uniqueGuids.Add(guid))
                     {
-                        continue;
-                    }
-
-                    string path = AssetDatabase.GUIDToAssetPath(guid);
-                    if (!string.IsNullOrWhiteSpace(path))
-                    {
-                        ScriptableObject obj =
-                            AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
-
-                        if (obj != null && obj.GetType() == type)
-                        {
-                            _allManagedObjectsCache.Add(obj);
-                        }
+                        _pendingSearchCacheGuids.Enqueue(guid);
                     }
                 }
             }
 
-            _allManagedObjectsCache.Sort(
-                (a, b) =>
+            // Do NOT mark the cache populated here — the assets aren't loaded until the batches
+            // below finish. Marking it ready after only collecting GUIDs made PerformSearch run
+            // against an empty/partial cache. It is marked populated on completion instead.
+            cacheStartTime.Stop();
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] Search cache GUID collection: {_pendingSearchCacheGuids.Count} GUIDs collected in {cacheStartTime.ElapsedMilliseconds}ms"
+                );
+            }
+
+            // Start loading batches
+            if (_pendingSearchCacheGuids.Count > 0)
+            {
+                ContinuePopulatingSearchCache(generation);
+            }
+            else
+            {
+                _isLoadingSearchCacheAsync = false;
+                _isSearchCachePopulated = true; // nothing to load; the (empty) cache is ready
+                RefreshActiveSearch(); // resolve any "Building search index…" popover immediately
+            }
+        }
+
+        private void ContinuePopulatingSearchCache(int generation)
+        {
+            if (generation != _searchCacheGeneration)
+            {
+                return; // superseded by a newer PopulateSearchCacheAsync run
+            }
+
+            if (!_isLoadingSearchCacheAsync || _pendingSearchCacheGuids.Count == 0)
+            {
+                _isLoadingSearchCacheAsync = false;
+                return;
+            }
+
+            int batchSize = Mathf.Min(AsyncLoadBatchSize, _pendingSearchCacheGuids.Count);
+            List<string> batch = DequeueBatch(_pendingSearchCacheGuids, batchSize);
+
+            // Load batch. GUIDs in _pendingSearchCacheGuids are already unique (deduped up front),
+            // so no per-batch de-duplication is needed here.
+            List<ScriptableObject> loadedObjects = new();
+
+            foreach (string guid in batch)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrWhiteSpace(path))
                 {
-                    int comparison = string.Compare(a.name, b.name, StringComparison.Ordinal);
-                    if (comparison != 0)
-                    {
-                        return comparison;
-                    }
-
-                    return string.Compare(
-                        a.GetType().FullName,
-                        b.GetType().FullName,
-                        StringComparison.Ordinal
-                    );
+                    continue;
                 }
-            );
 
-            _isSearchCachePopulated = true;
+                ScriptableObject obj = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+                if (obj != null)
+                {
+                    // Verify it's a managed type (O(1) against the set cached for this run). No cache
+                    // membership check needed: the cache was cleared and GUIDs are unique, so the
+                    // object can't already be present, and Contains() grows costlier as it fills.
+                    if (_searchCacheManagedTypes.Contains(obj.GetType()))
+                    {
+                        loadedObjects.Add(obj);
+                    }
+                }
+            }
+
+            // Append this batch. The cache is sorted once when loading completes (below); it isn't
+            // used for search until then, so per-item BinarySearch+Insert would just be wasted
+            // O(n^2) shifting work.
+            _allManagedObjectsCache.AddRange(loadedObjects);
+
+            // Continue with next batch
+            if (_pendingSearchCacheGuids.Count > 0)
+            {
+                rootVisualElement
+                    .schedule.Execute(() => ContinuePopulatingSearchCache(generation))
+                    .ExecuteLater(10);
+            }
+            else
+            {
+                _isLoadingSearchCacheAsync = false;
+                // Sort the fully-loaded cache once (search reads it sorted by name then type).
+                _allManagedObjectsCache.Sort(
+                    (a, b) =>
+                    {
+                        int nameComp = string.Compare(a.name, b.name, StringComparison.Ordinal);
+                        return nameComp != 0
+                            ? nameComp
+                            : string.Compare(
+                                a.GetType().FullName,
+                                b.GetType().FullName,
+                                StringComparison.Ordinal
+                            );
+                    }
+                );
+                _isSearchCachePopulated = true;
+                RefreshActiveSearch();
+            }
+        }
+
+        // Re-runs the active search once the search cache finishes loading, so results that were
+        // unavailable while it loaded in the background appear. Only acts while the search popover is
+        // open, so it never reopens a popover the user has dismissed.
+        private void RefreshActiveSearch()
+        {
+            if (_activePopover != _searchPopover || string.IsNullOrWhiteSpace(_lastSearchString))
+            {
+                return;
+            }
+
+            string current = _lastSearchString;
+            _lastSearchString = null; // bypass the no-op guard in PerformSearch
+            PerformSearch(current);
+        }
+
+        // Removes and returns up to batchSize items from the front of the queue. A Queue keeps this
+        // O(batchSize) instead of the O(n) element shift List.RemoveRange(0, batchSize) incurs each
+        // batch (which compounds to O(n^2) over a full drain on large projects).
+        private static List<string> DequeueBatch(Queue<string> queue, int batchSize)
+        {
+            List<string> batch = new(batchSize);
+            for (int i = 0; i < batchSize && queue.Count > 0; i++)
+            {
+                batch.Add(queue.Dequeue());
+            }
+
+            return batch;
         }
 
         public static void SignalRefresh()
@@ -637,13 +818,26 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            if (selectedType != null)
+            // Load once. For an unchanged type the SelectType call near the end no-ops its own load,
+            // so reload here (a refresh must re-scan). For a changed type, let that single SelectType
+            // call do the load — doing both would load the same type twice.
+            bool selectionTypeChanged = _namespaceController.SelectedType != selectedType;
+            if (selectedType == null)
             {
-                LoadObjectTypes(selectedType);
+                _selectedObjects.Clear();
+            }
+            else if (!selectionTypeChanged)
+            {
+                LoadObjectTypesAsync(selectedType);
             }
             else
             {
+                // The refresh resolved a different type (e.g. the previous type was removed); the
+                // SelectType call below will load it. Clear the old type's objects now so the object
+                // column doesn't show the previous type's assets until that async load's view rebuild.
                 _selectedObjects.Clear();
+                _filteredObjects.Clear();
+                _selectedObjectOrderIndex.Clear();
             }
 
             ScriptableObject selectedObject = _selectedObject;
@@ -671,11 +865,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 });
             }
 
-            if (selectedObject == null)
-            {
-                selectedObject = _selectedObjects.FirstOrDefault();
-            }
-
             PopulateSearchCache();
             BuildNamespaceView();
             BuildObjectsView();
@@ -690,7 +879,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            SelectObject(selectedObject);
+            // Only select eagerly if the previously-selected object is already loaded (found in the
+            // priority batch). Otherwise leave it to LoadObjectTypesAsync's generation-guarded
+            // deferred auto-select, which restores the real selection once its batch loads instead of
+            // persisting a fallback GUID over it.
+            if (selectedObject != null && _selectedObjects.Contains(selectedObject))
+            {
+                SelectObject(selectedObject);
+            }
             _namespaceController.SelectType(this, selectedType);
             _needsRefresh = false;
         }
@@ -820,8 +1016,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            float currentOuterWidth = _namespaceColumnElement.resolvedStyle.width;
-            float currentInnerWidth = _objectColumnElement.resolvedStyle.width;
+            float currentOuterWidth = Mathf.Max(
+                _namespaceColumnElement.resolvedStyle.width,
+                MinNamespacePaneWidth
+            );
+            float currentInnerWidth = Mathf.Max(
+                _objectColumnElement.resolvedStyle.width,
+                MinObjectPaneWidth
+            );
 
             if (!Mathf.Approximately(currentOuterWidth, _lastSavedOuterWidth))
             {
@@ -894,9 +1096,16 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             selectedType ??= typesInNamespace[0];
-            LoadObjectTypes(selectedType);
+
+            // Build namespace view first so type selection is visible
             BuildNamespaceView();
-            BuildObjectsView();
+
+            // Register the restored type via SelectType, which sets the selected type BEFORE loading.
+            // That way the load's synchronous saved/first-object selection doesn't re-enter SelectType
+            // (which would start a second load), the object list filters correctly for the restored
+            // type, and an empty type shows its empty view rather than a stale one. SelectType also
+            // loads the objects, restores the saved selection, and refreshes the dependent UI.
+            _namespaceController.SelectType(this, selectedType);
 
             VisualElement typeElementToSelect = FindTypeElement(selectedType);
             if (typeElementToSelect != null)
@@ -931,47 +1140,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                 }
             }
-
-            string savedObjectGuid = null;
-            if (selectedType != null)
-            {
-                savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.FullName);
-            }
-
-            ScriptableObject objectToSelect = null;
-
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && 0 < _selectedObjects.Count)
-            {
-                objectToSelect = _selectedObjects.Find(obj =>
-                {
-                    if (obj == null)
-                    {
-                        return false;
-                    }
-
-                    string path = AssetDatabase.GetAssetPath(obj);
-                    return !string.IsNullOrWhiteSpace(path)
-                        && string.Equals(
-                            AssetDatabase.AssetPathToGUID(path),
-                            savedObjectGuid,
-                            StringComparison.OrdinalIgnoreCase
-                        );
-                });
-            }
-
-            if (objectToSelect == null && 0 < _selectedObjects.Count)
-            {
-                objectToSelect = _selectedObjects[0];
-            }
-
-            SelectObject(objectToSelect);
-            if (objectToSelect == null)
-            {
-                _namespaceController.SelectType(this, selectedType);
-            }
-            UpdateCreateObjectButtonStyle();
-            BuildProcessorColumnView();
-            UpdateLabelAreaAndFilter();
         }
 
         private VisualElement FindTypeElement(Type targetType)
@@ -1055,13 +1223,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
             headerRow.Add(_searchField);
 
-            float initialOuterWidth = EditorPrefs.GetFloat(
-                PrefsSplitterOuterKey,
-                DefaultOuterSplitWidth
+            float initialOuterWidth = Mathf.Max(
+                EditorPrefs.GetFloat(PrefsSplitterOuterKey, DefaultOuterSplitWidth),
+                MinNamespacePaneWidth
             );
-            float initialInnerWidth = EditorPrefs.GetFloat(
-                PrefsSplitterInnerKey,
-                DefaultInnerSplitWidth
+            float initialInnerWidth = Mathf.Max(
+                EditorPrefs.GetFloat(PrefsSplitterInnerKey, DefaultInnerSplitWidth),
+                MinObjectPaneWidth
             );
 
             _lastSavedOuterWidth = initialOuterWidth;
@@ -1141,10 +1309,46 @@ namespace WallstopStudios.DataVisualizer.Editor
             _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
             root.Add(_confirmNamespaceAddPopover);
 
-            BuildNamespaceView();
-            BuildProcessorColumnView();
-            BuildObjectsView();
-            BuildInspectorView();
+            // CreateGUI is now complete - window structure is ready
+            // Defer ALL content building to next frame so window appears instantly
+            rootVisualElement
+                .schedule.Execute(() =>
+                {
+                    if (EnableAsyncLoadDebugLog)
+                    {
+                        Debug.Log(
+                            $"[DataVisualizer] CreateGUI - Loading types and building views at {System.DateTime.Now:HH:mm:ss.fff}"
+                        );
+                    }
+
+                    // Load types (fast now without CreateInstance)
+                    LoadScriptableObjectTypes();
+
+                    // Build all views - window is already visible at this point
+                    BuildNamespaceView();
+                    BuildProcessorColumnView();
+                    BuildObjectsView();
+                    BuildInspectorView();
+
+                    // Schedule the async initialization after views are built
+                    rootVisualElement
+                        .schedule.Execute(() =>
+                        {
+                            if (EnableAsyncLoadDebugLog)
+                            {
+                                Debug.Log(
+                                    $"[DataVisualizer] CreateGUI - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
+                                );
+                            }
+                            // Start async search cache population in background (low priority)
+                            PopulateSearchCacheAsync();
+                            // Restore selection with priority async loading
+                            RestorePreviousSelection();
+                            StartPeriodicWidthSave();
+                        })
+                        .ExecuteLater(10);
+                })
+                .ExecuteLater(1); // Execute on next frame so window renders first
         }
 
         private static void TryLoadStyleSheet(VisualElement root)
@@ -1156,125 +1360,247 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
             if (!string.IsNullOrWhiteSpace(packageRoot))
             {
-                if (
-                    packageRoot.StartsWith("Packages", StringComparison.OrdinalIgnoreCase)
-                    && !packageRoot.Contains(PackageId, StringComparison.OrdinalIgnoreCase)
-                )
+                // Convert absolute path to Unity relative path if needed
+                string packagePath = null;
+                bool isAbsolutePath = Path.IsPathRooted(packageRoot);
+
+                if (isAbsolutePath)
                 {
-                    int dataVisualizerIndex = packageRoot.LastIndexOf(
-                        "DataVisualizer",
-                        StringComparison.Ordinal
-                    );
-                    if (0 <= dataVisualizerIndex)
+                    // Convert absolute path to Unity relative path
+                    string projectPath = Path.GetDirectoryName(Application.dataPath);
+                    string normalizedProjectPath = projectPath.Replace('\\', '/');
+                    string normalizedPackageRoot = packageRoot.Replace('\\', '/');
+
+                    if (
+                        normalizedPackageRoot.StartsWith(
+                            normalizedProjectPath,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
                     {
-                        packageRoot = packageRoot[..dataVisualizerIndex];
-                        packageRoot += PackageId;
-                    }
-                }
-
-                char pathSeparator = Path.DirectorySeparatorChar;
-                string styleSheetPath =
-                    $"{packageRoot}{pathSeparator}Editor{pathSeparator}DataVisualizer{pathSeparator}Styles{pathSeparator}DataVisualizerStyles.uss";
-                string unityRelativeStyleSheetPath = DirectoryHelper.AbsoluteToUnityRelativePath(
-                    styleSheetPath
-                );
-                unityRelativeStyleSheetPath = unityRelativeStyleSheetPath.SanitizePath();
-
-                const string packageCache = "PackageCache/";
-                int packageCacheIndex;
-                if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
-                {
-                    styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                        unityRelativeStyleSheetPath
-                    );
-                }
-
-                if (styleSheet == null && !string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
-                {
-                    packageCacheIndex = unityRelativeStyleSheetPath.IndexOf(
-                        packageCache,
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                    if (0 <= packageCacheIndex)
-                    {
-                        unityRelativeStyleSheetPath = unityRelativeStyleSheetPath[
-                            (packageCacheIndex + packageCache.Length)..
-                        ];
-                        int forwardIndex = unityRelativeStyleSheetPath.IndexOf(
-                            "/",
-                            StringComparison.Ordinal
-                        );
-                        if (0 <= forwardIndex)
-                        {
-                            unityRelativeStyleSheetPath = unityRelativeStyleSheetPath.Substring(
-                                forwardIndex
-                            );
-                            unityRelativeStyleSheetPath =
-                                "Packages/" + PackageId + "/" + unityRelativeStyleSheetPath;
-                        }
-                        else
-                        {
-                            unityRelativeStyleSheetPath = "Packages/" + unityRelativeStyleSheetPath;
-                        }
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
-                    {
-                        styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                            unityRelativeStyleSheetPath
-                        );
-                        if (styleSheet == null)
-                        {
-                            Debug.LogError(
-                                $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
-                            );
-                        }
+                        // Extract the part after project root
+                        string relativePart = normalizedPackageRoot
+                            .Substring(normalizedProjectPath.Length)
+                            .TrimStart('/');
+                        packagePath = relativePart;
                     }
                     else
                     {
-                        Debug.LogError(
-                            $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
+                        // Not within project, try to find Packages folder in path
+                        int packagesIndex = normalizedPackageRoot.IndexOf(
+                            "/Packages/",
+                            StringComparison.OrdinalIgnoreCase
                         );
-                    }
-                }
-
-                string fontPath =
-                    $"{packageRoot}{pathSeparator}Editor{pathSeparator}Fonts{pathSeparator}IBMPlexMono-Regular.ttf";
-                string unityRelativeFontPath = DirectoryHelper.AbsoluteToUnityRelativePath(
-                    fontPath
-                );
-
-                font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
-                if (font == null)
-                {
-                    packageCacheIndex = unityRelativeFontPath.IndexOf(
-                        packageCache,
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                    if (0 <= packageCacheIndex)
-                    {
-                        unityRelativeFontPath = unityRelativeFontPath[
-                            (packageCacheIndex + packageCache.Length)..
-                        ];
-                        int forwardIndex = unityRelativeFontPath.IndexOf(
-                            "/",
-                            StringComparison.Ordinal
-                        );
-                        if (0 <= forwardIndex)
+                        if (packagesIndex >= 0)
                         {
-                            unityRelativeFontPath = unityRelativeFontPath.Substring(forwardIndex);
-                            unityRelativeFontPath =
-                                "Packages/" + PackageId + "/" + unityRelativeFontPath;
+                            packagePath = normalizedPackageRoot.Substring(packagesIndex + 1); // +1 to skip the leading slash so the path starts at "Packages/"
                         }
                         else
                         {
-                            unityRelativeFontPath = "Packages/" + unityRelativeFontPath;
+                            // Just try to extract the folder name
+                            string folderName = Path.GetFileName(packageRoot);
+                            if (
+                                !string.IsNullOrWhiteSpace(folderName)
+                                && folderName.Contains(
+                                    "DataVisualizer",
+                                    StringComparison.OrdinalIgnoreCase
+                                )
+                            )
+                            {
+                                packagePath = $"Packages/{folderName}";
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // Already a Unity relative path
+                    packagePath = packageRoot.Replace('\\', '/');
+                }
+
+                // Ensure it starts with Packages/
+                if (!string.IsNullOrWhiteSpace(packagePath))
+                {
+                    if (!packagePath.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Extract package folder name
+                        string folderName = Path.GetFileName(packagePath);
+                        if (string.IsNullOrWhiteSpace(folderName))
+                        {
+                            folderName = Path.GetFileName(packageRoot);
+                        }
+                        if (!string.IsNullOrWhiteSpace(folderName))
+                        {
+                            packagePath = $"Packages/{folderName}";
                         }
                     }
 
-                    if (!string.IsNullOrWhiteSpace(unityRelativeFontPath))
+                    // Try direct Unity relative paths
+                    string[] styleSheetPathsToTry = new[]
                     {
+                        $"{packagePath}/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss",
+                        $"Packages/{PackageId}/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss",
+                    };
+
+                    foreach (string styleSheetPath in styleSheetPathsToTry)
+                    {
+                        styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(styleSheetPath);
+                        if (styleSheet != null)
+                        {
+                            break;
+                        }
+                    }
+
+                    string[] fontPathsToTry = new[]
+                    {
+                        $"{packagePath}/Editor/Fonts/IBMPlexMono-Regular.ttf",
+                        $"Packages/{PackageId}/Editor/Fonts/IBMPlexMono-Regular.ttf",
+                    };
+
+                    foreach (string fontPath in fontPathsToTry)
+                    {
+                        font = AssetDatabase.LoadAssetAtPath<Font>(fontPath);
+                        if (font != null)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                // Fallback to absolute path conversion if direct paths didn't work
+                if (styleSheet == null || font == null)
+                {
+                    if (
+                        packageRoot.StartsWith("Packages", StringComparison.OrdinalIgnoreCase)
+                        && !packageRoot.Contains(PackageId, StringComparison.OrdinalIgnoreCase)
+                    )
+                    {
+                        int dataVisualizerIndex = packageRoot.LastIndexOf(
+                            "DataVisualizer",
+                            StringComparison.Ordinal
+                        );
+                        if (0 <= dataVisualizerIndex)
+                        {
+                            packageRoot = packageRoot[..dataVisualizerIndex];
+                            packageRoot += PackageId;
+                        }
+                    }
+
+                    char pathSeparator = Path.DirectorySeparatorChar;
+                    if (styleSheet == null)
+                    {
+                        string styleSheetPath =
+                            $"{packageRoot}{pathSeparator}Editor{pathSeparator}DataVisualizer{pathSeparator}Styles{pathSeparator}DataVisualizerStyles.uss";
+                        string unityRelativeStyleSheetPath =
+                            DirectoryHelper.AbsoluteToUnityRelativePath(styleSheetPath);
+                        unityRelativeStyleSheetPath = unityRelativeStyleSheetPath.SanitizePath();
+
+                        const string packageCache = "PackageCache/";
+                        int packageCacheIndex;
+                        if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
+                        {
+                            styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                                unityRelativeStyleSheetPath
+                            );
+                        }
+
+                        if (
+                            styleSheet == null
+                            && !string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath)
+                        )
+                        {
+                            packageCacheIndex = unityRelativeStyleSheetPath.IndexOf(
+                                packageCache,
+                                StringComparison.OrdinalIgnoreCase
+                            );
+                            if (0 <= packageCacheIndex)
+                            {
+                                unityRelativeStyleSheetPath = unityRelativeStyleSheetPath[
+                                    (packageCacheIndex + packageCache.Length)..
+                                ];
+                                int forwardIndex = unityRelativeStyleSheetPath.IndexOf(
+                                    "/",
+                                    StringComparison.Ordinal
+                                );
+                                if (0 <= forwardIndex)
+                                {
+                                    unityRelativeStyleSheetPath =
+                                        unityRelativeStyleSheetPath.Substring(forwardIndex);
+                                    unityRelativeStyleSheetPath =
+                                        "Packages/" + PackageId + "/" + unityRelativeStyleSheetPath;
+                                }
+                                else
+                                {
+                                    unityRelativeStyleSheetPath =
+                                        "Packages/" + unityRelativeStyleSheetPath;
+                                }
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(unityRelativeStyleSheetPath))
+                            {
+                                styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                                    unityRelativeStyleSheetPath
+                                );
+                                if (styleSheet == null)
+                                {
+                                    Debug.LogError(
+                                        $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
+                                    );
+                                }
+                            }
+                            else
+                            {
+                                Debug.LogError(
+                                    $"Failed to convert absolute path '{styleSheetPath}' to Unity relative path."
+                                );
+                            }
+                        }
+                    }
+
+                    if (font == null)
+                    {
+                        string fontPath =
+                            $"{packageRoot}{pathSeparator}Editor{pathSeparator}Fonts{pathSeparator}IBMPlexMono-Regular.ttf";
+                        string unityRelativeFontPath = DirectoryHelper.AbsoluteToUnityRelativePath(
+                            fontPath
+                        );
+
                         font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
+                        if (font == null && !string.IsNullOrWhiteSpace(unityRelativeFontPath))
+                        {
+                            const string packageCache = "PackageCache/";
+                            int packageCacheIndex = unityRelativeFontPath.IndexOf(
+                                packageCache,
+                                StringComparison.OrdinalIgnoreCase
+                            );
+                            if (0 <= packageCacheIndex)
+                            {
+                                unityRelativeFontPath = unityRelativeFontPath[
+                                    (packageCacheIndex + packageCache.Length)..
+                                ];
+                                int forwardIndex = unityRelativeFontPath.IndexOf(
+                                    "/",
+                                    StringComparison.Ordinal
+                                );
+                                if (0 <= forwardIndex)
+                                {
+                                    unityRelativeFontPath = unityRelativeFontPath.Substring(
+                                        forwardIndex
+                                    );
+                                    unityRelativeFontPath =
+                                        "Packages/" + PackageId + "/" + unityRelativeFontPath;
+                                }
+                                else
+                                {
+                                    unityRelativeFontPath = "Packages/" + unityRelativeFontPath;
+                                }
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(unityRelativeFontPath))
+                            {
+                                font = AssetDatabase.LoadAssetAtPath<Font>(unityRelativeFontPath);
+                            }
+                        }
                     }
                 }
             }
@@ -1544,6 +1870,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            // The type's objects still stream in asynchronously; running a processor now would only
+            // touch the already-loaded subset while the dialog implies the whole type. Wait for the
+            // load to finish so the processor operates on the complete set.
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType == _namespaceController.SelectedType)
+            {
+                EditorUtility.DisplayDialog(
+                    "Loading In Progress",
+                    $"'{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' is still loading its "
+                        + "objects. Please wait for loading to finish before running a processor so it operates on the full set.",
+                    "OK"
+                );
+                return;
+            }
+
             ScriptableObject[] toProcess;
 
             switch (state.logic)
@@ -1785,9 +2125,35 @@ namespace WallstopStudios.DataVisualizer.Editor
             _currentSearchResultItems.Clear();
             _searchHighlightIndex = -1;
 
-            if (!_isSearchCachePopulated || string.IsNullOrWhiteSpace(searchText))
+            if (string.IsNullOrWhiteSpace(searchText))
             {
                 CloseActivePopover();
+                return;
+            }
+
+            if (!_isSearchCachePopulated)
+            {
+                // If the cache isn't populated and isn't already (re)building — e.g. after the window
+                // was hidden and shown again, which clears the cache without rebuilding it (population
+                // otherwise only runs once in CreateGUI) — kick it off now so this query resolves.
+                if (!_isLoadingSearchCacheAsync)
+                {
+                    PopulateSearchCacheAsync();
+                }
+
+                // Keep the popover open with a status line instead of dismissing the user's query;
+                // RefreshActiveSearch re-runs this search automatically once the cache is ready.
+                Label buildingLabel = new("Building search index…")
+                {
+                    style =
+                    {
+                        unityTextAlign = TextAnchor.MiddleCenter,
+                        paddingTop = 8,
+                        paddingBottom = 8,
+                    },
+                };
+                _searchPopover.Add(buildingLabel);
+                OpenPopover(_searchPopover, _searchField, shouldFocus: false);
                 return;
             }
 
@@ -2272,11 +2638,43 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Type targetType = targetObject.GetType();
             bool typeChanged = _namespaceController.SelectedType != targetType;
-            _namespaceController.SelectType(this, targetType);
 
             if (typeChanged)
             {
-                LoadObjectTypes(targetType);
+                // Persist the navigation target as this type's last selection so the async loader
+                // both prioritizes loading it and auto-selects it once its batch is in. SelectType
+                // already starts LoadObjectTypesAsync; loading again here (as before) cleared
+                // _selectedObjects mid-flight, interleaved duplicate batches, and left the loader to
+                // auto-select the *previous* saved object instead of the one the user clicked.
+                string targetGuid = AssetDatabase.AssetPathToGUID(
+                    AssetDatabase.GetAssetPath(targetObject)
+                );
+                if (!string.IsNullOrWhiteSpace(targetGuid))
+                {
+                    SetLastSelectedObjectGuidForType(targetType.FullName, targetGuid);
+                }
+
+                _namespaceController.SelectType(this, targetType);
+                CloseActivePopover();
+                return;
+            }
+
+            if (!_selectedObjects.Contains(targetObject))
+            {
+                // Same type, but the target's batch has not streamed in yet. Persist it as this type's
+                // last selection and reload with it prioritized so it loads first and is auto-selected —
+                // otherwise SelectObject would update the inspector while its ListView row is missing.
+                string targetGuid = AssetDatabase.AssetPathToGUID(
+                    AssetDatabase.GetAssetPath(targetObject)
+                );
+                if (!string.IsNullOrWhiteSpace(targetGuid))
+                {
+                    SetLastSelectedObjectGuidForType(targetType.FullName, targetGuid);
+                }
+
+                LoadObjectTypesAsync(targetType, priorityLoad: false);
+                CloseActivePopover();
+                return;
             }
 
             BuildObjectsView();
@@ -3378,7 +3776,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            ScriptableObject instance = CreateInstance(type);
+            ScriptableObject instance = ScriptableObject.CreateInstance(type);
             if (instance is ICreatable creatable)
             {
                 creatable.BeforeCreate();
@@ -3394,6 +3792,19 @@ namespace WallstopStudios.DataVisualizer.Editor
             CloseActivePopover();
             if (type == _namespaceController.SelectedType)
             {
+                if (_isLoadingObjectsAsync)
+                {
+                    // A load is still streaming assets in by canonical order. Give the new instance an
+                    // order past all of them so it sorts to the end and the loader's binary-search
+                    // inserts stay consistent (they assume _selectedObjects is ordered by this index).
+                    _selectedObjectOrderIndex[instance] = int.MaxValue;
+                    string instanceGuid = AssetDatabase.AssetPathToGUID(uniquePath);
+                    if (!string.IsNullOrWhiteSpace(instanceGuid))
+                    {
+                        _asyncDisplayOrderByGuid[instanceGuid] = int.MaxValue;
+                    }
+                }
+
                 _selectedObjects.Add(instance);
                 BuildObjectsView();
             }
@@ -3581,7 +3992,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             int index = _selectedObjects.IndexOf(objectToDelete);
             _selectedObjects.Remove(objectToDelete);
             _selectedObjects.RemoveAll(obj => obj == null);
-            _objectVisualElementMap.Remove(objectToDelete, out VisualElement visualElement);
+            _filteredObjects.Remove(objectToDelete);
+            _filteredObjects.RemoveAll(obj => obj == null);
+            _selectedObjectOrderIndex.Remove(objectToDelete);
             int targetIndex = _selectedObject == objectToDelete ? Mathf.Max(0, index - 1) : 0;
 
             bool deleted = AssetDatabase.DeleteAsset(path);
@@ -3589,15 +4002,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 Debug.Log($"Asset '{path}' deleted successfully.");
                 AssetDatabase.Refresh();
-                VisualElement parent = visualElement?.parent;
-                visualElement?.RemoveFromHierarchy();
-                if (parent != null)
-                {
-                    foreach (VisualElement child in parent.Children())
-                    {
-                        NamespaceController.RecalibrateVisualElements(child, offset: 1);
-                    }
-                }
+                BuildObjectsView();
                 if (targetIndex < _selectedObjects.Count)
                 {
                     SelectObject(_selectedObjects[targetIndex]);
@@ -3608,7 +4013,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 else
                 {
-                    _emptyObjectLabel.style.display = DisplayStyle.Flex;
                     SelectObject(null);
                 }
             }
@@ -3660,6 +4064,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     borderRightWidth = 1,
                     borderRightColor = Color.gray,
                     height = Length.Percent(100),
+                    minWidth = MinNamespacePaneWidth,
+                    flexShrink = 0,
                 },
             };
 
@@ -4405,13 +4811,37 @@ namespace WallstopStudios.DataVisualizer.Editor
                     borderRightColor = Color.gray,
                     flexDirection = FlexDirection.Column,
                     height = Length.Percent(100),
+                    minWidth = MinObjectPaneWidth,
+                    flexShrink = 0,
                 },
             };
 
             VisualElement objectHeader = new() { name = "object-header" };
             objectHeader.AddToClassList("object-header");
 
-            objectHeader.Add(new Label("Objects"));
+            VisualElement headerLeft = new()
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    flexGrow = 1,
+                },
+            };
+
+            headerLeft.Add(new Label("Objects"));
+
+            _objectLoadingIndicator = new Label() { name = "object-loading-indicator", text = "" };
+            _objectLoadingIndicator.AddToClassList("loading-indicator");
+            _objectLoadingIndicator.style.display = DisplayStyle.None;
+            _objectLoadingIndicator.style.marginLeft = 8;
+            _objectLoadingIndicator.style.fontSize = 11;
+            _objectLoadingIndicator.style.unityFontStyleAndWeight = FontStyle.Italic;
+            _objectLoadingIndicator.style.color = new Color(0.7f, 0.7f, 0.7f);
+            headerLeft.Add(_objectLoadingIndicator);
+
+            objectHeader.Add(headerLeft);
+
             _createObjectButton = null;
             _createObjectButton = new Button(() =>
             {
@@ -4616,74 +5046,42 @@ namespace WallstopStudios.DataVisualizer.Editor
             SetupDropTarget(_andLabelsContainer, LabelFilterSection.AND);
             SetupDropTarget(_orLabelsContainer, LabelFilterSection.OR);
 
-            _objectPageController = new VisualElement
+            _emptyObjectLabel = new Label
             {
-                name = "object-page-controller",
-                style = { display = DisplayStyle.None },
+                name = "empty-object-list-label",
+                style = { alignSelf = Align.Center, display = DisplayStyle.None },
             };
-            _objectPageController.AddToClassList("object-page-controller");
-            _previousPageButton = new Button(() =>
+            _emptyObjectLabel.AddToClassList("empty-object-list-label");
+            objectColumn.Add(_emptyObjectLabel);
+
+            _objectListView = new ListView
             {
-                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
-                if (currentPage <= 0)
+                name = "object-listview",
+                itemsSource = _filteredObjects,
+                selectionType = SelectionType.Single,
+                virtualizationMethod = CollectionVirtualizationMethod.FixedHeight,
+                fixedItemHeight = ObjectRowFixedHeight,
+                makeItem = MakeObjectRow,
+                unbindItem = (element, _) => element.userData = null,
+                reorderable = true,
+                // Animated gives the "floaty" reorder feel (rows slide to make room). Its drag-handle
+                // column is hidden via USS (.unity-list-view__reorderable-handle) so it doesn't add the
+                // left gutter the user flagged; the whole row stays draggable.
+                reorderMode = ListViewReorderMode.Animated,
+                showBorder = false,
+                style = { flexGrow = 1 },
+            };
+            _objectListView.bindItem = (element, i) =>
+            {
+                if (i >= 0 && i < _filteredObjects.Count)
                 {
-                    return;
+                    BindObjectRow(element, _filteredObjects[i], i);
                 }
-
-                SetCurrentPage(_namespaceController.SelectedType, currentPage - 1);
-                BuildObjectsView();
-            })
-            {
-                text = "←",
             };
-            _previousPageButton.AddToClassList("go-button-disabled");
-
-            _currentPageField = new IntegerField();
-            _currentPageField.AddToClassList("current-page-field");
-            _currentPageField.RegisterValueChangedCallback(evt =>
-            {
-                int newValue = evt.newValue;
-                newValue = Mathf.Clamp(newValue, 0, _filteredObjects.Count / MaxObjectsPerPage);
-                if (newValue != evt.newValue)
-                {
-                    _currentPageField.SetValueWithoutNotify(newValue);
-                }
-
-                SetCurrentPage(_namespaceController.SelectedType, newValue);
-                BuildObjectsView();
-            });
-            _maxPageField = new IntegerField() { isReadOnly = true };
-            _maxPageField.AddToClassList("max-page-field");
-            _nextPageButton = new Button(() =>
-            {
-                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
-                if (_filteredObjects.Count / MaxObjectsPerPage <= currentPage)
-                {
-                    return;
-                }
-
-                SetCurrentPage(_namespaceController.SelectedType, currentPage + 1);
-                BuildObjectsView();
-            })
-            {
-                text = "→",
-            };
-            _nextPageButton.AddToClassList("go-button-disabled");
-            _objectPageController.Add(_previousPageButton);
-            _objectPageController.Add(_currentPageField);
-            _objectPageController.Add(_maxPageField);
-            _objectPageController.Add(_nextPageButton);
-
-            objectColumn.Add(_objectPageController);
-
-            _objectScrollView = new ScrollView(ScrollViewMode.Vertical)
-            {
-                name = "object-scrollview",
-            };
-            _objectScrollView.AddToClassList("object-scrollview");
-            _objectListContainer = new VisualElement { name = "object-list" };
-            _objectScrollView.Add(_objectListContainer);
-            objectColumn.Add(_objectScrollView);
+            _objectListView.AddToClassList("object-scrollview");
+            _objectListView.RegisterSelectionChangedCompat(OnObjectListSelectionChanged);
+            _objectListView.itemIndexChanged += OnObjectListItemReordered;
+            objectColumn.Add(_objectListView);
             UpdateCreateObjectButtonStyle();
             UpdateLabelAreaAndFilter();
             return objectColumn;
@@ -4806,7 +5204,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement inspectorColumn = new()
             {
                 name = "inspector-column",
-                style = { flexGrow = 1, height = Length.Percent(100) },
+                style =
+                {
+                    flexGrow = 1,
+                    height = Length.Percent(100),
+                    minWidth = MinInspectorPaneWidth,
+                    flexShrink = 0,
+                },
             };
             _inspectorScrollView = new ScrollView(ScrollViewMode.Vertical)
             {
@@ -5312,45 +5716,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 else
                 {
-                    HashSet<string> uniqueLabels = new(StringComparer.Ordinal);
-                    Predicate<string> labelMatch = uniqueLabels.Contains;
                     foreach (ScriptableObject obj in _selectedObjects)
                     {
-                        if (obj == null)
+                        if (
+                            obj != null
+                            && LabelFilterEvaluator.Matches(AssetDatabase.GetLabels(obj), config)
+                        )
                         {
-                            continue;
-                        }
-
-                        string[] labels = AssetDatabase.GetLabels(obj);
-                        uniqueLabels.Clear();
-                        foreach (string label in labels)
-                        {
-                            uniqueLabels.Add(label);
-                        }
-
-                        bool matchesAnd = noAndFilter || andLabels.TrueForAll(labelMatch);
-                        bool matchesOr = noOrFilter || orLabels.Exists(labelMatch);
-
-                        switch (config.combinationType)
-                        {
-                            case LabelCombinationType.And:
-                            {
-                                if (matchesAnd && matchesOr)
-                                {
-                                    _filteredObjects.Add(obj);
-                                }
-
-                                break;
-                            }
-                            case LabelCombinationType.Or:
-                            {
-                                if (matchesAnd || matchesOr)
-                                {
-                                    _filteredObjects.Add(obj);
-                                }
-
-                                break;
-                            }
+                            _filteredObjects.Add(obj);
                         }
                     }
                 }
@@ -5760,200 +6133,118 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal void BuildObjectsView()
         {
             _selectedObjects.RemoveAll(obj => obj == null);
-            if (_objectListContainer == null)
+            if (_objectListView == null)
             {
                 return;
             }
 
-            _objectListContainer.Clear();
-            _objectVisualElementMap.Clear();
-            _objectScrollView.scrollOffset = Vector2.zero;
-
             Type selectedType = _namespaceController.SelectedType;
-            _emptyObjectLabel = new Label(
-                $"No objects of type '{selectedType?.Name}' found.\nUse the '+' button above to create one."
-            )
-            {
-                name = "empty-object-list-label",
-                style = { alignSelf = Align.Center },
-            };
-            _emptyObjectLabel.AddToClassList("empty-object-list-label");
-            _objectListContainer.Add(_emptyObjectLabel);
+
+            // Nothing loaded yet (or still loading): show the empty/loading overlay, hide the list.
             if (selectedType != null && _selectedObjects.Count == 0)
             {
+                _filteredObjects.Clear();
+                _objectListView.RefreshItems();
+                _objectListView.style.display = DisplayStyle.None;
+                _emptyObjectLabel.text =
+                    _isLoadingObjectsAsync && _asyncLoadTargetType == selectedType
+                        ? "Loading objects..."
+                        : $"No objects of type '{selectedType.Name}' found.\nUse the '+' button above to create one.";
                 _emptyObjectLabel.style.display = DisplayStyle.Flex;
                 return;
             }
 
             ApplyLabelFilter(buildObjectsView: false);
 
-            _emptyObjectLabel.style.display = DisplayStyle.None;
             if (_filteredObjects.Count == 0)
             {
-                // If _selectedObjects has items, then filter is active and hiding all
-                if (_selectedObjects.Count > 0)
-                {
-                    Label noMatchLabel = new(
-                        $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' match the current label filter."
-                    )
-                    {
-                        style = { alignSelf = Align.Center },
-                    };
-                    noMatchLabel.AddToClassList("empty-object-list-label");
-                    _objectListContainer.Add(noMatchLabel);
-                }
-                else
-                {
-                    Label noMatchLabel = new(
-                        $"No objects of type '{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' found."
-                    )
-                    {
-                        style = { alignSelf = Align.Center },
-                    };
-                    noMatchLabel.AddToClassList("empty-object-list-label");
-                    _objectListContainer.Add(noMatchLabel);
-                }
+                _objectListView.RefreshItems();
+                _objectListView.style.display = DisplayStyle.None;
+                _emptyObjectLabel.text =
+                    _selectedObjects.Count > 0
+                        ? $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' match the current label filter."
+                        : $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' found.";
+                _emptyObjectLabel.style.display = DisplayStyle.Flex;
                 return;
             }
 
-            if (_filteredObjects.Count <= MaxObjectsPerPage)
-            {
-                if (_objectPageController != null)
-                {
-                    _objectPageController.style.display = DisplayStyle.None;
-                }
-                for (int i = 0; i < _filteredObjects.Count; i++)
-                {
-                    BuildObjectRow(_filteredObjects[i], i);
-                }
-            }
-            else
-            {
-                if (_objectPageController != null)
-                {
-                    _objectPageController.style.display = DisplayStyle.Flex;
-                }
+            _emptyObjectLabel.style.display = DisplayStyle.None;
+            _objectListView.style.display = DisplayStyle.Flex;
 
-                _maxPageField.value = _filteredObjects.Count / MaxObjectsPerPage;
-                int currentPage = GetCurrentPage(_namespaceController.SelectedType);
-                currentPage = Mathf.Clamp(
-                    currentPage,
-                    0,
-                    _filteredObjects.Count / MaxObjectsPerPage
-                );
-                _currentPageField.SetValueWithoutNotify(currentPage);
+            // Drag-reorder is only safe (maps 1:1 to the saved order) when no label filter is hiding
+            // items, i.e. the filtered list matches the full list.
+            _objectListView.reorderable = _filteredObjects.Count == _selectedObjects.Count;
 
-                _previousPageButton.EnableInClassList("go-button-disabled", currentPage <= 0);
-                _previousPageButton.EnableInClassList(
-                    StyleConstants.ActionButtonClass,
-                    0 < currentPage
-                );
-                _previousPageButton.EnableInClassList("go-button", 0 < currentPage);
+            _objectListView.RefreshItems();
 
-                _nextPageButton.EnableInClassList(
-                    "go-button-disabled",
-                    _maxPageField.value <= currentPage
-                );
-                _nextPageButton.EnableInClassList(
-                    StyleConstants.ActionButtonClass,
-                    currentPage < _maxPageField.value
-                );
-                _nextPageButton.EnableInClassList("go-button", currentPage < _maxPageField.value);
-
-                int max = Mathf.Min((currentPage + 1) * MaxObjectsPerPage, _filteredObjects.Count);
-                for (int i = currentPage * MaxObjectsPerPage; i < max; i++)
-                {
-                    BuildObjectRow(_filteredObjects[i], i);
-                }
-            }
+            // Re-resolve the selection by identity (indices shift as async batches load).
+            int selectedIndex =
+                _selectedObject != null ? _filteredObjects.IndexOf(_selectedObject) : -1;
+            _suppressListSelectionCallback = true;
+            _objectListView.SetSelectionWithoutNotify(
+                selectedIndex >= 0 ? new[] { selectedIndex } : Array.Empty<int>()
+            );
+            _suppressListSelectionCallback = false;
         }
 
-        private void BuildObjectRow(ScriptableObject dataObject, int index)
+        // Builds the reusable skeleton of an object row (no per-object data) for the ListView's
+        // makeItem. Button handlers resolve the current object from the row's userData at click time
+        // so the element can be safely reused across items (as ListView virtualization requires).
+        private VisualElement MakeObjectRow()
         {
-            if (dataObject == null)
-            {
-                return;
-            }
+            // Outer element: the ListView forces this to fixedItemHeight (FixedHeight virtualization),
+            // so it stays a transparent slot that vertically centers the visible box. The box can't
+            // carry its own vertical margin without breaking the ListView's fixed-height scroll math,
+            // so the inter-row gap comes from centering a shorter box inside the taller slot.
+            VisualElement row = new() { name = "object-row-slot" };
+            row.AddToClassList(StyleConstants.ClickableClass);
+            row.style.flexDirection = FlexDirection.Column;
+            row.style.justifyContent = Justify.Center;
+            // Force the slot to the full fixed-item height so the shorter box centers within it
+            // (the ListView otherwise shrinks the slot to the box, leaving no room to center/gap).
+            row.style.height = ObjectRowFixedHeight;
 
-            string dataObjectName;
-            if (dataObject is IDisplayable displayable)
-            {
-                dataObjectName = displayable.Title;
-            }
-            else
-            {
-                dataObjectName = dataObject.name;
-            }
-
-            VisualElement objectItemRow = new()
-            {
-                name = $"object-item-row-{dataObject.GetObjectIdString()}",
-            };
-            objectItemRow.AddToClassList(ObjectItemClass);
-            objectItemRow.AddToClassList(StyleConstants.ClickableClass);
-            objectItemRow.style.flexDirection = FlexDirection.Row;
-            objectItemRow.style.alignItems = Align.Center;
-            objectItemRow.userData = dataObject;
-            objectItemRow.RegisterCallback<PointerDownEvent>(OnObjectPointerDown);
+            VisualElement box = new() { name = "object-item-box" };
+            box.AddToClassList(ObjectItemClass);
+            box.AddToClassList(StyleConstants.ClickableClass);
+            box.style.flexDirection = FlexDirection.Row;
+            box.style.alignItems = Align.Center;
+            row.Add(box);
 
             Button goUpButton = new(() =>
             {
-                _filteredObjects.Remove(dataObject);
-                _filteredObjects.Insert(0, dataObject);
-                _filteredObjects.Remove(dataObject);
-                _filteredObjects.Insert(0, dataObject);
-                UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
-                BuildObjectsView();
+                if (row.userData is ScriptableObject o)
+                {
+                    MoveObjectToTop(o);
+                }
             })
             {
                 name = "go-up-button",
                 text = "↑",
-                tooltip = $"Move {dataObjectName} to top",
             };
-            if (_selectedObjects.Count == 1 || index == 0)
-            {
-                goUpButton.AddToClassList("go-button-disabled");
-            }
-            else
-            {
-                goUpButton.AddToClassList(StyleConstants.ActionButtonClass);
-                goUpButton.AddToClassList("go-button");
-            }
-
-            objectItemRow.Add(goUpButton);
+            goUpButton.RegisterCallback(StopRowChildPointerDown);
+            box.Add(goUpButton);
 
             Button goDownButton = new(() =>
             {
-                _selectedObjects.Remove(dataObject);
-                _selectedObjects.Add(dataObject);
-                _filteredObjects.Remove(dataObject);
-                _filteredObjects.Add(dataObject);
-                UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
-                BuildObjectsView();
+                if (row.userData is ScriptableObject o)
+                {
+                    MoveObjectToBottom(o);
+                }
             })
             {
                 name = "go-down-button",
                 text = "↓",
-                tooltip = $"Move {dataObjectName} to bottom",
             };
-            if (_filteredObjects.Count == 1 || index == _filteredObjects.Count - 1)
-            {
-                goDownButton.AddToClassList("go-button-disabled");
-            }
-            else
-            {
-                goDownButton.AddToClassList(StyleConstants.ActionButtonClass);
-                goDownButton.AddToClassList("go-button");
-            }
-
-            objectItemRow.Add(goDownButton);
+            goDownButton.RegisterCallback(StopRowChildPointerDown);
+            box.Add(goDownButton);
 
             VisualElement contentArea = new() { name = "content" };
             contentArea.AddToClassList(ObjectItemContentClass);
             contentArea.AddToClassList(StyleConstants.ClickableClass);
-            objectItemRow.Add(contentArea);
+            box.Add(contentArea);
 
-            Label titleLabel = new(dataObjectName) { name = "object-item-label" };
+            Label titleLabel = new() { name = "object-item-label" };
             titleLabel.AddToClassList("object-item__label");
             titleLabel.AddToClassList(StyleConstants.ClickableClass);
             contentArea.Add(titleLabel);
@@ -5969,9 +6260,16 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
             actionsArea.AddToClassList(ObjectItemActionsClass);
-            objectItemRow.Add(actionsArea);
+            actionsArea.RegisterCallback(StopRowChildPointerDown);
+            box.Add(actionsArea);
 
-            Button cloneButton = new(() => CloneObject(dataObject))
+            Button cloneButton = new(() =>
+            {
+                if (row.userData is ScriptableObject o)
+                {
+                    CloneObject(o);
+                }
+            })
             {
                 text = "++",
                 tooltip = "Clone Object",
@@ -5981,7 +6279,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             actionsArea.Add(cloneButton);
 
             Button renameButton = null;
-            renameButton = new Button(() => OpenRenamePopover(titleLabel, renameButton, dataObject))
+            renameButton = new Button(() =>
+            {
+                if (row.userData is ScriptableObject o)
+                {
+                    OpenRenamePopover(titleLabel, renameButton, o);
+                }
+            })
             {
                 text = "@",
                 tooltip = "Rename Object",
@@ -5992,76 +6296,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Button moveButton = new(() =>
             {
-                if (dataObject == null)
+                if (row.userData is ScriptableObject o)
                 {
-                    return;
-                }
-
-                string assetPath = AssetDatabase.GetAssetPath(dataObject);
-                string startDirectory = Path.GetDirectoryName(assetPath) ?? string.Empty;
-                string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
-                    title: "Select New Location (Must be inside Assets)",
-                    folder: startDirectory,
-                    defaultName: ""
-                );
-
-                if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
-                {
-                    return;
-                }
-
-                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
-
-                string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
-
-                if (
-                    !selectedAbsolutePath.StartsWith(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                    EditorUtility.DisplayDialog(
-                        "Invalid Folder",
-                        "The selected folder must be inside the project's 'Assets' directory.",
-                        "OK"
-                    );
-                    return;
-                }
-
-                string relativePath;
-                if (
-                    selectedAbsolutePath.Equals(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    relativePath = "Assets";
-                }
-                else
-                {
-                    relativePath =
-                        "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-                    relativePath = relativePath.Replace("//", "/");
-                }
-
-                string targetPath = $"{relativePath}/{dataObject.name}.asset";
-                if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    // Ignore same path operation
-                    return;
-                }
-
-                string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
-                AssetDatabase.SaveAssets();
-                if (!string.IsNullOrWhiteSpace(errorMessage))
-                {
-                    Debug.LogError(
-                        $"Error moving asset {dataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}"
-                    );
-                    EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
+                    MoveObjectToFolder(o);
                 }
             })
             {
@@ -6073,7 +6310,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             actionsArea.Add(moveButton);
 
             Button deleteButton = null;
-            deleteButton = new Button(() => OpenConfirmDeletePopover(deleteButton, dataObject))
+            deleteButton = new Button(() =>
+            {
+                if (row.userData is ScriptableObject o)
+                {
+                    OpenConfirmDeletePopover(deleteButton, o);
+                }
+            })
             {
                 text = "X",
                 tooltip = "Delete Object",
@@ -6082,13 +6325,195 @@ namespace WallstopStudios.DataVisualizer.Editor
             deleteButton.AddToClassList("delete-button");
             actionsArea.Add(deleteButton);
 
-            _objectVisualElementMap[dataObject] = objectItemRow;
-            _objectListContainer.Add(objectItemRow);
+            return row;
+        }
 
-            if (_selectedObject == dataObject)
+        // Populates a row skeleton for a specific object at a display index. Serves as the ListView
+        // bindItem.
+        private void BindObjectRow(VisualElement row, ScriptableObject dataObject, int index)
+        {
+            if (row == null || dataObject == null)
             {
-                objectItemRow.AddToClassList(StyleConstants.SelectedClass);
-                _selectedElement = objectItemRow;
+                return;
+            }
+
+            row.userData = dataObject;
+            row.name = $"object-item-row-{dataObject.GetObjectIdString()}";
+
+            string dataObjectName = dataObject is IDisplayable displayable
+                ? displayable.Title
+                : dataObject.name;
+
+            Label titleLabel = row.Q<Label>("object-item-label");
+            if (titleLabel != null)
+            {
+                titleLabel.text = dataObjectName;
+            }
+
+            Button goUpButton = row.Q<Button>("go-up-button");
+            if (goUpButton != null)
+            {
+                goUpButton.tooltip = $"Move {dataObjectName} to top";
+                bool disabled = _selectedObjects.Count == 1 || index == 0;
+                goUpButton.EnableInClassList("go-button-disabled", disabled);
+                goUpButton.EnableInClassList(StyleConstants.ActionButtonClass, !disabled);
+                goUpButton.EnableInClassList("go-button", !disabled);
+            }
+
+            Button goDownButton = row.Q<Button>("go-down-button");
+            if (goDownButton != null)
+            {
+                goDownButton.tooltip = $"Move {dataObjectName} to bottom";
+                bool disabled = _filteredObjects.Count == 1 || index == _filteredObjects.Count - 1;
+                goDownButton.EnableInClassList("go-button-disabled", disabled);
+                goDownButton.EnableInClassList(StyleConstants.ActionButtonClass, !disabled);
+                goDownButton.EnableInClassList("go-button", !disabled);
+            }
+
+            // Custom green-border selection styling follows the selected object across ListView
+            // element reuse (applied to the visible box, not the transparent outer slot).
+            row.Q<VisualElement>("object-item-box")
+                ?.EnableInClassList(StyleConstants.SelectedClass, _selectedObject == dataObject);
+        }
+
+        private void MoveObjectToTop(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            _selectedObjects.Remove(dataObject);
+            _selectedObjects.Insert(0, dataObject);
+            _filteredObjects.Remove(dataObject);
+            _filteredObjects.Insert(0, dataObject);
+            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+            BuildObjectsView();
+            FocusMovedObject(dataObject);
+        }
+
+        private void MoveObjectToBottom(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            _selectedObjects.Remove(dataObject);
+            _selectedObjects.Add(dataObject);
+            _filteredObjects.Remove(dataObject);
+            _filteredObjects.Add(dataObject);
+            UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+            BuildObjectsView();
+            FocusMovedObject(dataObject);
+        }
+
+        // Selects the just-moved object, deferred one tick so it wins over the ListView's own
+        // pointer-driven selection for the button click (which can land on the wrong row after the
+        // reorder). Keeps the selection sticky and focuses the item the user acted on.
+        private void FocusMovedObject(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            // Deferred one tick so it runs after the ListView's own pointer-driven selection for the
+            // button click. Always re-selects and scrolls the moved item fully into view — bypassing
+            // SelectObject's already-selected early-out, which would otherwise skip the scroll.
+            rootVisualElement
+                .schedule.Execute(() =>
+                {
+                    if (_objectListView == null)
+                    {
+                        return;
+                    }
+
+                    int index = _filteredObjects.IndexOf(dataObject);
+                    if (index < 0)
+                    {
+                        return;
+                    }
+
+                    if (_selectedObject != dataObject)
+                    {
+                        SelectObject(dataObject);
+                    }
+
+                    _suppressListSelectionCallback = true;
+                    _objectListView.SetSelectionWithoutNotify(new[] { index });
+                    _suppressListSelectionCallback = false;
+                    _objectListView.ScrollToItem(index);
+                })
+                .ExecuteLater(1);
+        }
+
+        private void MoveObjectToFolder(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                return;
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(dataObject);
+            string startDirectory = Path.GetDirectoryName(assetPath) ?? string.Empty;
+            string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
+                title: "Select New Location (Must be inside Assets)",
+                folder: startDirectory,
+                defaultName: ""
+            );
+
+            if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
+            {
+                return;
+            }
+
+            selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
+
+            string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
+
+            if (
+                !selectedAbsolutePath.StartsWith(
+                    projectAssetsPath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                Debug.LogError("Selected folder must be inside the project's Assets folder.");
+                EditorUtility.DisplayDialog(
+                    "Invalid Folder",
+                    "The selected folder must be inside the project's 'Assets' directory.",
+                    "OK"
+                );
+                return;
+            }
+
+            string relativePath;
+            if (selectedAbsolutePath.Equals(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
+            {
+                relativePath = "Assets";
+            }
+            else
+            {
+                relativePath = "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
+                relativePath = relativePath.Replace("//", "/");
+            }
+
+            string targetPath = $"{relativePath}/{dataObject.name}.asset";
+            if (string.Equals(assetPath, targetPath, StringComparison.OrdinalIgnoreCase))
+            {
+                // Ignore same path operation
+                return;
+            }
+
+            string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
+            AssetDatabase.SaveAssets();
+            if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                Debug.LogError(
+                    $"Error moving asset {dataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}"
+                );
+                EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
             }
         }
 
@@ -6123,7 +6548,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            if (_selectedElement != null)
+            if (_selectedObject != null)
             {
                 try
                 {
@@ -6909,9 +7334,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        internal ScriptableObject DetermineObjectToAutoSelect()
+        internal ScriptableObject DetermineObjectToAutoSelect(Type selectedType)
         {
-            Type selectedType = _namespaceController.SelectedType;
             if (selectedType == null || _selectedObjects.Count == 0)
             {
                 return null;
@@ -6919,18 +7343,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             ScriptableObject objectToSelect = null;
             string savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.FullName);
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid))
-            {
-                objectToSelect = _selectedObjects.Find(obj =>
-                    obj != null
-                    && string.Equals(
-                        AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(obj)),
-                        savedObjectGuid,
-                        StringComparison.Ordinal
-                    )
-                );
-            }
-
             if (!string.IsNullOrWhiteSpace(savedObjectGuid))
             {
                 objectToSelect = _selectedObjects.Find(obj =>
@@ -6945,7 +7357,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                         && string.Equals(
                             AssetDatabase.AssetPathToGUID(path),
                             savedObjectGuid,
-                            StringComparison.Ordinal
+                            // Case-insensitive to match the priority guard in LoadObjectTypesAsync, so
+                            // a saved GUID that loaded is never skipped here over casing.
+                            StringComparison.OrdinalIgnoreCase
                         );
                 });
             }
@@ -6989,15 +7403,17 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void RefreshSelectedElementVisuals(ScriptableObject dataObject)
         {
-            if (
-                dataObject == null
-                || !_objectVisualElementMap.TryGetValue(dataObject, out VisualElement visualElement)
-            )
+            if (dataObject == null || _objectListView == null)
             {
                 return;
             }
 
-            UpdateObjectTitleRepresentation(dataObject, visualElement);
+            int index = _filteredObjects.IndexOf(dataObject);
+            if (index >= 0)
+            {
+                // Re-binds the row (BindObjectRow refreshes the title) without a full rebuild.
+                _objectListView.RefreshItem(index);
+            }
         }
 
         private static void UpdateObjectTitleRepresentation(
@@ -7033,43 +7449,322 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        internal void LoadObjectTypes(Type type)
+        internal void LoadObjectTypesAsync(Type type, bool priorityLoad = false)
         {
             if (type == null)
             {
                 return;
             }
 
-            _selectedObjects.Clear();
-            _objectVisualElementMap.Clear();
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] LoadObjectTypesAsync START - Type: {type.Name}, Priority: {priorityLoad} at {System.DateTime.Now:HH:mm:ss.fff}"
+                );
+            }
+
+            // Cancel any existing async load for a different type
+            // Cancel any in-flight load when starting a fresh one — even for the SAME type (e.g. a
+            // refresh) — otherwise the old scheduled pump and its _pendingObjectGuids interleave with
+            // the new load and corrupt ordering/selection.
+            if (_isLoadingObjectsAsync && !priorityLoad)
+            {
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] Cancelling previous async load for {_asyncLoadTargetType?.Name}"
+                    );
+                }
+                _asyncLoadTask?.Pause();
+                _pendingObjectGuids.Clear();
+                UpdateLoadingIndicator(0, 0); // Hide indicator for cancelled load
+            }
+
+            // A new generation for this fresh load so any stale scheduled callback no-ops (see field).
+            if (!priorityLoad)
+            {
+                _asyncLoadGeneration++;
+            }
+            int loadGeneration = _asyncLoadGeneration;
+
+            _asyncLoadTargetType = type;
+            _isLoadingObjectsAsync = true;
+
+            // Clear existing if this is a new selection (not a continuation)
+            if (!priorityLoad)
+            {
+                _selectedObjects.Clear();
+                _selectedObjectOrderIndex.Clear();
+                _filteredObjects.Clear();
+            }
 
             List<string> customGuidOrder = GetObjectOrderForType(type);
-            Dictionary<string, ScriptableObject> objectsByGuid = new();
-            string[] assetGuids = AssetDatabase.FindAssets($"t:{type.Name}");
-            foreach (string assetGuid in assetGuids)
+
+            // Get the last selected object's GUID so we can prioritize loading it
+            string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
+
+            // Get all GUIDs for this type
+            string[] allGuids = AssetDatabase.FindAssets($"t:{type.Name}");
+            _asyncLoadTotalCount = allGuids.Length;
+            _asyncLoadSkippedCount = 0;
+
+            // No assets of this type: skip the async loader entirely so it doesn't flash the
+            // "Loading objects..." overlay before immediately completing. Clear any stale
+            // selection/indicator and show the empty view now.
+            if (allGuids.Length == 0)
             {
-                string assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
-                if (string.IsNullOrWhiteSpace(assetPath))
-                {
-                    continue;
-                }
+                _isLoadingObjectsAsync = false;
+                _asyncLoadTargetType = null;
+                _pendingObjectGuids.Clear();
+                UpdateLoadingIndicator(0, 0);
+                SelectObject(null);
+                BuildObjectsView();
+                return;
+            }
 
-                ScriptableObject asset =
-                    AssetDatabase.LoadMainAssetAtPath(assetPath) as ScriptableObject;
-                if (asset == null || asset.GetType() != type)
-                {
-                    continue;
-                }
+            // Ignore a stale saved selection (asset deleted/moved so FindAssets no longer returns it)
+            // so it isn't prioritized ahead of real assets, wasting a priority slot loading nothing.
+            // Case-insensitive so a valid saved GUID is never dropped over casing and then wrongly
+            // de-prioritized (which would fall back to the first asset and overwrite the saved id).
+            if (
+                !string.IsNullOrWhiteSpace(savedObjectGuid)
+                && !allGuids.Contains(savedObjectGuid, StringComparer.OrdinalIgnoreCase)
+            )
+            {
+                savedObjectGuid = null;
+            }
 
-                if (!string.IsNullOrWhiteSpace(assetGuid))
+            // Establish the canonical display order for this load: custom-ordered assets first (in
+            // their saved sequence), then everything else by asset path. LoadObjectBatch positions
+            // assets by this map so drag/move ordering is preserved across async batches.
+            _asyncDisplayOrderByGuid.Clear();
+            {
+                HashSet<string> allGuidLookup = new(allGuids, StringComparer.Ordinal);
+                int displayIndex = 0;
+                foreach (string guid in customGuidOrder)
                 {
-                    objectsByGuid[assetGuid] = asset;
+                    if (allGuidLookup.Contains(guid) && !_asyncDisplayOrderByGuid.ContainsKey(guid))
+                    {
+                        _asyncDisplayOrderByGuid[guid] = displayIndex++;
+                    }
+                }
+                foreach (
+                    string guid in allGuids
+                        .Where(candidate => !_asyncDisplayOrderByGuid.ContainsKey(candidate))
+                        .OrderBy(
+                            candidate => AssetDatabase.GUIDToAssetPath(candidate),
+                            StringComparer.OrdinalIgnoreCase
+                        )
+                )
+                {
+                    _asyncDisplayOrderByGuid[guid] = displayIndex++;
                 }
             }
 
-            List<ScriptableObject> sortedObjects = new();
+            // Prioritize: saved object, custom order, then remaining
+            List<string> priorityGuids = new();
+            List<string> remainingGuids = new();
 
-            foreach (string guid in customGuidOrder)
+            // Create a set for fast lookup
+            HashSet<string> customGuidSet = new(customGuidOrder, StringComparer.Ordinal);
+
+            // Add saved object to priority if it exists and isn't already in custom order
+            if (
+                !string.IsNullOrWhiteSpace(savedObjectGuid)
+                && !customGuidSet.Contains(savedObjectGuid)
+            )
+            {
+                priorityGuids.Add(savedObjectGuid);
+            }
+
+            foreach (string guid in allGuids)
+            {
+                if (customGuidSet.Contains(guid))
+                {
+                    priorityGuids.Add(guid);
+                }
+                else if (guid != savedObjectGuid) // Don't add saved object twice
+                {
+                    remainingGuids.Add(guid);
+                }
+            }
+
+            // Ensure custom order is respected, with saved object ALWAYS at the front
+            List<string> orderedPriorityGuids = new();
+
+            // Saved object ALWAYS comes first (critical for restoring selection)
+            // Even if it's in custom order, we need it loaded immediately
+            // O(1) membership for the ordering below instead of repeated O(n) List.Contains scans.
+            HashSet<string> priorityGuidSet = new(priorityGuids, StringComparer.Ordinal);
+
+            if (
+                !string.IsNullOrWhiteSpace(savedObjectGuid)
+                && priorityGuidSet.Contains(savedObjectGuid)
+            )
+            {
+                orderedPriorityGuids.Add(savedObjectGuid);
+            }
+
+            // Then custom order (excluding saved object to avoid duplicates)
+            orderedPriorityGuids.AddRange(
+                customGuidOrder.Where(guid =>
+                    priorityGuidSet.Contains(guid) && guid != savedObjectGuid
+                )
+            );
+
+            // Then any remaining priority items
+            orderedPriorityGuids.AddRange(
+                priorityGuids.Except(orderedPriorityGuids, StringComparer.Ordinal)
+            );
+
+            // Load priority batch first (custom ordered items)
+            int priorityBatchSize = Mathf.Min(
+                AsyncLoadPriorityBatchSize,
+                orderedPriorityGuids.Count
+            );
+            List<string> priorityBatch = orderedPriorityGuids.GetRange(0, priorityBatchSize);
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                string savedObjInfo = "";
+                if (!string.IsNullOrWhiteSpace(savedObjectGuid))
+                {
+                    bool savedInBatch = priorityBatch.Contains(savedObjectGuid);
+                    savedObjInfo = savedInBatch
+                        ? $" (saved object {savedObjectGuid} is in priority batch)"
+                        : $" (WARNING: saved object {savedObjectGuid} NOT in priority batch!)";
+                }
+                Debug.Log(
+                    $"[DataVisualizer] Loading priority batch: {priorityBatchSize} objects{savedObjInfo} (Total: {allGuids.Length}, Remaining: {allGuids.Length - priorityBatchSize})"
+                );
+            }
+
+            // LoadObjectBatch updates the indicator with the real loaded count, so there's no
+            // pre-load UpdateLoadingIndicator here (it briefly showed progress before anything loaded).
+            LoadObjectBatch(type, priorityBatch, true);
+
+            // Queue remaining priority items
+            for (int i = priorityBatchSize; i < orderedPriorityGuids.Count; i++)
+            {
+                _pendingObjectGuids.Enqueue(orderedPriorityGuids[i]);
+            }
+
+            // Order the remaining GUIDs by the canonical display order already computed above rather
+            // than re-deriving asset paths and sorting again (that duplicate work is noticeable on
+            // large projects). _asyncDisplayOrderByGuid was built path-sorted, so order is preserved.
+            List<string> remainingSorted = remainingGuids
+                .OrderBy(guid =>
+                    _asyncDisplayOrderByGuid.TryGetValue(guid, out int order) ? order : int.MaxValue
+                )
+                .ToList();
+
+            // Load first batch of remaining items if we have space
+            if (priorityBatchSize < AsyncLoadPriorityBatchSize)
+            {
+                int remainingInPriorityBatch = AsyncLoadPriorityBatchSize - priorityBatchSize;
+                int firstRemainingBatch = Mathf.Min(
+                    remainingInPriorityBatch,
+                    remainingSorted.Count
+                );
+                List<string> firstRemainingBatchGuids = remainingSorted.GetRange(
+                    0,
+                    firstRemainingBatch
+                );
+                LoadObjectBatch(type, firstRemainingBatchGuids, true);
+
+                for (int i = firstRemainingBatch; i < remainingSorted.Count; i++)
+                {
+                    _pendingObjectGuids.Enqueue(remainingSorted[i]);
+                }
+            }
+            else
+            {
+                foreach (string guid in remainingSorted)
+                {
+                    _pendingObjectGuids.Enqueue(guid);
+                }
+            }
+
+            // Now that the priority batch AND the first remainder batch are loaded, select the
+            // saved/first object synchronously (still in this frame, so a type switch goes straight
+            // from the old inspector to the new one with no stale UI or "loading"/"select an object"
+            // flash). Running it here rather than right after the (possibly empty) priority batch means
+            // a fresh type with no saved selection and no custom order still auto-selects its first
+            // real asset instead of showing a populated list with a blank inspector. Remaining objects
+            // keep streaming in asynchronously below.
+            if (!priorityLoad)
+            {
+                BuildObjectsView();
+                UpdateCreateObjectButtonStyle();
+                UpdateLabelAreaAndFilter();
+
+                ScriptableObject objectToSelect = DetermineObjectToAutoSelect(type);
+
+                if (EnableAsyncLoadDebugLog)
+                {
+                    if (objectToSelect != null)
+                    {
+                        string objPath = AssetDatabase.GetAssetPath(objectToSelect);
+                        string objGuid = AssetDatabase.AssetPathToGUID(objPath);
+                        Debug.Log(
+                            $"[DataVisualizer] Selecting saved object: {objectToSelect.name} (GUID: {objGuid})"
+                        );
+                    }
+                    else
+                    {
+                        Debug.LogWarning(
+                            $"[DataVisualizer] No saved object found, _selectedObjects.Count = {_selectedObjects.Count}"
+                        );
+                    }
+                }
+
+                if (objectToSelect != null)
+                {
+                    SelectObjectAndNavigate(objectToSelect);
+                }
+                else if (_selectedObjects.Count > 0)
+                {
+                    SelectObjectAndNavigate(_selectedObjects[0]);
+                }
+                else
+                {
+                    // The type has no assets — clear the stale selection and inspector instead of
+                    // leaving the previously selected object showing.
+                    SelectObject(null);
+                }
+            }
+
+            // Continue loading remaining batches
+            if (_pendingObjectGuids.Count > 0)
+            {
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] Queued {_pendingObjectGuids.Count} objects for background loading"
+                    );
+                }
+                ContinueLoadingObjects(type, loadGeneration);
+            }
+            else
+            {
+                _isLoadingObjectsAsync = false;
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] LoadObjectTypesAsync COMPLETE - All {allGuids.Length} objects loaded immediately"
+                    );
+                }
+                UpdateLoadingIndicator(allGuids.Length, allGuids.Length);
+                BuildObjectsView();
+            }
+        }
+
+        private void LoadObjectBatch(Type type, List<string> guids, bool updateView = false)
+        {
+            var batchStartTime = System.Diagnostics.Stopwatch.StartNew();
+            List<(string guid, ScriptableObject asset)> loadedObjects = new();
+
+            foreach (string guid in guids)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 if (string.IsNullOrWhiteSpace(path))
@@ -7077,41 +7772,160 @@ namespace WallstopStudios.DataVisualizer.Editor
                     continue;
                 }
 
-                ScriptableObject dataObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
-                if (dataObject == null || dataObject.GetType() != type)
+                ScriptableObject asset =
+                    AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+                if (asset != null && asset.GetType() == type)
+                {
+                    loadedObjects.Add((guid, asset));
+                }
+            }
+
+            // Insert into _selectedObjects at each asset's canonical position (custom order first,
+            // then by path) so user ordering survives batched loading. The position index is cached
+            // per object so comparisons stay O(1) with no per-comparison AssetDatabase calls.
+            // NOTE: intentionally does NOT touch _filteredObjects — ApplyLabelFilter() rebuilds that
+            // from _selectedObjects when BuildObjectsView() runs, so active filters stay correct.
+            foreach ((string guid, ScriptableObject obj) in loadedObjects)
+            {
+                if (_selectedObjectOrderIndex.ContainsKey(obj))
                 {
                     continue;
                 }
 
-                sortedObjects.Add(dataObject);
-                objectsByGuid.Remove(guid);
+                int order = _asyncDisplayOrderByGuid.TryGetValue(guid, out int knownOrder)
+                    ? knownOrder
+                    : int.MaxValue;
+                _selectedObjectOrderIndex[obj] = order;
+
+                // Binary search for the insertion point (the list stays sorted by display-order
+                // index), keeping batch insertion O(log n) comparisons instead of a linear scan.
+                int lo = 0;
+                int hi = _selectedObjects.Count;
+                while (lo < hi)
+                {
+                    int mid = (lo + hi) >> 1;
+                    int midOrder = _selectedObjectOrderIndex.TryGetValue(
+                        _selectedObjects[mid],
+                        out int midValue
+                    )
+                        ? midValue
+                        : int.MaxValue;
+                    if (midOrder < order)
+                    {
+                        lo = mid + 1;
+                    }
+                    else
+                    {
+                        hi = mid;
+                    }
+                }
+                _selectedObjects.Insert(lo, obj);
             }
 
-            List<ScriptableObject> remainingObjects = objectsByGuid.Values.ToList();
-            remainingObjects.Sort(
-                (a, b) =>
+            batchStartTime.Stop();
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] Loaded batch: {loadedObjects.Count} objects in {batchStartTime.ElapsedMilliseconds}ms (Total loaded: {_selectedObjects.Count})"
+                );
+            }
+
+            // Skipped = GUIDs in this batch that resolved to a missing/mismatched-type asset. Track
+            // them so the indicator total below reflects only loadable assets.
+            _asyncLoadSkippedCount += guids.Count - loadedObjects.Count;
+
+            // Update loading indicator if async loading is in progress. Uses the count
+            // captured when the load started instead of rescanning the whole project per batch.
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType != null)
+            {
+                UpdateLoadingIndicator(
+                    _selectedObjects.Count,
+                    _asyncLoadTotalCount - _asyncLoadSkippedCount
+                );
+            }
+
+            if (updateView)
+            {
+                BuildObjectsView();
+            }
+        }
+
+        private void ContinueLoadingObjects(Type type, int loadGeneration)
+        {
+            if (loadGeneration != _asyncLoadGeneration)
+            {
+                return; // superseded by a newer load, which owns the async state
+            }
+
+            if (
+                !_isLoadingObjectsAsync
+                || _asyncLoadTargetType != type
+                || _pendingObjectGuids.Count == 0
+            )
+            {
+                _isLoadingObjectsAsync = false;
+                if (_pendingObjectGuids.Count == 0)
                 {
-                    int comparison = string.Compare(
-                        a.name,
-                        b.name,
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                    if (comparison != 0)
-                    {
-                        return comparison;
-                    }
-                    return string.Compare(
-                        AssetDatabase.GetAssetPath(a),
-                        AssetDatabase.GetAssetPath(b),
-                        StringComparison.OrdinalIgnoreCase
+                    BuildObjectsView();
+                }
+                return;
+            }
+
+            int batchSize = Mathf.Min(AsyncLoadBatchSize, _pendingObjectGuids.Count);
+            List<string> batch = DequeueBatch(_pendingObjectGuids, batchSize);
+
+            LoadObjectBatch(type, batch, true);
+
+            if (_pendingObjectGuids.Count > 0)
+            {
+                // Schedule next batch
+                _asyncLoadTask = rootVisualElement.schedule.Execute(() =>
+                    ContinueLoadingObjects(type, loadGeneration)
+                );
+                _asyncLoadTask.ExecuteLater(10);
+            }
+            else
+            {
+                _isLoadingObjectsAsync = false;
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] LoadObjectTypesAsync COMPLETE - All objects loaded. Total: {_selectedObjects.Count}"
                     );
                 }
-            );
-            sortedObjects.AddRange(remainingObjects);
+                UpdateLoadingIndicator(_selectedObjects.Count, _selectedObjects.Count);
+                BuildObjectsView();
+            }
+        }
 
-            _selectedObjects.Clear();
-            _selectedObjects.AddRange(sortedObjects);
-            _filteredObjects.AddRange(sortedObjects);
+        private void UpdateLoadingIndicator(int loadedCount, int totalCount)
+        {
+            if (_objectLoadingIndicator == null)
+            {
+                return;
+            }
+
+            Type selectedType = _namespaceController.SelectedType;
+
+            // Show indicator only if:
+            // 1. We're currently loading objects asynchronously
+            // 2. The type being loaded matches the currently selected type
+            // 3. There are still objects remaining to load
+            if (
+                _isLoadingObjectsAsync
+                && _asyncLoadTargetType == selectedType
+                && selectedType != null
+                && totalCount > loadedCount
+            )
+            {
+                _objectLoadingIndicator.style.display = DisplayStyle.Flex;
+                _objectLoadingIndicator.text = $"Loading... ({loadedCount}/{totalCount})";
+            }
+            else
+            {
+                _objectLoadingIndicator.style.display = DisplayStyle.None;
+                _objectLoadingIndicator.text = "";
+            }
         }
 
         private void LoadScriptableObjectTypes()
@@ -7183,48 +7997,24 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private static bool IsLoadableType(Type type)
         {
-            bool allowed =
-                type != typeof(ScriptableObject)
+            // Fast type validation without expensive CreateInstance calls
+            // This allows namespace/type list to appear immediately
+            return type != typeof(ScriptableObject)
                 && !type.IsAbstract
                 && !type.IsGenericType
+                && !type.IsInterface
+                && !type.IsNestedPrivate
                 && !IsSubclassOf(type, typeof(Editor))
                 && !IsSubclassOf(type, typeof(EditorWindow))
                 && !IsSubclassOf(type, typeof(ScriptableSingleton<>))
                 && type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
                 && type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true;
-            if (!allowed)
-            {
-                return false;
-            }
 
-            try
-            {
-                ScriptableObject instance = CreateInstance(type);
-                try
-                {
-                    using SerializedObject serializedObject = new(instance);
-                    using SerializedProperty scriptProperty = serializedObject.FindProperty(
-                        "m_Script"
-                    );
-                    if (scriptProperty == null)
-                    {
-                        return false;
-                    }
-
-                    return scriptProperty.objectReferenceValue != null;
-                }
-                finally
-                {
-                    if (instance != null)
-                    {
-                        DestroyImmediate(instance);
-                    }
-                }
-            }
-            catch
-            {
-                return false;
-            }
+            // Note: We removed CreateInstance validation because:
+            // 1. It was slow (1-2 seconds for large projects)
+            // 2. It caused "Reset() called with object" errors for some ScriptableObjects
+            // 3. The real validation happens when loading actual assets anyway
+            // 4. Types that can't be instantiated simply won't have any assets to load
         }
 
         private static bool IsSubclassOf(Type typeToCheck, Type baseClass)
@@ -7250,6 +8040,92 @@ namespace WallstopStudios.DataVisualizer.Editor
             return false;
         }
 
+        internal void SelectObjectAndNavigate(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                SelectObject(null);
+                return;
+            }
+
+            // SelectObject drives the ListView selection + ScrollToItem by index; no manual paging.
+            SelectObject(dataObject);
+
+            // Re-scroll once async layout settles (the item may not have had geometry yet).
+            if (_objectListView != null && _filteredObjects.Contains(dataObject))
+            {
+                rootVisualElement
+                    .schedule.Execute(() =>
+                    {
+                        int i = _filteredObjects.IndexOf(dataObject);
+                        if (i >= 0 && _objectListView != null)
+                        {
+                            _objectListView.ScrollToItem(i);
+                        }
+                    })
+                    .ExecuteLater(10);
+            }
+        }
+
+        private void OnObjectListSelectionChanged(IEnumerable<object> selection)
+        {
+            if (_suppressListSelectionCallback)
+            {
+                return;
+            }
+
+            ScriptableObject selected = null;
+            foreach (object item in selection)
+            {
+                selected = item as ScriptableObject;
+                break;
+            }
+
+            // Ignore deselect-to-empty (e.g. a click on an action button clearing the ListView
+            // selection) so the current selection stays sticky through reorder/go-up/go-down.
+            if (selected != null)
+            {
+                SelectObject(selected);
+            }
+        }
+
+        // Persists the new order after a ListView drag-reorder. The ListView has already reordered
+        // its itemsSource (_filteredObjects) in place; reorder is only enabled when the filtered
+        // list equals the full list (see BuildObjectsView), so we can persist it directly.
+        private void OnObjectListItemReordered(int fromIndex, int toIndex)
+        {
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null)
+            {
+                return;
+            }
+
+            _selectedObjects.Clear();
+            _selectedObjects.AddRange(_filteredObjects);
+            UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
+
+            if (_selectedObject != null)
+            {
+                int i = _filteredObjects.IndexOf(_selectedObject);
+                if (i >= 0)
+                {
+                    _suppressListSelectionCallback = true;
+                    _objectListView.SetSelectionWithoutNotify(new[] { i });
+                    _suppressListSelectionCallback = false;
+                }
+            }
+
+            // Ensure the dropped item ends up fully in view — drag auto-panning can leave it at the
+            // edge. Deferred so the ListView finishes settling the reordered layout first.
+            if (toIndex >= 0 && toIndex < _filteredObjects.Count)
+            {
+                int scrollIndex = toIndex;
+                rootVisualElement
+                    .schedule.Execute(() => _objectListView.ScrollToItem(scrollIndex))
+                    .ExecuteLater(1);
+            }
+        }
+
         internal void SelectObject(ScriptableObject dataObject)
         {
             if (_selectedObject == dataObject)
@@ -7257,53 +8133,34 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _selectedElement?.RemoveFromClassList(StyleConstants.SelectedClass);
-            foreach (
-                VisualElement child in _selectedElement?.IterateChildrenRecursively()
-                    ?? Enumerable.Empty<VisualElement>()
-            )
-            {
-                child.EnableInClassList(StyleConstants.ClickableClass, true);
-            }
             _selectedObject = dataObject;
-            _selectedElement = null;
-            if (
-                _selectedObject != null
-                && _objectVisualElementMap.TryGetValue(
-                    _selectedObject,
-                    out VisualElement newSelectedElement
-                )
-            )
+
+            // Drive the ListView's visual selection + scroll by index (it owns the --selected style).
+            if (_objectListView != null)
             {
-                _selectedElement = newSelectedElement;
-                _selectedElement.AddToClassList(StyleConstants.SelectedClass);
-                foreach (VisualElement child in _selectedElement.IterateChildrenRecursively())
+                int index = dataObject != null ? _filteredObjects.IndexOf(dataObject) : -1;
+                _suppressListSelectionCallback = true;
+                if (index >= 0)
                 {
-                    child.EnableInClassList(StyleConstants.ClickableClass, false);
+                    _objectListView.SetSelectionWithoutNotify(new[] { index });
+                    _objectListView.ScrollToItem(index);
                 }
-
-                if (Settings.selectActiveObject)
+                else
                 {
-                    Selection.activeObject = _selectedObject;
+                    _objectListView.SetSelectionWithoutNotify(Array.Empty<int>());
                 }
+                _suppressListSelectionCallback = false;
 
-                Rect targetElementWorldBound = newSelectedElement.worldBound;
-                Rect scrollViewContentViewportWorldBound = _objectScrollView
-                    .contentViewport
-                    .worldBound;
-                bool isElementInView = targetElementWorldBound.Overlaps(
-                    scrollViewContentViewportWorldBound
-                );
+                // Repaint rows so the custom .object-item.selected box style tracks the new selection.
+                // bindItem is the only place that class is applied and the ListView's own --selected
+                // fill is intentionally transparent, so a plain click needs an explicit refresh.
+                // RefreshItems rebinds visible rows only, so it is cheap.
+                _objectListView.RefreshItems();
+            }
 
-                if (!isElementInView)
-                {
-                    _objectScrollView
-                        .schedule.Execute(() =>
-                        {
-                            _objectScrollView?.ScrollTo(_selectedElement);
-                        })
-                        .ExecuteLater(1);
-                }
+            if (_selectedObject != null && Settings.selectActiveObject)
+            {
+                Selection.activeObject = _selectedObject;
             }
 
             try
@@ -7355,35 +8212,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _namespaceController.SelectedType != null
                         ? DisplayStyle.Flex
                         : DisplayStyle.None;
-            }
-        }
-
-        private void OnObjectPointerDown(PointerDownEvent evt)
-        {
-            VisualElement targetElement = evt.currentTarget as VisualElement;
-            if (targetElement?.userData is not ScriptableObject clickedObject)
-            {
-                return;
-            }
-
-            if (_selectedObject != clickedObject)
-            {
-                SelectObject(clickedObject);
-            }
-
-            if (evt.button == 0)
-            {
-                _lastActiveFocusArea = FocusArea.None;
-                _draggedElement = targetElement;
-                _draggedData = clickedObject;
-                _activeDragType = DragType.Object;
-                _isDragging = false;
-                targetElement.CapturePointer(evt.pointerId);
-                targetElement.Focus();
-                targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
-                targetElement.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
-                targetElement.RegisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
-                evt.StopPropagation();
             }
         }
 
@@ -7459,11 +8287,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     switch (dropType)
                     {
-                        case DragType.Object:
-                        {
-                            PerformObjectDrop();
-                            break;
-                        }
                         case DragType.Namespace:
                         {
                             PerformNamespaceDrop();
@@ -7689,60 +8512,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             SetTypeOrderForNamespace(namespaceKey, newTypeNameOrder);
         }
 
-        private void PerformObjectDrop()
-        {
-            int targetIndex = _inPlaceGhost?.userData is int index ? index : -1;
-            _inPlaceGhost?.RemoveFromHierarchy();
-            if (
-                _draggedElement == null
-                || _draggedData is not ScriptableObject draggedObject
-                || _objectListContainer == null
-            )
-            {
-                return;
-            }
-
-            if (targetIndex < 0)
-            {
-                return;
-            }
-
-            int currentIndex = _objectListContainer.IndexOf(_draggedElement);
-            if (currentIndex < 0)
-            {
-                return;
-            }
-
-            if (currentIndex < targetIndex)
-            {
-                targetIndex--;
-            }
-
-            _draggedElement.style.display = DisplayStyle.Flex;
-            _draggedElement.style.opacity = 1.0f;
-            _objectListContainer.Insert(targetIndex, _draggedElement);
-            foreach (VisualElement child in _objectListContainer.Children())
-            {
-                NamespaceController.RecalibrateVisualElements(child, offset: 1);
-            }
-
-            int oldDataIndex = _selectedObjects.IndexOf(draggedObject);
-            if (0 > oldDataIndex)
-            {
-                return;
-            }
-
-            _selectedObjects.RemoveAt(oldDataIndex);
-            int dataInsertIndex = targetIndex;
-            dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, _selectedObjects.Count);
-            _selectedObjects.Insert(dataInsertIndex, draggedObject);
-            Type selectedType = _namespaceController.SelectedType;
-            if (selectedType != null)
-            {
-                UpdateAndSaveObjectOrderList(selectedType, _selectedObjects);
-            }
-        }
-
         private void StartDragVisuals(Vector2 currentPosition, string dragText)
         {
             if (_draggedElement == null || _draggedData == null)
@@ -7849,11 +8618,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement container = null;
             switch (_activeDragType)
             {
-                case DragType.Object:
-                {
-                    container = _objectListContainer.contentContainer;
-                    break;
-                }
                 case DragType.Namespace:
                 {
                     container = _namespaceListContainer;
@@ -8124,6 +8888,51 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
+            // If async loading is still in progress, orderedObjects holds only the loaded subset.
+            // Merge the not-yet-loaded GUIDs (in their intended display order) so persisting a reorder
+            // mid-load does not drop them, then rebuild the in-flight order maps from the merged order
+            // so the remaining LoadObjectBatch inserts stay consistent with what the user just saved
+            // (otherwise later batches keep positioning new items by the stale pre-reorder order).
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType == type)
+            {
+                HashSet<string> present = new(orderedGuids, StringComparer.Ordinal);
+                foreach (
+                    string guid in _asyncDisplayOrderByGuid
+                        .OrderBy(kvp => kvp.Value)
+                        .Select(kvp => kvp.Key)
+                )
+                {
+                    if (present.Add(guid))
+                    {
+                        orderedGuids.Add(guid);
+                    }
+                }
+
+                _asyncDisplayOrderByGuid.Clear();
+                for (int i = 0; i < orderedGuids.Count; i++)
+                {
+                    _asyncDisplayOrderByGuid[orderedGuids[i]] = i;
+                }
+
+                _selectedObjectOrderIndex.Clear();
+                foreach (ScriptableObject obj in orderedObjects)
+                {
+                    if (obj == null)
+                    {
+                        continue;
+                    }
+
+                    string path = AssetDatabase.GetAssetPath(obj);
+                    string guid = string.IsNullOrWhiteSpace(path)
+                        ? null
+                        : AssetDatabase.AssetPathToGUID(path);
+                    _selectedObjectOrderIndex[obj] =
+                        guid != null && _asyncDisplayOrderByGuid.TryGetValue(guid, out int mapIndex)
+                            ? mapIndex
+                            : int.MaxValue;
+                }
+            }
+
             SetObjectOrderForType(type.FullName, orderedGuids);
         }
 
@@ -8184,75 +8993,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
                 return entry?.ObjectGuids?.ToList() ?? new List<string>();
             }
-        }
-
-        private int GetCurrentPage(Type type)
-        {
-            DataVisualizerSettings settings = Settings;
-            if (settings.persistStateInSettingsAsset)
-            {
-                TypeObjectOrder entry = settings.objectOrders?.Find(o =>
-                    string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
-                );
-                return entry?.page ?? 0;
-            }
-            else
-            {
-                TypeObjectOrder entry = UserState.objectOrders?.Find(o =>
-                    string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
-                );
-                return entry?.page ?? 0;
-            }
-        }
-
-        private void SetCurrentPage(Type type, int page)
-        {
-            PersistSettings(
-                settings =>
-                {
-                    bool dirty = false;
-                    TypeObjectOrder entry = settings.objectOrders?.Find(o =>
-                        string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
-                    );
-                    if (entry == null)
-                    {
-                        entry = new TypeObjectOrder { TypeFullName = type.FullName };
-                        settings.objectOrders ??= new List<TypeObjectOrder>();
-                        settings.objectOrders.Add(entry);
-                        dirty = true;
-                    }
-
-                    if (page != entry.page)
-                    {
-                        dirty = true;
-                        entry.page = page;
-                    }
-
-                    return dirty;
-                },
-                userState =>
-                {
-                    bool dirty = false;
-                    TypeObjectOrder entry = userState.objectOrders?.Find(o =>
-                        string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
-                    );
-                    if (entry == null)
-                    {
-                        entry = new TypeObjectOrder { TypeFullName = type.FullName };
-                        userState.objectOrders ??= new List<TypeObjectOrder>();
-                        userState.objectOrders.Add(entry);
-                        dirty = true;
-                    }
-
-                    if (page != entry.page)
-                    {
-                        dirty = true;
-                        entry.page = page;
-                    }
-
-                    return dirty;
-                }
-            );
         }
 
         private void SetObjectOrderForType(string typeFullName, List<string> objectGuids)

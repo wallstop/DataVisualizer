@@ -6,10 +6,13 @@ namespace WallstopStudios.DataVisualizer
 {
     using System;
     using System.Text.RegularExpressions;
-    using UnityEditor;
     using UnityEngine;
     using UnityEngine.Serialization;
     using UnityEngine.UIElements;
+#if UNITY_EDITOR
+    using UnityEditor;
+#endif
+
 #if ODIN_INSPECTOR
     using Sirenix.OdinInspector;
 #endif

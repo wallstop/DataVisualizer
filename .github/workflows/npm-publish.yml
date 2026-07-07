@@ -1,75 +1,88 @@
 name: Publish to NPM
 
+# Manual, on-demand publishing (mirrors the DxMessaging release route): dispatch this workflow
+# to publish the current package.json version. The publish step is re-runnable (it skips a
+# version already on the registry) and attaches build provenance.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'package.json'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Pack and report the version/dist-tag without publishing"
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  publish_npm:
+  publish:
+    name: Publish npm package
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # required for `npm publish --provenance`
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0  # Ensure full commit history for version comparison
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 18
-          registry-url: 'https://registry.npmjs.org/'
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
 
-      - name: Check if version changed
-        id: version_check
+      - name: Pack and resolve version / dist-tag
+        id: pack
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual trigger detected. Skipping version check."
-            NEW_VERSION=$(jq -r '.version' package.json)
-            echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-            echo "should_publish=true" >> $GITHUB_ENV
-            if [[ "$NEW_VERSION" == *"rc"* ]]; then
-              echo "This is a pre-release (next tag)."
-              echo "NPM_TAG=next" >> $GITHUB_ENV
-            else
-              echo "This is a stable release (latest tag)."
-              echo "NPM_TAG=latest" >> $GITHUB_ENV
-            fi
-          else
-            PREV_VERSION=$(git show HEAD~1:package.json | jq -r '.version' || echo "0.0.0")
-            NEW_VERSION=$(jq -r '.version' package.json)
-            echo "Previous version: $PREV_VERSION"
-            echo "New version: $NEW_VERSION"
-
-            if [ "$PREV_VERSION" != "$NEW_VERSION" ]; then
-              echo "Version changed, proceeding..."
-              echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-              echo "should_publish=true" >> $GITHUB_ENV
-
-              # Detect pre-releases (versions with "rc" or similar tags)
-              if [[ "$NEW_VERSION" == *"rc"* ]]; then
-                echo "This is a pre-release (next tag)."
-                echo "NPM_TAG=next" >> $GITHUB_ENV
-              else
-                echo "This is a stable release (latest tag)."
-                echo "NPM_TAG=latest" >> $GITHUB_ENV
-              fi
-            else
-              echo "Version did not change, skipping..."
-              echo "should_publish=false" >> $GITHUB_ENV
-            fi
+          set -euo pipefail
+          pkg="$(jq -r '.name' package.json)"
+          ver="$(jq -r '.version' package.json)"
+          if [ -z "${pkg}" ] || [ "${pkg}" = "null" ] || [ -z "${ver}" ] || [ "${ver}" = "null" ]; then
+            echo "::error::package.json is missing name or version."
+            exit 1
           fi
+          # rc/alpha/beta/preview pre-releases publish under the "next" dist-tag; stable under "latest".
+          if printf '%s' "${ver}" | grep -qiE '\-(rc|alpha|beta|preview)'; then
+            npm_tag="next"
+          else
+            npm_tag="latest"
+          fi
+          package_file="$(npm pack --json | jq -r '.[0].filename')"
+          {
+            echo "pkg=${pkg}"
+            echo "ver=${ver}"
+            echo "npm_tag=${npm_tag}"
+            echo "package_file=${package_file}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "Prepared ${pkg}@${ver} -> dist-tag '${npm_tag}' (${package_file})."
 
-      - name: Install Dependencies
-        if: env.should_publish == 'true'
-        run: npm install
-
-      - name: Publish to NPM
-        if: env.should_publish == 'true'
-        run: npm publish --access public --tag ${{ env.NPM_TAG }}
+      - name: Publish to npm with provenance
+        if: ${{ inputs.dry_run == false }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PKG: ${{ steps.pack.outputs.pkg }}
+          VER: ${{ steps.pack.outputs.ver }}
+          NPM_TAG: ${{ steps.pack.outputs.npm_tag }}
+          PACKAGE_FILE: ${{ steps.pack.outputs.package_file }}
+        run: |
+          set -euo pipefail
+          # Re-runnable: skip if this exact name@version is already on the registry (a prior run may
+          # have published it before failing downstream). npm publish is otherwise irreversible.
+          if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
+            echo "::notice::${PKG}@${VER} is already on the registry; skipping publish."
+          else
+            npm publish "${PACKAGE_FILE}" --provenance --access public --tag "${NPM_TAG}"
+            echo "::notice::Published ${PKG}@${VER} to dist-tag '${NPM_TAG}'."
+          fi
+
+      - name: Dry-run summary
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          echo "Dry run: would publish ${{ steps.pack.outputs.pkg }}@${{ steps.pack.outputs.ver }} to dist-tag '${{ steps.pack.outputs.npm_tag }}'."
