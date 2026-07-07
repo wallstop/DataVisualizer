@@ -2133,9 +2133,16 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (!_isSearchCachePopulated)
             {
-                // The search cache is still populating in the background. Keep the popover open with a
-                // status line instead of dismissing the user's query; RefreshActiveSearch re-runs this
-                // search automatically once the cache is ready.
+                // If the cache isn't populated and isn't already (re)building — e.g. after the window
+                // was hidden and shown again, which clears the cache without rebuilding it (population
+                // otherwise only runs once in CreateGUI) — kick it off now so this query resolves.
+                if (!_isLoadingSearchCacheAsync)
+                {
+                    PopulateSearchCacheAsync();
+                }
+
+                // Keep the popover open with a status line instead of dismissing the user's query;
+                // RefreshActiveSearch re-runs this search automatically once the cache is ready.
                 Label buildingLabel = new("Building search index…")
                 {
                     style =
