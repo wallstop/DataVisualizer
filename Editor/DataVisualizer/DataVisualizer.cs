@@ -1870,6 +1870,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            // The type's objects still stream in asynchronously; running a processor now would only
+            // touch the already-loaded subset while the dialog implies the whole type. Wait for the
+            // load to finish so the processor operates on the complete set.
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType == _namespaceController.SelectedType)
+            {
+                EditorUtility.DisplayDialog(
+                    "Loading In Progress",
+                    $"'{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}' is still loading its "
+                        + "objects. Please wait for loading to finish before running a processor so it operates on the full set.",
+                    "OK"
+                );
+                return;
+            }
+
             ScriptableObject[] toProcess;
 
             switch (state.logic)
@@ -7336,7 +7350,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                         && string.Equals(
                             AssetDatabase.AssetPathToGUID(path),
                             savedObjectGuid,
-                            StringComparison.Ordinal
+                            // Case-insensitive to match the priority guard in LoadObjectTypesAsync, so
+                            // a saved GUID that loaded is never skipped here over casing.
+                            StringComparison.OrdinalIgnoreCase
                         );
                 });
             }
