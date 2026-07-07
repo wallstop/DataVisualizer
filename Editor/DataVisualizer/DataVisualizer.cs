@@ -1147,7 +1147,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _scriptableObjectTypes,
                 _namespaceOrder,
                 GetLastSelectedNamespaceKey(),
-                GetLastSelectedTypeName()
+                GetLastSelectedTypeFullName()
             );
 
             if (selectedType == null)
@@ -9138,7 +9138,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        private string GetLastSelectedTypeName()
+        private string GetLastSelectedTypeFullName()
         {
             DataVisualizerSettings settings = Settings;
             return settings.persistStateInSettingsAsset
@@ -9146,29 +9146,29 @@ namespace WallstopStudios.DataVisualizer.Editor
                 : UserState.lastSelectedTypeName;
         }
 
-        private string GetLastSelectedObjectGuidForType(string typeName)
+        private string GetLastSelectedObjectGuidForType(string typeFullName)
         {
-            if (string.IsNullOrWhiteSpace(typeName))
+            if (string.IsNullOrWhiteSpace(typeFullName))
             {
                 return null;
             }
 
             DataVisualizerSettings settings = Settings;
             return settings.persistStateInSettingsAsset
-                ? settings.GetLastObjectForType(typeName)
-                : UserState.GetLastObjectForType(typeName);
+                ? settings.GetLastObjectForType(typeFullName)
+                : UserState.GetLastObjectForType(typeFullName);
         }
 
-        internal void SetLastSelectedObjectGuidForType(string typeName, string objectGuid)
+        internal void SetLastSelectedObjectGuidForType(string typeFullName, string objectGuid)
         {
-            if (string.IsNullOrWhiteSpace(typeName))
+            if (string.IsNullOrWhiteSpace(typeFullName))
             {
                 return;
             }
 
             PersistSettings(
-                settings => settings.SetLastObjectForType(typeName, objectGuid),
-                userState => userState.SetLastObjectForType(typeName, objectGuid)
+                settings => settings.SetLastObjectForType(typeFullName, objectGuid),
+                userState => userState.SetLastObjectForType(typeFullName, objectGuid)
             );
         }
 

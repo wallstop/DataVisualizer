@@ -557,7 +557,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return;
                 }
 
-                SetLastSelectedTypeName(dataVisualizer, typeFullName);
+                SetLastSelectedTypeFullName(dataVisualizer, typeFullName);
             }
             catch (Exception e)
             {
@@ -565,7 +565,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private static void SetLastSelectedTypeName(
+        private static void SetLastSelectedTypeFullName(
             DataVisualizer dataVisualizer,
             string typeFullName
         )

@@ -156,16 +156,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return entry.ObjectGuids;
         }
 
-        internal bool SetLastObjectForType(string typeName, string guid)
+        internal bool SetLastObjectForType(string typeFullName, string guid)
         {
-            if (string.IsNullOrWhiteSpace(typeName))
+            if (string.IsNullOrWhiteSpace(typeFullName))
             {
                 return false;
             }
 
             lastObjectSelections ??= new List<LastObjectSelectionEntry>();
             int existingIndex = lastObjectSelections.FindIndex(e =>
-                string.Equals(e.typeFullName, typeName, StringComparison.Ordinal)
+                string.Equals(e.typeFullName, typeFullName, StringComparison.Ordinal)
             );
             if (string.IsNullOrWhiteSpace(guid))
             {
@@ -198,7 +198,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             else
             {
                 lastObjectSelections.Add(
-                    new LastObjectSelectionEntry { typeFullName = typeName, objectGuid = guid }
+                    new LastObjectSelectionEntry { typeFullName = typeFullName, objectGuid = guid }
                 );
             }
 
@@ -206,15 +206,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return true;
         }
 
-        internal string GetLastObjectForType(string typeName)
+        internal string GetLastObjectForType(string typeFullName)
         {
-            if (string.IsNullOrWhiteSpace(typeName))
+            if (string.IsNullOrWhiteSpace(typeFullName))
             {
                 return null;
             }
 
             return lastObjectSelections
-                ?.Find(e => string.Equals(e.typeFullName, typeName, StringComparison.Ordinal))
+                ?.Find(e => string.Equals(e.typeFullName, typeFullName, StringComparison.Ordinal))
                 ?.objectGuid;
         }
 
