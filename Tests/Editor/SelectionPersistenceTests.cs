@@ -183,9 +183,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.SaveAssets();
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
+                string upperGuid = assetGuid.ToUpperInvariant();
                 string[] includedGuids = DataVisualizer.IncludeResolvedSavedObjectGuid(
                     typeof(SelectionPersistenceGuidData),
-                    assetGuid,
+                    upperGuid,
                     Array.Empty<string>(),
                     out string normalizedSavedObjectGuid
                 );

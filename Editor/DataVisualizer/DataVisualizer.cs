@@ -7948,7 +7948,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private static string NormalizeSavedObjectGuidForType(string assetGuid, Type type)
         {
-            return TryResolveAssetGuidForType(assetGuid, type, out _) ? assetGuid : null;
+            if (!TryResolveAssetGuidForType(assetGuid, type, out string assetPath))
+            {
+                return null;
+            }
+
+            string canonicalGuid = AssetDatabase.AssetPathToGUID(assetPath);
+            return string.IsNullOrWhiteSpace(canonicalGuid) ? assetGuid : canonicalGuid;
         }
 
         private void ContinueLoadingObjects(Type type, int loadGeneration)
