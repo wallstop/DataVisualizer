@@ -7319,18 +7319,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (!string.IsNullOrWhiteSpace(savedObjectGuid))
             {
                 objectToSelect = _selectedObjects.Find(obj =>
-                    obj != null
-                    && string.Equals(
-                        AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(obj)),
-                        savedObjectGuid,
-                        StringComparison.Ordinal
-                    )
-                );
-            }
-
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid))
-            {
-                objectToSelect = _selectedObjects.Find(obj =>
                 {
                     if (obj == null)
                     {
@@ -7613,53 +7601,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             // pre-load UpdateLoadingIndicator here (it briefly showed progress before anything loaded).
             LoadObjectBatch(type, priorityBatch, true);
 
-            // Select the saved/first object synchronously (right after the priority batch) so a type
-            // switch goes straight from the old inspector to the new one in a single frame: the old
-            // type's rows/selection are replaced before anything renders, so there is no stale UI and
-            // no intermediate "loading"/"select an object" flash. Remaining objects keep streaming in
-            // asynchronously below.
-            if (!priorityLoad)
-            {
-                BuildObjectsView();
-                UpdateCreateObjectButtonStyle();
-                UpdateLabelAreaAndFilter();
-
-                ScriptableObject objectToSelect = DetermineObjectToAutoSelect(type);
-
-                if (EnableAsyncLoadDebugLog)
-                {
-                    if (objectToSelect != null)
-                    {
-                        string objPath = AssetDatabase.GetAssetPath(objectToSelect);
-                        string objGuid = AssetDatabase.AssetPathToGUID(objPath);
-                        Debug.Log(
-                            $"[DataVisualizer] Selecting saved object: {objectToSelect.name} (GUID: {objGuid})"
-                        );
-                    }
-                    else
-                    {
-                        Debug.LogWarning(
-                            $"[DataVisualizer] No saved object found, _selectedObjects.Count = {_selectedObjects.Count}"
-                        );
-                    }
-                }
-
-                if (objectToSelect != null)
-                {
-                    SelectObjectAndNavigate(objectToSelect);
-                }
-                else if (_selectedObjects.Count > 0)
-                {
-                    SelectObjectAndNavigate(_selectedObjects[0]);
-                }
-                else
-                {
-                    // The type has no assets — clear the stale selection and inspector instead of
-                    // leaving the previously selected object showing.
-                    SelectObject(null);
-                }
-            }
-
             // Queue remaining priority items
             for (int i = priorityBatchSize; i < orderedPriorityGuids.Count; i++)
             {
@@ -7699,6 +7640,55 @@ namespace WallstopStudios.DataVisualizer.Editor
                 foreach (string guid in remainingSorted)
                 {
                     _pendingObjectGuids.Enqueue(guid);
+                }
+            }
+
+            // Now that the priority batch AND the first remainder batch are loaded, select the
+            // saved/first object synchronously (still in this frame, so a type switch goes straight
+            // from the old inspector to the new one with no stale UI or "loading"/"select an object"
+            // flash). Running it here rather than right after the (possibly empty) priority batch means
+            // a fresh type with no saved selection and no custom order still auto-selects its first
+            // real asset instead of showing a populated list with a blank inspector. Remaining objects
+            // keep streaming in asynchronously below.
+            if (!priorityLoad)
+            {
+                BuildObjectsView();
+                UpdateCreateObjectButtonStyle();
+                UpdateLabelAreaAndFilter();
+
+                ScriptableObject objectToSelect = DetermineObjectToAutoSelect(type);
+
+                if (EnableAsyncLoadDebugLog)
+                {
+                    if (objectToSelect != null)
+                    {
+                        string objPath = AssetDatabase.GetAssetPath(objectToSelect);
+                        string objGuid = AssetDatabase.AssetPathToGUID(objPath);
+                        Debug.Log(
+                            $"[DataVisualizer] Selecting saved object: {objectToSelect.name} (GUID: {objGuid})"
+                        );
+                    }
+                    else
+                    {
+                        Debug.LogWarning(
+                            $"[DataVisualizer] No saved object found, _selectedObjects.Count = {_selectedObjects.Count}"
+                        );
+                    }
+                }
+
+                if (objectToSelect != null)
+                {
+                    SelectObjectAndNavigate(objectToSelect);
+                }
+                else if (_selectedObjects.Count > 0)
+                {
+                    SelectObjectAndNavigate(_selectedObjects[0]);
+                }
+                else
+                {
+                    // The type has no assets — clear the stale selection and inspector instead of
+                    // leaving the previously selected object showing.
+                    SelectObject(null);
                 }
             }
 
