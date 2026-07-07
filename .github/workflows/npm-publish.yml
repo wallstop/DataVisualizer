@@ -1,8 +1,8 @@
 name: Publish to NPM
 
-# Manual, on-demand publishing (mirrors the DxMessaging release route): dispatch this workflow
-# to publish the current package.json version. The publish step is re-runnable (it skips a
-# version already on the registry) and attaches build provenance.
+# Manual, on-demand publishing: dispatch this workflow to publish the current package.json
+# version. The publish step is re-runnable (it skips a version already on the registry) and
+# uses npm Trusted Publishing through GitHub OIDC.
 on:
   workflow_dispatch:
     inputs:
@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      id-token: write # required for `npm publish --provenance`
+      id-token: write # required for npm Trusted Publishing through OIDC
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -35,8 +35,9 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
       - name: Pack and resolve version / dist-tag
         id: pack
@@ -63,10 +64,21 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
           echo "Prepared ${pkg}@${ver} -> dist-tag '${npm_tag}' (${package_file})."
 
-      - name: Publish to npm with provenance
+      - name: Verify npm trusted publishing toolchain
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+          required_npm="11.5.1"
+          current_npm="$(npm --version)"
+          if [ "$(printf '%s\n' "${required_npm}" "${current_npm}" | sort -V | head -n1)" != "${required_npm}" ]; then
+            echo "::error::npm ${current_npm} is too old; trusted publishing requires npm >= ${required_npm}."
+            exit 1
+          fi
+
+      - name: Publish to npm with trusted publishing
         if: ${{ inputs.dry_run == false }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           PKG: ${{ steps.pack.outputs.pkg }}
           VER: ${{ steps.pack.outputs.ver }}
           NPM_TAG: ${{ steps.pack.outputs.npm_tag }}
@@ -78,7 +90,7 @@ jobs:
           if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
             echo "::notice::${PKG}@${VER} is already on the registry; skipping publish."
           else
-            npm publish "${PACKAGE_FILE}" --provenance --access public --tag "${NPM_TAG}"
+            npm publish "${PACKAGE_FILE}" --access public --tag "${NPM_TAG}"
             echo "::notice::Published ${PKG}@${VER} to dist-tag '${NPM_TAG}'."
           fi
 
