@@ -33,16 +33,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
 
             DataVisualizerUserState userState = JsonUtility.FromJson<DataVisualizerUserState>(json);
-            if (
-                userState == null
-                || json.Contains("\"lastSelectedTypeFullName\"", StringComparison.Ordinal)
-            )
+            if (userState == null)
             {
                 return userState;
             }
 
             LegacyUserState legacyUserState = JsonUtility.FromJson<LegacyUserState>(json);
-            if (!string.IsNullOrWhiteSpace(legacyUserState?.lastSelectedTypeName))
+            if (
+                string.IsNullOrWhiteSpace(userState.lastSelectedTypeFullName)
+                && !string.IsNullOrWhiteSpace(legacyUserState?.lastSelectedTypeName)
+            )
             {
                 userState.lastSelectedTypeFullName = legacyUserState.lastSelectedTypeName;
             }

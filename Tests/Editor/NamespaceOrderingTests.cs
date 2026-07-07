@@ -5,6 +5,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.Linq;
     using NUnit.Framework;
     using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor;
     using WallstopStudios.DataVisualizer.Editor.Data;
     using CollisionA = WallstopStudios.DataVisualizer.Tests.Editor.TypeIdentityCollision.First.Data;
     using CollisionB = WallstopStudios.DataVisualizer.Tests.Editor.TypeIdentityCollision.Second.Data;
@@ -100,6 +101,25 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             Assert.AreSame(secondType, resolvedType);
             Assert.AreEqual(firstType.Name, secondType.Name);
+        }
+
+        [Test]
+        public void Should_PreserveOtherNamespaces_When_RemovingManagedTypeNames()
+        {
+            string[] managedTypeNames =
+            {
+                "Gameplay.EnemyData",
+                "UI.MenuData",
+                "Gameplay.SpawnData",
+            };
+            string[] removedTypeNames = { "Gameplay.EnemyData", "Gameplay.SpawnData" };
+
+            List<string> result = NamespaceController.RemoveManagedTypeNames(
+                managedTypeNames,
+                removedTypeNames
+            );
+
+            CollectionAssert.AreEqual(new[] { "UI.MenuData" }, result);
         }
     }
 }

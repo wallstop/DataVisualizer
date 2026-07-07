@@ -737,6 +737,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             List<string> currentManagedList = GetManagedTypeNames(namespaceKey);
+            List<string> removedTypeNames = new();
             bool changed = false;
             foreach (Type type in typesToRemove)
             {
@@ -747,6 +748,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 changed = true;
+                removedTypeNames.Add(typeName);
                 dataVisualizer.SetLastSelectedObjectGuidForType(typeName, null);
                 RemoveTypeOrderEntry(dataVisualizer, namespaceKey, typeName);
             }
@@ -758,7 +760,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                     RemoveNamespaceCollapseState(dataVisualizer, namespaceKey);
                 }
 
-                PersistManagedTypesList(dataVisualizer, currentManagedList);
+                PersistManagedTypesList(
+                    dataVisualizer,
+                    RemoveManagedTypeNames(GetAllManagedTypeNames(), removedTypeNames)
+                );
                 DataVisualizer.SignalRefresh();
             }
             else
@@ -791,7 +796,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                     RemoveNamespaceCollapseState(dataVisualizer, namespaceKey);
                 }
 
-                PersistManagedTypesList(dataVisualizer, currentManagedList);
+                PersistManagedTypesList(
+                    dataVisualizer,
+                    RemoveManagedTypeNames(GetAllManagedTypeNames(), new[] { typeName })
+                );
                 DataVisualizer.SignalRefresh();
             }
             else
@@ -886,6 +894,30 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             return _managedTypes
                 .Values.SelectMany(types => types.Select(type => type.FullName))
+                .ToList();
+        }
+
+        public static List<string> RemoveManagedTypeNames(
+            IEnumerable<string> managedTypeNames,
+            IEnumerable<string> typeNamesToRemove
+        )
+        {
+            if (managedTypeNames == null)
+            {
+                return new List<string>();
+            }
+
+            HashSet<string> removedTypeNames = typeNamesToRemove
+                ?.Where(typeName => !string.IsNullOrWhiteSpace(typeName))
+                .ToHashSet(StringComparer.Ordinal);
+            if (removedTypeNames == null || removedTypeNames.Count == 0)
+            {
+                return managedTypeNames.ToList();
+            }
+
+            return managedTypeNames
+                .Where(typeName => !removedTypeNames.Contains(typeName))
+                .Distinct(StringComparer.Ordinal)
                 .ToList();
         }
 

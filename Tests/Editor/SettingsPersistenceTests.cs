@@ -144,6 +144,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "{\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\",\"lastSelectedTypeFullName\":\"Example.Namespace.CurrentData\"}",
             "Example.Namespace.CurrentData"
         )]
+        [TestCase(
+            "{\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\",\"lastSelectedTypeFullName\":\"\"}",
+            "Example.Namespace.LegacyData"
+        )]
+        [TestCase(
+            "{\"lastSelectedNamespaceKey\":\"\\\"lastSelectedTypeFullName\\\"\",\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\"}",
+            "Example.Namespace.LegacyData"
+        )]
         public void Should_MigrateLegacySelectedTypeName_When_LoadingUserStateJson(
             string json,
             string expectedTypeFullName
