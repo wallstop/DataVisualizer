@@ -400,11 +400,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             float height = Mathf.Max(MinWindowHeight, window.position.height);
             Rect monitorArea = MonitorUtility.GetPrimaryMonitorRect();
 
-            float centerX = (monitorArea.width - width) / 2f;
-            float centerY = (monitorArea.height - height) / 2f;
+            float centerX = monitorArea.x + (monitorArea.width - width) / 2f;
+            float centerY = monitorArea.y + (monitorArea.height - height) / 2f;
 
-            float x = Mathf.Max(0, centerX);
-            float y = Mathf.Max(0, centerY);
+            float x = Mathf.Max(monitorArea.x, centerX);
+            float y = Mathf.Max(monitorArea.y, centerY);
 
             window.position = new Rect(x, y, width, height);
             EditorPrefs.SetBool(PrefsInitialSizeAppliedKey, true);
