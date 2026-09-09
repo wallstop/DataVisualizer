@@ -409,9 +409,19 @@ test_install_seeds_isolated_claude_approvals() {
     make_sandbox
     mkdir -p "${SANDBOX}/install-bin"
     printf '{"mcpServers":{"unity":{}}}\n' >"${SANDBOX}/.mcp.json"
+    local node_path node_dir test_path
+    node_path="$(command -v node || true)"
+    node_dir=""
+    if [ -n "${node_path}" ]; then
+        node_dir="$(dirname "${node_path}")"
+    fi
+    test_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    if [ -n "${node_dir}" ]; then
+        test_path="${test_path}:${node_dir}"
+    fi
     (cd "${SANDBOX}/workdir" && \
         env -i \
-            PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+            PATH="${test_path}" \
             HOME="${SANDBOX}/home" \
             CODEX_HOME="${SANDBOX}/codex-home" \
             AI_BACKENDS_BIN_DIR="${SANDBOX}/install-bin" \
