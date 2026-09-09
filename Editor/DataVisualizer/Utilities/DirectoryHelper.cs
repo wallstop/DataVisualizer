@@ -3,10 +3,8 @@ namespace WallstopStudios.DataVisualizer.Helper
     using System;
     using System.IO;
     using System.Runtime.CompilerServices;
-    using UnityEngine;
-#if UNITY_EDITOR
     using UnityEditor;
-#endif
+    using UnityEngine;
 
     internal static class DirectoryHelper
     {
@@ -17,7 +15,6 @@ namespace WallstopStudios.DataVisualizer.Helper
                 return;
             }
 
-#if UNITY_EDITOR
             if (!relativeDirectoryPath.StartsWith("Assets/"))
             {
                 if (relativeDirectoryPath.Equals("Assets", StringComparison.OrdinalIgnoreCase))
@@ -66,7 +63,6 @@ namespace WallstopStudios.DataVisualizer.Helper
                 AssetDatabase.CreateFolder(parentPath, currentFolderName);
                 Debug.Log($"Created folder: {relativeDirectoryPath}");
             }
-#endif
         }
 
         public static string GetCallerScriptDirectory([CallerFilePath] string sourceFilePath = "")
@@ -174,18 +170,6 @@ namespace WallstopStudios.DataVisualizer.Helper
                     ? projectRoot.Length
                     : projectRoot.Length + 1;
                 return absolutePath.Length > startIndex ? absolutePath[startIndex..] : string.Empty;
-            }
-            if (absolutePath.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                int startIndex = projectRoot.EndsWith("/", StringComparison.OrdinalIgnoreCase)
-                    ? projectRoot.Length
-                    : projectRoot.Length + 1;
-                if (startIndex < absolutePath.Length)
-                {
-                    return "Assets/" + absolutePath[startIndex..];
-                }
-
-                return "Assets";
             }
 
             return string.Empty;
