@@ -322,20 +322,38 @@ seed_claude_approvals() {
     mcp_config="${AI_BACKENDS_MCP_CONFIG:-${WORKSPACE_ROOT}/.mcp.json}"
     state_file="${config_dir}/.claude.json"
     [ -f "${mcp_config}" ] || return 0
-    command -v jq >/dev/null 2>&1 || return 0
     prepare_config_dir "${config_dir}" || return 1
     [ -s "${state_file}" ] || printf '{}\n' >"${state_file}" || return 1
     tmp="$(mktemp "${state_file}.XXXXXX")" || return 1
-    if jq --arg project "${WORKSPACE_ROOT}" --slurpfile mcp "${mcp_config}" '
-        ($mcp[0].mcpServers // {} | keys | sort) as $names
-        | (.projects // {}) as $projects
-        | ($projects[$project] // {}) as $entry
-        | (($entry.enabledMcpjsonServers // []) + $names | unique) as $enabled
-        | ($entry + {hasTrustDialogAccepted: true, enabledMcpjsonServers: $enabled}) as $desired
-        | if $entry == $desired then . else (. + {projects: ($projects + {($project): $desired})}) end
-    ' "${state_file}" >"${tmp}" 2>/dev/null \
-        && chmod 600 "${tmp}" \
-        && mv "${tmp}" "${state_file}"; then
+    if command -v jq >/dev/null 2>&1; then
+        jq --arg project "${WORKSPACE_ROOT}" --slurpfile mcp "${mcp_config}" '
+            ($mcp[0].mcpServers // {} | keys | sort) as $names
+            | (.projects // {}) as $projects
+            | ($projects[$project] // {}) as $entry
+            | (($entry.enabledMcpjsonServers // []) + $names | unique) as $enabled
+            | ($entry + {hasTrustDialogAccepted: true, enabledMcpjsonServers: $enabled}) as $desired
+            | if $entry == $desired then . else (. + {projects: ($projects + {($project): $desired})}) end
+        ' "${state_file}" >"${tmp}" 2>/dev/null
+    elif command -v node >/dev/null 2>&1; then
+        node - "${state_file}" "${mcp_config}" "${WORKSPACE_ROOT}" >"${tmp}" 2>/dev/null <<'NODE'
+const fs = require("node:fs");
+
+const [stateFile, mcpFile, project] = process.argv.slice(2);
+const state = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+const mcp = JSON.parse(fs.readFileSync(mcpFile, "utf8"));
+const projects = state.projects && typeof state.projects === "object" ? state.projects : {};
+const entry = projects[project] && typeof projects[project] === "object" ? projects[project] : {};
+const names = Object.keys(mcp.mcpServers && typeof mcp.mcpServers === "object" ? mcp.mcpServers : {});
+const existing = Array.isArray(entry.enabledMcpjsonServers) ? entry.enabledMcpjsonServers : [];
+const enabledMcpjsonServers = [...new Set([...existing, ...names])].sort();
+projects[project] = { ...entry, hasTrustDialogAccepted: true, enabledMcpjsonServers };
+process.stdout.write(`${JSON.stringify({ ...state, projects }, null, 2)}\n`);
+NODE
+    else
+        rm -f "${tmp}"
+        return 0
+    fi
+    if [ -s "${tmp}" ] && chmod 600 "${tmp}" && mv "${tmp}" "${state_file}"; then
         return 0
     fi
     rm -f "${tmp}"
