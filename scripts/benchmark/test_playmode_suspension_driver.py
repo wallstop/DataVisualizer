@@ -77,6 +77,7 @@ class PlayModeSuspensionDriverTests(unittest.TestCase):
     def test_asset_mutation_cycle_requires_queued_invalidation_and_drain(self):
         source = inspect.getsource(run_asset_mutation_cycle)
         self.assertIn("refreshQueued=True", source)
+        self.assertIn("refreshQueued=False", source)
         self.assertIn("searchPending=0", source)
 
     def test_scenario_bootstraps_canonical_settings_before_fixture(self):

@@ -399,7 +399,7 @@ def run_open_cycle(scenario: UnityScenario, cycle: int) -> dict[str, Any]:
         snapshot_code(),
         lambda value: isinstance(value, str)
         and "suspended=False" in value
-        and "queued=False" in value,
+        and "refreshQueued=False" in value,
         "resumed open window",
     )
     drained = scenario.wait_for(
@@ -506,7 +506,7 @@ def run_asset_mutation_cycle(scenario: UnityScenario, operation: str) -> dict[st
         snapshot_code(),
         lambda value: isinstance(value, str)
         and "suspended=False" in value
-        and "queued=False" in value,
+        and "refreshQueued=False" in value,
         f"resumed after {operation}",
     )
     drained = scenario.wait_for(
