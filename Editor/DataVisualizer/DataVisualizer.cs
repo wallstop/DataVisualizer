@@ -70,6 +70,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const float MinWindowWidth =
             MinNamespacePaneWidth + MinObjectPaneWidth + MinInspectorPaneWidth + 60f;
         private const float MinWindowHeight = 480f;
+        private const long SplitterSaveDebounceMilliseconds = 250;
         private const int AsyncLoadBatchSize = 100;
         private const int AsyncLoadPriorityBatchSize = 100;
 
@@ -304,6 +305,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private float _lastSavedOuterWidth = -1f;
         private float _lastSavedInnerWidth = -1f;
         private IVisualElementScheduledItem _saveWidthsTask;
+        private bool _suppressSplitterWidthSave;
 
         private int _searchHighlightIndex = -1;
         private int _typePopoverHighlightIndex = -1;
@@ -478,13 +480,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             _isSearchCachePopulated = false;
             CloseActivePopover();
             CancelDrag();
-            _saveWidthsTask?.Pause();
+            FlushSplitterWidthSave();
             if (!Settings.persistStateInSettingsAsset && _userStateDirty)
             {
                 SaveUserStateToFile();
             }
-
-            _saveWidthsTask = null;
             _currentInspectorScriptableObject?.Dispose();
             _currentInspectorScriptableObject = null;
             _dragGhost?.RemoveFromHierarchy();
@@ -1074,12 +1074,54 @@ namespace WallstopStudios.DataVisualizer.Editor
             return settings;
         }
 
-        private void StartPeriodicWidthSave()
+        private void StartSplitterWidthTracking()
+        {
+            _namespaceColumnElement?.UnregisterCallback<GeometryChangedEvent>(
+                HandleSplitterGeometryChanged
+            );
+            _objectColumnElement?.UnregisterCallback<GeometryChangedEvent>(
+                HandleSplitterGeometryChanged
+            );
+            _namespaceColumnElement?.RegisterCallback<GeometryChangedEvent>(
+                HandleSplitterGeometryChanged
+            );
+            _objectColumnElement?.RegisterCallback<GeometryChangedEvent>(
+                HandleSplitterGeometryChanged
+            );
+            _suppressSplitterWidthSave = false;
+        }
+
+        private void HandleSplitterGeometryChanged(GeometryChangedEvent evt)
+        {
+            if (_suppressSplitterWidthSave)
+            {
+                return;
+            }
+
+            _saveWidthsTask?.Pause();
+            _saveWidthsTask = rootVisualElement.schedule.Execute(() =>
+            {
+                _saveWidthsTask = null;
+                CheckAndSaveSplitterWidths();
+            });
+            _saveWidthsTask.ExecuteLater(SplitterSaveDebounceMilliseconds);
+        }
+
+        private void FlushSplitterWidthSave()
         {
             _saveWidthsTask?.Pause();
-            _saveWidthsTask = rootVisualElement
-                .schedule.Execute(CheckAndSaveSplitterWidths)
-                .Every(1000);
+            _saveWidthsTask = null;
+            if (!_suppressSplitterWidthSave)
+            {
+                CheckAndSaveSplitterWidths();
+            }
+
+            _namespaceColumnElement?.UnregisterCallback<GeometryChangedEvent>(
+                HandleSplitterGeometryChanged
+            );
+            _objectColumnElement?.UnregisterCallback<GeometryChangedEvent>(
+                HandleSplitterGeometryChanged
+            );
         }
 
         private void CheckAndSaveSplitterWidths()
@@ -1360,7 +1402,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                             PopulateSearchCacheAsync();
                             // Restore selection with priority async loading
                             RestorePreviousSelection();
-                            StartPeriodicWidthSave();
+                            StartSplitterWidthTracking();
                         })
                         .ExecuteLater(10);
                 })
