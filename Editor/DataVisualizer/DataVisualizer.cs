@@ -894,7 +894,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             bool selectActiveObject
         )
         {
-            if (settings == null || !settings.SetSelectActiveObject(selectActiveObject))
+            if (
+                EditorApplication.isPlayingOrWillChangePlaymode
+                || settings == null
+                || !settings.SetSelectActiveObject(selectActiveObject)
+            )
             {
                 return false;
             }
@@ -2185,6 +2189,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 "Run",
                 () =>
                 {
+                    if (_isPlayModeSuspended)
+                    {
+                        return;
+                    }
+
                     try
                     {
                         processor.Process(_namespaceController.SelectedType, toProcess);
@@ -3087,7 +3096,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement triggerElement
         )
         {
-            if (_confirmActionPopover == null || onConfirm == null)
+            if (_isPlayModeSuspended || _confirmActionPopover == null || onConfirm == null)
             {
                 return;
             }
@@ -3166,6 +3175,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             bool shouldFocus = true
         )
         {
+            if (_isPlayModeSuspended)
+            {
+                return;
+            }
+
             if (!isNested)
             {
                 CloseActivePopover();
@@ -3208,6 +3222,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             triggerElement
                 .schedule.Execute(() =>
                 {
+                    if (_isPlayModeSuspended)
+                    {
+                        return;
+                    }
+
                     VisualElement currentlyActive = isNested
                         ? _activeNestedPopover
                         : _activePopover;
@@ -3364,6 +3383,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleGlobalKeyDown(KeyDownEvent evt)
         {
+            if (_isPlayModeSuspended)
+            {
+                return;
+            }
+
             if (_activePopover == _inspectorLabelSuggestionsPopover)
             {
                 HandleNewLabelInputKeyDown(evt);
@@ -3650,6 +3674,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             prefsToggle.AddToClassList("settings-prefs-toggle");
             prefsToggle.RegisterValueChangedCallback(evt =>
             {
+                if (_isPlayModeSuspended)
+                {
+                    return;
+                }
+
                 bool newModeIsSettingsAsset = evt.newValue;
                 bool previousModeWasSettingsAsset = Settings.persistStateInSettingsAsset;
                 if (previousModeWasSettingsAsset == newModeIsSettingsAsset)
@@ -3832,7 +3861,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             ScriptableObject dataObject
         )
         {
-            if (dataObject == null)
+            if (_isPlayModeSuspended || dataObject == null)
             {
                 return;
             }
@@ -9320,6 +9349,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void MigratePersistenceState(bool migrateToSettingsAsset)
         {
+            if (_isPlayModeSuspended)
+            {
+                return;
+            }
+
             try
             {
                 DataVisualizerUserState userState = UserState;
