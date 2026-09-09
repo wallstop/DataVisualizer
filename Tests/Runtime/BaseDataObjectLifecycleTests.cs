@@ -46,6 +46,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Runtime
             Assert.That(clone.Title, Is.EqualTo("Sword (Clone)"));
         }
 
+        [Test]
+        public void Should_PreserveSerializedAssetState_WhenStateRoundTrips()
+        {
+            source.SetAssetGuid("runtime-guid");
+            source.Title = "Sword";
+            source.Description = "A serialized runtime fixture.";
+
+            string serializedState = JsonUtility.ToJson(source);
+            JsonUtility.FromJsonOverwrite(serializedState, clone);
+
+            Assert.That(clone.Id, Is.EqualTo("runtime-guid"));
+            Assert.That(clone.Title, Is.EqualTo("Sword"));
+            Assert.That(clone.Description, Is.EqualTo("A serialized runtime fixture."));
+        }
+
         [TestCase("Sword (Clone)", "Sword (Clone 1)")]
         [TestCase("Sword (Clone 4)", "Sword (Clone 5)")]
         public void Should_ContinueCloneNumbering_WhenSourceAlreadyHasCloneSuffix(
