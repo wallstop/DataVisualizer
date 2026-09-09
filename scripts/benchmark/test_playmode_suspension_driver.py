@@ -1,9 +1,16 @@
+import inspect
 import unittest
 
 from playmode_suspension_driver import (
+    BenchmarkError,
     RELOAD_CONFIGURATIONS,
+    SuspensionConfig,
+    UnityScenario,
     parse_args,
+    asset_mutation_code,
+    prepare_asset_mutation_code,
     restore_reload_code,
+    run_asset_mutation_cycle,
     start_loads_and_play_code,
     snapshot_code,
 )
@@ -45,6 +52,7 @@ class PlayModeSuspensionDriverTests(unittest.TestCase):
         ):
             self.assertIn(field, source)
         self.assertIn("indicator=", source)
+        self.assertIn("settingsPath=", source)
 
     def test_load_and_search_requests_capture_work_before_editor_ticks(self):
         source = start_loads_and_play_code()
@@ -54,6 +62,46 @@ class PlayModeSuspensionDriverTests(unittest.TestCase):
         self.assertIn('"|searchPending=" + searchPending', source)
         self.assertIn('"_scriptableObjectTypes"', source)
         self.assertLess(source.index("objectMethod.Invoke"), source.index("EditorApplication.isPlaying = true"))
+
+    def test_asset_mutations_use_real_asset_database_operations(self):
+        for operation, expected in (
+            ("import", "ImportAsset"),
+            ("move", "MoveAsset"),
+            ("delete", "DeleteAsset"),
+        ):
+            source = asset_mutation_code(operation)
+            self.assertIn(expected, source)
+            self.assertIn("return", source)
+        self.assertIn("CreateFolder", prepare_asset_mutation_code())
+
+    def test_asset_mutation_cycle_requires_queued_invalidation_and_drain(self):
+        source = inspect.getsource(run_asset_mutation_cycle)
+        self.assertIn("refreshQueued=True", source)
+        self.assertIn("searchPending=0", source)
+
+    def test_scenario_bootstraps_canonical_settings_before_fixture(self):
+        source = inspect.getsource(__import__("playmode_suspension_driver"))
+        self.assertIn("canonical host settings bootstrap", source)
+        self.assertIn("settingsPath=Assets/Editor/DataVisualizerSettings.asset", source)
+
+    def test_wait_for_retries_transient_mcp_failures_until_deadline(self):
+        scenario = UnityScenario.__new__(UnityScenario)
+        scenario.config = SuspensionConfig(
+            host_project="/host/DataVisualizer",
+            unity_version="6000.4.6f1",
+            output=__import__("pathlib").Path("/tmp/result.json"),
+            mcp_url="http://127.0.0.1:1/mcp",
+            mcp_token=None,
+            timeout_seconds=0.01,
+            fixture_size=201,
+        )
+
+        def fail(*_args, **_kwargs):
+            raise BenchmarkError("transient MCP failure")
+
+        scenario.eval = fail
+        with self.assertRaisesRegex(BenchmarkError, "transient MCP failure"):
+            scenario.wait_for("return true;", lambda value: value is True, "test state")
 
     def test_restore_reload_code_handles_combined_flags(self):
         source = restore_reload_code("True|DisableDomainReload, DisableSceneReload")

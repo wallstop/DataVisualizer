@@ -26,6 +26,7 @@ from benchmark_driver import (
 
 
 FIXTURE_ROOT = "Assets/__CodexPlayModeSuspensionFixture"
+MOVED_FIXTURE_ROOT = FIXTURE_ROOT + "/Moved"
 WINDOW_TYPE = "WallstopStudios.DataVisualizer.Editor.DataVisualizer"
 SETTINGS_TYPE = "WallstopStudios.DataVisualizer.Editor.Data.DataVisualizerSettings"
 SCHEMA_VERSION = "1"
@@ -110,11 +111,21 @@ class UnityScenario:
     def wait_for(self, query: str, predicate: Callable[[Any], bool], label: str) -> Any:
         deadline = time.monotonic() + self.config.timeout_seconds
         last_value: Any = None
+        last_error: BenchmarkError | None = None
         while time.monotonic() < deadline:
-            last_value = self.eval(query, timeout_seconds=min(10.0, self.config.timeout_seconds))
+            try:
+                last_value = self.eval(
+                    query, timeout_seconds=min(10.0, self.config.timeout_seconds)
+                )
+            except BenchmarkError as error:
+                last_error = error
+                time.sleep(0.5)
+                continue
             if predicate(last_value):
                 return last_value
             time.sleep(0.5)
+        if last_error is not None and last_value is None:
+            raise BenchmarkError(f"Timed out waiting for {label}: {last_error}")
         raise BenchmarkError(f"Timed out waiting for {label}: {last_value}")
 
 
@@ -201,6 +212,46 @@ if (existed)
 return existed ? "deleted" : "absent";'''
 
 
+def prepare_asset_mutation_code() -> str:
+    return f'''var folder = "{MOVED_FIXTURE_ROOT}";
+if (!UnityEditor.AssetDatabase.IsValidFolder(folder))
+{{
+    var guid = UnityEditor.AssetDatabase.CreateFolder("{FIXTURE_ROOT}", "Moved");
+    if (string.IsNullOrEmpty(guid)) return "folder-create-failed";
+}}
+return UnityEditor.AssetDatabase.IsValidFolder(folder) ? "ready" : "folder-missing";'''
+
+
+def asset_mutation_code(operation: str) -> str:
+    paths = {
+        "import": f'{FIXTURE_ROOT}/Item_000000.asset',
+        "move": f'{FIXTURE_ROOT}/Item_000001.asset',
+        "delete": f'{FIXTURE_ROOT}/Item_000002.asset',
+    }
+    if operation not in paths:
+        raise ValueError(f"Unsupported asset mutation: {operation}")
+    path = paths[operation]
+    if operation == "import":
+        return f'''var path = "{path}";
+UnityEditor.AssetDatabase.ImportAsset(path, UnityEditor.ImportAssetOptions.ForceUpdate);
+return UnityEditor.AssetDatabase.AssetPathToGUID(path) == "" ? "import-missing" : "imported";'''
+    if operation == "move":
+        return f'''var error = UnityEditor.AssetDatabase.MoveAsset(
+    "{path}", "{MOVED_FIXTURE_ROOT}/Item_000001.asset"
+);
+return string.IsNullOrEmpty(error) ? "moved" : "move-failed:" + error;'''
+    return f'''var path = "{path}";
+bool deleted = UnityEditor.AssetDatabase.DeleteAsset(path);
+return deleted ? "deleted" : "delete-failed";'''
+
+
+def restore_moved_asset_code() -> str:
+    return f'''var error = UnityEditor.AssetDatabase.MoveAsset(
+    "{MOVED_FIXTURE_ROOT}/Item_000001.asset", "{FIXTURE_ROOT}/Item_000001.asset"
+);
+return string.IsNullOrEmpty(error) ? "restored" : "restore-failed:" + error;'''
+
+
 def close_window_code() -> str:
     return f'''var windows = UnityEngine.Resources.FindObjectsOfTypeAll<{WINDOW_TYPE}>();
 for (int index = 0; index < windows.Length; index++)
@@ -233,6 +284,7 @@ var searchPending = ((System.Collections.ICollection)type.GetField("_pendingSear
 var indicator = type.GetField("_objectLoadingIndicator", flags).GetValue(window) as UnityEngine.UIElements.Label;
 var search = type.GetField("_searchField", flags).GetValue(window) as UnityEngine.UIElements.VisualElement;
 var create = type.GetField("_createObjectButton", flags).GetValue(window) as UnityEngine.UIElements.VisualElement;
+var settings = type.GetField("_settings", flags).GetValue(window) as UnityEngine.ScriptableObject;
 return "window=1" +
     "|playing=" + UnityEditor.EditorApplication.isPlaying +
     "|suspended=" + suspended +
@@ -246,6 +298,7 @@ return "window=1" +
     "|indicator=" + (indicator == null ? "missing" : indicator.text) +
     "|searchEnabled=" + (search == null ? "missing" : search.enabledSelf) +
     "|createEnabled=" + (create == null ? "missing" : create.enabledSelf) +
+    "|settingsPath=" + UnityEditor.AssetDatabase.GetAssetPath(settings) +
     "|children=" + window.rootVisualElement.childCount;'''
 
 
@@ -417,6 +470,66 @@ def run_close_during_play_cycle(scenario: UnityScenario) -> dict[str, Any]:
     }
 
 
+def run_asset_mutation_cycle(scenario: UnityScenario, operation: str) -> dict[str, Any]:
+    pre_play = scenario.eval(start_loads_and_play_code())
+    if not (
+        isinstance(pre_play, str)
+        and "loading=True" in pre_play
+        and "searchLoading=True" in pre_play
+        and "pending=0" not in pre_play
+        and "searchPending=0" not in pre_play
+    ):
+        raise BenchmarkError(f"{operation} cycle did not capture in-flight work: {pre_play}")
+    wait_editor_state(scenario, True)
+    suspended = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str)
+        and "suspended=True" in value
+        and "refreshQueued=False" in value,
+        f"suspended window before {operation}",
+    )
+    mutation = scenario.eval(asset_mutation_code(operation))
+    if isinstance(mutation, str) and (
+        mutation.startswith("move-failed")
+        or mutation.startswith("delete-failed")
+        or mutation.startswith("import-missing")
+    ):
+        raise BenchmarkError(f"{operation} mutation failed: {mutation}")
+    queued = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str) and "refreshQueued=True" in value,
+        f"queued {operation} invalidation",
+    )
+    scenario.eval("UnityEditor.EditorApplication.isPlaying = false; return \"requested\";")
+    wait_editor_state(scenario, False)
+    resumed = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str)
+        and "suspended=False" in value
+        and "queued=False" in value,
+        f"resumed after {operation}",
+    )
+    drained = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str)
+        and "loading=False" in value
+        and "pending=0" in value
+        and "searchLoading=False" in value
+        and "searchPending=0" in value,
+        f"drained work after {operation}",
+    )
+    return {
+        "operation": operation,
+        "prePlay": pre_play,
+        "suspended": suspended,
+        "mutation": mutation,
+        "queued": queued,
+        "resumed": resumed,
+        "drained": drained,
+        "restored": None,
+    }
+
+
 def run_first_enable_cycle(scenario: UnityScenario) -> dict[str, Any]:
     scenario.eval(close_window_code())
     started_at = time.monotonic()
@@ -448,6 +561,16 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
         "return UnityEditor.EditorSettings.enterPlayModeOptionsEnabled + \"|\" + "
         "UnityEditor.EditorSettings.enterPlayModeOptions;"
     )
+    scenario.eval(close_window_code())
+    scenario.eval(cleanup_code())
+    scenario.eval(open_window_code())
+    scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str)
+        and "settingsPath=Assets/Editor/DataVisualizerSettings.asset" in value,
+        "canonical host settings bootstrap",
+    )
+    scenario.eval(close_window_code())
     report: dict[str, Any] = {
         "schemaVersion": SCHEMA_VERSION,
         "hostProject": config.host_project,
@@ -474,16 +597,34 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
                 lambda value: value == config.fixture_size or value == str(config.fixture_size),
                 "fixture import",
             )
+            mutation_folder = scenario.eval(prepare_asset_mutation_code())
+            if mutation_folder != "ready":
+                raise BenchmarkError(f"Could not prepare asset mutation folder: {mutation_folder}")
             scenario.eval(close_window_code())
             scenario.eval(open_window_code())
             scenario.wait_for(
                 snapshot_code(),
-                lambda value: isinstance(value, str) and "window=1" in value and "children=0" not in value,
+                lambda value: isinstance(value, str)
+                and "window=1" in value
+                and "children=0" not in value
+                and "settingsPath=Assets/Editor/DataVisualizerSettings.asset" in value,
                 "Data Visualizer visual tree",
             )
             cycles = [run_open_cycle(scenario, cycle) for cycle in (1, 2)]
+            asset_mutations = [
+                run_asset_mutation_cycle(scenario, operation)
+                for operation in ("import", "move", "delete")
+            ]
             close_during_play = run_close_during_play_cycle(scenario)
             first_enable = run_first_enable_cycle(scenario)
+            restored = scenario.eval(restore_moved_asset_code())
+            if restored != "restored":
+                raise BenchmarkError(f"Moved fixture asset could not be restored: {restored}")
+            scenario.wait_for(
+                snapshot_code(),
+                lambda value: isinstance(value, str) and "refreshQueued=False" in value,
+                "settled edit-mode move restoration",
+            )
             scenario.eval(close_window_code())
             report["configurations"].append(
                 {
@@ -491,6 +632,8 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
                     "domainReload": configuration.domain_reload,
                     "sceneReload": configuration.scene_reload,
                     "cycles": cycles,
+                    "assetMutations": asset_mutations,
+                    "assetMutationRestored": restored,
                     "closeDuringPlay": close_during_play,
                     "firstEnable": first_enable,
                 }

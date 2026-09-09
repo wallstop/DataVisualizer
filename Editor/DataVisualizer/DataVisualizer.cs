@@ -1235,25 +1235,30 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private static DataVisualizerSettings LoadOrCreateSettings()
         {
-            DataVisualizerSettings settings = null;
+            DataVisualizerSettings settings = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(
+                SettingsDefaultPath
+            );
 
-            DataVisualizerSettings[] foundSettings = AssetDatabase
-                .FindAssets($"t:{nameof(DataVisualizerSettings)}")
-                .Select(AssetDatabase.GUIDToAssetPath)
-                .Select(AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>)
-                .Where(s => s != null)
-                .ToArray();
-
-            if (0 < foundSettings.Length)
+            if (settings == null)
             {
-                if (1 < foundSettings.Length)
-                {
-                    Debug.LogWarning(
-                        $"Multiple DataVisualizerSettings assets found ({foundSettings.Length}). Using the first one."
-                    );
-                }
+                DataVisualizerSettings[] foundSettings = AssetDatabase
+                    .FindAssets($"t:{nameof(DataVisualizerSettings)}")
+                    .Select(AssetDatabase.GUIDToAssetPath)
+                    .Select(AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>)
+                    .Where(s => s != null)
+                    .ToArray();
 
-                settings = foundSettings[0];
+                if (0 < foundSettings.Length)
+                {
+                    if (1 < foundSettings.Length)
+                    {
+                        Debug.LogWarning(
+                            $"Multiple DataVisualizerSettings assets found ({foundSettings.Length}). Using the first one."
+                        );
+                    }
+
+                    settings = foundSettings[0];
+                }
             }
 
             if (settings == null)

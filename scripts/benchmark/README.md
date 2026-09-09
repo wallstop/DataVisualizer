@@ -70,8 +70,11 @@ python3 scripts/benchmark/playmode_suspension_driver.py \
 It runs two in-flight open-window cycles and one first-enable-during-Play cycle
 for each domain-reload/scene-reload combination. The report captures suspended
 state, pending object work, search-cache work, queued invalidation, paused
-indicator text, mutation-control availability, resume state, and cleanup. The
-scenario uses a fixture of at least 201 settings assets so the async queue is
+indicator text, mutation-control availability, resume state, and cleanup. Each
+configuration also imports, moves, and deletes a fixture asset during Play Mode
+through `AssetDatabase`, proving that the real asset-postprocessor path queues
+one coalesced invalidation without interrupting in-flight work. The scenario
+uses a fixture of at least 201 settings assets so the async queue is
 observable, temporarily adds that fixture type to the window's in-memory managed
 catalog for search-cache coverage, uses reflection only for diagnostics, and
 does not add an automation API or a background process to the package. It also
