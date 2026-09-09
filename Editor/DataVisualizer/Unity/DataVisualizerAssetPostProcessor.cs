@@ -17,6 +17,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             string[] movedFromAssetPaths
         )
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                return;
+            }
+
             if (
                 importedAssets.Length <= 0
                 && deletedAssets.Length <= 0

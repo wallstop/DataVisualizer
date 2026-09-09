@@ -277,6 +277,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         private readonly List<IDataProcessor> _allDataProcessors = new();
         private readonly List<IDataProcessor> _compatibleDataProcessors = new();
         private bool _dataProcessorsDiscovered;
+        private bool _isPlayModeSuspended;
+        private bool _refreshQueuedDuringPlayMode;
+        private bool _deferredInitializationPending;
 
         private TextField _searchField;
         private VisualElement _searchPopover;
@@ -421,6 +424,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             _isSearchCachePopulated = false;
             _dataProcessorsDiscovered = false;
             _allDataProcessors.Clear();
+            _isPlayModeSuspended = EditorApplication.isPlayingOrWillChangePlaymode;
+            _refreshQueuedDuringPlayMode = false;
+            _deferredInitializationPending = false;
+            EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
+            EditorApplication.playModeStateChanged += HandlePlayModeStateChanged;
             _selectedObject = null;
             _selectedObjects.Clear();
 #if ODIN_INSPECTOR
@@ -438,6 +446,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnDisable()
         {
+            EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             rootVisualElement.UnregisterCallback<KeyDownEvent>(
                 HandleGlobalKeyDown,
                 TrickleDown.TrickleDown
@@ -447,11 +456,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnDestroy()
         {
+            EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             Cleanup();
         }
 
         private void Cleanup()
         {
+            EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             if (Instance == this)
             {
                 Instance = null;
@@ -470,6 +481,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             _isLabelCachePopulated = false;
             _dataProcessorsDiscovered = false;
             _allDataProcessors.Clear();
+            _isPlayModeSuspended = false;
+            _refreshQueuedDuringPlayMode = false;
+            _deferredInitializationPending = false;
             _selectedObject = null;
             _scriptableObjectTypes.Clear();
             _namespaceOrder.Clear();
@@ -506,6 +520,112 @@ namespace WallstopStudios.DataVisualizer.Editor
 #endif
         }
 
+        private void HandlePlayModeStateChanged(PlayModeStateChange stateChange)
+        {
+            switch (stateChange)
+            {
+                case PlayModeStateChange.ExitingEditMode:
+                case PlayModeStateChange.EnteredPlayMode:
+                    SuspendForPlayMode();
+                    break;
+                case PlayModeStateChange.EnteredEditMode:
+                    ResumeAfterPlayMode();
+                    break;
+            }
+        }
+
+        private void SuspendForPlayMode()
+        {
+            if (_isPlayModeSuspended)
+            {
+                ApplyPlayModeAvailability();
+                return;
+            }
+
+            _isPlayModeSuspended = true;
+            _asyncLoadTask?.Pause();
+            _asyncLoadTask = null;
+            _saveWidthsTask?.Pause();
+            _saveWidthsTask = null;
+            _suppressSplitterWidthSave = true;
+            CloseActivePopover();
+            ApplyPlayModeAvailability();
+            UpdateLoadingIndicator(0, 0);
+        }
+
+        private void ResumeAfterPlayMode()
+        {
+            if (!_isPlayModeSuspended)
+            {
+                return;
+            }
+
+            _isPlayModeSuspended = false;
+            ApplyPlayModeAvailability();
+
+            if (_deferredInitializationPending)
+            {
+                _deferredInitializationPending = false;
+                CreateGUI();
+                return;
+            }
+
+            StartSplitterWidthTracking();
+            if (_refreshQueuedDuringPlayMode)
+            {
+                _refreshQueuedDuringPlayMode = false;
+                ScheduleRefresh();
+                return;
+            }
+
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType != null)
+            {
+                ContinueLoadingObjects(_asyncLoadTargetType, _asyncLoadGeneration);
+            }
+
+            if (_isLoadingSearchCacheAsync)
+            {
+                ContinuePopulatingSearchCache(_searchCacheGeneration);
+            }
+            else if (!_isSearchCachePopulated && _scriptableObjectTypes.Count > 0)
+            {
+                PopulateSearchCacheAsync();
+            }
+
+            UpdateLoadingIndicator(_selectedObjects.Count, _asyncLoadTotalCount);
+        }
+
+        private void ApplyPlayModeAvailability()
+        {
+            bool enabled = !_isPlayModeSuspended;
+            _settingsButton?.SetEnabled(enabled);
+            _searchField?.SetEnabled(enabled);
+            _addTypeButton?.SetEnabled(enabled);
+            _addTypesFromDataFolderButton?.SetEnabled(enabled);
+            _addTypesFromScriptFolderButton?.SetEnabled(enabled);
+            _createObjectButton?.SetEnabled(enabled);
+            _typeAddSearchField?.SetEnabled(enabled);
+            _typeSearchField?.SetEnabled(enabled);
+            _namespaceListContainer?.SetEnabled(enabled);
+            _objectListView?.SetEnabled(enabled);
+            _labelCollapseRow?.SetEnabled(enabled);
+            _labelFilterSelectionRoot?.SetEnabled(enabled);
+            _inspectorContainer?.SetEnabled(enabled);
+            _processorAreaElement?.SetEnabled(enabled);
+            _settingsPopover?.SetEnabled(enabled);
+            _createPopover?.SetEnabled(enabled);
+            _renamePopover?.SetEnabled(enabled);
+            _confirmDeletePopover?.SetEnabled(enabled);
+            _confirmActionPopover?.SetEnabled(enabled);
+            _typeAddPopover?.SetEnabled(enabled);
+            _confirmNamespaceAddPopover?.SetEnabled(enabled);
+            _inspectorLabelSuggestionsPopover?.SetEnabled(enabled);
+
+            rootVisualElement
+                .Query<Button>(className: StyleConstants.ActionButtonClass)
+                .ForEach(button => button.SetEnabled(enabled));
+        }
+
         private void PopulateSearchCache()
         {
             // Start async loading instead
@@ -514,6 +634,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void PopulateSearchCacheAsync()
         {
+            if (_isPlayModeSuspended)
+            {
+                _refreshQueuedDuringPlayMode = true;
+                return;
+            }
+
             var cacheStartTime = System.Diagnostics.Stopwatch.StartNew();
             _allManagedObjectsCache.Clear();
             _pendingSearchCacheGuids.Clear();
@@ -573,6 +699,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void ContinuePopulatingSearchCache(int generation)
         {
+            if (_isPlayModeSuspended)
+            {
+                return;
+            }
+
             if (generation != _searchCacheGeneration)
             {
                 return; // superseded by a newer PopulateSearchCacheAsync run
@@ -686,6 +817,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void ScheduleRefresh()
         {
+            if (_isPlayModeSuspended)
+            {
+                _refreshQueuedDuringPlayMode = true;
+                return;
+            }
+
             if (_needsRefresh)
             {
                 return;
@@ -732,6 +869,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             Func<DataVisualizerUserState, bool> userStateApplier
         )
         {
+            if (_isPlayModeSuspended)
+            {
+                return;
+            }
+
             DataVisualizerSettings settings = Settings;
             if (settings.persistStateInSettingsAsset)
             {
@@ -763,6 +905,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void RefreshAllViews()
         {
+            if (_isPlayModeSuspended)
+            {
+                _needsRefresh = false;
+                _refreshQueuedDuringPlayMode = true;
+                return;
+            }
+
             Type selectedType = _namespaceController.SelectedType;
 
             string previousNamespaceKey =
@@ -1162,6 +1311,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void RestorePreviousSelection()
         {
+            if (_isPlayModeSuspended)
+            {
+                _deferredInitializationPending = true;
+                return;
+            }
+
             if (_scriptableObjectTypes.Count == 0)
             {
                 return;
@@ -1368,12 +1523,19 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
             root.Add(_confirmNamespaceAddPopover);
+            ApplyPlayModeAvailability();
 
             // CreateGUI is now complete - window structure is ready
             // Defer ALL content building to next frame so window appears instantly
             rootVisualElement
                 .schedule.Execute(() =>
                 {
+                    if (_isPlayModeSuspended)
+                    {
+                        _deferredInitializationPending = true;
+                        return;
+                    }
+
                     if (EnableAsyncLoadDebugLog)
                     {
                         Debug.Log(
@@ -1394,6 +1556,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                     rootVisualElement
                         .schedule.Execute(() =>
                         {
+                            if (_isPlayModeSuspended)
+                            {
+                                _deferredInitializationPending = true;
+                                return;
+                            }
+
                             if (EnableAsyncLoadDebugLog)
                             {
                                 Debug.Log(
@@ -1958,6 +2126,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void RunDataProcessor(VisualElement context, IDataProcessor processor)
         {
+            if (_isPlayModeSuspended)
+            {
+                return;
+            }
+
             ProcessorState state = CurrentProcessorState;
             if (processor == null || _namespaceController.SelectedType == null || state == null)
             {
@@ -3567,7 +3740,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void SelectDataFolderForPopover(Label displayField)
         {
-            if (displayField == null)
+            if (_isPlayModeSuspended || displayField == null)
             {
                 Debug.LogError("Cannot select data folder: Display field reference is null.");
                 return;
@@ -3827,6 +4000,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleCreateConfirmed(Type type, TextField nameField, Label errorLabel)
         {
+            if (_isPlayModeSuspended)
+            {
+                return;
+            }
+
             errorLabel.style.display = DisplayStyle.None;
             string newName = nameField.value;
 
@@ -3897,6 +4075,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleRenameConfirmed(Label titleLabel, TextField nameField, Label errorLabel)
         {
+            if (_isPlayModeSuspended)
+            {
+                return;
+            }
+
             errorLabel.style.display = DisplayStyle.None;
             string originalPath = _popoverContext as string;
             string newName = nameField.value;
@@ -4058,6 +4241,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleDeleteConfirmed()
         {
+            if (_isPlayModeSuspended)
+            {
+                return;
+            }
+
             ScriptableObject objectToDelete = _popoverContext as ScriptableObject;
             CloseActivePopover();
 
@@ -6479,7 +6667,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void MoveObjectToTop(ScriptableObject dataObject)
         {
-            if (dataObject == null)
+            if (_isPlayModeSuspended || dataObject == null)
             {
                 return;
             }
@@ -6495,7 +6683,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void MoveObjectToBottom(ScriptableObject dataObject)
         {
-            if (dataObject == null)
+            if (_isPlayModeSuspended || dataObject == null)
             {
                 return;
             }
@@ -6551,7 +6739,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void MoveObjectToFolder(ScriptableObject dataObject)
         {
-            if (dataObject == null)
+            if (_isPlayModeSuspended || dataObject == null)
             {
                 return;
             }
@@ -7226,7 +7414,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void AddLabelToSelectedAsset()
         {
-            if (_selectedObject == null || _inspectorNewLabelInput == null)
+            if (_isPlayModeSuspended || _selectedObject == null || _inspectorNewLabelInput == null)
             {
                 return;
             }
@@ -7275,7 +7463,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void RemoveLabelFromSelectedAsset(string labelToRemove)
         {
-            if (_selectedObject == null || string.IsNullOrWhiteSpace(labelToRemove))
+            if (
+                _isPlayModeSuspended
+                || _selectedObject == null
+                || string.IsNullOrWhiteSpace(labelToRemove)
+            )
             {
                 return;
             }
@@ -7307,7 +7499,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void CloneObject(ScriptableObject originalObject)
         {
-            if (originalObject == null)
+            if (_isPlayModeSuspended || originalObject == null)
             {
                 return;
             }
@@ -7554,6 +7746,12 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             if (type == null)
             {
+                return;
+            }
+
+            if (_isPlayModeSuspended)
+            {
+                _refreshQueuedDuringPlayMode = true;
                 return;
             }
 
@@ -8019,6 +8217,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void ContinueLoadingObjects(Type type, int loadGeneration)
         {
+            if (_isPlayModeSuspended)
+            {
+                return;
+            }
+
             if (loadGeneration != _asyncLoadGeneration)
             {
                 return; // superseded by a newer load, which owns the async state
@@ -8069,6 +8272,13 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             if (_objectLoadingIndicator == null)
             {
+                return;
+            }
+
+            if (_isPlayModeSuspended && (_isLoadingObjectsAsync || _isLoadingSearchCacheAsync))
+            {
+                _objectLoadingIndicator.style.display = DisplayStyle.Flex;
+                _objectLoadingIndicator.text = "Loading paused while playing";
                 return;
             }
 
