@@ -1,6 +1,7 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
+    using System.Collections.Generic;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
@@ -170,6 +171,89 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             Assert.DoesNotThrow(() => userState = DataVisualizerUserState.FromJson(json));
             Assert.IsNull(userState);
+        }
+
+        [Test]
+        public void Should_RoundTripPersistedStateWithoutSharingMutableCollections()
+        {
+            DataVisualizerUserState source = new()
+            {
+                lastSelectedNamespaceKey = "Gameplay",
+                lastSelectedTypeFullName = "Gameplay.EnemyData",
+                namespaceOrder = new List<string> { "Gameplay", "UI" },
+                typeOrders = new List<NamespaceTypeOrder>
+                {
+                    new()
+                    {
+                        namespaceKey = "Gameplay",
+                        typeNames = new List<string> { "Gameplay.EnemyData" },
+                    },
+                },
+                lastObjectSelections = new List<LastObjectSelectionEntry>
+                {
+                    new()
+                    {
+                        typeFullName = "Gameplay.EnemyData",
+                        objectGuid = "0123456789abcdef0123456789abcdef",
+                    },
+                },
+                namespaceCollapseStates = new List<NamespaceCollapseState>
+                {
+                    new() { namespaceKey = "Gameplay", isCollapsed = true },
+                },
+                objectOrders = new List<TypeObjectOrder>
+                {
+                    new()
+                    {
+                        TypeFullName = "Gameplay.EnemyData",
+                        ObjectGuids = new List<string> { "0123456789abcdef0123456789abcdef" },
+                    },
+                },
+                managedTypeNames = new List<string> { "Gameplay.EnemyData" },
+                labelFilterConfigs = new List<TypeLabelFilterConfig>
+                {
+                    new()
+                    {
+                        typeFullName = "Gameplay.EnemyData",
+                        andLabels = new List<string> { "boss" },
+                    },
+                },
+                processorStates = new List<ProcessorState>
+                {
+                    new() { typeFullName = "Gameplay.EnemyData", isCollapsed = false },
+                },
+            };
+
+            DataVisualizerSettings settings =
+                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            try
+            {
+                settings.HydrateFrom(source);
+
+                source.namespaceOrder.Add("Mutated");
+                source.typeOrders[0].typeNames.Add("Mutated.Type");
+                source.lastObjectSelections[0].objectGuid = "fedcba9876543210fedcba9876543210";
+
+                DataVisualizerUserState restored = new();
+                restored.HydrateFrom(settings);
+
+                CollectionAssert.AreEqual(new[] { "Gameplay", "UI" }, restored.namespaceOrder);
+                CollectionAssert.AreEqual(
+                    new[] { "Gameplay.EnemyData" },
+                    restored.typeOrders[0].typeNames
+                );
+                Assert.AreEqual(
+                    "0123456789abcdef0123456789abcdef",
+                    restored.lastObjectSelections[0].objectGuid
+                );
+                Assert.IsTrue(restored.HasCollapseState("Gameplay"));
+                Assert.AreEqual("boss", restored.labelFilterConfigs[0].andLabels[0]);
+                Assert.IsFalse(restored.processorStates[0].isCollapsed);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(settings);
+            }
         }
 
         private static void AssertCollapseStateDirtySemantics(
