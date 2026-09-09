@@ -384,7 +384,6 @@ test_install_creates_all_launchers() {
             CODEX_HOME="${SANDBOX}/codex-home" \
             AI_BACKENDS_BIN_DIR="${SANDBOX}/install-bin" \
             AI_BACKENDS_ENV_FILE="${SANDBOX}/env.local" \
-            AI_BACKENDS_MCP_CONFIG="${SANDBOX}/.mcp.json" \
             bash "${LAUNCHER}" install \
             >"${SANDBOX}/stdout.txt" 2>"${SANDBOX}/stderr.txt")
     RUN_EXIT=$?
@@ -417,6 +416,7 @@ test_install_seeds_isolated_claude_approvals() {
             CODEX_HOME="${SANDBOX}/codex-home" \
             AI_BACKENDS_BIN_DIR="${SANDBOX}/install-bin" \
             AI_BACKENDS_ENV_FILE="${SANDBOX}/env.local" \
+            AI_BACKENDS_MCP_CONFIG="${SANDBOX}/.mcp.json" \
             bash "${LAUNCHER}" install \
             >"${SANDBOX}/stdout.txt" 2>"${SANDBOX}/stderr.txt")
     RUN_EXIT=$?

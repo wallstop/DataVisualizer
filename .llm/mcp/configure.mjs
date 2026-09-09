@@ -606,7 +606,8 @@ function writeClaudeSettings() {
 // trusted and the servers are approved. Record the same machine-local state
 // (~/.claude.json projects entry) that the interactive dialogs write.
 function writeClaudeApprovals(managedNames) {
-    const filePath = path.join(os.homedir(), ".claude.json");
+    const homeDirectory = process.env.HOME || os.homedir();
+    const filePath = path.join(homeDirectory, ".claude.json");
     let existing = {};
     try {
         existing = JSON.parse(fs.readFileSync(filePath, "utf8"));
