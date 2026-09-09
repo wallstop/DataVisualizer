@@ -51,12 +51,45 @@ class ReleaseToolsTests(unittest.TestCase):
             resolve_version("1.2.3", None, "1.2.2")
 
     def test_changelog_rotation_preserves_unreleased_heading(self) -> None:
-        source = "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- A fix.\n\n## [1.0.0] - 2026-01-01\n"
+        source = (
+            "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- A fix.\n\n"
+            "## [1.0.0] - 2026-01-01\n\n"
+            "[Unreleased]: https://github.com/wallstop/DataVisualizer/compare/v1.0.0...HEAD\n"
+            "[1.0.0]: https://github.com/wallstop/DataVisualizer/releases/tag/v1.0.0\n"
+        )
         rotated = rotate_changelog(source, "1.1.0", "2026-09-09")
         self.assertIn("## [Unreleased]\n\n## [1.1.0] - 2026-09-09", rotated)
         self.assertIn("### Fixed\n\n- A fix.", rotated)
+        self.assertIn(
+            "[Unreleased]: https://github.com/wallstop/DataVisualizer/compare/v1.1.0...HEAD",
+            rotated,
+        )
+        self.assertIn(
+            "[1.1.0]: https://github.com/wallstop/DataVisualizer/compare/v1.0.0...v1.1.0",
+            rotated,
+        )
+        self.assertIn(
+            "[1.0.0]: https://github.com/wallstop/DataVisualizer/releases/tag/v1.0.0",
+            rotated,
+        )
         with self.assertRaises(ReleaseError):
             rotate_changelog("# Changelog\n\n## [Unreleased]\n", "1.1.0", "2026-09-09")
+
+    def test_changelog_rotation_preserves_crlf_line_endings(self) -> None:
+        source = (
+            "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- A fix.\n\n"
+            "## [1.0.0] - 2026-01-01\n\n"
+            "[Unreleased]: https://github.com/wallstop/DataVisualizer/compare/v1.0.0...HEAD\n"
+            "[1.0.0]: https://github.com/wallstop/DataVisualizer/releases/tag/v1.0.0\n"
+        ).replace("\n", "\r\n")
+
+        rotated = rotate_changelog(source, "1.1.0", "2026-09-09")
+
+        self.assertNotIn("\n", rotated.replace("\r\n", ""))
+        self.assertIn(
+            "[1.1.0]: https://github.com/wallstop/DataVisualizer/compare/v1.0.0...v1.1.0\r\n",
+            rotated,
+        )
 
     def test_prepare_dry_run_and_validate_release_tree(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

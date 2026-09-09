@@ -3769,7 +3769,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void SelectDataFolderForPopover(Label displayField)
         {
-            if (_isPlayModeSuspended || displayField == null)
+            if (_isPlayModeSuspended)
+            {
+                Debug.LogError("Cannot select data folder while Play Mode is active.");
+                return;
+            }
+
+            if (displayField == null)
             {
                 Debug.LogError("Cannot select data folder: Display field reference is null.");
                 return;

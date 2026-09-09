@@ -31,6 +31,8 @@ UNRELEASED = re.compile(r"(?m)^## \[Unreleased\][ \t]*\r?$")
 RELEASE_HEADER = re.compile(
     r"(?m)^## \[([^\]]+)\] - (\d{4}-\d{2}-\d{2})[ \t]*\r?$"
 )
+LINK_REFERENCE = re.compile(r"(?m)^\[([^\]]+)\]:[ \t]*(\S+)[ \t]*\r?$")
+CHANGELOG_REPOSITORY_URL = "https://github.com/wallstop/DataVisualizer"
 DEFAULT_INCLUDES = ("Editor", "Runtime", "Tests")
 
 
@@ -136,10 +138,9 @@ def rotate_changelog(text: str, version: str, release_date: str) -> str:
         date = dt.date.fromisoformat(release_date)
     except ValueError as error:
         raise ReleaseError(f"Invalid release date: {release_date!r}") from error
-    if RELEASE_HEADER.search(text):
-        for match in RELEASE_HEADER.finditer(text):
-            if match.group(1) == version:
-                raise ReleaseError(f"Changelog already contains {version}")
+    release_matches = list(RELEASE_HEADER.finditer(text))
+    if any(match.group(1) == version for match in release_matches):
+        raise ReleaseError(f"Changelog already contains {version}")
     unreleased = UNRELEASED.search(text)
     if unreleased is None:
         raise ReleaseError("CHANGELOG.md must contain an ## [Unreleased] section")
@@ -149,8 +150,44 @@ def rotate_changelog(text: str, version: str, release_date: str) -> str:
     if not body:
         raise ReleaseError("The Unreleased changelog section must contain changes")
     rendered_date = date.isoformat()
-    replacement = f"## [Unreleased]\n\n## [{version}] - {rendered_date}\n\n{body}\n\n"
-    return text[: unreleased.start()] + replacement + text[body_end:].lstrip("\r\n")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    replacement = (
+        f"## [Unreleased]{newline}{newline}"
+        f"## [{version}] - {rendered_date}{newline}{newline}"
+        f"{body}{newline}{newline}"
+    )
+    rotated = text[: unreleased.start()] + replacement + text[body_end:].lstrip("\r\n")
+    previous_version = release_matches[0].group(1) if release_matches else None
+    return _update_changelog_links(rotated, version, previous_version)
+
+
+def _update_changelog_links(text: str, version: str, previous_version: str | None) -> str:
+    """Keep Keep-a-Changelog comparison references aligned with a new release."""
+    newline = "\r\n" if "\r\n" in text else "\n"
+    release_url = (
+        f"{CHANGELOG_REPOSITORY_URL}/compare/v{previous_version}...v{version}"
+        if previous_version
+        else f"{CHANGELOG_REPOSITORY_URL}/releases/tag/v{version}"
+    )
+    desired = {
+        "Unreleased": f"{CHANGELOG_REPOSITORY_URL}/compare/v{version}...HEAD",
+        version: release_url,
+    }
+    seen: set[str] = set()
+
+    def replace_reference(match: re.Match[str]) -> str:
+        label = match.group(1)
+        if label not in desired:
+            return match.group(0)
+        seen.add(label)
+        line_ending = "\r" if match.group(0).endswith("\r") else ""
+        return f"[{label}]: {desired[label]}{line_ending}"
+
+    updated = LINK_REFERENCE.sub(replace_reference, text)
+    missing = [f"[{label}]: {desired[label]}" for label in desired if label not in seen]
+    if missing:
+        updated = updated.rstrip("\r\n") + newline * 2 + newline.join(missing) + newline
+    return updated
 
 
 def changelog_contains_version(text: str, version: str) -> bool:
