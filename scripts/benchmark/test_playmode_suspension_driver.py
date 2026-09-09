@@ -11,6 +11,8 @@ from playmode_suspension_driver import (
     prepare_asset_mutation_code,
     restore_reload_code,
     run_script_reload_cycle,
+    run_destroy_during_play_cycle,
+    destroy_window_code,
     remove_reload_probe_code,
     run_asset_mutation_cycle,
     start_loads_and_play_code,
@@ -115,6 +117,14 @@ class PlayModeSuspensionDriverTests(unittest.TestCase):
         self.assertIn('"pending=0"', source)
         self.assertIn('"searchReady=True"', source)
         self.assertIn("AssetDatabase.Refresh", remove_reload_probe_code())
+
+    def test_destroy_cycle_requires_reopen_without_stale_window_work(self):
+        source = inspect.getsource(run_destroy_during_play_cycle)
+        self.assertIn("DestroyImmediate", destroy_window_code())
+        self.assertIn('"noWindow"', source)
+        self.assertIn('"reopenedSnapshot"', source)
+        self.assertIn('"pending=0"', source)
+        self.assertIn('"searchPending=0"', source)
 
     def test_restore_reload_code_handles_combined_flags(self):
         source = restore_reload_code("True|DisableDomainReload, DisableSceneReload")

@@ -272,6 +272,15 @@ for (int index = 0; index < windows.Length; index++)
 return windows.Length.ToString();'''
 
 
+def destroy_window_code() -> str:
+    return f'''var windows = UnityEngine.Resources.FindObjectsOfTypeAll<{WINDOW_TYPE}>();
+for (int index = 0; index < windows.Length; index++)
+{{
+    UnityEngine.Object.DestroyImmediate(windows[index]);
+}}
+return windows.Length.ToString();'''
+
+
 def open_window_code() -> str:
     return f'''var window = UnityEditor.EditorWindow.GetWindow<{WINDOW_TYPE}>("Data Visualizer");
 window.Show();
@@ -475,6 +484,51 @@ def run_close_during_play_cycle(scenario: UnityScenario) -> dict[str, Any]:
         "prePlay": pre_play,
         "suspended": suspended,
         "closed": closed,
+        "noWindow": no_window,
+        "reopened": reopened,
+        "reopenedSnapshot": reopened_snapshot,
+    }
+
+
+def run_destroy_during_play_cycle(scenario: UnityScenario) -> dict[str, Any]:
+    pre_play = scenario.eval(start_loads_and_play_code())
+    if not (
+        isinstance(pre_play, str)
+        and "loading=True" in pre_play
+        and "searchLoading=True" in pre_play
+        and "pending=0" not in pre_play
+        and "searchPending=0" not in pre_play
+    ):
+        raise BenchmarkError(f"Destroy cycle did not capture in-flight object load: {pre_play}")
+    wait_editor_state(scenario, True)
+    suspended = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str) and "suspended=True" in value,
+        "suspended window before destroy",
+    )
+    destroyed = scenario.eval(destroy_window_code())
+    no_window = scenario.wait_for(
+        f"return UnityEngine.Resources.FindObjectsOfTypeAll<{WINDOW_TYPE}>().Length;",
+        lambda value: value == 0 or value == "0",
+        "destroyed window cleanup",
+    )
+    scenario.eval("UnityEditor.EditorApplication.isPlaying = false; return \"requested\";")
+    wait_editor_state(scenario, False)
+    reopened = scenario.eval(open_window_code())
+    reopened_snapshot = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str)
+        and "suspended=False" in value
+        and "loading=False" in value
+        and "pending=0" in value
+        and "searchPending=0" in value
+        and "searchReady=True" in value,
+        "reopened window after destroy",
+    )
+    return {
+        "prePlay": pre_play,
+        "suspended": suspended,
+        "destroyed": destroyed,
         "noWindow": no_window,
         "reopened": reopened,
         "reopenedSnapshot": reopened_snapshot,
@@ -696,6 +750,7 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
                 for operation in ("import", "move", "delete")
             ]
             script_reload = run_script_reload_cycle(scenario)
+            destroy_during_play = run_destroy_during_play_cycle(scenario)
             close_during_play = run_close_during_play_cycle(scenario)
             first_enable = run_first_enable_cycle(scenario)
             restored = scenario.eval(restore_moved_asset_code())
@@ -716,6 +771,7 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
                     "assetMutations": asset_mutations,
                     "assetMutationRestored": restored,
                     "scriptReload": script_reload,
+                    "destroyDuringPlay": destroy_during_play,
                     "closeDuringPlay": close_during_play,
                     "firstEnable": first_enable,
                 }
