@@ -19,6 +19,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
+                if (
+                    importedAssets.Any(IsDeletedAssetPathRelevant)
+                    || deletedAssets.Any(IsDeletedAssetPathRelevant)
+                    || movedAssets.Any(IsDeletedAssetPathRelevant)
+                    || movedFromAssetPaths.Any(IsDeletedAssetPathRelevant)
+                )
+                {
+                    DataVisualizer.SignalRefresh();
+                }
                 return;
             }
 
