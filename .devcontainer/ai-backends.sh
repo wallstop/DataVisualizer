@@ -318,14 +318,15 @@ install_launchers() {
 # project .mcp.json server shows "Pending approval" in claude-zai /
 # claude-openrouter because they never read ~/.claude.json.
 seed_claude_approvals() {
-    local config_dir="$1" state_file tmp
+    local config_dir="$1" mcp_config state_file tmp
+    mcp_config="${AI_BACKENDS_MCP_CONFIG:-${WORKSPACE_ROOT}/.mcp.json}"
     state_file="${config_dir}/.claude.json"
-    [ -f "${WORKSPACE_ROOT}/.mcp.json" ] || return 0
+    [ -f "${mcp_config}" ] || return 0
     command -v jq >/dev/null 2>&1 || return 0
     prepare_config_dir "${config_dir}" || return 1
     [ -s "${state_file}" ] || printf '{}\n' >"${state_file}" || return 1
     tmp="$(mktemp "${state_file}.XXXXXX")" || return 1
-    if jq --arg project "${WORKSPACE_ROOT}" --slurpfile mcp "${WORKSPACE_ROOT}/.mcp.json" '
+    if jq --arg project "${WORKSPACE_ROOT}" --slurpfile mcp "${mcp_config}" '
         ($mcp[0].mcpServers // {} | keys | sort) as $names
         | (.projects // {}) as $projects
         | ($projects[$project] // {}) as $entry

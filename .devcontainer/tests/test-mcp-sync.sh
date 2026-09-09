@@ -63,6 +63,7 @@ destroy_sandbox() {
 run_sync() {
     (cd "${SANDBOX}" && \
         DATAVIZ_MCP_WORKSPACE="${SANDBOX}" \
+        DATAVIZ_IN_CONTAINER=1 \
         CODEX_HOME="${SANDBOX}/codex-home" \
         HOME="${SANDBOX}/home" \
         bash "${SYNC}" "${SANDBOX}" \

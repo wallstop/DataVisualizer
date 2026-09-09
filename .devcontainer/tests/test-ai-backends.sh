@@ -200,7 +200,7 @@ test_claude_zai_sandbox_settings_flag() {
     # user message of every claude-zai session).
     make_sandbox
     write_env_file 'ZAI_API_KEY=zk-file-key\n'
-    AI_BACKENDS_CONTAINER_MODE=yes run_launcher claude-zai --version
+    run_launcher claude-zai AI_BACKENDS_CONTAINER_MODE=yes --version
     assert_dump_line "sandbox override passed via --settings flag" "arg: --settings"
     assert_dump_line "sandbox settings JSON disables weaker nested sandbox" \
         'arg: {"sandbox":{"enabled":false,"enableWeakerNestedSandbox":true}}'
@@ -384,6 +384,7 @@ test_install_creates_all_launchers() {
             CODEX_HOME="${SANDBOX}/codex-home" \
             AI_BACKENDS_BIN_DIR="${SANDBOX}/install-bin" \
             AI_BACKENDS_ENV_FILE="${SANDBOX}/env.local" \
+            AI_BACKENDS_MCP_CONFIG="${SANDBOX}/.mcp.json" \
             bash "${LAUNCHER}" install \
             >"${SANDBOX}/stdout.txt" 2>"${SANDBOX}/stderr.txt")
     RUN_EXIT=$?
@@ -408,6 +409,7 @@ test_install_seeds_isolated_claude_approvals() {
     # seed them, or every project MCP server shows "Pending approval" there.
     make_sandbox
     mkdir -p "${SANDBOX}/install-bin"
+    printf '{"mcpServers":{"unity":{}}}\n' >"${SANDBOX}/.mcp.json"
     (cd "${SANDBOX}/workdir" && \
         env -i \
             PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \

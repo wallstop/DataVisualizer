@@ -226,7 +226,7 @@ function ConvertTo-SkillsIndexContent {
         }
         [void]$builder.AppendLine()
     }
-    return $builder.ToString()
+    return ConvertTo-NormalizedText $builder.ToString()
 }
 
 Export-ModuleMember -Variable @(
