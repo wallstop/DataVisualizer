@@ -356,6 +356,9 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         private static long _playRequestTimestamp;
         private static bool _started;
         private static EditorWindow _window;
+        private static bool _originalEnterPlayModeOptionsEnabled;
+        private static EnterPlayModeOptions _originalEnterPlayModeOptions;
+        private static bool _playModeSettingsCaptured;
 
         public static string Run()
         {
@@ -365,6 +368,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             }
 
             _started = true;
+            CaptureAndConfigurePlayModeSettings();
             _phase = Phase.Prepare;
             _result = CreateResult();
             EditorApplication.update -= Tick;
@@ -392,6 +396,31 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             {
                 return "cleanup-failed: " + error.Message;
             }
+            finally
+            {
+                RestorePlayModeSettings();
+            }
+        }
+
+        private static void CaptureAndConfigurePlayModeSettings()
+        {
+            _originalEnterPlayModeOptionsEnabled = EditorSettings.enterPlayModeOptionsEnabled;
+            _originalEnterPlayModeOptions = EditorSettings.enterPlayModeOptions;
+            _playModeSettingsCaptured = true;
+            EditorSettings.enterPlayModeOptionsEnabled = true;
+            EditorSettings.enterPlayModeOptions =
+                EnterPlayModeOptions.DisableDomainReload | EnterPlayModeOptions.DisableSceneReload;
+        }
+
+        private static void RestorePlayModeSettings()
+        {
+            if (!_playModeSettingsCaptured)
+            {
+                return;
+            }
+            EditorSettings.enterPlayModeOptionsEnabled = _originalEnterPlayModeOptionsEnabled;
+            EditorSettings.enterPlayModeOptions = _originalEnterPlayModeOptions;
+            _playModeSettingsCaptured = false;
         }
 
         private static void Tick()
@@ -722,6 +751,10 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 {
                     // Preserve the original benchmark failure.
                 }
+            }
+            finally
+            {
+                RestorePlayModeSettings();
             }
             EditorApplication.update -= Tick;
             if (ExitEditor)
@@ -1147,17 +1180,7 @@ def run_direct(config: BenchmarkConfig, bootstrap: str, output: Path) -> dict[st
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text(bootstrap, encoding="utf-8", newline="\n")
     try:
-        command = [
-            config.unity_path,
-            "-batchmode",
-            "-quit",
-            "-projectPath",
-            config.host_project,
-            "-executeMethod",
-            ENTRYPOINT + ".Run",
-            "-logFile",
-            str(output.with_suffix(".unity.log")),
-        ]
+        command = direct_unity_command(config, output)
         process = subprocess.run(
             command,
             cwd=project,
@@ -1177,6 +1200,21 @@ def run_direct(config: BenchmarkConfig, bootstrap: str, output: Path) -> dict[st
     finally:
         source.unlink(missing_ok=True)
         source.with_suffix(source.suffix + ".meta").unlink(missing_ok=True)
+
+
+def direct_unity_command(config: BenchmarkConfig, output: Path) -> list[str]:
+    """Build the direct command without -quit, since Unity exits from Finish()."""
+
+    return [
+        config.unity_path,
+        "-batchmode",
+        "-projectPath",
+        config.host_project,
+        "-executeMethod",
+        ENTRYPOINT + ".Run",
+        "-logFile",
+        str(output.with_suffix(".unity.log")),
+    ]
 
 
 def run_mcp(config: BenchmarkConfig, bootstrap: str, output: Path) -> dict[str, Any]:
@@ -1289,13 +1327,27 @@ def run_mcp(config: BenchmarkConfig, bootstrap: str, output: Path) -> dict[str, 
             time.sleep(0.5)
     finally:
         cleanup_client = McpClient(config.mcp_url, config.mcp_token, 5.0)
+        cleanup_deadline = time.monotonic() + 30.0
         try:
             cleanup_client = connect(5.0)
+            cleanup_result = call_with_reconnect(
+                "eval",
+                {
+                    "code": f"return {ENTRYPOINT}.Cleanup();",
+                    "timeout": 10_000,
+                },
+                cleanup_deadline,
+            )
+            cleanup_client = client
+            if isinstance(cleanup_result, str) and cleanup_result.startswith("cleanup-failed"):
+                raise BenchmarkError(cleanup_result)
+        except BenchmarkError:
+            print("warning: MCP fixture cleanup failed", file=sys.stderr)
+        try:
             cleanup_client.call_tool(
                 "delete_asset", {"asset": BOOTSTRAP_PATH, "confirm": True}
             )
         except BenchmarkError:
-            # The result is still useful; leave an actionable cleanup error in the console.
             print("warning: MCP bootstrap cleanup failed", file=sys.stderr)
         try:
             cleanup_client.call_tool(

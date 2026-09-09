@@ -11,6 +11,7 @@ from benchmark_driver import (
     build_argument_parser,
     comparison_report_path,
     config_from_args,
+    direct_unity_command,
     extract_unity_result,
     parse_mcp_tool_result,
     parse_fixture_size,
@@ -150,6 +151,29 @@ class BenchmarkDriverTests(unittest.TestCase):
             self.assertIn("MISS", contents)
             self.assertIn("`30` | 25.000 ms | 25.000 ms", contents)
             self.assertIn("`indexed-search`", contents)
+
+    def test_direct_command_waits_for_deferred_finish(self):
+        parser = build_argument_parser()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(__file__).resolve().parents[2]
+            arguments = parser.parse_args(
+                [
+                    "--host-project",
+                    str(root),
+                    "--unity-version",
+                    "6000.4.6f1",
+                    "--fixture-size",
+                    "100",
+                    "--output-dir",
+                    temporary,
+                    "--mode",
+                    "direct",
+                ]
+            )
+            config = config_from_args(arguments, root)
+            command = direct_unity_command(config, Path(temporary) / "result.json")
+            self.assertNotIn("-quit", command)
+            self.assertIn("-executeMethod", command)
 
     def test_mcp_error_result_is_not_treated_as_running_status(self):
         with self.assertRaises(BenchmarkError):
