@@ -9,6 +9,9 @@
 ###############################################################################
 *.sh text eol=lf
 
+# Generated Markdown is compared byte-for-byte by the cross-platform harness.
+.llm/skills/index.md text eol=lf
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #
