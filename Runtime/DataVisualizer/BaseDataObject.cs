@@ -91,8 +91,9 @@ namespace WallstopStudios.DataVisualizer
 
         [Header("Base Data")]
         [FormerlySerializedAs("initialGuid")]
-#if ODIN_INSPECTOR
         [ReadOnly]
+#if ODIN_INSPECTOR
+        [Sirenix.OdinInspector.ReadOnly]
 #endif
         [SerializeField]
         protected internal string _assetGuid;
@@ -119,18 +120,24 @@ namespace WallstopStudios.DataVisualizer
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(_assetGuid))
-            {
-                return;
-            }
-
             string assetPath = AssetDatabase.GetAssetPath(this);
             if (string.IsNullOrWhiteSpace(assetPath))
             {
                 return;
             }
 
-            _assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
+            string canonicalGuid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (string.IsNullOrWhiteSpace(canonicalGuid))
+            {
+                return;
+            }
+
+            if (string.Equals(_assetGuid, canonicalGuid, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _assetGuid = canonicalGuid;
             EditorUtility.SetDirty(this);
 #endif
         }

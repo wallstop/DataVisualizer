@@ -4,6 +4,15 @@
 * text=auto
 
 ###############################################################################
+# Shell scripts must stay LF so shebangs and bash parsing survive Windows
+# checkouts (runners and WSL).
+###############################################################################
+*.sh text eol=lf
+
+# Generated Markdown is compared byte-for-byte by the cross-platform harness.
+.llm/skills/index.md text eol=lf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by
