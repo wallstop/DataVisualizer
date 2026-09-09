@@ -15,7 +15,6 @@ $SkillsRelativePath = '.llm/skills'
 $AgentEntrypoints = @(
     @{ Path = 'AGENTS.md'; Link = '](./.llm/context.md)' },
     @{ Path = 'CLAUDE.md'; Link = '](./.llm/context.md)' },
-    @{ Path = 'GEMINI.md'; Link = '](./.llm/context.md)' },
     @{ Path = '.cursorrules'; Link = '](./.llm/context.md)' },
     @{ Path = '.windsurfrules'; Link = '](./.llm/context.md)' },
     @{ Path = '.github/copilot-instructions.md'; Link = '](../.llm/context.md)' }

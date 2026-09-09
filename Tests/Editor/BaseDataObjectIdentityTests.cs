@@ -10,7 +10,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string AssetPathPrefix = "Assets/DataVisualizerBaseDataObjectIdentityTest";
 
         [Test]
-        public void Should_RestoreCanonicalAssetGuid_WhenSerializedGuidIsCorrupted()
+        public void ShouldRestoreCanonicalAssetGuidWhenSerializedGuidIsCorrupted()
         {
             TestDataObject dataObject = ScriptableObject.CreateInstance<TestDataObject>();
             string assetPath = AssetDatabase.GenerateUniqueAssetPath(AssetPathPrefix + ".asset");

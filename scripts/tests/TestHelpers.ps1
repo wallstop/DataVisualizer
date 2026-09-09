@@ -115,7 +115,7 @@ function New-LlmFixtureRoot {
         "See the [AI Agent Guidelines]($contextLinkNested) for all AI agent guidelines."
     ) -join "`n"
 
-    foreach ($pointer in @('AGENTS.md', 'CLAUDE.md', 'GEMINI.md', '.cursorrules', '.windsurfrules')) {
+    foreach ($pointer in @('AGENTS.md', 'CLAUDE.md', '.cursorrules', '.windsurfrules')) {
         Write-FixtureFile -Root $root -RelativePath $pointer -Content $pointerContent
     }
     Write-FixtureFile -Root $root -RelativePath '.github/copilot-instructions.md' -Content $pointerContentNested

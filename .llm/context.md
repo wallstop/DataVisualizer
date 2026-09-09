@@ -1,7 +1,7 @@
 # LLM Agent Instructions
 
 Procedural skills are in the [skills/](./skills/) directory. Frontend entrypoints
-(`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.windsurfrules`,
+(`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`,
 `.github/copilot-instructions.md`) are thin pointers to this file. Skills are
 standard [Agent Skills](https://agentskills.io) (`SKILL.md` + frontmatter).
 

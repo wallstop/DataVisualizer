@@ -75,10 +75,10 @@ Invoke-TestCase 'Fails_When_PointerFileMissingDelegationLink' {
 Invoke-TestCase 'Fails_When_PointerFileMissing' {
     $root = New-LintedFixture
     try {
-        Remove-Item -LiteralPath (Get-FixturePath -Root $root -RelativePath 'GEMINI.md') -Force
+        Remove-Item -LiteralPath (Get-FixturePath -Root $root -RelativePath '.cursorrules') -Force
         $output = & $lintScript -Root $root *>&1 | Out-String
         Assert-ExitCode 1 'missing pointer file should fail'
-        Assert-True ($output -match 'GEMINI\.md') "output should name the pointer, got: $output"
+        Assert-True ($output -match '\.cursorrules') "output should name the pointer, got: $output"
     } finally {
         Remove-TempRoot $root
     }
