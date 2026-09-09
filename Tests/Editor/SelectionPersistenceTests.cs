@@ -166,6 +166,37 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void Should_NotResolveMissingSavedObjectGuid()
+        {
+            const string missingGuid = "0123456789abcdef0123456789abcdef";
+
+            Assert.IsFalse(
+                DataVisualizer.TryResolveAssetGuidForType(
+                    missingGuid,
+                    typeof(SelectionPersistenceGuidData),
+                    out string resolvedPath
+                )
+            );
+            Assert.IsNull(resolvedPath);
+        }
+
+        [Test]
+        public void Should_NotIncludeMissingSavedObjectGuid_When_FindAssetsIsEmpty()
+        {
+            const string missingGuid = "fedcba9876543210fedcba9876543210";
+
+            string[] includedGuids = DataVisualizer.IncludeResolvedSavedObjectGuid(
+                typeof(SelectionPersistenceGuidData),
+                missingGuid,
+                Array.Empty<string>(),
+                out string normalizedSavedObjectGuid
+            );
+
+            Assert.IsEmpty(includedGuids);
+            Assert.IsNull(normalizedSavedObjectGuid);
+        }
+
+        [Test]
         public void Should_IncludeDirectlyResolvedSavedGuid_When_FindAssetsMissesIt()
         {
             string folderName =
