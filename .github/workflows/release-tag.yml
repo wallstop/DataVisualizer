@@ -1,0 +1,80 @@
+name: Tag merged release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+concurrency:
+  group: release-tag-${{ github.event.pull_request.head.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    name: Tag merged release PR
+    if: ${{ github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout merged default branch
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify release tree and derive tag
+        id: release
+        env:
+          RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          case "${RELEASE_BRANCH}" in
+            release/v*) ;;
+            *) echo "::error::Unexpected release branch ${RELEASE_BRANCH}"; exit 1 ;;
+          esac
+          version="${RELEASE_BRANCH#release/v}"
+          python3 scripts/release/release_tools.py validate-release --root . --version "${version}"
+          tag="v${version}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create narrowly scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTO_COMMIT_APP_ID }}
+          private-key: ${{ secrets.AUTO_COMMIT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: DataVisualizer
+          permission-contents: write
+
+      - name: Create immutable annotated tag
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            existing="$(git rev-list -n 1 "${TAG}^{commit}")"
+            if [ "${existing}" != "$(git rev-parse HEAD)" ]; then
+              echo "::error::${TAG} already exists at ${existing}; refusing to retarget it."
+              exit 1
+            fi
+            echo "${TAG} already points at the merged release commit; leaving it unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release ${TAG}" "$(git rev-parse HEAD)"
+          remote="https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push "${remote}" "${TAG}"

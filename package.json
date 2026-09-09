@@ -23,6 +23,7 @@
   },
   "author": "wallstop studios <wallstop@wallstopstudios.com> (https://wallstopstudios.com)",
   "homepage": "https://github.com/wallstop/DataVisualizer#readme",
+  "changelog": "https://github.com/wallstop/DataVisualizer/blob/main/CHANGELOG.md",
   "main": "README.md",
   "files": [
     "Editor",
@@ -33,6 +34,8 @@
     "Tests.meta",
     "docs",
     "docs.meta",
+    "CHANGELOG.md",
+    "CHANGELOG.md.meta",
     "README.md.meta",
     "LICENSE.meta",
     "package.json.meta"
@@ -48,7 +51,6 @@
     "ai:backends:install": "bash .devcontainer/ai-backends.sh install"
   }
 }
-
 
 
 

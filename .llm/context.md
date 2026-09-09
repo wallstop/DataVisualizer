@@ -31,13 +31,12 @@ Editor/                          Editor-only assembly (WallstopStudios.DataVisua
     Styles/                      USS stylesheet + style constants
     UI/                          Reusable UI Toolkit controls
     Unity/                       Asset postprocessor
-    Utilities/                   ReadOnly attribute + drawer, monitor utility
+    Utilities/                   ReadOnly attribute + drawer, monitor and path utilities
     Extensions/                  ObjectId, Color, ListView compat, UI extensions
   Fonts/                         Bundled UI font
 Runtime/                         Runtime assembly (WallstopStudios.DataVisualizer.asmdef)
   DataVisualizer/                BaseDataObject, lifecycle interfaces, attributes
   Extensions/                    Shared extension methods
-  Helper/                        Directory/Path/Reflection helpers
 Tests/Editor/                    EditMode tests (WallstopStudios.DataVisualizer.Tests.Editor.asmdef)
 docs/                            Screenshots and README assets
 scripts/                         PowerShell automation for this .llm harness

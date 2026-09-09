@@ -1,100 +1,172 @@
-name: Publish to NPM
+name: Publish release artifacts
 
-# Manual, on-demand publishing: dispatch this workflow to publish the current package.json
-# version. The publish step is re-runnable (it skips a version already on the registry) and
-# uses npm Trusted Publishing through GitHub OIDC.
+# A tag created by release-tag.yml is the only publication trigger. The tag is
+# created with a GitHub App token so this event is not suppressed by GitHub's
+# GITHUB_TOKEN recursion protection.
 on:
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Pack and report the version/dist-tag without publishing"
-        type: boolean
-        default: false
+  push:
+    tags:
+      - "v*"
 
 concurrency:
-  group: publish-npm
+  group: publish-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  publish:
-    name: Publish npm package
+  package:
+    name: Validate and package release
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      id-token: write # required for npm Trusted Publishing through OIDC
+    timeout-minutes: 20
     steps:
-      - name: Checkout
+      - name: Checkout exact tag
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "24"
+          package-manager-cache: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Validate release metadata
+        id: release
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          python3 scripts/release/release_tools.py validate-release --root . --version "${version}"
+          tag="v${version}"
+          if [ "$(git describe --tags --exact-match HEAD 2>/dev/null || true)" != "${tag}" ]; then
+            echo "::error::Checked-out commit is not the exact release tag ${tag}."
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run non-Unity repository checks
+        run: |
+          set -euo pipefail
+          npm run lint:llm
+          pwsh -NoProfile -File scripts/tests/run-all.ps1
+
+      - name: Pack and verify npm payload
+        id: npm
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          node -e 'const p=require("./package.json"); if (p.version!==process.env.VERSION || p.name!=="com.wallstop-studios.data-visualizer") process.exit(1);'
+          npm pack --json --pack-destination "${RUNNER_TEMP}" > "${RUNNER_TEMP}/npm-pack.json"
+          package_file="${RUNNER_TEMP}/$(jq -r '.[0].filename' "${RUNNER_TEMP}/npm-pack.json")"
+          [ -f "${package_file}" ]
+          while IFS= read -r member; do
+            case "${member}" in
+              package/Editor|package/Editor.meta|package/Editor/*|package/Runtime|package/Runtime.meta|package/Runtime/*|package/Tests|package/Tests.meta|package/Tests/*|package/docs|package/docs.meta|package/docs/*|package/CHANGELOG.md|package/CHANGELOG.md.meta|package/README.md|package/README.md.meta|package/LICENSE|package/LICENSE.meta|package/package.json|package/package.json.meta) ;;
+              *) echo "::error::Unexpected npm payload member ${member}"; exit 1 ;;
+            esac
+          done < <(tar -tzf "${package_file}" | sed 's#/$##')
+          sha256sum "${package_file}" > "${package_file}.sha256"
+          echo "file=${package_file}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build and validate Unity package
+        id: unity
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          output="${RUNNER_TEMP}/com.wallstop-studios.data-visualizer-${VERSION}.unitypackage"
+          python3 scripts/release/release_tools.py build-unitypackage --root . --output "${output}"
+          python3 scripts/release/release_tools.py validate-unitypackage --archive "${output}" --checksum "${output}.sha256" --root .
+          echo "file=${output}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload validated release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}
+          if-no-files-found: error
+          path: |
+            ${{ steps.npm.outputs.file }}
+            ${{ steps.npm.outputs.file }}.sha256
+            ${{ steps.unity.outputs.file }}
+            ${{ steps.unity.outputs.file }}.sha256
+
+  publish:
+    name: Publish npm and GitHub Release
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js for trusted publishing
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
-      - name: Pack and resolve version / dist-tag
-        id: pack
-        run: |
-          set -euo pipefail
-          pkg="$(jq -r '.name' package.json)"
-          ver="$(jq -r '.version' package.json)"
-          if [ -z "${pkg}" ] || [ "${pkg}" = "null" ] || [ -z "${ver}" ] || [ "${ver}" = "null" ]; then
-            echo "::error::package.json is missing name or version."
-            exit 1
-          fi
-          # rc/alpha/beta/preview pre-releases publish under the "next" dist-tag; stable under "latest".
-          if printf '%s' "${ver}" | grep -qiE '\-(rc|alpha|beta|preview)'; then
-            npm_tag="next"
-          else
-            npm_tag="latest"
-          fi
-          package_file="$(npm pack --json | jq -r '.[0].filename')"
-          {
-            echo "pkg=${pkg}"
-            echo "ver=${ver}"
-            echo "npm_tag=${npm_tag}"
-            echo "package_file=${package_file}"
-          } >> "${GITHUB_OUTPUT}"
-          echo "Prepared ${pkg}@${ver} -> dist-tag '${npm_tag}' (${package_file})."
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
 
-      - name: Verify npm trusted publishing toolchain
+      - name: Download validated artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}
+          path: "${{ runner.temp }}/release"
+
+      - name: Publish exact npm version
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          node --version
-          npm --version
+          version="${VERSION#v}"
+          package_file="$(find "${RUNNER_TEMP}/release" -maxdepth 1 -name '*.tgz' -print -quit)"
+          [ -n "${package_file}" ]
           required_npm="11.5.1"
           current_npm="$(npm --version)"
           if [ "$(printf '%s\n' "${required_npm}" "${current_npm}" | sort -V | head -n1)" != "${required_npm}" ]; then
             echo "::error::npm ${current_npm} is too old; trusted publishing requires npm >= ${required_npm}."
             exit 1
           fi
-
-      - name: Publish to npm with trusted publishing
-        if: ${{ inputs.dry_run == false }}
-        env:
-          PKG: ${{ steps.pack.outputs.pkg }}
-          VER: ${{ steps.pack.outputs.ver }}
-          NPM_TAG: ${{ steps.pack.outputs.npm_tag }}
-          PACKAGE_FILE: ${{ steps.pack.outputs.package_file }}
-        run: |
-          set -euo pipefail
-          # Re-runnable: skip if this exact name@version is already on the registry (a prior run may
-          # have published it before failing downstream). npm publish is otherwise irreversible.
-          if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
-            echo "::notice::${PKG}@${VER} is already on the registry; skipping publish."
+          pkg="$(node -p 'require("./package.json").name')"
+          if npm view "${pkg}@${version}" version >/dev/null 2>&1; then
+            echo "${pkg}@${version} already exists; skipping irreversible publish."
           else
-            npm publish "${PACKAGE_FILE}" --access public --tag "${NPM_TAG}"
-            echo "::notice::Published ${PKG}@${VER} to dist-tag '${NPM_TAG}'."
+            npm_tag="$(python3 -c 'import sys; sys.path.insert(0, "scripts/release"); from release_tools import npm_dist_tag; print(npm_dist_tag(sys.argv[1]))' "${version}")"
+            npm publish "${package_file}" --access public --tag "${npm_tag}"
           fi
 
-      - name: Dry-run summary
-        if: ${{ inputs.dry_run == true }}
+      - name: Create or update GitHub Release
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          echo "Dry run: would publish ${{ steps.pack.outputs.pkg }}@${{ steps.pack.outputs.ver }} to dist-tag '${{ steps.pack.outputs.npm_tag }}'."
+          set -euo pipefail
+          version="${TAG#v}"
+          notes="$(python3 scripts/release/release_tools.py changelog-section --root . --version "${version}" | jq -r .section)"
+          if python3 -c 'import sys; sys.path.insert(0, "scripts/release"); from release_tools import parse_version; print(bool(parse_version(sys.argv[1])[3]))' "${version}" | grep -qx true; then prerelease_flag=--prerelease; else prerelease_flag=; fi
+          files=("${RUNNER_TEMP}/release"/*)
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --title "${TAG}" --notes "${notes}" ${prerelease_flag}
+            gh release upload "${TAG}" "${files[@]}" --clobber
+          else
+            gh release create "${TAG}" "${files[@]}" --title "${TAG}" --notes "${notes}" ${prerelease_flag}
+          fi
