@@ -229,6 +229,7 @@ var searchReady = (bool)type.GetField("_isSearchCachePopulated", flags).GetValue
 var refreshQueued = (bool)type.GetField("_refreshQueuedDuringPlayMode", flags).GetValue(window);
 var deferred = (bool)type.GetField("_deferredInitializationPending", flags).GetValue(window);
 var pending = ((System.Collections.ICollection)type.GetField("_pendingObjectGuids", flags).GetValue(window)).Count;
+var searchPending = ((System.Collections.ICollection)type.GetField("_pendingSearchCacheGuids", flags).GetValue(window)).Count;
 var indicator = type.GetField("_objectLoadingIndicator", flags).GetValue(window) as UnityEngine.UIElements.Label;
 var search = type.GetField("_searchField", flags).GetValue(window) as UnityEngine.UIElements.VisualElement;
 var create = type.GetField("_createObjectButton", flags).GetValue(window) as UnityEngine.UIElements.VisualElement;
@@ -241,6 +242,7 @@ return "window=1" +
     "|refreshQueued=" + refreshQueued +
     "|deferred=" + deferred +
     "|pending=" + pending +
+    "|searchPending=" + searchPending +
     "|indicator=" + (indicator == null ? "missing" : indicator.text) +
     "|searchEnabled=" + (search == null ? "missing" : search.enabledSelf) +
     "|createEnabled=" + (create == null ? "missing" : create.enabledSelf) +
@@ -252,16 +254,29 @@ def start_loads_and_play_code() -> str:
 var window = windows.Length == 0 ? null : windows[0];
 if (window == null) return "window-missing";
 var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+var type = window.GetType();
 var objectMethod = typeof({WINDOW_TYPE}).GetMethod("LoadObjectTypesAsync", flags);
 objectMethod.Invoke(window, new object[] {{ typeof({SETTINGS_TYPE}), false }});
+var catalog = (System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<System.Type>>)
+    type.GetField("_scriptableObjectTypes", flags).GetValue(window);
+var namespaceKey = typeof({SETTINGS_TYPE}).Namespace;
+if (!catalog.TryGetValue(namespaceKey, out var catalogTypes))
+{{
+    catalogTypes = new System.Collections.Generic.List<System.Type>();
+    catalog[namespaceKey] = catalogTypes;
+}}
+if (!catalogTypes.Contains(typeof({SETTINGS_TYPE})))
+{{
+    catalogTypes.Add(typeof({SETTINGS_TYPE}));
+}}
 var searchMethod = typeof({WINDOW_TYPE}).GetMethod("PopulateSearchCacheAsync", flags);
 searchMethod.Invoke(window, null);
 UnityEditor.EditorApplication.isPlaying = true;
-var type = window.GetType();
 var loading = (bool)type.GetField("_isLoadingObjectsAsync", flags).GetValue(window);
 var searchLoading = (bool)type.GetField("_isLoadingSearchCacheAsync", flags).GetValue(window);
 var pending = ((System.Collections.ICollection)type.GetField("_pendingObjectGuids", flags).GetValue(window)).Count;
-return "requested|loading=" + loading + "|searchLoading=" + searchLoading + "|pending=" + pending;'''
+var searchPending = ((System.Collections.ICollection)type.GetField("_pendingSearchCacheGuids", flags).GetValue(window)).Count;
+return "requested|loading=" + loading + "|searchLoading=" + searchLoading + "|pending=" + pending + "|searchPending=" + searchPending;'''
 
 
 def signal_refresh_code() -> str:
@@ -308,7 +323,9 @@ def run_open_cycle(scenario: UnityScenario, cycle: int) -> dict[str, Any]:
     if not (
         isinstance(pre_play, str)
         and "loading=True" in pre_play
+        and "searchLoading=True" in pre_play
         and "pending=0" not in pre_play
+        and "searchPending=0" not in pre_play
     ):
         raise BenchmarkError(f"Object load did not remain in flight: {pre_play}")
     wait_editor_state(scenario, True)
@@ -327,8 +344,20 @@ def run_open_cycle(scenario: UnityScenario, cycle: int) -> dict[str, Any]:
     wait_editor_state(scenario, False)
     resumed = scenario.wait_for(
         snapshot_code(),
-        lambda value: isinstance(value, str) and "suspended=False" in value,
+        lambda value: isinstance(value, str)
+        and "suspended=False" in value
+        and "queued=False" in value,
         "resumed open window",
+    )
+    drained = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str)
+        and "loading=False" in value
+        and "pending=0" in value
+        and "searchLoading=False" in value
+        and "searchPending=0" in value
+        and "searchReady=True" in value,
+        "resumed async work",
     )
     return {
         "cycle": cycle,
@@ -337,6 +366,54 @@ def run_open_cycle(scenario: UnityScenario, cycle: int) -> dict[str, Any]:
         "playing": playing,
         "invalidated": invalidated,
         "resumed": resumed,
+        "drained": drained,
+    }
+
+
+def run_close_during_play_cycle(scenario: UnityScenario) -> dict[str, Any]:
+    scenario.eval(open_window_code())
+    scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str) and "children=11" in value,
+        "window before close-during-Play cycle",
+    )
+    pre_play = scenario.eval(start_loads_and_play_code())
+    if not isinstance(pre_play, str) or "loading=True" not in pre_play:
+        raise BenchmarkError(f"Close cycle did not capture in-flight object load: {pre_play}")
+    scenario.wait_for(
+        "return UnityEditor.EditorApplication.isPlaying;",
+        lambda value: value is True or value == "True",
+        "Play Mode for close cycle",
+    )
+    suspended = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str) and "suspended=True" in value,
+        "suspended window before close",
+    )
+    closed = scenario.eval(close_window_code())
+    no_window = scenario.wait_for(
+        f"return UnityEngine.Resources.FindObjectsOfTypeAll<{WINDOW_TYPE}>().Length;",
+        lambda value: value == 0 or value == "0",
+        "closed window cleanup",
+    )
+    scenario.eval("UnityEditor.EditorApplication.isPlaying = false; return \"requested\";")
+    wait_editor_state(scenario, False)
+    reopened = scenario.eval(open_window_code())
+    reopened_snapshot = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str)
+        and "suspended=False" in value
+        and "loading=False" in value
+        and "searchReady=True" in value,
+        "reopened window after close",
+    )
+    return {
+        "prePlay": pre_play,
+        "suspended": suspended,
+        "closed": closed,
+        "noWindow": no_window,
+        "reopened": reopened,
+        "reopenedSnapshot": reopened_snapshot,
     }
 
 
@@ -405,6 +482,7 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
                 "Data Visualizer visual tree",
             )
             cycles = [run_open_cycle(scenario, cycle) for cycle in (1, 2)]
+            close_during_play = run_close_during_play_cycle(scenario)
             first_enable = run_first_enable_cycle(scenario)
             scenario.eval(close_window_code())
             report["configurations"].append(
@@ -413,6 +491,7 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
                     "domainReload": configuration.domain_reload,
                     "sceneReload": configuration.scene_reload,
                     "cycles": cycles,
+                    "closeDuringPlay": close_during_play,
                     "firstEnable": first_enable,
                 }
             )

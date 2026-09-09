@@ -73,6 +73,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const long SplitterSaveDebounceMilliseconds = 250;
         private const int AsyncLoadBatchSize = 100;
         private const int AsyncLoadPriorityBatchSize = 100;
+        private const double AsyncContinuationDelaySeconds = 0.01d;
 
         // Debug logging for testing async loading
         // Set to true to see detailed loading performance logs in Unity Console
@@ -345,11 +346,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         // Async loading state
         private Type _asyncLoadTargetType;
-        private IVisualElementScheduledItem _asyncLoadTask;
         private readonly Queue<string> _pendingObjectGuids = new();
         private readonly Queue<string> _pendingSearchCacheGuids = new();
         private bool _isLoadingObjectsAsync;
         private bool _isLoadingSearchCacheAsync;
+        private bool _asyncContinuationRegistered;
+        private double _nextAsyncContinuationTime;
 
         // Total asset count for the in-progress async load, captured once from the
         // initial FindAssets so per-batch progress updates never rescan the project.
@@ -469,8 +471,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             // Cancel async loading
-            _asyncLoadTask?.Pause();
-            _asyncLoadTask = null;
+            UnregisterAsyncContinuation();
             _asyncLoadTargetType = null;
             _pendingObjectGuids.Clear();
             _pendingSearchCacheGuids.Clear();
@@ -543,8 +544,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _isPlayModeSuspended = true;
-            _asyncLoadTask?.Pause();
-            _asyncLoadTask = null;
+            UnregisterAsyncContinuation();
             _saveWidthsTask?.Pause();
             _saveWidthsTask = null;
             _suppressSplitterWidthSave = true;
@@ -563,6 +563,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _isPlayModeSuspended = false;
             ApplyPlayModeAvailability();
 
+            bool refreshQueued = _refreshQueuedDuringPlayMode;
+            _refreshQueuedDuringPlayMode = false;
             if (_deferredInitializationPending)
             {
                 _deferredInitializationPending = false;
@@ -571,21 +573,19 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             StartSplitterWidthTracking();
-            if (_refreshQueuedDuringPlayMode)
+            if (refreshQueued)
             {
-                _refreshQueuedDuringPlayMode = false;
                 ScheduleRefresh();
-                return;
             }
 
             if (_isLoadingObjectsAsync && _asyncLoadTargetType != null)
             {
-                ContinueLoadingObjects(_asyncLoadTargetType, _asyncLoadGeneration);
+                ScheduleAsyncContinuation();
             }
 
             if (_isLoadingSearchCacheAsync)
             {
-                ContinuePopulatingSearchCache(_searchCacheGeneration);
+                ScheduleAsyncContinuation();
             }
             else if (!_isSearchCachePopulated && _scriptableObjectTypes.Count > 0)
             {
@@ -751,9 +751,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Continue with next batch
             if (_pendingSearchCacheGuids.Count > 0)
             {
-                rootVisualElement
-                    .schedule.Execute(() => ContinuePopulatingSearchCache(generation))
-                    .ExecuteLater(10);
+                ScheduleAsyncContinuation();
             }
             else
             {
@@ -804,6 +802,73 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             return batch;
+        }
+
+        private void ScheduleAsyncContinuation()
+        {
+            if (
+                _isPlayModeSuspended
+                || EditorApplication.isPlayingOrWillChangePlaymode
+                || (!_isLoadingObjectsAsync && !_isLoadingSearchCacheAsync)
+            )
+            {
+                return;
+            }
+
+            double nextRun = EditorApplication.timeSinceStartup + AsyncContinuationDelaySeconds;
+            if (_nextAsyncContinuationTime <= 0d || nextRun < _nextAsyncContinuationTime)
+            {
+                _nextAsyncContinuationTime = nextRun;
+            }
+
+            if (_asyncContinuationRegistered)
+            {
+                return;
+            }
+
+            _asyncContinuationRegistered = true;
+            EditorApplication.update -= ProcessAsyncContinuation;
+            EditorApplication.update += ProcessAsyncContinuation;
+        }
+
+        private void UnregisterAsyncContinuation()
+        {
+            EditorApplication.update -= ProcessAsyncContinuation;
+            _asyncContinuationRegistered = false;
+            _nextAsyncContinuationTime = 0d;
+        }
+
+        private void ProcessAsyncContinuation()
+        {
+            if (
+                _isPlayModeSuspended
+                || EditorApplication.isPlayingOrWillChangePlaymode
+                || EditorApplication.timeSinceStartup < _nextAsyncContinuationTime
+            )
+            {
+                if (_isPlayModeSuspended || EditorApplication.isPlayingOrWillChangePlaymode)
+                {
+                    UnregisterAsyncContinuation();
+                }
+
+                return;
+            }
+
+            _nextAsyncContinuationTime = 0d;
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType != null)
+            {
+                ContinueLoadingObjects(_asyncLoadTargetType, _asyncLoadGeneration);
+            }
+
+            if (_isLoadingSearchCacheAsync)
+            {
+                ContinuePopulatingSearchCache(_searchCacheGeneration);
+            }
+
+            if (!_isLoadingObjectsAsync && !_isLoadingSearchCacheAsync)
+            {
+                UnregisterAsyncContinuation();
+            }
         }
 
         public static void SignalRefresh()
@@ -7809,7 +7874,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                         $"[DataVisualizer] Cancelling previous async load for {_asyncLoadTargetType?.Name}"
                     );
                 }
-                _asyncLoadTask?.Pause();
                 _pendingObjectGuids.Clear();
                 UpdateLoadingIndicator(0, 0); // Hide indicator for cancelled load
             }
@@ -8283,11 +8347,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (_pendingObjectGuids.Count > 0)
             {
-                // Schedule next batch
-                _asyncLoadTask = rootVisualElement.schedule.Execute(() =>
-                    ContinueLoadingObjects(type, loadGeneration)
-                );
-                _asyncLoadTask.ExecuteLater(10);
+                // Schedule next batch through the editor update hook so progress does not depend on
+                // the window being focused or actively repainting.
+                ScheduleAsyncContinuation();
             }
             else
             {

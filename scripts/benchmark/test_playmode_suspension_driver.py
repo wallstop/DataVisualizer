@@ -37,7 +37,9 @@ class PlayModeSuspensionDriverTests(unittest.TestCase):
         for field in (
             "_isPlayModeSuspended",
             "_isLoadingObjectsAsync",
+            "_isLoadingSearchCacheAsync",
             "_pendingObjectGuids",
+            "_pendingSearchCacheGuids",
             "_refreshQueuedDuringPlayMode",
             "_deferredInitializationPending",
         ):
@@ -49,6 +51,8 @@ class PlayModeSuspensionDriverTests(unittest.TestCase):
         self.assertIn('"requested|loading=" + loading', source)
         self.assertIn('"|searchLoading=" + searchLoading', source)
         self.assertIn('"|pending=" + pending', source)
+        self.assertIn('"|searchPending=" + searchPending', source)
+        self.assertIn('"_scriptableObjectTypes"', source)
         self.assertLess(source.index("objectMethod.Invoke"), source.index("EditorApplication.isPlaying = true"))
 
     def test_restore_reload_code_handles_combined_flags(self):

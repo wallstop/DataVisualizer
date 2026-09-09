@@ -72,5 +72,7 @@ for each domain-reload/scene-reload combination. The report captures suspended
 state, pending object work, search-cache work, queued invalidation, paused
 indicator text, mutation-control availability, resume state, and cleanup. The
 scenario uses a fixture of at least 201 settings assets so the async queue is
-observable, reflection only for diagnostics, and does not add an automation API
-or a background process to the package.
+observable, temporarily adds that fixture type to the window's in-memory managed
+catalog for search-cache coverage, uses reflection only for diagnostics, and
+does not add an automation API or a background process to the package. It also
+closes and reopens the window during Play Mode to verify callback cleanup.
