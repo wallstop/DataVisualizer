@@ -10,6 +10,8 @@ from playmode_suspension_driver import (
     asset_mutation_code,
     prepare_asset_mutation_code,
     restore_reload_code,
+    run_script_reload_cycle,
+    remove_reload_probe_code,
     run_asset_mutation_cycle,
     start_loads_and_play_code,
     snapshot_code,
@@ -103,6 +105,16 @@ class PlayModeSuspensionDriverTests(unittest.TestCase):
         scenario.eval = fail
         with self.assertRaisesRegex(BenchmarkError, "transient MCP failure"):
             scenario.wait_for("return true;", lambda value: value is True, "test state")
+
+    def test_script_reload_cycle_creates_recompiles_and_cleans_probe(self):
+        source = inspect.getsource(run_script_reload_cycle)
+        self.assertIn('"create_script"', source)
+        self.assertIn('"recompile"', source)
+        self.assertIn('"window=1"', source)
+        self.assertIn('"suspended=True"', source)
+        self.assertIn('"pending=0"', source)
+        self.assertIn('"searchReady=True"', source)
+        self.assertIn("AssetDatabase.Refresh", remove_reload_probe_code())
 
     def test_restore_reload_code_handles_combined_flags(self):
         source = restore_reload_code("True|DisableDomainReload, DisableSceneReload")

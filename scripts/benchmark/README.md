@@ -78,4 +78,6 @@ uses a fixture of at least 201 settings assets so the async queue is
 observable, temporarily adds that fixture type to the window's in-memory managed
 catalog for search-cache coverage, uses reflection only for diagnostics, and
 does not add an automation API or a background process to the package. It also
-closes and reopens the window during Play Mode to verify callback cleanup.
+creates and recompiles a disposable editor script during Play Mode, then closes
+and reopens the window during Play Mode to verify script-reload and callback
+cleanup. The probe and fixture are removed in the final cleanup path.

@@ -27,6 +27,7 @@ from benchmark_driver import (
 
 FIXTURE_ROOT = "Assets/__CodexPlayModeSuspensionFixture"
 MOVED_FIXTURE_ROOT = FIXTURE_ROOT + "/Moved"
+RELOAD_PROBE_PATH = "Assets/Editor/__CodexPlayModeReloadProbe.cs"
 WINDOW_TYPE = "WallstopStudios.DataVisualizer.Editor.DataVisualizer"
 SETTINGS_TYPE = "WallstopStudios.DataVisualizer.Editor.Data.DataVisualizerSettings"
 SCHEMA_VERSION = "1"
@@ -250,6 +251,16 @@ def restore_moved_asset_code() -> str:
     "{MOVED_FIXTURE_ROOT}/Item_000001.asset", "{FIXTURE_ROOT}/Item_000001.asset"
 );
 return string.IsNullOrEmpty(error) ? "restored" : "restore-failed:" + error;'''
+
+
+def remove_reload_probe_code() -> str:
+    return f'''var path = "{RELOAD_PROBE_PATH}";
+bool existed = System.IO.File.Exists(path);
+if (existed) System.IO.File.Delete(path);
+var metaPath = path + ".meta";
+if (System.IO.File.Exists(metaPath)) System.IO.File.Delete(metaPath);
+UnityEditor.AssetDatabase.Refresh();
+return existed ? "probe-deleted" : "probe-absent";'''
 
 
 def close_window_code() -> str:
@@ -530,6 +541,74 @@ def run_asset_mutation_cycle(scenario: UnityScenario, operation: str) -> dict[st
     }
 
 
+def run_script_reload_cycle(scenario: UnityScenario) -> dict[str, Any]:
+    pre_play = scenario.eval(start_loads_and_play_code())
+    if not (
+        isinstance(pre_play, str)
+        and "loading=True" in pre_play
+        and "searchLoading=True" in pre_play
+        and "pending=0" not in pre_play
+        and "searchPending=0" not in pre_play
+    ):
+        raise BenchmarkError(f"Script reload cycle did not capture in-flight work: {pre_play}")
+    wait_editor_state(scenario, True)
+    suspended = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str)
+        and "suspended=True" in value
+        and "refreshQueued=False" in value,
+        "suspended window before script reload",
+    )
+    deadline = time.monotonic() + scenario.config.timeout_seconds
+    created = scenario.call(
+        "create_script",
+        {
+            "name": "__CodexPlayModeReloadProbe",
+            "namespace": "DataVisualizer.Benchmark.ReloadProbe",
+            "path": "Assets/Editor",
+        },
+        deadline,
+        request_timeout=min(30.0, scenario.config.timeout_seconds),
+    )
+    if not isinstance(created, dict) or created.get("assetPath") != RELOAD_PROBE_PATH:
+        raise BenchmarkError(f"Script reload probe was not created: {created}")
+    recompiled = scenario.call(
+        "recompile",
+        {"focus": False},
+        deadline,
+        request_timeout=min(30.0, scenario.config.timeout_seconds),
+    )
+    after_reload = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str)
+        and "window=1" in value
+        and "suspended=True" in value,
+        "window after script reload",
+    )
+    scenario.eval("UnityEditor.EditorApplication.isPlaying = false; return \"requested\";")
+    wait_editor_state(scenario, False)
+    drained = scenario.wait_for(
+        snapshot_code(),
+        lambda value: isinstance(value, str)
+        and "suspended=False" in value
+        and "refreshQueued=False" in value
+        and "loading=False" in value
+        and "pending=0" in value
+        and "searchLoading=False" in value
+        and "searchPending=0" in value
+        and "searchReady=True" in value,
+        "drained work after script reload",
+    )
+    return {
+        "prePlay": pre_play,
+        "suspended": suspended,
+        "created": created,
+        "recompiled": recompiled,
+        "afterReload": after_reload,
+        "drained": drained,
+    }
+
+
 def run_first_enable_cycle(scenario: UnityScenario) -> dict[str, Any]:
     scenario.eval(close_window_code())
     started_at = time.monotonic()
@@ -562,6 +641,7 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
         "UnityEditor.EditorSettings.enterPlayModeOptions;"
     )
     scenario.eval(close_window_code())
+    scenario.eval(remove_reload_probe_code())
     scenario.eval(cleanup_code())
     scenario.eval(open_window_code())
     scenario.wait_for(
@@ -615,6 +695,7 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
                 run_asset_mutation_cycle(scenario, operation)
                 for operation in ("import", "move", "delete")
             ]
+            script_reload = run_script_reload_cycle(scenario)
             close_during_play = run_close_during_play_cycle(scenario)
             first_enable = run_first_enable_cycle(scenario)
             restored = scenario.eval(restore_moved_asset_code())
@@ -634,6 +715,7 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
                     "cycles": cycles,
                     "assetMutations": asset_mutations,
                     "assetMutationRestored": restored,
+                    "scriptReload": script_reload,
                     "closeDuringPlay": close_during_play,
                     "firstEnable": first_enable,
                 }
@@ -647,6 +729,7 @@ def run(config: SuspensionConfig) -> dict[str, Any]:
             pass
         try:
             scenario.eval(close_window_code())
+            scenario.eval(remove_reload_probe_code())
             scenario.eval(cleanup_code())
         finally:
             scenario.eval(restore_reload_code(original))
