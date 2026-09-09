@@ -8,6 +8,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
     using UnityEngine;
     using UnityEngine.Serialization;
     using Utilities;
+    using WallstopStudios.DataVisualizer;
 
     [CreateAssetMenu(
         fileName = "DataVisualizerSettings",

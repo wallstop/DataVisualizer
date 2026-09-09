@@ -1,0 +1,74 @@
+name: LLM Instructions Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".llm/**"
+      - "scripts/**"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "GEMINI.md"
+      - ".cursorrules"
+      - ".windsurfrules"
+      - ".github/copilot-instructions.md"
+      - ".github/workflows/llm-lint.yml"
+      - ".pre-commit-config.yaml"
+      - ".devcontainer/**"
+  pull_request:
+    paths:
+      - ".llm/**"
+      - "scripts/**"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "GEMINI.md"
+      - ".cursorrules"
+      - ".windsurfrules"
+      - ".github/copilot-instructions.md"
+      - ".github/workflows/llm-lint.yml"
+      - ".pre-commit-config.yaml"
+      - ".devcontainer/**"
+
+concurrency:
+  group: llm-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint .llm harness (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Dual-OS on purpose: catches cross-platform drift in the generated
+        # index (line endings, encodings, path separators).
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Lint LLM instructions
+        run: pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput
+
+      - name: Run harness self-tests
+        run: pwsh -NoProfile -File scripts/tests/run-all.ps1
+
+      - name: Enforce .llm file length limit
+        run: pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -VerboseOutput
+
+      - name: Fail on skills index drift
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File scripts/generate-skills-index.ps1
+          $status = git status --porcelain -- .llm/skills/index.md
+          if ($status) {
+            Write-Host "::error::.llm/skills/index.md is stale; run scripts/generate-skills-index.ps1 and commit the result."
+            Write-Host $status
+            exit 1
+          }

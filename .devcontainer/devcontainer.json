@@ -1,0 +1,170 @@
+// For format details, see https://aka.ms/devcontainer.json
+{
+    "name": "Data Visualizer (Unity Agent Tooling)",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    // Container agents reach host-side Unity editors (and the optional HTTP MCP
+    // bridge) through host.docker.internal. host-gateway covers Linux engines;
+    // Docker Desktop resolves the name natively.
+    "runArgs": [
+        "--add-host=host.docker.internal:host-gateway"
+    ],
+    // Forward a host-provided PAT / Z.ai key to terminal harnesses without
+    // storing them in the image. The gitignored .env.local remains the
+    // preferred credential source; these are fallbacks for host shells.
+    "remoteEnv": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${localEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+        "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}",
+        "ZAI_API_KEY": "${localEnv:ZAI_API_KEY}",
+        "OPENROUTER_API_KEY": "${localEnv:OPENROUTER_API_KEY}",
+        "NANOCODER_MCPSERVERS_FILE": "${containerWorkspaceFolder}/.nanocoder/mcp.json"
+    },
+    // Block attach until onCreate finishes so terminals always have .env.local
+    // sourced and MCP configs regenerated.
+    "waitFor": "onCreateCommand",
+    "mounts": [
+        // npm + uv caches survive rebuilds so restarts stay fast.
+        "source=dataviz-npm-cache,target=/home/vscode/.npm,type=volume",
+        "source=dataviz-uv-cache,target=/home/vscode/.cache/uv,type=volume",
+        // Agent auth homes persist across full rebuilds: log in once.
+        "source=dataviz-codex-home,target=/home/vscode/.codex,type=volume",
+        "source=dataviz-claude-home,target=/home/vscode/.claude,type=volume",
+        "source=dataviz-claude-zai-home,target=/home/vscode/.claude-zai,type=volume",
+        "source=dataviz-claude-openrouter-home,target=/home/vscode/.claude-openrouter,type=volume",
+        "source=dataviz-opencode-share,target=/home/vscode/.local/share/opencode,type=volume",
+        "source=dataviz-nanocoder-config,target=/home/vscode/.config/nanocoder,type=volume"
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                // C# / Unity
+                "ms-dotnettools.csharp",
+                "csharpier.csharpier",
+                "unity.unity-code-snippets",
+                // Quality of life
+                "editorconfig.editorconfig",
+                "usernamehw.errorlens",
+                "streetsidesoftware.code-spell-checker",
+                "gruntfuggly.todo-tree",
+                // Git
+                "eamodio.gitlens",
+                "mhutchie.git-graph",
+                "github.vscode-pull-request-github",
+                // Beautiful front end
+                "pkief.material-icon-theme",
+                "github.github-vscode-theme",
+                "dracula-theme.theme-dracula",
+                // Agent frontends
+                "github.copilot",
+                "github.copilot-chat",
+                "anthropic.claude-code",
+                "sst-dev.opencode"
+            ],
+            "settings": {
+                // ============================================================
+                // Appearance
+                // ============================================================
+                "workbench.colorTheme": "Default Dark Modern",
+                "workbench.iconTheme": "material-icon-theme",
+                "workbench.startupEditor": "none",
+                // ============================================================
+                // Editor
+                // ============================================================
+                "editor.formatOnSave": true,
+                "editor.formatOnPaste": false,
+                "editor.bracketPairColorization.enabled": true,
+                "editor.guides.bracketPairs": "active",
+                "editor.stickyScroll.enabled": true,
+                "editor.minimap.enabled": false,
+                "editor.renderWhitespace": "boundary",
+                "editor.tabSize": 4,
+                "editor.insertSpaces": true,
+                "editor.detectIndentation": false,
+                "[csharp]": {
+                    "editor.defaultFormatter": "csharpier.csharpier"
+                },
+                // ============================================================
+                // Files: hide machine-local agent config noise
+                // ============================================================
+                "files.exclude": {
+                    "**/.codex": true,
+                    "**/.claude": true,
+                    "**/.nanocoder": true,
+                    "**/.cursor": true
+                },
+                "files.watcherExclude": {
+                    "**/.git/objects/**": true,
+                    "**/.codex/**": true,
+                    "**/.claude/**": true,
+                    "**/.nanocoder/**": true,
+                    "**/.cache/**": true
+                },
+                "search.exclude": {
+                    "**/.codex": true,
+                    "**/.claude": true,
+                    "**/.nanocoder": true,
+                    "**/.artifacts": true,
+                    "**/node_modules": true
+                },
+                // ============================================================
+                // Terminal
+                // ============================================================
+                "terminal.integrated.defaultProfile.linux": "bash",
+                "terminal.integrated.scrollback": 10000,
+                "terminal.integrated.enablePersistentSessions": false,
+                "terminal.integrated.shellIntegration.enabled": true,
+                "terminal.integrated.shellIntegration.decorationsEnabled": "both",
+                // ============================================================
+                // Git
+                // ============================================================
+                "git.autofetch": true,
+                "git.enableSmartCommit": true,
+                "git.confirmSync": false,
+                // ============================================================
+                // Extension-specific
+                // ============================================================
+                "errorLens.enabledDiagnosticLevels": [
+                    "error",
+                    "warning"
+                ],
+                "todo-tree.general.tags": [
+                    "TODO",
+                    "FIXME",
+                    "BUG",
+                    "HACK",
+                    "XXX",
+                    "PERF"
+                ],
+                "cSpell.words": [
+                    "wallstop",
+                    "csharpier",
+                    "dataviz",
+                    "nanocoder",
+                    "opencode",
+                    "openrouter",
+                    "codex",
+                    "glm",
+                    "zai",
+                    "uvx",
+                    "bwrap",
+                    "devcontainer",
+                    "hookable"
+                ]
+            }
+        }
+    },
+    "features": {
+        // GitHub CLI for PR workflows (digest-pinned; see devcontainer-lock.json)
+        "ghcr.io/devcontainers/features/github-cli:1": {}
+    },
+    // onCreateCommand runs BEFORE extensions are activated.
+    "onCreateCommand": "bash .devcontainer/on-create.sh \"${containerWorkspaceFolder}\"",
+    "postCreateCommand": "bash .devcontainer/post-create.sh \"${containerWorkspaceFolder}\"",
+    // updateContentCommand runs after git pull/clone operations.
+    "updateContentCommand": "bash .devcontainer/update-content.sh \"${containerWorkspaceFolder}\"",
+    // Refresh moving npm CLIs and regenerate machine-local MCP configs on start.
+    "postStartCommand": "bash .devcontainer/post-start.sh \"${containerWorkspaceFolder}\"",
+    "remoteUser": "vscode"
+}

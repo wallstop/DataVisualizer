@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 #if UNITY_EDITOR
     using UnityEditor;
     using UnityEngine;
+    using WallstopStudios.DataVisualizer;
 
     // https://www.patrykgalach.com/2020/01/20/readonly-attribute-in-unity-editor/
     [CustomPropertyDrawer(typeof(ReadOnlyAttribute))]

@@ -38,7 +38,14 @@
     "package.json.meta"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint:llm": "pwsh -NoProfile -File scripts/lint-llm-instructions.ps1",
+    "lint:llm:fix": "pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -Fix",
+    "lint:llm:full": "pwsh -NoProfile -File scripts/generate-skills-index.ps1 && pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput && pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -VerboseOutput && pwsh -NoProfile -File scripts/tests/run-all.ps1",
+    "mcp:sync": "bash .llm/mcp/sync-mcp.sh",
+    "unity:mcp:host": "node .llm/mcp/unity-mcp-host.mjs",
+    "tools:install": "bash .devcontainer/install-npm-tools.sh",
+    "ai:backends:install": "bash .devcontainer/ai-backends.sh install"
   }
 }
 
