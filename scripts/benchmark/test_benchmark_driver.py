@@ -95,6 +95,7 @@ class BenchmarkDriverTests(unittest.TestCase):
             self.assertEqual(plan["samples"], 30)
             self.assertEqual(plan["warmups"], 5)
             self.assertIn("Unity Stopwatch", plan["timingBoundary"])
+            self.assertEqual(plan["playEntryCases"], ["open-idle", "open-indexing", "closed"])
             self.assertEqual(plan["comparisonOutput"], str(comparison_report_path(config)))
             json.dumps(plan)
 
@@ -131,11 +132,17 @@ class BenchmarkDriverTests(unittest.TestCase):
                 "memoryMegabytes": 1,
                 "playEntryTargetMilliseconds": 20,
                 "playEntryTargetMet": False,
-                "playEntryOpen": {
+                "playEntryOpenIdle": {
                     "warmups": [1] * 5,
                     "samples": [25] * 30,
                     "medianMilliseconds": 25,
                     "p95Milliseconds": 25,
+                },
+                "playEntryOpenIndexing": {
+                    "warmups": [3] * 5,
+                    "samples": [23] * 30,
+                    "medianMilliseconds": 23,
+                    "p95Milliseconds": 23,
                 },
                 "playEntryClosed": {
                     "warmups": [2] * 5,
@@ -150,6 +157,7 @@ class BenchmarkDriverTests(unittest.TestCase):
             contents = report.read_text(encoding="utf-8")
             self.assertIn("MISS", contents)
             self.assertIn("`30` | 25.000 ms | 25.000 ms", contents)
+            self.assertIn("Window open / indexing", contents)
             self.assertIn("`indexed-search`", contents)
 
     def test_direct_command_waits_for_deferred_finish(self):

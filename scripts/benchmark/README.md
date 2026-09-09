@@ -45,7 +45,11 @@ Play-entry samples, warm-up counts, medians, and p95 values.
 The Unity-side measurements use `System.Diagnostics.Stopwatch` and named
 `ProfilerMarker`s. MCP requests and Python polling are outside the measured
 Play-entry interval. Play-entry runs use five warm-ups and 30 retained samples
-for both open-window and closed-window cases, in matched alternating pairs.
+for each of three matched alternating cases: the window open and idle, the
+window open while object/search indexing is in flight, and the window closed.
+The legacy `playEntryOpen` JSON field aliases the open/idle result; the
+independent `playEntryOpenIdle` and `playEntryOpenIndexing` fields are
+authoritative.
 
 The current driver intentionally reports unsupported scenarios in
 `unavailableMetrics` instead of treating them as passes. In particular,

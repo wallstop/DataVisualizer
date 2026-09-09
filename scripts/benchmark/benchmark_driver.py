@@ -287,6 +287,8 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             Idle,
             Prepare,
             StartPlayCase,
+            AwaitOpenIdle,
+            AwaitOpenIndexing,
             AwaitPlayEntry,
             AwaitEditMode,
             Finish,
@@ -335,6 +337,8 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             public double playEntryTargetMilliseconds = PlayEntryTargetMilliseconds;
             public bool playEntryTargetMet;
             public SampleSet playEntryOpen = new();
+            public SampleSet playEntryOpenIdle = new();
+            public SampleSet playEntryOpenIndexing = new();
             public SampleSet playEntryClosed = new();
             public string[] unavailableMetrics = Array.Empty<string>();
         }
@@ -346,6 +350,8 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         private static readonly ProfilerMarker PlayEntryRequestMarker = new("DataVisualizer.Benchmark.PlayEntryRequest");
         private static readonly List<double> OpenWarmups = new();
         private static readonly List<double> OpenSamples = new();
+        private static readonly List<double> OpenIndexingWarmups = new();
+        private static readonly List<double> OpenIndexingSamples = new();
         private static readonly List<double> ClosedWarmups = new();
         private static readonly List<double> ClosedSamples = new();
         private static BenchmarkResult _result;
@@ -434,6 +440,12 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                         break;
                     case Phase.StartPlayCase:
                         StartPlayCase();
+                        break;
+                    case Phase.AwaitOpenIdle:
+                        AwaitOpenIdle();
+                        break;
+                    case Phase.AwaitOpenIndexing:
+                        AwaitOpenIndexing();
                         break;
                     case Phase.AwaitPlayEntry:
                         AwaitPlayEntry();
@@ -536,24 +548,46 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 return;
             }
 
-            bool open = _caseIndex == 0;
-            if (open)
+            if (_caseIndex == 0)
             {
-                if (_window == null)
-                {
-                    using (ShellConstructionMarker.Auto())
-                    {
-                        _window = EditorWindow.GetWindow<WallstopStudios.DataVisualizer.Editor.DataVisualizer>();
-                        _window?.Show();
-                    }
-                }
+                EnsureWindowOpen();
+                _waitTicks = 0;
+                _phase = Phase.AwaitOpenIdle;
+                return;
             }
-            else
+
+            if (_caseIndex == 1)
             {
                 _window?.Close();
                 _window = null;
+                EnsureWindowOpen();
+                BeginBenchmarkIndexing();
+                _waitTicks = 0;
+                _phase = Phase.AwaitOpenIndexing;
+                return;
             }
 
+            _window?.Close();
+            _window = null;
+            RequestPlayEntry("closed");
+        }
+
+        private static void EnsureWindowOpen()
+        {
+            if (_window != null)
+            {
+                return;
+            }
+
+            using (ShellConstructionMarker.Auto())
+            {
+                _window = EditorWindow.GetWindow<WallstopStudios.DataVisualizer.Editor.DataVisualizer>();
+                _window?.Show();
+            }
+        }
+
+        private static void RequestPlayEntry(string caseName)
+        {
             if (EditorApplication.isPlaying)
             {
                 _waitTicks = 0;
@@ -569,9 +603,113 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             }
             _waitTicks = 0;
             _phase = Phase.AwaitPlayEntry;
-            _result.status = open
-                ? $"starting-open-play-entry-{_repetition + 1}"
-                : $"starting-closed-play-entry-{_repetition + 1}";
+            _result.status = $"starting-{caseName}-play-entry-{_repetition + 1}";
+        }
+
+        private static void AwaitOpenIdle()
+        {
+            _waitTicks++;
+            if (IsWindowIdle())
+            {
+                RequestPlayEntry("open-idle");
+                return;
+            }
+
+            if (_waitTicks >= MaximumWaitTicks)
+            {
+                Fail(new InvalidOperationException("Window did not become idle before the benchmark timeout"));
+            }
+        }
+
+        private static void AwaitOpenIndexing()
+        {
+            _waitTicks++;
+            if (IsWindowIndexing())
+            {
+                RequestPlayEntry("open-indexing");
+                return;
+            }
+
+            if (_waitTicks % 5 == 0)
+            {
+                BeginBenchmarkIndexing();
+            }
+            if (_waitTicks >= MaximumWaitTicks)
+            {
+                Fail(new InvalidOperationException("Window did not enter indexing before the benchmark timeout"));
+            }
+        }
+
+        private static bool IsWindowIdle()
+        {
+            return _window != null
+                && !GetWindowBool("_isLoadingObjectsAsync")
+                && !GetWindowBool("_isLoadingSearchCacheAsync")
+                && !GetWindowBool("_deferredInitializationPending")
+                && GetWindowBool("_isSearchCachePopulated");
+        }
+
+        private static bool IsWindowIndexing()
+        {
+            return _window != null
+                && (
+                    GetWindowBool("_isLoadingObjectsAsync")
+                    || GetWindowBool("_isLoadingSearchCacheAsync")
+                );
+        }
+
+        private static bool GetWindowBool(string fieldName)
+        {
+            if (_window == null)
+            {
+                return false;
+            }
+            var field = _window.GetType().GetField(
+                fieldName,
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
+            );
+            return field?.GetValue(_window) is bool value && value;
+        }
+
+        private static void BeginBenchmarkIndexing()
+        {
+            if (_window == null)
+            {
+                return;
+            }
+
+            var flags =
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var windowType = _window.GetType();
+            var catalog = (Dictionary<string, List<Type>>)
+                windowType.GetField("_scriptableObjectTypes", flags).GetValue(_window);
+            Type[] benchmarkTypes =
+            {
+                typeof(PlainData),
+                typeof(BaseData),
+                // ScriptableObject is intentionally included so the search-cache query has more
+                // than one async batch even at the minimum 100-asset fixture size.
+                typeof(ScriptableObject),
+                typeof(WallstopStudios.DataVisualizer.Benchmark.First.Data),
+                typeof(WallstopStudios.DataVisualizer.Benchmark.Second.Data),
+            };
+            foreach (Type type in benchmarkTypes)
+            {
+                if (!catalog.TryGetValue(type.Namespace, out List<Type> types))
+                {
+                    types = new List<Type>();
+                    catalog[type.Namespace] = types;
+                }
+                if (!types.Contains(type))
+                {
+                    types.Add(type);
+                }
+            }
+
+            windowType
+                .GetMethod("LoadObjectTypesAsync", flags)
+                .Invoke(_window, new object[] { typeof(PlainData), false });
+            windowType.GetMethod("PopulateSearchCacheAsync", flags).Invoke(_window, null);
         }
 
         private static void AwaitPlayEntry()
@@ -580,8 +718,23 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             if (EditorApplication.isPlaying)
             {
                 double elapsed = ElapsedMilliseconds(_playRequestTimestamp);
-                List<double> warmups = _caseIndex == 0 ? OpenWarmups : ClosedWarmups;
-                List<double> samples = _caseIndex == 0 ? OpenSamples : ClosedSamples;
+                List<double> warmups;
+                List<double> samples;
+                if (_caseIndex == 0)
+                {
+                    warmups = OpenWarmups;
+                    samples = OpenSamples;
+                }
+                else if (_caseIndex == 1)
+                {
+                    warmups = OpenIndexingWarmups;
+                    samples = OpenIndexingSamples;
+                }
+                else
+                {
+                    warmups = ClosedWarmups;
+                    samples = ClosedSamples;
+                }
                 (warmups.Count < WarmupCount ? warmups : samples).Add(elapsed);
                 _waitTicks = 0;
                 EditorApplication.isPlaying = false;
@@ -611,11 +764,8 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             }
 
             _waitTicks = 0;
-            if (_caseIndex == 0)
-            {
-                _caseIndex = 1;
-            }
-            else
+            _caseIndex++;
+            if (_caseIndex >= 3)
             {
                 _caseIndex = 0;
                 _repetition++;
@@ -722,11 +872,15 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 _result.status = "completed";
             }
             _result.playEntryOpen = MakeSampleSet(OpenWarmups, OpenSamples);
+            _result.playEntryOpenIdle = _result.playEntryOpen;
+            _result.playEntryOpenIndexing = MakeSampleSet(OpenIndexingWarmups, OpenIndexingSamples);
             _result.playEntryClosed = MakeSampleSet(ClosedWarmups, ClosedSamples);
             _result.playEntryTargetMet =
-                _result.playEntryOpen.samples.Length == SampleCount
+                _result.playEntryOpenIdle.samples.Length == SampleCount
+                && _result.playEntryOpenIndexing.samples.Length == SampleCount
                 && _result.playEntryClosed.samples.Length == SampleCount
-                && _result.playEntryOpen.p95Milliseconds <= PlayEntryTargetMilliseconds
+                && _result.playEntryOpenIdle.p95Milliseconds <= PlayEntryTargetMilliseconds
+                && _result.playEntryOpenIndexing.p95Milliseconds <= PlayEntryTargetMilliseconds
                 && _result.playEntryClosed.p95Milliseconds <= PlayEntryTargetMilliseconds;
             try
             {
@@ -968,6 +1122,7 @@ def planned_execution(config: BenchmarkConfig) -> dict[str, Any]:
         },
         "warmups": 5,
         "samples": 30,
+        "playEntryCases": ["open-idle", "open-indexing", "closed"],
         "timingBoundary": "Unity Stopwatch/Profiler-side operation timing; orchestration excluded",
     }
 
@@ -988,16 +1143,18 @@ def _metric_line(value: Any) -> str:
 def write_comparison_report(path: Path, config: BenchmarkConfig, result: dict[str, Any]) -> None:
     """Write a concise, reviewable companion to the machine-readable JSON report."""
 
-    open_result = result.get("playEntryOpen") or {}
+    open_idle_result = result.get("playEntryOpenIdle") or result.get("playEntryOpen") or {}
+    open_indexing_result = result.get("playEntryOpenIndexing") or {}
     closed_result = result.get("playEntryClosed") or {}
     target = result.get("playEntryTargetMilliseconds", 20)
     target_met = result.get("playEntryTargetMet")
+    independent_cases_present = bool(result.get("playEntryOpenIndexing"))
     if result.get("suite") == "fixture":
         target_summary = "not measured (fixture suite)"
-    elif target_met is True:
-        target_summary = f"PASS (both p95 values <= {target} ms)"
+    elif target_met is True and independent_cases_present:
+        target_summary = f"PASS (all three p95 values <= {target} ms)"
     else:
-        target_summary = f"MISS (both p95 values must be <= {target} ms)"
+        target_summary = f"MISS (all three p95 values must be <= {target} ms)"
     unavailable = result.get("unavailableMetrics") or []
 
     lines = [
@@ -1028,12 +1185,13 @@ def write_comparison_report(path: Path, config: BenchmarkConfig, result: dict[st
         "",
         "The measured interval starts immediately before the Unity Play request and ends when Unity reports Play Mode. MCP polling and Python orchestration are excluded.",
         "",
-        f"- Target: `<= {target} ms` p95 for both cases",
+        f"- Target: `<= {target} ms` p95 for all three cases",
         f"- Acceptance: **{target_summary}**",
         "",
         "| Case | Warmups | Samples | Median | p95 |",
         "| --- | ---: | ---: | ---: | ---: |",
-        f"| Window open | `{len(open_result.get('warmups') or [])}` | `{len(open_result.get('samples') or [])}` | {_metric_line(open_result.get('medianMilliseconds'))} | {_metric_line(open_result.get('p95Milliseconds'))} |",
+        f"| Window open / idle | `{len(open_idle_result.get('warmups') or [])}` | `{len(open_idle_result.get('samples') or [])}` | {_metric_line(open_idle_result.get('medianMilliseconds'))} | {_metric_line(open_idle_result.get('p95Milliseconds'))} |",
+        f"| Window open / indexing | `{len(open_indexing_result.get('warmups') or [])}` | `{len(open_indexing_result.get('samples') or [])}` | {_metric_line(open_indexing_result.get('medianMilliseconds'))} | {_metric_line(open_indexing_result.get('p95Milliseconds'))} |",
         f"| Window closed | `{len(closed_result.get('warmups') or [])}` | `{len(closed_result.get('samples') or [])}` | {_metric_line(closed_result.get('medianMilliseconds'))} | {_metric_line(closed_result.get('p95Milliseconds'))} |",
         "",
         "## Unavailable metrics",
