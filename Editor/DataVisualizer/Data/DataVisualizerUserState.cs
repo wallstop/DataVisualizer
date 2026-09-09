@@ -32,22 +32,31 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 return null;
             }
 
-            DataVisualizerUserState userState = JsonUtility.FromJson<DataVisualizerUserState>(json);
-            if (userState == null)
+            try
             {
+                DataVisualizerUserState userState = JsonUtility.FromJson<DataVisualizerUserState>(
+                    json
+                );
+                if (userState == null)
+                {
+                    return userState;
+                }
+
+                LegacyUserState legacyUserState = JsonUtility.FromJson<LegacyUserState>(json);
+                if (
+                    string.IsNullOrWhiteSpace(userState.lastSelectedTypeFullName)
+                    && !string.IsNullOrWhiteSpace(legacyUserState?.lastSelectedTypeName)
+                )
+                {
+                    userState.lastSelectedTypeFullName = legacyUserState.lastSelectedTypeName;
+                }
+
                 return userState;
             }
-
-            LegacyUserState legacyUserState = JsonUtility.FromJson<LegacyUserState>(json);
-            if (
-                string.IsNullOrWhiteSpace(userState.lastSelectedTypeFullName)
-                && !string.IsNullOrWhiteSpace(legacyUserState?.lastSelectedTypeName)
-            )
+            catch (ArgumentException)
             {
-                userState.lastSelectedTypeFullName = legacyUserState.lastSelectedTypeName;
+                return null;
             }
-
-            return userState;
         }
 
         public void HydrateFrom(DataVisualizerSettings settings)

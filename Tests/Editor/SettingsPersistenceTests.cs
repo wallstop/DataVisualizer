@@ -162,6 +162,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual(expectedTypeFullName, userState.lastSelectedTypeFullName);
         }
 
+        [TestCase("{")]
+        [TestCase("not-json")]
+        public void Should_ReturnNull_When_UserStateJsonIsMalformed(string json)
+        {
+            DataVisualizerUserState userState = null;
+
+            Assert.DoesNotThrow(() => userState = DataVisualizerUserState.FromJson(json));
+            Assert.IsNull(userState);
+        }
+
         private static void AssertCollapseStateDirtySemantics(
             Func<string, bool, bool> setCollapsed,
             Func<string, bool> removeCollapsed
