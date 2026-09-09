@@ -54,3 +54,23 @@ latency, retained-reference memory, and the full compatibility/player matrix
 still require the work tracked by issue #21. A report's
 `playEntryTargetMet` must be true before the 20 ms acceptance target can be
 considered satisfied; measured misses remain misses.
+
+## Play Mode suspension scenario
+
+Use `playmode_suspension_driver.py` for the lifecycle matrix tracked by issue
+#20:
+
+```bash
+python3 scripts/benchmark/playmode_suspension_driver.py \
+  --host-project /Users/wallstop/Code/DataVisualizer \
+  --unity-version 6000.4.6f1 \
+  --output /tmp/data-visualizer-playmode-suspension.json
+```
+
+It runs two in-flight open-window cycles and one first-enable-during-Play cycle
+for each domain-reload/scene-reload combination. The report captures suspended
+state, pending object work, search-cache work, queued invalidation, paused
+indicator text, mutation-control availability, resume state, and cleanup. The
+scenario uses a fixture of at least 201 settings assets so the async queue is
+observable, reflection only for diagnostics, and does not add an automation API
+or a background process to the package.
