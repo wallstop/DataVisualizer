@@ -1281,12 +1281,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
             headerRow.Add(_searchField);
 
-            float initialOuterWidth = Mathf.Max(
+            float initialOuterWidth = LayoutGeometry.ClampPersistedPaneWidth(
                 EditorPrefs.GetFloat(PrefsSplitterOuterKey, DefaultOuterSplitWidth),
+                DefaultOuterSplitWidth,
                 MinNamespacePaneWidth
             );
-            float initialInnerWidth = Mathf.Max(
+            float initialInnerWidth = LayoutGeometry.ClampPersistedPaneWidth(
                 EditorPrefs.GetFloat(PrefsSplitterInnerKey, DefaultInnerSplitWidth),
+                DefaultInnerSplitWidth,
                 MinObjectPaneWidth
             );
 
@@ -1299,7 +1301,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _innerSplitView = new TwoPaneSplitView(
                 0,
-                (int)initialInnerWidth,
+                LayoutGeometry.ToInitialPaneDimension(initialInnerWidth),
                 TwoPaneSplitViewOrientation.Horizontal
             )
             {
@@ -1311,7 +1313,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _innerSplitView.Add(inspectorColumn);
             _outerSplitView = new TwoPaneSplitView(
                 0,
-                (int)initialOuterWidth,
+                LayoutGeometry.ToInitialPaneDimension(initialOuterWidth),
                 TwoPaneSplitViewOrientation.Horizontal
             )
             {
