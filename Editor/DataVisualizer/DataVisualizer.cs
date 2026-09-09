@@ -275,6 +275,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Label _processorHeaderLabel;
         private readonly List<IDataProcessor> _allDataProcessors = new();
         private readonly List<IDataProcessor> _compatibleDataProcessors = new();
+        private bool _dataProcessorsDiscovered;
 
         private TextField _searchField;
         private VisualElement _searchPopover;
@@ -416,35 +417,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             _nextColorIndex = 0;
             Instance = this;
             _isSearchCachePopulated = false;
+            _dataProcessorsDiscovered = false;
+            _allDataProcessors.Clear();
             _selectedObject = null;
             _selectedObjects.Clear();
 #if ODIN_INSPECTOR
             _odinPropertyTree = null;
 #endif
             _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
-
-            _allDataProcessors.Clear();
-            IEnumerable<Type> processorTypes = TypeCache
-                .GetTypesDerivedFrom<IDataProcessor>()
-                .Where(t => !t.IsAbstract && !t.IsInterface && !t.IsGenericTypeDefinition);
-            foreach (Type type in processorTypes)
-            {
-                try
-                {
-                    if (Activator.CreateInstance(type) is IDataProcessor instance)
-                    {
-                        _allDataProcessors.Add(instance);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError(
-                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex.Message}"
-                    );
-                }
-            }
-
-            _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
 
             // Don't load types here - it blocks the UI from appearing
             // LoadScriptableObjectTypes() is now deferred to CreateGUI
@@ -486,6 +466,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             UpdateLoadingIndicator(0, 0); // Hide loading indicator
 
             _isLabelCachePopulated = false;
+            _dataProcessorsDiscovered = false;
+            _allDataProcessors.Clear();
             _selectedObject = null;
             _scriptableObjectTypes.Clear();
             _namespaceOrder.Clear();
@@ -1786,14 +1768,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             _processorListContainer.Clear();
             _compatibleDataProcessors.Clear();
 
-            if (_namespaceController.SelectedType != null)
+            Type selectedType = _namespaceController.SelectedType;
+            if (selectedType == null)
             {
-                _compatibleDataProcessors.AddRange(
-                    _allDataProcessors.Where(p =>
-                        p.Accepts != null && p.Accepts.Contains(_namespaceController.SelectedType)
-                    )
-                );
+                _processorAreaElement.style.display = DisplayStyle.None;
+                return;
             }
+
+            EnsureDataProcessorsDiscovered();
+            _compatibleDataProcessors.AddRange(
+                _allDataProcessors.Where(p => p.Accepts != null && p.Accepts.Contains(selectedType))
+            );
 
             if (_compatibleDataProcessors.Count == 0)
             {
@@ -1883,6 +1868,37 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _processorListContainer.Add(processorButton);
                 }
             }
+        }
+
+        private void EnsureDataProcessorsDiscovered()
+        {
+            if (_dataProcessorsDiscovered)
+            {
+                return;
+            }
+
+            _dataProcessorsDiscovered = true;
+            IEnumerable<Type> processorTypes = TypeCache
+                .GetTypesDerivedFrom<IDataProcessor>()
+                .Where(t => !t.IsAbstract && !t.IsInterface && !t.IsGenericTypeDefinition);
+            foreach (Type type in processorTypes)
+            {
+                try
+                {
+                    if (Activator.CreateInstance(type) is IDataProcessor instance)
+                    {
+                        _allDataProcessors.Add(instance);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError(
+                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex.Message}"
+                    );
+                }
+            }
+
+            _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
         }
 
         private void ToggleProcessorContentCollapse()
