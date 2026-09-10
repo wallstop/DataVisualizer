@@ -563,6 +563,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 diagnostic = $"Persistence state migration failed: {exception.Message}";
                 return false;
             }
+            catch (InvalidDataException exception)
+            {
+                diagnostic = $"Persistence state migration failed: {exception.Message}";
+                return false;
+            }
         }
 
         private static DataVisualizerUserState LoadUserState(string path)

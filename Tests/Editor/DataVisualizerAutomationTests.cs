@@ -265,6 +265,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void Should_ReturnStructuredResultForTruncatedNestedAutomationJson()
+        {
+            string resultJson = DataVisualizerAutomation.ExecuteRequestJson(
+                "{\"schemaVersion\":1,\"requestId\":\"truncated\",\"operation\":0,\"configuration\":{\"dataFolderPath\":\"Assets/"
+            );
+            DataVisualizerAutomationResult result =
+                UnityEngine.JsonUtility.FromJson<DataVisualizerAutomationResult>(resultJson);
+
+            Assert.IsFalse(result.succeeded);
+            Assert.IsTrue(result.complete);
+            StringAssert.Contains("malformed", result.diagnostic);
+        }
+
+        [Test]
         public void Should_RejectUnknownAndDuplicateAutomationProperties()
         {
             DataVisualizerAutomationResult unknown = DataVisualizerAutomation.DispatchRequestJson(
@@ -289,6 +303,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             Assert.IsFalse(result.succeeded);
             StringAssert.Contains("unsupported", result.diagnostic);
+            Assert.AreEqual((DataVisualizerAutomationRequestKind)99, result.operation);
         }
     }
 }

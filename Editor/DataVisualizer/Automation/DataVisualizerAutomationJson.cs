@@ -68,13 +68,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 return FailureResult("Automation request JSON is required.");
             }
 
-            if (!TryValidateRequestEnvelope(json, out string envelopeDiagnostic))
-            {
-                return FailureResult("Automation request JSON is malformed: " + envelopeDiagnostic);
-            }
-
             try
             {
+                if (!TryValidateRequestEnvelope(json, out string envelopeDiagnostic))
+                {
+                    return FailureResult(
+                        "Automation request JSON is malformed: " + envelopeDiagnostic
+                    );
+                }
+
                 DataVisualizerAutomationRequest request =
                     JsonUtility.FromJson<DataVisualizerAutomationRequest>(json);
                 return DispatchRequest(request);
@@ -103,19 +105,25 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             {
                 return FailureResult(
                     request.requestId,
+                    request.operation,
                     $"Unsupported automation schema version: {request.schemaVersion}."
                 );
             }
 
             if (string.IsNullOrWhiteSpace(request.requestId))
             {
-                return FailureResult("Automation requestId is required.");
+                return FailureResult(
+                    request.requestId,
+                    request.operation,
+                    "Automation requestId is required."
+                );
             }
 
             if (!Enum.IsDefined(typeof(DataVisualizerAutomationRequestKind), request.operation))
             {
                 return FailureResult(
                     request.requestId,
+                    request.operation,
                     $"The requested automation operation is unsupported: {(int)request.operation}."
                 );
             }
@@ -179,22 +187,24 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                     default:
                         return FailureResult(
                             request.requestId,
+                            request.operation,
                             "The requested automation operation is unsupported."
                         );
                 }
             }
             catch (ArgumentException exception)
             {
-                return FailureResult(result.requestId, exception.Message);
+                return FailureResult(result.requestId, result.operation, exception.Message);
             }
             catch (InvalidOperationException exception)
             {
-                return FailureResult(result.requestId, exception.Message);
+                return FailureResult(result.requestId, result.operation, exception.Message);
             }
             catch (Exception exception)
             {
                 return FailureResult(
                     result.requestId,
+                    result.operation,
                     $"Automation operation failed: {exception.Message}"
                 );
             }
@@ -212,7 +222,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
 
             if (!TryValidateFilePaths(requestPath, resultPath, out string pathDiagnostic))
             {
-                TryWriteResultFile(resultPath, FailureResult(pathDiagnostic));
+                Debug.LogError(pathDiagnostic);
                 EditorApplication.Exit(2);
                 return;
             }
@@ -645,7 +655,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 {
                     return false;
                 }
-                else if (json[index] == opening)
+                if (index >= json.Length)
+                {
+                    return false;
+                }
+                if (json[index] == opening)
                 {
                     depth++;
                     index++;
@@ -715,17 +729,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
 
         private static DataVisualizerAutomationResult FailureResult(string diagnostic)
         {
-            return FailureResult(null, diagnostic);
+            return FailureResult(
+                null,
+                DataVisualizerAutomationRequestKind.ReadConfiguration,
+                diagnostic
+            );
         }
 
         private static DataVisualizerAutomationResult FailureResult(
             string requestId,
+            DataVisualizerAutomationRequestKind operation,
             string diagnostic
         )
         {
             return new DataVisualizerAutomationResult
             {
                 requestId = requestId,
+                operation = operation,
                 succeeded = false,
                 complete = true,
                 diagnostic = diagnostic,
