@@ -193,6 +193,14 @@ class BenchmarkDriverTests(unittest.TestCase):
             matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
             self.assertEqual(matrix["status"], "failed")
             self.assertEqual(matrix["runs"][0]["status"], "failed")
+            self.assertEqual(
+                [lane["status"] for lane in matrix["controlLanes"]],
+                ["planned", "not-run", "not-run", "not-run"],
+            )
+            self.assertEqual(
+                [item["unityLine"] for item in matrix["compatibility"]],
+                ["2021.3", "2022.3", "6000.4.6f1"],
+            )
 
     def test_matrix_parser_rejects_duplicate_sizes(self):
         with self.assertRaises(argparse.ArgumentTypeError):

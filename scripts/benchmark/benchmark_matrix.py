@@ -10,11 +10,25 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable
 
-from benchmark_driver import FIXTURE_SIZES, BenchmarkError, parse_fixture_size
+from benchmark_driver import (
+    FIXTURE_SIZES,
+    BenchmarkError,
+    build_argument_parser,
+    config_from_args,
+    parse_fixture_size,
+    validate_result,
+)
 
 
 DRIVER_PATH = Path(__file__).with_name("benchmark_driver.py").resolve()
 DEFAULT_TIMEOUT_SECONDS = 7_200.0
+CONTROL_LANES = (
+    ("package-present", "planned", "runs through the installed package"),
+    ("package-absent", "not-run", "requires an equivalent control project without the package"),
+    ("player-ordinary", "not-run", "requires player compile/build smoke coverage"),
+    ("player-base-data-object", "not-run", "requires player compatibility smoke coverage"),
+)
+COMPATIBILITY_LINES = ("2021.3", "2022.3", "6000.4.6f1")
 
 
 def parse_sizes(value: str) -> tuple[int, ...]:
@@ -125,6 +139,14 @@ def run_matrix(args: argparse.Namespace) -> dict[str, Any]:
         "unityVersions": args.unity_version,
         "fixtureSizes": list(args.sizes),
         "runs": runs,
+        "controlLanes": [
+            {"id": lane, "status": status, "reason": reason}
+            for lane, status, reason in CONTROL_LANES
+        ],
+        "compatibility": [
+            {"unityLine": line, "status": "not-run", "reason": "No local editor was supplied for this line"}
+            for line in COMPATIBILITY_LINES
+        ],
         "unavailable": [
             "Unity versions not listed in --unity-version",
             "package-absent controls",
@@ -153,6 +175,14 @@ def run_matrix(args: argparse.Namespace) -> dict[str, Any]:
                     entry["report"] = str(report)
                     if report.is_file():
                         result = json.loads(report.read_text(encoding="utf-8"))
+                        driver_arguments = build_argument_parser().parse_args(command[2:])
+                        validate_result(
+                            config_from_args(
+                                driver_arguments,
+                                Path(__file__).resolve().parents[2],
+                            ),
+                            result,
+                        )
                         entry["status"] = result.get("status", "unknown")
                         entry["fixtureVerified"] = result.get("fixtureVerified", False)
                         entry["cleanupCompleted"] = result.get("cleanupCompleted", False)
@@ -197,9 +227,37 @@ def write_markdown(path: Path, matrix: dict[str, Any]) -> None:
         f"- Suite: `{matrix['suite']}`",
         f"- Unity versions: {', '.join(f'`{item}`' for item in matrix['unityVersions'])}",
         "",
+        "## Control lanes",
+        "",
+        "| Lane | Status | Reason |",
+        "| --- | --- | --- |",
+    ]
+    lines.extend(
+        f"| `{lane['id']}` | `{lane['status']}` | {lane['reason']} |"
+        for lane in matrix["controlLanes"]
+    )
+    lines.extend(
+        [
+            "",
+            "## Compatibility lines",
+            "",
+            "| Unity line | Status | Reason |",
+            "| --- | --- | --- |",
+        ]
+    )
+    lines.extend(
+        f"| `{item['unityLine']}` | `{item['status']}` | {item['reason']} |"
+        for item in matrix["compatibility"]
+    )
+    lines.extend(
+        [
+            "",
+            "## Package-present runs",
+            "",
         "| Unity version | Fixture size | Status | Fixture verified | Cleanup completed |",
         "| --- | ---: | --- | --- | --- |",
-    ]
+        ]
+    )
     for run in matrix["runs"]:
         lines.append(
             f"| `{run['unityVersion']}` | `{run['fixtureSize']:,}` | "
