@@ -238,7 +238,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static bool IsPositiveFinite(float value)
         {
-            return value > 0 && !float.IsNaN(value) && !float.IsInfinity(value);
+            return 0 < value && !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         private sealed class LayoutTestWindow : EditorWindow { }

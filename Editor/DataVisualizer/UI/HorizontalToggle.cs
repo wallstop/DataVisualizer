@@ -273,7 +273,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 ? _leftLabel.resolvedStyle.width
                 : _rightLabel.resolvedStyle.width;
 
-            if (animate && resolvedStyle.width > 0)
+            if (animate && 0 < resolvedStyle.width)
             {
                 _indicator.RemoveFromClassList(indicatorSelectedUssClassName);
 

@@ -97,6 +97,11 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     files. Dot-folders (`.llm`, `.github`) never get `.meta` files.
 18. Keep agent/dev files out of the npm tarball: `package.json` `files` whitelists
     only `Editor`, `Runtime`, `Tests`, `docs`, and their `.meta` companions.
+19. Write explicit ordered comparisons with `<` or `<=`, reversing operands instead
+    of using `>` or `>=`. Relational patterns retain the operator required by C#
+    syntax. Keep `!=` when expressing genuine inequality or null checks; do not wrap
+    `==` in a negation merely to avoid it. Before reversing user-defined operators,
+    verify the swapped operands and paired operator preserve behavior.
 
 ### Skills Discipline
 

@@ -128,7 +128,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
 
             if (
-                existingIndex >= 0
+                0 <= existingIndex
                 && string.Equals(
                     lastObjectSelections[existingIndex].objectGuid,
                     guid,
@@ -139,7 +139,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 return false;
             }
 
-            if (existingIndex >= 0)
+            if (0 <= existingIndex)
             {
                 lastObjectSelections[existingIndex].objectGuid = guid;
             }

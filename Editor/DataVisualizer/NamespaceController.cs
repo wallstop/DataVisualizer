@@ -100,7 +100,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private static Type InternalSelected(VisualElement parent, int index)
         {
-            if (0 > index || index >= parent.childCount)
+            if (index < 0 || parent.childCount <= index)
             {
                 return null;
             }
@@ -219,7 +219,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 string namespaceKey = key;
                 List<Type> nonCoreManagedTypes = types.Where(IsTypeRemovable).ToList();
                 int removableTypeCount = nonCoreManagedTypes.Count;
-                bool showNamespaceRemoveButton = removableTypeCount > 1;
+                bool showNamespaceRemoveButton = 1 < removableTypeCount;
 
                 VisualElement namespaceGroupItem = new()
                 {
@@ -318,7 +318,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     namespaceRemoveButton = new Button(() =>
                     {
                         dataVisualizer.BuildAndOpenConfirmationPopover(
-                            $"Remove {removableTypeCount} non-core type{(removableTypeCount > 1 ? "s" : "")} from namespace '{namespaceKey}'?",
+                            $"Remove {removableTypeCount} non-core type{(1 < removableTypeCount ? "s" : "")} from namespace '{namespaceKey}'?",
                             "Remove",
                             () =>
                             {
@@ -339,7 +339,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         text = "X",
                         tooltip =
-                            $"Remove {removableTypeCount} non-BaseDataObject type{(removableTypeCount > 1 ? "s" : "")}",
+                            $"Remove {removableTypeCount} non-BaseDataObject type{(1 < removableTypeCount ? "s" : "")}",
                     };
                     namespaceRemoveButton.AddToClassList(StyleConstants.ActionButtonClass);
                     namespaceRemoveButton.AddToClassList(StyleConstants.DeleteButtonClass);

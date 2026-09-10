@@ -20,10 +20,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool candidateAdded = false;
             string normalizedSavedGuid = null;
 
-            if (referencedGuids != null && referencedGuids.Count > 0)
+            if (referencedGuids != null && 0 < referencedGuids.Count)
             {
                 candidateLookup = new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
-                candidateAdded = AddResolvedGuids(type, referencedGuids, candidateLookup) > 0;
+                candidateAdded = 0 < AddResolvedGuids(type, referencedGuids, candidateLookup);
             }
 
             if (TryNormalizeGuidForType(type, savedObjectGuid, out string normalizedGuid))
