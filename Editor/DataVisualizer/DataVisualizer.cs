@@ -601,7 +601,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             // Start loading batches
-            if (_pendingSearchCacheGuids.Count > 0)
+            if (0 < _pendingSearchCacheGuids.Count)
             {
                 ContinuePopulatingSearchCache(generation);
             }
@@ -660,7 +660,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _allManagedObjectsCache.AddRange(loadedObjects);
 
             // Continue with next batch
-            if (_pendingSearchCacheGuids.Count > 0)
+            if (0 < _pendingSearchCacheGuids.Count)
             {
                 rootVisualElement
                     .schedule.Execute(() => ContinuePopulatingSearchCache(generation))
@@ -709,7 +709,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private static List<string> DequeueBatch(Queue<string> queue, int batchSize)
         {
             List<string> batch = new(batchSize);
-            for (int i = 0; i < batchSize && queue.Count > 0; i++)
+            for (int i = 0; i < batchSize && 0 < queue.Count; i++)
             {
                 batch.Add(queue.Dequeue());
             }
@@ -1265,7 +1265,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     if (
                         !string.IsNullOrWhiteSpace(context._searchField.value)
-                        && context._searchPopover.childCount > 0
+                        && 0 < context._searchPopover.childCount
                         && context._activePopover != context._searchPopover
                     )
                     {
@@ -1449,7 +1449,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                             "/Packages/",
                             StringComparison.OrdinalIgnoreCase
                         );
-                        if (packagesIndex >= 0)
+                        if (0 <= packagesIndex)
                         {
                             packagePath = normalizedPackageRoot.Substring(packagesIndex + 1); // +1 to skip the leading slash so the path starts at "Packages/"
                         }
@@ -2015,7 +2015,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case KeyCode.DownArrow:
                 {
                     _searchHighlightIndex++;
-                    if (_searchHighlightIndex >= _currentSearchResultItems.Count)
+                    if (_currentSearchResultItems.Count <= _searchHighlightIndex)
                     {
                         _searchHighlightIndex = 0;
                     }
@@ -2038,7 +2038,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case KeyCode.KeypadEnter:
                 {
                     if (
-                        _searchHighlightIndex >= 0
+                        0 <= _searchHighlightIndex
                         && _searchHighlightIndex < _currentSearchResultItems.Count
                     )
                     {
@@ -2240,7 +2240,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 results.Add((obj, matchInfo));
-                if (results.Count >= MaxSearchResults)
+                if (MaxSearchResults <= results.Count)
                 {
                     break;
                 }
@@ -2262,7 +2262,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 scrollView.Add(listContainer);
             }
-            if (results.Count > 0)
+            if (0 < results.Count)
             {
                 _searchPopover.style.maxHeight = StyleKeyword.Null;
                 foreach ((ScriptableObject resultObj, SearchResultMatchInfo resultInfo) in results)
@@ -2507,8 +2507,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                     List<Tuple<int, int>> indices = new();
                     int start = 0;
                     while (
-                        (start = fullText.IndexOf(term, start, StringComparison.OrdinalIgnoreCase))
-                        >= 0
+                        0
+                        <= (
+                            start = fullText.IndexOf(
+                                term,
+                                start,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        )
                     )
                     {
                         indices.Add(Tuple.Create(start, term.Length));
@@ -2604,7 +2610,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             HashSet<object> visited
         )
         {
-            if (obj == null || currentDepth > maxDepth)
+            if (obj == null || maxDepth < currentDepth)
             {
                 return null;
             }
@@ -2826,8 +2832,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (
                 !float.IsNaN(windowWidth)
                 && !float.IsNaN(windowHeight)
-                && windowWidth > 0
-                && windowHeight > 0
+                && 0 < windowWidth
+                && 0 < windowHeight
             )
             {
                 clampedX = Mathf.Max(0, targetX);
@@ -3034,25 +3040,25 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     popoverWidth = Mathf.Min(
                         popoverWidth,
-                        popover.resolvedStyle.maxWidth.value > 0
+                        0 < popover.resolvedStyle.maxWidth.value
                             ? popover.resolvedStyle.maxWidth.value
                             : float.MaxValue
                     );
                     popoverHeight = Mathf.Min(
                         popoverHeight,
-                        popover.resolvedStyle.maxHeight.value > 0
+                        0 < popover.resolvedStyle.maxHeight.value
                             ? popover.resolvedStyle.maxHeight.value
                             : float.MaxValue
                     );
                     popoverWidth = Mathf.Max(
                         popoverWidth,
-                        popover.resolvedStyle.minWidth.value > 0
+                        0 < popover.resolvedStyle.minWidth.value
                             ? popover.resolvedStyle.minWidth.value
                             : 50f
                     );
                     popoverHeight = Mathf.Max(
                         popoverHeight,
-                        popover.resolvedStyle.minHeight.value > 0
+                        0 < popover.resolvedStyle.minHeight.value
                             ? popover.resolvedStyle.minHeight.value
                             : 30f
                     );
@@ -3796,7 +3802,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (
                 string.IsNullOrWhiteSpace(newName)
-                || newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+                || 0 <= newName.IndexOfAny(Path.GetInvalidFileNameChars())
             )
             {
                 errorLabel.text = "Invalid name.";
@@ -3911,7 +3917,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (
                 string.IsNullOrWhiteSpace(originalPath)
                 || string.IsNullOrWhiteSpace(newName)
-                || newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+                || 0 <= newName.IndexOfAny(Path.GetInvalidFileNameChars())
             )
             {
                 errorLabel.text = "Invalid name.";
@@ -4441,7 +4447,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 List<string> searchTerms = string.IsNullOrWhiteSpace(filter)
                     ? new List<string>()
                     : filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-                bool isFiltering = searchTerms.Count > 0;
+                bool isFiltering = 0 < searchTerms.Count;
 
                 HashSet<string> managedTypeFullNames = _namespaceController
                     .GetAllManagedTypeNames()
@@ -4487,7 +4493,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         addableTypes.Add(type);
                     }
 
-                    if (addableTypes.Count > 0)
+                    if (0 < addableTypes.Count)
                     {
                         foundMatches = true;
 
@@ -4581,7 +4587,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         };
                         header.userData = clickContext;
 
-                        if (typesToShowInGroup.Count > 1)
+                        if (1 < typesToShowInGroup.Count)
                         {
                             namespaceLabel.AddToClassList(
                                 "type-selection-list-namespace--not-empty"
@@ -4727,7 +4733,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case KeyCode.DownArrow:
                 {
                     _typePopoverHighlightIndex++;
-                    if (_typePopoverHighlightIndex >= _currentTypePopoverItems.Count)
+                    if (_currentTypePopoverItems.Count <= _typePopoverHighlightIndex)
                     {
                         _typePopoverHighlightIndex = 0;
                     }
@@ -4750,7 +4756,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case KeyCode.KeypadEnter:
                 {
                     if (
-                        _typePopoverHighlightIndex >= 0
+                        0 <= _typePopoverHighlightIndex
                         && _typePopoverHighlightIndex < _currentTypePopoverItems.Count
                     )
                     {
@@ -4838,7 +4844,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                     else
                     {
-                        if (addableCount > 0)
+                        if (0 < addableCount)
                         {
                             BuildConfirmNamespaceAddPopoverContent(nsKey, addableTypes);
                             OpenPopover(_confirmNamespaceAddPopover, element, isNested: true);
@@ -5184,7 +5190,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             _objectListView.bindItem = (element, i) =>
             {
-                if (i >= 0 && i < _filteredObjects.Count)
+                if (0 <= i && i < _filteredObjects.Count)
                 {
                     BindObjectRow(element, _filteredObjects[i], i);
                 }
@@ -5571,7 +5577,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 !_currentUniqueLabelsForType.Contains(label)
             );
 
-            if (removedAnd > 0 || removedOr > 0)
+            if (0 < removedAnd || 0 < removedOr)
             {
                 configChanged = true;
             }
@@ -6165,7 +6171,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _confirmNamespaceAddPopover.style.paddingRight = 10;
 
             string message =
-                $"Add {countToAdd} type{(countToAdd > 1 ? "s" : "")} from namespace '<color=yellow><i>{namespaceKey}</i></color>' to Data Visualizer?";
+                $"Add {countToAdd} type{(1 < countToAdd ? "s" : "")} from namespace '<color=yellow><i>{namespaceKey}</i></color>' to Data Visualizer?";
             Label messageLabel = new(message)
             {
                 style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
@@ -6272,7 +6278,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _objectListView.RefreshItems();
                 _objectListView.style.display = DisplayStyle.None;
                 _emptyObjectLabel.text =
-                    _selectedObjects.Count > 0
+                    0 < _selectedObjects.Count
                         ? $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' match the current label filter."
                         : $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' found.";
                 _emptyObjectLabel.style.display = DisplayStyle.Flex;
@@ -6293,7 +6299,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _selectedObject != null ? _filteredObjects.IndexOf(_selectedObject) : -1;
             _suppressListSelectionCallback = true;
             _objectListView.SetSelectionWithoutNotify(
-                selectedIndex >= 0 ? new[] { selectedIndex } : Array.Empty<int>()
+                0 <= selectedIndex ? new[] { selectedIndex } : Array.Empty<int>()
             );
             _suppressListSelectionCallback = false;
         }
@@ -6978,7 +6984,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void PopulateProjectUniqueLabelsCache(bool force = false)
         {
-            if (!force && _isLabelCachePopulated && _projectUniqueLabelsCache.Count > 0)
+            if (!force && _isLabelCachePopulated && 0 < _projectUniqueLabelsCache.Count)
             {
                 return;
             }
@@ -7013,7 +7019,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             PopulateProjectUniqueLabelsCache();
-            if (_activePopover == null && _projectUniqueLabelsCache.Count > 0)
+            if (_activePopover == null && 0 < _projectUniqueLabelsCache.Count)
             {
                 OpenPopover(
                     _inspectorLabelSuggestionsPopover,
@@ -7045,7 +7051,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .Take(10)
                 .ToArray();
 
-            if (suggestions.Length > 0)
+            if (0 < suggestions.Length)
             {
                 foreach (string suggestionText in suggestions)
                 {
@@ -7107,7 +7113,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case KeyCode.DownArrow:
                 {
                     _labelSuggestionHighlightIndex++;
-                    if (_labelSuggestionHighlightIndex >= _currentLabelSuggestionItems.Count)
+                    if (_currentLabelSuggestionItems.Count <= _labelSuggestionHighlightIndex)
                     {
                         _labelSuggestionHighlightIndex = 0;
                     }
@@ -7130,7 +7136,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case KeyCode.KeypadEnter:
                 {
                     if (
-                        _labelSuggestionHighlightIndex >= 0
+                        0 <= _labelSuggestionHighlightIndex
                         && _labelSuggestionHighlightIndex < _currentLabelSuggestionItems.Count
                     )
                     {
@@ -7564,7 +7570,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             int index = _filteredObjects.IndexOf(dataObject);
-            if (index >= 0)
+            if (0 <= index)
             {
                 // Re-binds the row (BindObjectRow refreshes the title) without a full rebuild.
                 _objectListView.RefreshItem(index);
@@ -7876,7 +7882,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     SelectObjectAndNavigate(objectToSelect);
                 }
-                else if (_selectedObjects.Count > 0)
+                else if (0 < _selectedObjects.Count)
                 {
                     SelectObjectAndNavigate(_selectedObjects[0]);
                 }
@@ -7889,7 +7895,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             // Continue loading remaining batches
-            if (_pendingObjectGuids.Count > 0)
+            if (0 < _pendingObjectGuids.Count)
             {
                 if (EnableAsyncLoadDebugLog)
                 {
@@ -8034,7 +8040,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             LoadObjectBatch(type, batch, true);
 
-            if (_pendingObjectGuids.Count > 0)
+            if (0 < _pendingObjectGuids.Count)
             {
                 // Schedule next batch
                 _asyncLoadTask = rootVisualElement.schedule.Execute(() =>
@@ -8073,7 +8079,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _isLoadingObjectsAsync
                 && _asyncLoadTargetType == selectedType
                 && selectedType != null
-                && totalCount > loadedCount
+                && loadedCount < totalCount
             )
             {
                 _objectLoadingIndicator.style.display = DisplayStyle.Flex;
@@ -8221,7 +8227,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     .schedule.Execute(() =>
                     {
                         int i = _filteredObjects.IndexOf(dataObject);
-                        if (i >= 0 && _objectListView != null)
+                        if (0 <= i && _objectListView != null)
                         {
                             _objectListView.ScrollToItem(i);
                         }
@@ -8270,7 +8276,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (_selectedObject != null)
             {
                 int i = _filteredObjects.IndexOf(_selectedObject);
-                if (i >= 0)
+                if (0 <= i)
                 {
                     _suppressListSelectionCallback = true;
                     _objectListView.SetSelectionWithoutNotify(new[] { i });
@@ -8280,7 +8286,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             // Ensure the dropped item ends up fully in view — drag auto-panning can leave it at the
             // edge. Deferred so the ListView finishes settling the reordered layout first.
-            if (toIndex >= 0 && toIndex < _filteredObjects.Count)
+            if (0 <= toIndex && toIndex < _filteredObjects.Count)
             {
                 int scrollIndex = toIndex;
                 rootVisualElement
@@ -8303,7 +8309,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 int index = dataObject != null ? _filteredObjects.IndexOf(dataObject) : -1;
                 _suppressListSelectionCallback = true;
-                if (index >= 0)
+                if (0 <= index)
                 {
                     _objectListView.SetSelectionWithoutNotify(new[] { index });
                     _objectListView.ScrollToItem(index);
@@ -8527,7 +8533,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             int oldDataIndex = _namespaceOrder.GetValueOrDefault(draggedKey, -1);
-            if (0 > oldDataIndex)
+            if (oldDataIndex < 0)
             {
                 return;
             }
@@ -9361,7 +9367,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             switch (indexA)
             {
-                case >= 0 when indexB >= 0:
+                case >= 0 when 0 <= indexB:
                     return indexA.CompareTo(indexB);
                 case >= 0:
                     return -1;

@@ -51,9 +51,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 return false;
             }
 
-            return states.RemoveAll(state =>
+            return 0
+                < states.RemoveAll(state =>
                     string.Equals(state?.namespaceKey, namespaceKey, StringComparison.Ordinal)
-                ) > 0;
+                );
         }
 
         public NamespaceCollapseState Clone()

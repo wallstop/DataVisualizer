@@ -53,7 +53,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
             switch (indexA)
             {
-                case >= 0 when indexB >= 0:
+                case >= 0 when 0 <= indexB:
                     return indexA.CompareTo(indexB);
                 case >= 0:
                     return -1;
