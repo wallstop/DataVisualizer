@@ -9451,6 +9451,53 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        internal bool TryApplyPersistenceModeFromAutomation(
+            bool persistInSettingsAsset,
+            out string diagnostic
+        )
+        {
+            diagnostic = string.Empty;
+            if (_isPlayModeSuspended)
+            {
+                diagnostic = "Persistence mode cannot change while the window is suspended.";
+                return false;
+            }
+
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset == persistInSettingsAsset)
+            {
+                return true;
+            }
+
+            try
+            {
+                if (persistInSettingsAsset)
+                {
+                    settings.persistStateInSettingsAsset = true;
+                    settings.HydrateFrom(UserState);
+                    settings.MarkDirty();
+                    AssetDatabase.SaveAssets();
+                }
+                else
+                {
+                    DataVisualizerUserState stateToPersist = UserState;
+                    stateToPersist.HydrateFrom(settings);
+                    settings.persistStateInSettingsAsset = false;
+                    File.WriteAllText(_userStateFilePath, JsonUtility.ToJson(stateToPersist, true));
+                    settings.MarkDirty();
+                    AssetDatabase.SaveAssets();
+                }
+
+                return true;
+            }
+            catch (Exception exception)
+            {
+                settings.persistStateInSettingsAsset = !persistInSettingsAsset;
+                diagnostic = $"Persistence state migration failed: {exception.Message}";
+                return false;
+            }
+        }
+
         private string GetLastSelectedNamespaceKey()
         {
             DataVisualizerSettings settings = Settings;

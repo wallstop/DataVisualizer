@@ -6,6 +6,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
     using System.Linq;
     using UnityEditor;
     using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor;
     using WallstopStudios.DataVisualizer.Editor.Data;
 
     [Serializable]
@@ -188,7 +189,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             DataVisualizerSettings settings = LoadSettings();
             bool persistenceModeChanged =
                 settings.persistStateInSettingsAsset != copy.persistStateInSettingsAsset;
-            if (
+            if (persistenceModeChanged && DataVisualizer.Instance != null)
+            {
+                if (
+                    !DataVisualizer.Instance.TryApplyPersistenceModeFromAutomation(
+                        copy.persistStateInSettingsAsset,
+                        out diagnostic
+                    )
+                )
+                {
+                    return DataVisualizerOperationResult.Failure(diagnostic);
+                }
+            }
+            else if (
                 persistenceModeChanged
                 && !TryMigratePersistenceState(
                     settings,
