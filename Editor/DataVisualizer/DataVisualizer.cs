@@ -550,19 +550,34 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
-            string dataFolderPath = Settings.DataFolderPath;
 
             // Collect all GUIDs first (fast, no asset loading)
             foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
             {
-                string[] guids = AssetGuidDiscovery.FindCandidates(type, dataFolderPath);
+                string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
                 foreach (string guid in guids)
                 {
-                    if (uniqueGuids.Add(guid))
+                    uniqueGuids.Add(guid);
+                }
+
+                AssetGuidDiscovery.AddResolvedGuids(type, GetObjectOrderForType(type), uniqueGuids);
+                string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
+                if (!uniqueGuids.Contains(savedObjectGuid))
+                {
+                    savedObjectGuid = AssetGuidDiscovery.NormalizeGuidForType(
+                        type,
+                        savedObjectGuid
+                    );
+                    if (savedObjectGuid != null)
                     {
-                        _pendingSearchCacheGuids.Enqueue(guid);
+                        uniqueGuids.Add(savedObjectGuid);
                     }
                 }
+            }
+
+            foreach (string guid in uniqueGuids)
+            {
+                _pendingSearchCacheGuids.Enqueue(guid);
             }
 
             // Do NOT mark the cache populated here — the assets aren't loaded until the batches
@@ -3797,7 +3812,18 @@ namespace WallstopStudios.DataVisualizer.Editor
             string uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
             if (!string.Equals(proposedPath, uniquePath, StringComparison.Ordinal))
             {
-                errorLabel.text = "Name is not unique.";
+                ScriptableObject existingAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
+                    proposedPath
+                );
+                if (existingAsset != null && existingAsset.GetType() == type)
+                {
+                    AddObjectToActiveTypeAndPersist(type, existingAsset, proposedPath);
+                    errorLabel.text = "Name is not unique. The existing asset is now shown.";
+                }
+                else
+                {
+                    errorLabel.text = "Name is not unique.";
+                }
                 errorLabel.style.display = DisplayStyle.Flex;
                 return;
             }
@@ -3816,24 +3842,55 @@ namespace WallstopStudios.DataVisualizer.Editor
             creatable?.AfterCreate();
 
             CloseActivePopover();
-            if (type == _namespaceController.SelectedType)
-            {
-                if (_isLoadingObjectsAsync)
-                {
-                    // A load is still streaming assets in by canonical order. Give the new instance an
-                    // order past all of them so it sorts to the end and the loader's binary-search
-                    // inserts stay consistent (they assume _selectedObjects is ordered by this index).
-                    _selectedObjectOrderIndex[instance] = int.MaxValue;
-                    string instanceGuid = AssetDatabase.AssetPathToGUID(uniquePath);
-                    if (!string.IsNullOrWhiteSpace(instanceGuid))
-                    {
-                        _asyncDisplayOrderByGuid[instanceGuid] = int.MaxValue;
-                    }
-                }
+            AddObjectToActiveTypeAndPersist(type, instance, uniquePath);
+        }
 
-                _selectedObjects.Add(instance);
-                BuildObjectsView();
+        private void AddObjectToActiveTypeAndPersist(
+            Type type,
+            ScriptableObject instance,
+            string assetPath
+        )
+        {
+            if (instance == null)
+            {
+                return;
             }
+
+            if (type != _namespaceController.SelectedType)
+            {
+                List<string> objectGuids = GetObjectOrderForType(type);
+                string instanceGuid = AssetDatabase.AssetPathToGUID(assetPath);
+                if (
+                    !string.IsNullOrWhiteSpace(instanceGuid)
+                    && !objectGuids.Contains(instanceGuid, StringComparer.OrdinalIgnoreCase)
+                )
+                {
+                    objectGuids.Add(instanceGuid);
+                    SetObjectOrderForType(type.FullName, objectGuids);
+                }
+                return;
+            }
+
+            if (_isLoadingObjectsAsync)
+            {
+                // A load is still streaming assets in by canonical order. Give the new instance an
+                // order past all of them so it sorts to the end and the loader's binary-search
+                // inserts stay consistent (they assume _selectedObjects is ordered by this index).
+                _selectedObjectOrderIndex[instance] = int.MaxValue;
+                string instanceGuid = AssetDatabase.AssetPathToGUID(assetPath);
+                if (!string.IsNullOrWhiteSpace(instanceGuid))
+                {
+                    _asyncDisplayOrderByGuid[instanceGuid] = int.MaxValue;
+                }
+            }
+
+            if (!_selectedObjects.Contains(instance))
+            {
+                _selectedObjects.Add(instance);
+            }
+
+            UpdateAndSaveObjectOrderList(type, _selectedObjects);
+            BuildObjectsView();
         }
 
         private void HandleRenameConfirmed(Label titleLabel, TextField nameField, Label errorLabel)
@@ -4022,12 +4079,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             _filteredObjects.RemoveAll(obj => obj == null);
             _selectedObjectOrderIndex.Remove(objectToDelete);
             int targetIndex = _selectedObject == objectToDelete ? Mathf.Max(0, index - 1) : 0;
-            string deletedTypeFullName = objectToDelete.GetType().FullName;
+            Type deletedType = objectToDelete.GetType();
+            string deletedTypeFullName = deletedType.FullName;
             string deletedGuid = AssetDatabase.AssetPathToGUID(path);
 
             bool deleted = AssetDatabase.DeleteAsset(path);
             if (deleted)
             {
+                _asyncDisplayOrderByGuid.Remove(deletedGuid);
+                UpdateAndSaveObjectOrderList(deletedType, _selectedObjects);
                 if (
                     string.Equals(
                         GetLastSelectedObjectGuidForType(deletedTypeFullName),
@@ -6557,6 +6617,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
                 EditorUtility.DisplayDialog("Invalid Move Operation", errorMessage, "OK");
             }
+            else
+            {
+                UpdateAndSaveObjectOrderList(dataObject.GetType(), _selectedObjects);
+            }
         }
 
         private void BuildInspectorView()
@@ -7546,10 +7610,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
 
             // Get all GUIDs for this type
-            string[] allGuids = IncludeResolvedSavedObjectGuid(
+            string[] allGuids = AssetGuidDiscovery.MergeCandidates(
                 type,
+                AssetDatabase.FindAssets($"t:{type.Name}"),
+                customGuidOrder,
                 savedObjectGuid,
-                AssetGuidDiscovery.FindCandidates(type, Settings.DataFolderPath),
                 out string normalizedSavedObjectGuid
             );
             if (!string.IsNullOrWhiteSpace(savedObjectGuid) && normalizedSavedObjectGuid == null)
@@ -7888,74 +7953,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 BuildObjectsView();
             }
-        }
-
-        public static bool TryResolveAssetGuidForType(
-            string assetGuid,
-            Type type,
-            out string assetPath
-        )
-        {
-            assetPath = null;
-            if (string.IsNullOrWhiteSpace(assetGuid) || type == null)
-            {
-                return false;
-            }
-
-            assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
-            if (string.IsNullOrWhiteSpace(assetPath))
-            {
-                assetPath = null;
-                return false;
-            }
-
-            ScriptableObject asset =
-                AssetDatabase.LoadMainAssetAtPath(assetPath) as ScriptableObject;
-            if (asset == null || asset.GetType() != type)
-            {
-                assetPath = null;
-                return false;
-            }
-
-            return true;
-        }
-
-        public static string[] IncludeResolvedSavedObjectGuid(
-            Type type,
-            string savedObjectGuid,
-            IEnumerable<string> discoveredGuids,
-            out string normalizedSavedObjectGuid
-        )
-        {
-            normalizedSavedObjectGuid = null;
-            string[] guids =
-                discoveredGuids?.Where(guid => !string.IsNullOrWhiteSpace(guid)).ToArray()
-                ?? Array.Empty<string>();
-
-            string matchingGuid = guids.FirstOrDefault(guid =>
-                string.Equals(guid, savedObjectGuid, StringComparison.OrdinalIgnoreCase)
-            );
-            if (!string.IsNullOrWhiteSpace(matchingGuid))
-            {
-                normalizedSavedObjectGuid = NormalizeSavedObjectGuidForType(matchingGuid, type);
-                return guids;
-            }
-
-            normalizedSavedObjectGuid = NormalizeSavedObjectGuidForType(savedObjectGuid, type);
-            return normalizedSavedObjectGuid == null
-                ? guids
-                : guids.Append(normalizedSavedObjectGuid).ToArray();
-        }
-
-        private static string NormalizeSavedObjectGuidForType(string assetGuid, Type type)
-        {
-            if (!TryResolveAssetGuidForType(assetGuid, type, out string assetPath))
-            {
-                return null;
-            }
-
-            string canonicalGuid = AssetDatabase.AssetPathToGUID(assetPath);
-            return string.IsNullOrWhiteSpace(canonicalGuid) ? assetGuid : canonicalGuid;
         }
 
         private void ContinueLoadingObjects(Type type, int loadGeneration)

@@ -40,6 +40,22 @@ metadata:
   explicit migration; never orphan saved keys silently.
 - EditorPrefs keys share the `PrefsPrefix` const; reuse the prefix for new keys.
 
+## Asset Discovery
+
+- Treat `AssetDatabase.FindAssets` as an I/O boundary. Call it once per logical
+  type refresh unless a measured requirement justifies another query, and reuse its
+  returned array when no merge is needed.
+- Search folders constrain a query; they cannot express "this type anywhere OR any
+  asset in this folder." Do not simulate that union with repeated searches in a
+  per-type loop.
+- Unity type filters can omit editor-only `ScriptableObject` assets whose class has
+  no matching `MonoScript`. Persist exact asset GUIDs at create, clone, reorder, and
+  move boundaries, remove them on delete, then validate and merge those direct GUIDs
+  with the single type query.
+- Validate direct GUIDs with `GetMainAssetTypeAtPath` and exact type equality. Do not
+  instantiate arbitrary user types to probe script metadata or broaden the fallback
+  into a project-wide asset scan.
+
 ## Filtering and Search
 
 - Label filtering is config-driven (`TypeLabelFilterConfig` with AND/OR combination
