@@ -80,6 +80,10 @@ still require the work tracked by issue #21. A report's
 `playEntryTargetMet` must be true before the 20 ms acceptance target can be
 considered satisfied; measured misses remain misses.
 
+Successful `--keep-fixture` runs retain the verified fixture for inspection;
+failed runs still clean it up. Without that flag, a run is accepted only when
+the report proves both fixture verification and cleanup completion.
+
 ## Play Mode suspension scenario
 
 Use `playmode_suspension_driver.py` for the lifecycle matrix tracked by issue

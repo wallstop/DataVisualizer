@@ -19,6 +19,7 @@ from benchmark_driver import (
     parse_fixture_size,
     planned_execution,
     render_bootstrap,
+    validate_result,
     write_comparison_report,
 )
 
@@ -50,6 +51,69 @@ class BenchmarkDriverTests(unittest.TestCase):
     def test_matrix_parser_rejects_duplicate_sizes(self):
         with self.assertRaises(argparse.ArgumentTypeError):
             parse_sizes("100,100")
+
+    def test_validate_result_requires_fixture_and_cleanup_evidence(self):
+        parser = build_argument_parser()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(__file__).resolve().parents[2]
+            arguments = parser.parse_args(
+                [
+                    "--host-project",
+                    "/host/DataVisualizer",
+                    "--unity-version",
+                    "6000.4.6f1",
+                    "--fixture-size",
+                    "100",
+                    "--output-dir",
+                    temporary,
+                    "--mode",
+                    "mcp",
+                ]
+            )
+            config = config_from_args(arguments, root)
+            result = {
+                "status": "completed",
+                "unityVersion": "6000.4.6f1",
+                "fixtureSize": 100,
+                "fixtureVerified": False,
+                "fixtureAssetCount": 100,
+                "cleanupCompleted": True,
+            }
+            with self.assertRaises(BenchmarkError):
+                validate_result(config, result)
+            result["fixtureVerified"] = True
+            result["cleanupCompleted"] = False
+            with self.assertRaises(BenchmarkError):
+                validate_result(config, result)
+
+    def test_validate_result_allows_kept_fixture_without_cleanup(self):
+        parser = build_argument_parser()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(__file__).resolve().parents[2]
+            arguments = parser.parse_args(
+                [
+                    "--host-project",
+                    "/host/DataVisualizer",
+                    "--unity-version",
+                    "6000.4.6f1",
+                    "--fixture-size",
+                    "100",
+                    "--output-dir",
+                    temporary,
+                    "--mode",
+                    "mcp",
+                    "--keep-fixture",
+                ]
+            )
+            result = {
+                "status": "completed",
+                "unityVersion": "6000.4.6f1",
+                "fixtureSize": 100,
+                "fixtureVerified": True,
+                "fixtureAssetCount": 100,
+                "cleanupCompleted": False,
+            }
+            self.assertEqual(validate_result(config_from_args(arguments, root), result), result)
 
     def test_parse_fixture_size_accepts_supported_values(self):
         self.assertEqual(parse_fixture_size("10,000"), 10_000)

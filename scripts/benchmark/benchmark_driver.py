@@ -401,6 +401,11 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         {
             try
             {
+                bool preserveSuccessfulFixture = KeepFixture && _result?.status == "completed";
+                if (preserveSuccessfulFixture)
+                {
+                    return "cleanup-complete-fixture-kept";
+                }
                 CleanupFixture();
                 return "cleanup-complete";
             }
@@ -1253,6 +1258,15 @@ def validate_result(config: BenchmarkConfig, result: dict[str, Any]) -> dict[str
         raise BenchmarkError(
             f"Fixture size mismatch: requested {config.fixture_size}, got {result.get('fixtureSize')}"
         )
+    if result.get("fixtureVerified") is not True:
+        raise BenchmarkError("Unity benchmark did not verify its fixture contents")
+    if result.get("fixtureAssetCount") != config.fixture_size:
+        raise BenchmarkError(
+            "Fixture asset count mismatch: "
+            f"expected {config.fixture_size}, got {result.get('fixtureAssetCount')}"
+        )
+    if not config.keep_fixture and result.get("cleanupCompleted") is not True:
+        raise BenchmarkError("Unity benchmark did not report completed fixture cleanup")
     return result
 
 
