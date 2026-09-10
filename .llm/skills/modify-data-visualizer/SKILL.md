@@ -53,8 +53,13 @@ metadata:
   move boundaries, remove them on delete, then validate and merge those direct GUIDs
   with the single type query.
 - Validate direct GUIDs with `GetMainAssetTypeAtPath` and exact type equality. Do not
-  instantiate arbitrary user types to probe script metadata or broaden the fallback
-  into a project-wide asset scan.
+  instantiate arbitrary user types to probe script metadata or broaden a per-type
+  refresh into a synchronous project-wide asset scan.
+- Never-registered assets missed by Unity's type filters come from the shared lazy
+  `AssetGuidTypeIndex`. It snapshots project `.asset` paths after first use, classifies
+  them cooperatively through `GetMainAssetTypeAtPath`, and refreshes the window after
+  completion. Keep this index exact-type, load-free, shared across managed types, and
+  maintained by the asset postprocessor rather than adding another fallback scan.
 - Discovery is intentionally limited to exact main assets. Derived instances and
   subassets do not satisfy a selected base/main type; keep this boundary covered by
   tests instead of broadening equality to assignability.

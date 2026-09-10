@@ -102,6 +102,10 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     syntax. Keep `!=` when expressing genuine inequality or null checks; do not wrap
     `==` in a negation merely to avoid it. Before reversing user-defined operators,
     verify the swapped operands and paired operator preserve behavior.
+20. Prefer one declared class, struct, interface, or enum per `.cs` file. Unity object
+    types must use a matching filename so Unity can associate the script reliably.
+    Keep any deliberately nonconforming regression fixture isolated and document why
+    it must model an external project's unsupported layout.
 
 ### Skills Discipline
 

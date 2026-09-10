@@ -415,6 +415,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             minSize = new Vector2(MinWindowWidth, MinWindowHeight);
             _nextColorIndex = 0;
             Instance = this;
+            AssetGuidTypeIndex.IndexCompleted -= SignalRefresh;
+            AssetGuidTypeIndex.IndexCompleted += SignalRefresh;
             _isSearchCachePopulated = false;
             _selectedObject = null;
             _selectedObjects.Clear();
@@ -470,6 +472,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void Cleanup()
         {
+            AssetGuidTypeIndex.IndexCompleted -= SignalRefresh;
+            if (!AssetGuidTypeIndex.IsComplete)
+            {
+                AssetGuidTypeIndex.Cancel();
+            }
+
             if (Instance == this)
             {
                 Instance = null;
@@ -551,36 +559,24 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
             int resolvedReferenceCount = 0;
+            AssetGuidTypeIndex.EnsureStarted();
 
             // Collect all GUIDs first (fast, no asset loading)
             foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
             {
-                string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
+                string[] typeFilterGuids = AssetDatabase.FindAssets($"t:{type.Name}");
+                string[] guids = AssetGuidDiscovery.MergeCandidates(
+                    type,
+                    typeFilterGuids,
+                    GetObjectOrderForType(type),
+                    GetLastSelectedObjectGuidForType(type.FullName),
+                    out _
+                );
                 foreach (string guid in guids)
                 {
                     uniqueGuids.Add(guid);
                 }
-
-                resolvedReferenceCount += AssetGuidDiscovery.AddResolvedGuids(
-                    type,
-                    GetObjectOrderForType(type),
-                    uniqueGuids
-                );
-                string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
-                if (
-                    !uniqueGuids.Contains(savedObjectGuid)
-                    && AssetGuidDiscovery.TryNormalizeGuidForType(
-                        type,
-                        savedObjectGuid,
-                        out string normalizedSavedObjectGuid
-                    )
-                )
-                {
-                    if (uniqueGuids.Add(normalizedSavedObjectGuid))
-                    {
-                        resolvedReferenceCount++;
-                    }
-                }
+                resolvedReferenceCount += guids.Length - typeFilterGuids.Length;
             }
 
             foreach (string guid in uniqueGuids)
@@ -7665,6 +7661,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
 
             // Get all GUIDs for this type
+            AssetGuidTypeIndex.EnsureStarted();
             string[] allGuids = AssetGuidDiscovery.MergeCandidates(
                 type,
                 AssetDatabase.FindAssets($"t:{type.Name}"),

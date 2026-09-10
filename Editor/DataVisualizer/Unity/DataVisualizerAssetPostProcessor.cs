@@ -7,6 +7,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
     using Data;
     using UnityEditor;
     using UnityEngine;
+    using Utilities;
 
     public sealed class DataVisualizerAssetProcessor : AssetPostprocessor
     {
@@ -17,6 +18,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             string[] movedFromAssetPaths
         )
         {
+            AssetGuidTypeIndex.ApplyAssetChanges(
+                importedAssets,
+                deletedAssets,
+                movedAssets,
+                movedFromAssetPaths
+            );
+
             if (
                 importedAssets.Length <= 0
                 && deletedAssets.Length <= 0

@@ -20,10 +20,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool candidateAdded = false;
             string normalizedSavedGuid = null;
 
-            if (referencedGuids != null && 0 < referencedGuids.Count)
+            IReadOnlyList<string> indexedGuids = AssetGuidTypeIndex.GetKnownGuids(type);
+            if (0 < indexedGuids.Count)
             {
                 candidateLookup = new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
-                candidateAdded = 0 < AddResolvedGuids(type, referencedGuids, candidateLookup);
+                foreach (string indexedGuid in indexedGuids)
+                {
+                    candidateAdded |= candidateLookup.Add(indexedGuid);
+                }
+            }
+
+            if (referencedGuids != null && 0 < referencedGuids.Count)
+            {
+                candidateLookup ??= new HashSet<string>(
+                    candidates,
+                    StringComparer.OrdinalIgnoreCase
+                );
+                candidateAdded |= 0 < AddResolvedGuids(type, referencedGuids, candidateLookup);
             }
 
             if (TryNormalizeGuidForType(type, savedObjectGuid, out string normalizedGuid))

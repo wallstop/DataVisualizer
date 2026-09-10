@@ -8,9 +8,120 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using UnityEditor;
     using UnityEngine;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
+    using CollisionA = WallstopStudios.DataVisualizer.Tests.Editor.TypeIdentityCollision.First.Data;
+    using CollisionB = WallstopStudios.DataVisualizer.Tests.Editor.TypeIdentityCollision.Second.Data;
 
     public sealed class AssetGuidDiscoveryTests
     {
+        private static string _indexRootFolder;
+        private static string _neverRegisteredGuid;
+        private static string _firstCollisionGuid;
+        private static string _secondCollisionGuid;
+
+        [OneTimeSetUp]
+        public void BuildProjectAssetTypeIndex()
+        {
+            _indexRootFolder =
+                "Assets/DataVisualizerAssetGuidTypeIndexTests_" + Guid.NewGuid().ToString("N");
+            EnsureFolderExists(_indexRootFolder);
+            _neverRegisteredGuid = CreateAsset(
+                ScriptableObject.CreateInstance<EditorOnlyCreationData>(),
+                _indexRootFolder + "/NeverRegistered.asset"
+            );
+            _firstCollisionGuid = CreateAsset(
+                ScriptableObject.CreateInstance<CollisionA.OrderCollisionData>(),
+                _indexRootFolder + "/FirstCollision.asset"
+            );
+            _secondCollisionGuid = CreateAsset(
+                ScriptableObject.CreateInstance<CollisionB.OrderCollisionData>(),
+                _indexRootFolder + "/SecondCollision.asset"
+            );
+            AssetDatabase.SaveAssets();
+
+            AssetGuidTypeIndex.Rebuild();
+            AssetGuidTypeIndex.ProcessPendingSlice(double.PositiveInfinity);
+            AssetGuidTypeIndex.ProcessPendingSlice(double.PositiveInfinity);
+            Assert.IsTrue(AssetGuidTypeIndex.IsComplete);
+        }
+
+        [OneTimeTearDown]
+        public void ClearProjectAssetTypeIndex()
+        {
+            AssetGuidTypeIndex.Cancel();
+            AssetDatabase.DeleteAsset(_indexRootFolder);
+            AssetDatabase.Refresh();
+        }
+
+        [Test]
+        public void Should_IncludeNeverRegisteredAsset_When_ProjectIndexRebuildCompletes()
+        {
+            string[] typeFilterGuids = AssetDatabase.FindAssets(
+                $"t:{nameof(EditorOnlyCreationData)}"
+            );
+
+            string[] discoveredGuids = AssetGuidDiscovery.MergeCandidates(
+                typeof(EditorOnlyCreationData),
+                typeFilterGuids,
+                Array.Empty<string>(),
+                null,
+                out _
+            );
+
+            CollectionAssert.DoesNotContain(typeFilterGuids, _neverRegisteredGuid);
+            CollectionAssert.Contains(discoveredGuids, _neverRegisteredGuid);
+        }
+
+        [Test]
+        public void Should_KeepIndexedGuidsSeparate_When_ShortTypeNamesCollide()
+        {
+            IReadOnlyList<string> firstGuids = AssetGuidTypeIndex.GetKnownGuids(
+                typeof(CollisionA.OrderCollisionData)
+            );
+            IReadOnlyList<string> secondGuids = AssetGuidTypeIndex.GetKnownGuids(
+                typeof(CollisionB.OrderCollisionData)
+            );
+
+            CollectionAssert.Contains(firstGuids, _firstCollisionGuid);
+            CollectionAssert.DoesNotContain(firstGuids, _secondCollisionGuid);
+            CollectionAssert.Contains(secondGuids, _secondCollisionGuid);
+            CollectionAssert.DoesNotContain(secondGuids, _firstCollisionGuid);
+        }
+
+        [Test]
+        public void Should_UpdateCompletedIndex_When_AssetIsImportedAndDeleted()
+        {
+            string assetPath = _indexRootFolder + "/ImportedAfterIndex.asset";
+            string assetGuid = CreateAsset(
+                ScriptableObject.CreateInstance<EditorOnlyCreationData>(),
+                assetPath
+            );
+            AssetDatabase.SaveAssets();
+
+            AssetGuidTypeIndex.ApplyAssetChanges(
+                Array.Empty<string>(),
+                new[] { assetPath },
+                Array.Empty<string>(),
+                Array.Empty<string>()
+            );
+
+            AssetGuidTypeIndex.ApplyAssetChanges(
+                new[] { assetPath },
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<string>()
+            );
+            CollectionAssert.Contains(
+                AssetGuidTypeIndex.GetKnownGuids(typeof(EditorOnlyCreationData)),
+                assetGuid
+            );
+
+            AssetDatabase.DeleteAsset(assetPath);
+            CollectionAssert.DoesNotContain(
+                AssetGuidTypeIndex.GetKnownGuids(typeof(EditorOnlyCreationData)),
+                assetGuid
+            );
+        }
+
         [Test]
         public void Should_IncludeReferencedAsset_When_TypeFilterDoesNotReturnIt()
         {
@@ -70,7 +181,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string[] discoveredGuids = { "already-discovered" };
 
             string[] mergedGuids = AssetGuidDiscovery.MergeCandidates(
-                typeof(EditorOnlyCreationData),
+                typeof(UnindexedAssetGuidDiscoveryData),
                 discoveredGuids,
                 Array.Empty<string>(),
                 null,
@@ -112,7 +223,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
                 string[] mergedGuids = AssetGuidDiscovery.MergeCandidates(
-                    typeof(EditorOnlyCreationData),
+                    typeof(UnindexedAssetGuidDiscoveryData),
                     Array.Empty<string>(),
                     new[] { assetGuid },
                     null,
@@ -254,13 +365,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 current = next;
             }
         }
+
+        private static string CreateAsset(ScriptableObject asset, string assetPath)
+        {
+            AssetDatabase.CreateAsset(asset, assetPath);
+            return AssetDatabase.AssetPathToGUID(assetPath);
+        }
     }
-
-    public class EditorOnlyCreationData : ScriptableObject { }
-
-    public sealed class OtherEditorOnlyCreationData : ScriptableObject { }
-
-    public sealed class DerivedEditorOnlyCreationData : EditorOnlyCreationData { }
-
-    public sealed class EditorOnlyCreationSubasset : ScriptableObject { }
 }
