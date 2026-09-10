@@ -1,0 +1,57 @@
+name: Documentation issue
+description: Report incorrect, missing, or unclear documentation
+title: "[Docs]: "
+labels:
+  - documentation
+  - triage
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Page, file, or section
+      description: Link to the page or identify the README heading or source file.
+      placeholder: README.md > Installation
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Documentation problem
+      description: Explain what is incorrect, missing, outdated, or unclear.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-correction
+    attributes:
+      label: Expected correction
+      description: Describe what a reader should learn or be able to do after the change.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested priority
+      description: Maintainers may adjust this classification during triage.
+      options:
+        - "P1 - instructions cause data loss or make the package unusable"
+        - "P2 - incorrect or missing guidance blocks a normal workflow"
+        - "P3 - clarity, wording, or low-impact omission"
+      default: 2
+    validations:
+      required: true
+
+  - type: input
+    id: package-version
+    attributes:
+      label: Data Visualizer version or revision
+      description: Provide this when the documentation differs by release.
+      placeholder: 0.0.37 or b9266ec
+
+  - type: textarea
+    id: suggested-text
+    attributes:
+      label: Suggested text or example
+      description: Optional proposed wording, code, screenshot, or link.

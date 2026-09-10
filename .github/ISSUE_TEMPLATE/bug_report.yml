@@ -1,0 +1,113 @@
+name: Bug report
+description: Report broken or unexpected Data Visualizer behavior
+title: "[Bug]: "
+labels:
+  - bug
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please include enough detail for someone else to reproduce it in a clean Unity project.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What went wrong, and what user-facing impact does it have?
+      placeholder: Describe the problem and its impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: List the smallest sequence that consistently demonstrates the problem.
+      placeholder: |
+        1. Create or open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      placeholder: Explain what should happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+      placeholder: Explain what happens instead, including the exact error text when available.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested priority
+      description: Maintainers may adjust this classification during triage.
+      options:
+        - "P0 - data loss, security issue, or unusable package"
+        - "P1 - major feature broken with no practical workaround"
+        - "P2 - normal defect or a workaround exists"
+        - "P3 - minor, cosmetic, or low-impact problem"
+      default: 2
+    validations:
+      required: true
+
+  - type: input
+    id: unity-version
+    attributes:
+      label: Unity version
+      description: Include the full editor version from About Unity or ProjectVersion.txt.
+      placeholder: 6000.4.6f1
+    validations:
+      required: true
+
+  - type: input
+    id: package-version
+    attributes:
+      label: Data Visualizer version or revision
+      description: Provide the package version, Git tag, branch, or commit SHA.
+      placeholder: 0.0.37 or b9266ec
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the editor OS, installation source, relevant packages, and Data Visualizer persistence mode.
+      placeholder: |
+        Editor OS: Windows 11
+        Installation source: Git URL
+        Related packages: ...
+        Persistence mode: per-user JSON
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, or sample project
+      description: Drag in screenshots or files and include relevant Console output. Remove secrets and private data first.
+      placeholder: Attach evidence or explain why none is available.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Regression status
+      options:
+        - Unknown or not tested
+        - Regression - worked in an earlier version
+        - Not a regression - never worked in the tested setup
+    validations:
+      required: true
