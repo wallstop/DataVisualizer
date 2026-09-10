@@ -43,9 +43,55 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 return false;
             }
 
-            dataFolderPath = normalizedPath;
-            diagnostic = string.Empty;
-            return true;
+            try
+            {
+                string assetRoot = Path.GetFullPath(Application.dataPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string relativePath =
+                    normalizedPath.Length == "Assets".Length
+                        ? string.Empty
+                        : normalizedPath.Substring("Assets/".Length);
+                string candidate = Path.GetFullPath(Path.Combine(assetRoot, relativePath));
+                if (
+                    !candidate.Equals(assetRoot, StringComparison.OrdinalIgnoreCase)
+                    && !candidate.StartsWith(
+                        assetRoot + Path.DirectorySeparatorChar,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                    && !candidate.StartsWith(
+                        assetRoot + Path.AltDirectorySeparatorChar,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    diagnostic = "dataFolderPath must resolve inside the Assets folder.";
+                    return false;
+                }
+
+                string canonicalRelativePath = candidate
+                    .Substring(assetRoot.Length)
+                    .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                dataFolderPath = string.IsNullOrEmpty(canonicalRelativePath)
+                    ? "Assets"
+                    : "Assets/" + canonicalRelativePath.Replace('\\', '/');
+                diagnostic = string.Empty;
+                return true;
+            }
+            catch (ArgumentException exception)
+            {
+                diagnostic = $"dataFolderPath is invalid: {exception.Message}";
+                return false;
+            }
+            catch (IOException exception)
+            {
+                diagnostic = $"dataFolderPath is invalid: {exception.Message}";
+                return false;
+            }
+            catch (NotSupportedException exception)
+            {
+                diagnostic = $"dataFolderPath is invalid: {exception.Message}";
+                return false;
+            }
         }
     }
 
@@ -104,6 +150,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
     public static class DataVisualizerAutomation
     {
         private const string SettingsPath = "Assets/Editor/DataVisualizerSettings.asset";
+        private const string UserStateFileName = "DataVisualizerUserState.json";
 
         public static DataVisualizerConfiguration ReadConfiguration()
         {
@@ -139,6 +186,20 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             }
 
             DataVisualizerSettings settings = LoadSettings();
+            bool persistenceModeChanged =
+                settings.persistStateInSettingsAsset != copy.persistStateInSettingsAsset;
+            if (
+                persistenceModeChanged
+                && !TryMigratePersistenceState(
+                    settings,
+                    copy.persistStateInSettingsAsset,
+                    out diagnostic
+                )
+            )
+            {
+                return DataVisualizerOperationResult.Failure(diagnostic);
+            }
+
             settings._dataFolderPath = copy.dataFolderPath;
             settings.persistStateInSettingsAsset = copy.persistStateInSettingsAsset;
             settings.selectActiveObject = copy.selectActiveObject;
@@ -349,6 +410,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 return settings;
             }
 
+            DataVisualizerSettings[] foundSettings = AssetDatabase
+                .FindAssets($"t:{nameof(DataVisualizerSettings)}")
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Select(AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>)
+                .Where(candidate => candidate != null)
+                .ToArray();
+            if (foundSettings.Length > 0)
+            {
+                return foundSettings[0];
+            }
+
             string directory = Path.GetDirectoryName(SettingsPath)?.Replace('\\', '/');
             if (!string.IsNullOrWhiteSpace(directory) && !AssetDatabase.IsValidFolder(directory))
             {
@@ -359,6 +431,55 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             AssetDatabase.CreateAsset(settings, SettingsPath);
             AssetDatabase.SaveAssets();
             return AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(SettingsPath) ?? settings;
+        }
+
+        private static bool TryMigratePersistenceState(
+            DataVisualizerSettings settings,
+            bool migrateToSettingsAsset,
+            out string diagnostic
+        )
+        {
+            try
+            {
+                string userStatePath = Path.Combine(
+                    Application.persistentDataPath,
+                    UserStateFileName
+                );
+                if (migrateToSettingsAsset)
+                {
+                    DataVisualizerUserState userState = LoadUserState(userStatePath);
+                    settings.HydrateFrom(userState);
+                    diagnostic = string.Empty;
+                    return true;
+                }
+
+                DataVisualizerUserState stateToPersist = new();
+                stateToPersist.HydrateFrom(settings);
+                File.WriteAllText(userStatePath, JsonUtility.ToJson(stateToPersist, true));
+                diagnostic = string.Empty;
+                return true;
+            }
+            catch (IOException exception)
+            {
+                diagnostic = $"Persistence state migration failed: {exception.Message}";
+                return false;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                diagnostic = $"Persistence state migration failed: {exception.Message}";
+                return false;
+            }
+        }
+
+        private static DataVisualizerUserState LoadUserState(string path)
+        {
+            if (!File.Exists(path))
+            {
+                return new DataVisualizerUserState();
+            }
+
+            return DataVisualizerUserState.FromJson(File.ReadAllText(path))
+                ?? new DataVisualizerUserState();
         }
     }
 }

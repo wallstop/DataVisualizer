@@ -66,5 +66,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 DataVisualizerAutomation.QueryAssetMetadata(null, 0, 0)
             );
         }
+
+        [Test]
+        public void Should_RejectAssetPathThatEscapesProjectAssets()
+        {
+            DataVisualizerConfiguration configuration = new()
+            {
+                dataFolderPath = "Assets/../../outside",
+            };
+
+            DataVisualizerOperationResult result = DataVisualizerAutomation.ApplyConfiguration(
+                configuration
+            );
+
+            Assert.IsFalse(result.succeeded);
+            StringAssert.Contains("inside", result.diagnostic);
+        }
     }
 }
