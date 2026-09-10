@@ -26,7 +26,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 candidateLookup = new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
                 for (int index = 0; index < indexedGuids.Length; index++)
                 {
-                    candidateAdded |= candidateLookup.Add(indexedGuids[index]);
+                    if (candidateLookup.Add(indexedGuids[index]))
+                    {
+                        candidateAdded = true;
+                    }
                 }
             }
 
@@ -36,7 +39,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     candidates,
                     StringComparer.OrdinalIgnoreCase
                 );
-                candidateAdded |= 0 < AddResolvedGuids(type, referencedGuids, candidateLookup);
+                if (0 < AddResolvedGuids(type, referencedGuids, candidateLookup))
+                {
+                    candidateAdded = true;
+                }
             }
 
             if (TryNormalizeGuidForType(type, savedObjectGuid, out string normalizedGuid))
@@ -46,7 +52,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     candidates,
                     StringComparer.OrdinalIgnoreCase
                 );
-                candidateAdded |= candidateLookup.Add(normalizedSavedGuid);
+                if (candidateLookup.Add(normalizedSavedGuid))
+                {
+                    candidateAdded = true;
+                }
             }
 
             if (!candidateAdded)
