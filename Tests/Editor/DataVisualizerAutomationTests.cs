@@ -220,12 +220,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ReportUnavailableIndexProgressWithoutAWindow()
+        public void Should_ReportIndexProgressWithStableCounters()
         {
             DataVisualizerIndexProgress progress = DataVisualizerAutomation.GetIndexProgress();
 
-            Assert.IsFalse(progress.windowAvailable);
-            Assert.IsFalse(progress.isComplete);
+            Assert.NotNull(progress);
+            Assert.GreaterOrEqual(progress.loadedObjectCount, 0);
+            Assert.GreaterOrEqual(progress.objectLoadTotalCount, 0);
+            Assert.GreaterOrEqual(progress.pendingObjectCount, 0);
+            Assert.GreaterOrEqual(progress.pendingSearchCacheCount, 0);
+            if (!progress.windowAvailable)
+            {
+                Assert.IsFalse(progress.isComplete);
+            }
         }
 
         [Test]

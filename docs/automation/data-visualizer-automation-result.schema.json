@@ -21,13 +21,41 @@
     "configurationJson": { "type": ["string", "null"] },
     "managedTypes": { "type": "array" },
     "metadata": { "type": ["object", "null"] },
-    "indexProgress": { "$ref": "#/$defs/indexProgress" },
+    "indexProgress": {
+      "anyOf": [{ "$ref": "#/$defs/indexProgress" }, { "type": "null" }]
+    },
     "assetOperation": { "$ref": "#/$defs/assetOperationResult" }
   },
+  "allOf": [
+    {
+      "if": {
+        "required": ["operation"],
+        "properties": { "operation": { "const": 6 } }
+      },
+      "then": {
+        "required": ["indexProgress"],
+        "properties": { "indexProgress": { "$ref": "#/$defs/indexProgress" } }
+      }
+    }
+  ],
   "$defs": {
     "indexProgress": {
-      "type": ["object", "null"],
+      "type": "object",
       "additionalProperties": false,
+      "required": [
+        "windowAvailable",
+        "isPlayModeSuspended",
+        "isLoadingObjects",
+        "isLoadingSearchCache",
+        "isSearchCachePopulated",
+        "refreshPending",
+        "loadedObjectCount",
+        "objectLoadTotalCount",
+        "pendingObjectCount",
+        "pendingSearchCacheCount",
+        "selectedTypeAssemblyQualifiedName",
+        "isComplete"
+      ],
       "properties": {
         "windowAvailable": { "type": "boolean" },
         "isPlayModeSuspended": { "type": "boolean" },

@@ -1039,6 +1039,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             bool selectionTypeChanged = _namespaceController.SelectedType != selectedType;
             if (selectedType == null)
             {
+                CancelObjectLoading();
                 _selectedObjects.Clear();
             }
             else if (!selectionTypeChanged)
@@ -1104,6 +1105,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             _namespaceController.SelectType(this, selectedType);
             _needsRefresh = false;
+        }
+
+        private void CancelObjectLoading()
+        {
+            if (_isLoadingObjectsAsync || _pendingObjectGuids.Count > 0)
+            {
+                _asyncLoadGeneration++;
+            }
+
+            _asyncLoadTargetType = null;
+            _pendingObjectGuids.Clear();
+            _isLoadingObjectsAsync = false;
+            _asyncLoadTotalCount = 0;
+            _asyncLoadSkippedCount = 0;
+            UpdateLoadingIndicator(0, 0);
         }
 
         private VisualElement FindAncestorNamespaceGroup(VisualElement startingElement)
