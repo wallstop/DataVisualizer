@@ -5,30 +5,45 @@
       "id": "layout",
       "file": "data-visualizer-layout.jpg",
       "alt": "Data Visualizer namespace, object list, and inspector panes",
+      "width": 1620,
+      "height": 1080,
+      "expectedVisible": ["namespace navigation", "object list", "inspector pane"],
       "usedBy": ["index.md"]
     },
     {
       "id": "settings",
       "file": "data-visualizer-settings.jpg",
       "alt": "Data Visualizer settings panel",
+      "width": 1620,
+      "height": 1080,
+      "expectedVisible": ["settings panel", "data folder", "persistence"],
       "usedBy": ["getting-started.md"]
     },
     {
       "id": "instance-actions",
       "file": "data-visualizer-instance-actions.jpg",
       "alt": "Selected Data Visualizer object with instance actions",
+      "width": 1620,
+      "height": 1080,
+      "expectedVisible": ["selected object", "instance actions", "inspector"],
       "usedBy": ["user-guide.md"]
     },
     {
       "id": "import",
       "file": "data-visualizer-import.jpg",
       "alt": "Data Visualizer import and label workflow",
+      "width": 1620,
+      "height": 1080,
+      "expectedVisible": ["import workflow", "labels", "asset list"],
       "usedBy": ["user-guide.md"]
     },
     {
       "id": "create",
       "file": "data-visualizer-create.jpg",
       "alt": "Data Visualizer create asset workflow",
+      "width": 1620,
+      "height": 1080,
+      "expectedVisible": ["create asset workflow", "asset type", "data folder"],
       "usedBy": ["user-guide.md"]
     }
   ]

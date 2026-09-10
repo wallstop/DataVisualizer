@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -44,8 +45,8 @@ def check_link(source: Path, target: str) -> None:
         )
 
 
-def validate_markdown() -> set[Path]:
-    referenced_images: set[Path] = set()
+def validate_markdown() -> dict[Path, set[str]]:
+    referenced_images: dict[Path, set[str]] = {}
     for source in sorted(DOCS.rglob("*.md")):
         contents = source.read_text(encoding="utf-8")
         for raw_target in MARKDOWN_LINK.findall(contents):
@@ -54,12 +55,17 @@ def validate_markdown() -> set[Path]:
             if target.startswith(("http://", "https://", "mailto:", "tel:", "#")):
                 continue
             target_path = (source.parent / target.split("#", 1)[0].split("?", 1)[0]).resolve()
-            if target.startswith("!"):
-                referenced_images.add(target_path)
+            if target_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+                referenced_images.setdefault(target_path, set()).add(
+                    source.relative_to(DOCS).as_posix()
+                )
         for match in re.finditer(r"!\[[^\]]*\]\(([^)]+)\)", contents):
             target = match.group(1).strip().strip("<>").split("#", 1)[0].split("?", 1)[0]
             if not target.startswith(("http://", "https://")):
-                referenced_images.add((source.parent / target).resolve())
+                target_path = (source.parent / target).resolve()
+                referenced_images.setdefault(target_path, set()).add(
+                    source.relative_to(DOCS).as_posix()
+                )
     return referenced_images
 
 
@@ -88,7 +94,34 @@ def validate_examples() -> None:
             raise DocumentationError(f"{example.relative_to(ROOT)} has an invalid operation")
 
 
-def validate_images(referenced_images: set[Path]) -> None:
+def jpeg_dimensions(image: Path) -> tuple[int, int]:
+    data = image.read_bytes()
+    index = 2
+    sof_markers = set(range(0xC0, 0xC4)) | set(range(0xC5, 0xC8)) | set(
+        range(0xC9, 0xCC)
+    ) | set(range(0xCD, 0xD0))
+    while index + 8 < len(data):
+        if data[index] != 0xFF:
+            index += 1
+            continue
+        while index < len(data) and data[index] == 0xFF:
+            index += 1
+        marker = data[index]
+        index += 1
+        if marker in {0xD8, 0xD9}:
+            continue
+        if index + 2 > len(data):
+            break
+        segment_length = int.from_bytes(data[index : index + 2], "big")
+        if marker in sof_markers and index + 7 <= len(data):
+            height = int.from_bytes(data[index + 3 : index + 5], "big")
+            width = int.from_bytes(data[index + 5 : index + 7], "big")
+            return width, height
+        index += segment_length
+    raise DocumentationError(f"could not read JPEG dimensions: {image}")
+
+
+def validate_images(referenced_images: dict[Path, set[str]]) -> None:
     for image in sorted(referenced_images):
         if not image.is_file() or image.stat().st_size < 1024:
             raise DocumentationError(f"Referenced image is missing or too small: {image}")
@@ -98,13 +131,34 @@ def validate_images(referenced_images: set[Path]) -> None:
     if manifest.get("version") != 1 or not isinstance(scenarios, list):
         raise DocumentationError("docs/images/manifest.json must declare version 1 and scenarios")
     manifest_files: set[str] = set()
+    image_hashes: set[str] = set()
     for scenario in scenarios:
-        if not all(scenario.get(key) for key in ("id", "file", "alt", "usedBy")):
-            raise DocumentationError("every image manifest entry needs id, file, alt, and usedBy")
+        if not all(
+            scenario.get(key)
+            for key in ("id", "file", "alt", "usedBy", "width", "height", "expectedVisible")
+        ):
+            raise DocumentationError(
+                "every image manifest entry needs id, file, alt, dimensions, expectedVisible, and usedBy"
+            )
         image = DOCS / "images" / scenario["file"]
         manifest_files.add(image.name)
         if not image.is_file() or image.stat().st_size < 1024:
             raise DocumentationError(f"image manifest file is missing or too small: {image}")
+        if jpeg_dimensions(image) != (scenario["width"], scenario["height"]):
+            raise DocumentationError(f"image dimensions do not match manifest: {image}")
+        if not isinstance(scenario["expectedVisible"], list) or not all(
+            isinstance(value, str) and value.strip() for value in scenario["expectedVisible"]
+        ):
+            raise DocumentationError(f"image expectedVisible must contain nonempty strings: {image}")
+        for used_by in scenario["usedBy"]:
+            used_by_path = DOCS / used_by
+            if not used_by_path.is_file():
+                raise DocumentationError(f"image manifest usedBy file is missing: {used_by}")
+            if used_by not in referenced_images.get(image.resolve(), set()):
+                raise DocumentationError(f"image manifest usage is missing from {used_by}: {image}")
+        image_hashes.add(hashlib.sha256(image.read_bytes()).hexdigest())
+    if len(image_hashes) != len(scenarios):
+        raise DocumentationError("image manifest contains duplicate image content")
     actual_files = {image.name for image in (DOCS / "images").glob("*.jpg")}
     if actual_files != manifest_files:
         raise DocumentationError(
