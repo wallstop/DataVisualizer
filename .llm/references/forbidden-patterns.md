@@ -19,3 +19,6 @@ Patterns that must not appear in this codebase, with the compliant alternative.
 | Editing `.llm/skills/index.md` by hand | `pwsh -NoProfile -File scripts/generate-skills-index.ps1` | file is generated; hand edits drift |
 | Markdown files under `.llm/` exceeding 300 lines | split into skills/code-samples/references | context minimalism (hard limit, enforced) |
 | Smart quotes / em-dashes in `.llm/skills/*/SKILL.md` frontmatter | ASCII-only frontmatter values | cross-OS index determinism |
+| `foreach` over an `IReadOnlyList<T>` / `IList<T>` interface | counted `for`; use `foreach` for arrays/concrete value enumerators | avoid boxed/interface enumerator allocation in hot loops |
+| Bitwise Boolean aggregation or mutation inside `|=` / `&=` | named operation results combined afterward with `||` / `&&` | preserve evaluation while making side effects and intent auditable |
+| Direct lifecycle-state writes and scheduler changes across helpers | one transition owner and state-machine runner | prevent contradictory transitions and orphaned recurring work |

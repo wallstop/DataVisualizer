@@ -10,10 +10,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     public static class AssetGuidTypeIndex
     {
         private const double DefaultSliceMilliseconds = 4d;
-        private const int IdleState = 0;
-        private const int WaitingForPathSnapshotState = 1;
-        private const int ClassifyingState = 2;
-        private const int CompleteState = 3;
+        private const string ProjectAssetsPrefix = "Assets/";
+        private const string AssetExtension = ".asset";
 
         private static readonly Queue<string> PendingAssetPaths = new();
         private static readonly Dictionary<string, (Type Type, string Guid)> AssetsByPath = new(
@@ -21,11 +19,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         );
         private static readonly Dictionary<Type, HashSet<string>> GuidsByType = new();
 
-        private static int _state;
+        private static AssetGuidTypeIndexState _state;
 
         public static event Action IndexCompleted;
 
-        public static bool IsComplete => _state == CompleteState;
+        public static bool IsComplete => _state == AssetGuidTypeIndexState.Complete;
 
         public static string[] GetKnownGuids(Type type)
         {
@@ -41,14 +39,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public static void EnsureStarted()
         {
-            if (_state != IdleState)
+            if (_state != AssetGuidTypeIndexState.Idle)
             {
                 return;
             }
 
-            _state = WaitingForPathSnapshotState;
-            EditorApplication.update -= ProcessEditorUpdate;
-            EditorApplication.update += ProcessEditorUpdate;
+            TransitionTo(AssetGuidTypeIndexState.WaitingForPathSnapshot);
         }
 
         public static void Rebuild()
@@ -59,27 +55,49 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public static void Cancel()
         {
-            EditorApplication.update -= ProcessEditorUpdate;
             PendingAssetPaths.Clear();
             AssetsByPath.Clear();
             GuidsByType.Clear();
-            _state = IdleState;
+            TransitionTo(AssetGuidTypeIndexState.Idle);
         }
 
         public static bool ProcessPendingSlice(double budgetMilliseconds)
         {
             EnsureStarted();
-            if (_state == WaitingForPathSnapshotState)
-            {
-                CaptureAssetPaths();
-                return false;
-            }
+            return RunStateMachine(budgetMilliseconds);
+        }
 
-            if (_state == CompleteState)
+        private static bool RunStateMachine(double budgetMilliseconds)
+        {
+            switch (_state)
             {
+                case AssetGuidTypeIndexState.WaitingForPathSnapshot:
+                    return CapturePathSnapshot();
+                case AssetGuidTypeIndexState.Classifying:
+                    return ProcessClassificationSlice(budgetMilliseconds);
+                case AssetGuidTypeIndexState.Complete:
+                    return true;
+                case AssetGuidTypeIndexState.Idle:
+                default:
+                    return false;
+            }
+        }
+
+        private static bool CapturePathSnapshot()
+        {
+            CaptureAssetPaths();
+            if (PendingAssetPaths.Count == 0)
+            {
+                TransitionTo(AssetGuidTypeIndexState.Complete);
                 return true;
             }
 
+            TransitionTo(AssetGuidTypeIndexState.Classifying);
+            return false;
+        }
+
+        private static bool ProcessClassificationSlice(double budgetMilliseconds)
+        {
             Stopwatch stopwatch = Stopwatch.StartNew();
             do
             {
@@ -94,7 +112,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 return false;
             }
 
-            CompleteIndex();
+            TransitionTo(AssetGuidTypeIndexState.Complete);
             return true;
         }
 
@@ -105,15 +123,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             IReadOnlyList<string> movedFromAssetPaths
         )
         {
-            if (_state == IdleState)
+            if (_state == AssetGuidTypeIndexState.Idle)
             {
                 return false;
             }
 
-            bool changed = RemovePaths(deletedAssets) | RemovePaths(movedFromAssetPaths);
-            changed |= IndexPaths(importedAssets);
-            changed |= IndexPaths(movedAssets);
-            return changed;
+            bool deletedPathsRemoved = RemovePaths(deletedAssets);
+            bool movedPathsRemoved = RemovePaths(movedFromAssetPaths);
+            bool importedPathsIndexed = IndexPaths(importedAssets);
+            bool movedPathsIndexed = IndexPaths(movedAssets);
+            return deletedPathsRemoved
+                || movedPathsRemoved
+                || importedPathsIndexed
+                || movedPathsIndexed;
         }
 
         private static void ProcessEditorUpdate()
@@ -130,12 +152,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     PendingAssetPaths.Enqueue(path);
                 }
             }
-
-            _state = ClassifyingState;
-            if (PendingAssetPaths.Count == 0)
-            {
-                CompleteIndex();
-            }
         }
 
         private static bool IndexPaths(IReadOnlyList<string> paths)
@@ -151,7 +167,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 string path = paths[index];
                 if (IsProjectAssetPath(path))
                 {
-                    changed |= IndexPath(path);
+                    bool pathIndexed = IndexPath(path);
+                    if (pathIndexed)
+                    {
+                        changed = true;
+                    }
                 }
             }
 
@@ -168,7 +188,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool changed = false;
             for (int index = 0; index < paths.Count; index++)
             {
-                changed |= RemovePath(paths[index]);
+                bool pathRemoved = RemovePath(paths[index]);
+                if (pathRemoved)
+                {
+                    changed = true;
+                }
             }
 
             return changed;
@@ -225,15 +249,30 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         private static bool IsProjectAssetPath(string path)
         {
-            return path?.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) == true
-                && path.EndsWith(".asset", StringComparison.OrdinalIgnoreCase);
+            // Unity AssetDatabase paths use forward slashes on every supported platform.
+            return path?.StartsWith(ProjectAssetsPrefix, StringComparison.OrdinalIgnoreCase) == true
+                && path.EndsWith(AssetExtension, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static void CompleteIndex()
+        private static void TransitionTo(AssetGuidTypeIndexState nextState)
         {
-            _state = CompleteState;
             EditorApplication.update -= ProcessEditorUpdate;
-            IndexCompleted?.Invoke();
+            bool stateChanged = _state != nextState;
+            _state = nextState;
+
+            bool shouldProcess =
+                nextState == AssetGuidTypeIndexState.WaitingForPathSnapshot
+                || nextState == AssetGuidTypeIndexState.Classifying;
+            if (shouldProcess)
+            {
+                EditorApplication.update += ProcessEditorUpdate;
+                return;
+            }
+
+            if (stateChanged && nextState == AssetGuidTypeIndexState.Complete)
+            {
+                IndexCompleted?.Invoke();
+            }
         }
     }
 #endif

@@ -5,14 +5,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
     using System.Linq;
     using UnityEngine.Serialization;
 
-    public enum LabelCombinationType
-    {
-        [Obsolete("Please use a valid value")]
-        None = 0,
-        And = 1,
-        Or = 2,
-    }
-
     [Serializable]
     public sealed class TypeLabelFilterConfig
     {

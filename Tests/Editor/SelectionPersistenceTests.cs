@@ -325,8 +325,4 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
         }
     }
-
-    public sealed class SelectionPersistenceGuidData : ScriptableObject { }
-
-    public sealed class OtherSelectionPersistenceGuidData : ScriptableObject { }
 }

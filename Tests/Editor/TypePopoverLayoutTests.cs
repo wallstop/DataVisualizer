@@ -240,7 +240,5 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             return 0 < value && !float.IsNaN(value) && !float.IsInfinity(value);
         }
-
-        private sealed class LayoutTestWindow : EditorWindow { }
     }
 }

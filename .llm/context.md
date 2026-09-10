@@ -106,6 +106,16 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     types must use a matching filename so Unity can associate the script reliably.
     Keep any deliberately nonconforming regression fixture isolated and document why
     it must model an external project's unsupported layout.
+21. Use `foreach` for arrays and concrete collections with value-type enumerators when
+    the loop does not need an index. For variables typed as `IReadOnlyList<T>` or
+    `IList<T>`, use a counted loop to avoid interface-enumerator allocation. Retain
+    `foreach` when the input is a stream or only exposes `IEnumerable<T>`.
+22. Never use bitwise `|`, `&`, `|=`, or `&=` to aggregate Boolean results. Evaluate
+    every side-effectful operation into its own named Boolean, then combine results
+    with `||` or `&&`. Bitwise operators remain correct for flags and numeric values.
+23. Give mutable lifecycle/state machines one transition owner. Helpers may gather or
+    process data, but they must not scatter direct state writes or scheduler ownership
+    across methods; route transitions through one named runner/transition method.
 
 ### Skills Discipline
 

@@ -39,8 +39,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AssetDatabase.SaveAssets();
 
             AssetGuidTypeIndex.Rebuild();
-            AssetGuidTypeIndex.ProcessPendingSlice(double.PositiveInfinity);
-            AssetGuidTypeIndex.ProcessPendingSlice(double.PositiveInfinity);
+            bool pathSnapshotCompleted = AssetGuidTypeIndex.ProcessPendingSlice(
+                double.PositiveInfinity
+            );
+            bool classificationCompleted = AssetGuidTypeIndex.ProcessPendingSlice(
+                double.PositiveInfinity
+            );
+            Assert.IsFalse(pathSnapshotCompleted);
+            Assert.IsTrue(classificationCompleted);
             Assert.IsTrue(AssetGuidTypeIndex.IsComplete);
         }
 
@@ -88,38 +94,48 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_UpdateCompletedIndex_When_AssetIsImportedAndDeleted()
+        public void Should_ApplyEveryAssetChangeCollection_When_IndexIsComplete()
         {
-            string assetPath = _indexRootFolder + "/ImportedAfterIndex.asset";
-            string assetGuid = CreateAsset(
+            string importedAssetPath = _indexRootFolder + "/ImportedAfterIndex.asset";
+            string movedAssetPath = _indexRootFolder + "/MovedAfterIndex.asset";
+            string importedAssetGuid = CreateAsset(
                 ScriptableObject.CreateInstance<EditorOnlyCreationData>(),
-                assetPath
+                importedAssetPath
+            );
+            string movedAssetGuid = CreateAsset(
+                ScriptableObject.CreateInstance<EditorOnlyCreationData>(),
+                movedAssetPath
             );
             AssetDatabase.SaveAssets();
 
-            AssetGuidTypeIndex.ApplyAssetChanges(
-                Array.Empty<string>(),
-                new[] { assetPath },
-                Array.Empty<string>(),
-                Array.Empty<string>()
+            Assert.IsTrue(
+                AssetGuidTypeIndex.ApplyAssetChanges(
+                    Array.Empty<string>(),
+                    new[] { importedAssetPath },
+                    Array.Empty<string>(),
+                    new[] { movedAssetPath }
+                )
             );
 
-            AssetGuidTypeIndex.ApplyAssetChanges(
-                new[] { assetPath },
-                Array.Empty<string>(),
-                Array.Empty<string>(),
-                Array.Empty<string>()
+            Assert.IsTrue(
+                AssetGuidTypeIndex.ApplyAssetChanges(
+                    new[] { importedAssetPath },
+                    Array.Empty<string>(),
+                    new[] { movedAssetPath },
+                    Array.Empty<string>()
+                )
             );
-            CollectionAssert.Contains(
-                AssetGuidTypeIndex.GetKnownGuids(typeof(EditorOnlyCreationData)),
-                assetGuid
+            string[] indexedGuids = AssetGuidTypeIndex.GetKnownGuids(
+                typeof(EditorOnlyCreationData)
             );
+            CollectionAssert.Contains(indexedGuids, importedAssetGuid);
+            CollectionAssert.Contains(indexedGuids, movedAssetGuid);
 
-            AssetDatabase.DeleteAsset(assetPath);
-            CollectionAssert.DoesNotContain(
-                AssetGuidTypeIndex.GetKnownGuids(typeof(EditorOnlyCreationData)),
-                assetGuid
-            );
+            AssetDatabase.DeleteAsset(importedAssetPath);
+            AssetDatabase.DeleteAsset(movedAssetPath);
+            indexedGuids = AssetGuidTypeIndex.GetKnownGuids(typeof(EditorOnlyCreationData));
+            CollectionAssert.DoesNotContain(indexedGuids, importedAssetGuid);
+            CollectionAssert.DoesNotContain(indexedGuids, movedAssetGuid);
         }
 
         [Test]

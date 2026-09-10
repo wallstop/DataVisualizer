@@ -24,9 +24,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             if (0 < indexedGuids.Length)
             {
                 candidateLookup = new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
-                for (int index = 0; index < indexedGuids.Length; index++)
+                foreach (string indexedGuid in indexedGuids)
                 {
-                    if (candidateLookup.Add(indexedGuids[index]))
+                    if (candidateLookup.Add(indexedGuid))
                     {
                         candidateAdded = true;
                     }
