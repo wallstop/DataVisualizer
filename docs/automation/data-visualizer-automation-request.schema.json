@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wallstop-studios.github.io/DataVisualizer/schemas/data-visualizer-automation-request.schema.json",
+  "title": "Data Visualizer automation request",
+  "type": "object",
+  "required": ["schemaVersion", "requestId", "operation"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "requestId": { "type": "string", "minLength": 1 },
+    "operation": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "description": "DataVisualizerAutomationRequestKind enum value."
+    },
+    "configuration": { "$ref": "#/$defs/configuration" },
+    "configurationJson": { "type": "string" },
+    "assemblyQualifiedTypeName": { "type": ["string", "null"] },
+    "page": { "type": "integer", "minimum": 0 },
+    "pageSize": { "type": "integer", "minimum": 1, "maximum": 500 },
+    "searchFolder": { "type": ["string", "null"] },
+    "guid": { "type": ["string", "null"] },
+    "assetOperation": { "$ref": "#/$defs/assetOperation" }
+  },
+  "$defs": {
+    "configuration": {
+      "type": "object",
+      "required": ["dataFolderPath", "persistStateInSettingsAsset", "selectActiveObject"],
+      "properties": {
+        "dataFolderPath": { "type": "string", "minLength": 1 },
+        "persistStateInSettingsAsset": { "type": "boolean" },
+        "selectActiveObject": { "type": "boolean" }
+      }
+    },
+    "assetOperation": {
+      "type": "object",
+      "required": ["operation", "guids"],
+      "properties": {
+        "operation": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "guids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "value": { "type": "string" },
+        "labels": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

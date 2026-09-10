@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "requestId": "list-assets-001",
+  "operation": 5,
+  "assemblyQualifiedTypeName": null,
+  "page": 0,
+  "pageSize": 100,
+  "searchFolder": "Assets"
+}

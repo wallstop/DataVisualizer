@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "requestId": "preview-rename-001",
+  "operation": 9,
+  "assetOperation": {
+    "operation": 0,
+    "guids": ["0123456789abcdef0123456789abcdef"],
+    "value": "RenamedData"
+  }
+}

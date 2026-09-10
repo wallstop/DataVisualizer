@@ -111,5 +111,30 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual(1, result.items.Count);
             StringAssert.Contains("not found", result.items[0].diagnostic);
         }
+
+        [Test]
+        public void Should_RejectUnsupportedAutomationSchemaVersion()
+        {
+            DataVisualizerAutomationResult result = DataVisualizerAutomation.DispatchRequestJson(
+                "{\"schemaVersion\":2,\"requestId\":\"schema-2\"}"
+            );
+
+            Assert.IsFalse(result.succeeded);
+            Assert.IsTrue(result.complete);
+            StringAssert.Contains("schema version", result.diagnostic);
+            Assert.AreEqual("schema-2", result.requestId);
+        }
+
+        [Test]
+        public void Should_ReturnStructuredResultForMalformedAutomationJson()
+        {
+            string resultJson = DataVisualizerAutomation.ExecuteRequestJson("{");
+            DataVisualizerAutomationResult result =
+                UnityEngine.JsonUtility.FromJson<DataVisualizerAutomationResult>(resultJson);
+
+            Assert.IsFalse(result.succeeded);
+            Assert.IsTrue(result.complete);
+            StringAssert.Contains("malformed", result.diagnostic);
+        }
     }
 }

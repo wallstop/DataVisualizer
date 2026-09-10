@@ -112,10 +112,19 @@ DataVisualizerAssetMetadataPage page =
     );
 ```
 
+The JSON adapter uses schema version `1`, a caller-supplied `requestId`, and the
+numeric values of the public request-kind enums. In-process callers can pass a
+request to `DispatchRequest` or JSON to `ExecuteRequestJson`. Direct Unity runs
+use `-executeMethod
+WallstopStudios.DataVisualizer.Editor.Automation.DataVisualizerAutomation.ExecuteRequestFile`
+with `-dataVisualizerRequest <path>` and `-dataVisualizerResult <path>`; the
+method writes one final result and exits nonzero when the request fails. Schemas
+and working request examples are in `docs/automation`.
+
 The facade is intentionally explicit and bounded. Serialized-property operations,
-cancellation/progress, and the file-based JSON request adapter remain follow-up
-work; callers should inspect each operation result instead of assuming a modal UI
-path or transaction rollback.
+cancellation/progress, and processor discovery/execution remain follow-up work;
+callers should inspect each operation result instead of assuming a modal UI path
+or transaction rollback.
 
 **Attributes** let you override display namespace or friendly names on ScriptableObject classes. Useful when code organization doesn't match your content taxonomy.
 
