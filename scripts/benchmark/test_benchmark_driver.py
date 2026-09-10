@@ -416,6 +416,9 @@ class BenchmarkDriverTests(unittest.TestCase):
             source = render_bootstrap(config_from_args(arguments, root), "")
             self.assertIn("refusing to delete an unowned benchmark fixture", source)
             self.assertIn("return _repetition % 2 == 0 ? _caseIndex : 2 - _caseIndex;", source)
+            self.assertIn("OwnershipIdentity", source)
+            self.assertIn("PlayModeSettingsSnapshot", source)
+            self.assertIn("refusing to delete an unowned benchmark fixture", source)
             self.assertIn("originalEnterPlayModeOptionsEnabled", source)
             self.assertIn("Unity refused to delete the benchmark fixture", source)
 

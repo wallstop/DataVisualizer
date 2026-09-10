@@ -326,6 +326,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         private const int FixtureSize = __FIXTURE_SIZE__;
         private const string FixtureRoot = __FIXTURE_ROOT__;
         private const string ResultPath = __RESULT_PATH__;
+        private const string OwnershipIdentity = __OWNERSHIP_IDENTITY__;
         private const string Revision = __REVISION__;
         private const string UnityVersionArgument = __UNITY_VERSION__;
         private const string Suite = __SUITE__;
@@ -385,6 +386,13 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             public int caseIndex;
             public bool warmup;
             public double elapsedMilliseconds;
+        }
+
+        [Serializable]
+        private sealed class PlayModeSettingsSnapshot
+        {
+            public bool enabled;
+            public int options;
         }
 
         [Serializable]
@@ -518,6 +526,20 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         {
             _originalEnterPlayModeOptionsEnabled = EditorSettings.enterPlayModeOptionsEnabled;
             _originalEnterPlayModeOptions = EditorSettings.enterPlayModeOptions;
+            string snapshot = JsonUtility.ToJson(
+                new PlayModeSettingsSnapshot
+                {
+                    enabled = _originalEnterPlayModeOptionsEnabled,
+                    options = (int)_originalEnterPlayModeOptions,
+                }
+            );
+            string snapshotPath = ResultPath + ".playmode-settings";
+            string snapshotDirectory = Path.GetDirectoryName(snapshotPath);
+            if (!string.IsNullOrWhiteSpace(snapshotDirectory))
+            {
+                Directory.CreateDirectory(snapshotDirectory);
+            }
+            File.WriteAllText(snapshotPath, snapshot);
             _playModeSettingsCaptured = true;
             EditorSettings.enterPlayModeOptionsEnabled = true;
             EditorSettings.enterPlayModeOptions =
@@ -526,13 +548,30 @@ namespace WallstopStudios.DataVisualizer.Benchmark
 
         private static void RestorePlayModeSettings()
         {
-            if (!_playModeSettingsCaptured)
+            if (_playModeSettingsCaptured)
+            {
+                EditorSettings.enterPlayModeOptionsEnabled = _originalEnterPlayModeOptionsEnabled;
+                EditorSettings.enterPlayModeOptions = _originalEnterPlayModeOptions;
+                _playModeSettingsCaptured = false;
+                File.Delete(ResultPath + ".playmode-settings");
+                return;
+            }
+
+            string snapshotPath = ResultPath + ".playmode-settings";
+            if (!File.Exists(snapshotPath))
             {
                 return;
             }
-            EditorSettings.enterPlayModeOptionsEnabled = _originalEnterPlayModeOptionsEnabled;
-            EditorSettings.enterPlayModeOptions = _originalEnterPlayModeOptions;
-            _playModeSettingsCaptured = false;
+            PlayModeSettingsSnapshot snapshot = JsonUtility.FromJson<PlayModeSettingsSnapshot>(
+                File.ReadAllText(snapshotPath)
+            );
+            if (snapshot == null)
+            {
+                throw new InvalidOperationException("Persisted Play Mode settings snapshot is invalid");
+            }
+            EditorSettings.enterPlayModeOptionsEnabled = snapshot.enabled;
+            EditorSettings.enterPlayModeOptions = (EnterPlayModeOptions)snapshot.options;
+            File.Delete(snapshotPath);
         }
 
         private static void Tick()
@@ -629,7 +668,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             AssetDatabase.CreateFolder("Assets", "__DataVisualizerBenchmarkFixture");
 
             _fixtureShared = ScriptableObject.CreateInstance<BenchmarkSharedData>();
-            _fixtureShared.identity = "shared-reference-000000";
+            _fixtureShared.identity = OwnershipIdentity;
             AssetDatabase.CreateAsset(_fixtureShared, FixtureRoot + "/Shared.asset");
             _nextFixtureIndex = 0;
             _fixtureGenerationStartTimestamp = Stopwatch.GetTimestamp();
@@ -1213,6 +1252,15 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         {
             if (AssetDatabase.IsValidFolder(FixtureRoot))
             {
+                BenchmarkSharedData shared = AssetDatabase.LoadAssetAtPath<BenchmarkSharedData>(
+                    FixtureRoot + "/Shared.asset"
+                );
+                if (shared == null || shared.identity != OwnershipIdentity)
+                {
+                    throw new InvalidOperationException(
+                        "refusing to delete an unowned benchmark fixture"
+                    );
+                }
                 if (!AssetDatabase.DeleteAsset(FixtureRoot))
                 {
                     throw new InvalidOperationException("Unity refused to delete the benchmark fixture");
@@ -1286,6 +1334,7 @@ def render_bootstrap(config: BenchmarkConfig, result_path: str) -> str:
         "FIXTURE_SIZE": str(config.fixture_size),
         "FIXTURE_ROOT": csharp_string("Assets/__DataVisualizerBenchmarkFixture"),
         "RESULT_PATH": csharp_string(result_path),
+        "OWNERSHIP_IDENTITY": csharp_string("benchmark-owner:" + result_path),
         "REVISION": csharp_string(config.revision),
         "UNITY_VERSION": csharp_string(config.unity_version),
         "SUITE": csharp_string(config.suite),
