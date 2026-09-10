@@ -71,6 +71,32 @@ class BenchmarkDriverTests(unittest.TestCase):
             self.assertIn("private const int FixtureBatchSize = 500;", source)
             self.assertIn('private const string Suite = "fixture";', source)
 
+    def test_large_fixture_bootstrap_uses_cooperative_batches(self):
+        parser = build_argument_parser()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(__file__).resolve().parents[2]
+            arguments = parser.parse_args(
+                [
+                    "--host-project",
+                    "/host/DataVisualizer",
+                    "--unity-version",
+                    "6000.4.6f1",
+                    "--fixture-size",
+                    "50,000",
+                    "--suite",
+                    "fixture",
+                    "--output-dir",
+                    temporary,
+                    "--mode",
+                    "mcp",
+                ]
+            )
+            source = render_bootstrap(config_from_args(arguments, root), "")
+            self.assertIn("private const int FixtureSize = 50000;", source)
+            self.assertIn("private static void CreateFixtureBatch()", source)
+            self.assertIn("AssetDatabase.Refresh();", source)
+            self.assertIn("_phase = Phase.VerifyFixture;", source)
+
     def test_planned_execution_records_measurement_boundary(self):
         parser = build_argument_parser()
         with tempfile.TemporaryDirectory() as temporary:
