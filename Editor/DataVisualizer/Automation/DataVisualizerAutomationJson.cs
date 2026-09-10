@@ -194,8 +194,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
         {
             string requestPath = GetCommandLineArgument("-dataVisualizerRequest");
             string resultPath = GetCommandLineArgument("-dataVisualizerResult");
-            if (string.IsNullOrWhiteSpace(requestPath) || string.IsNullOrWhiteSpace(resultPath))
+            if (string.IsNullOrWhiteSpace(resultPath))
             {
+                EditorApplication.Exit(2);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(requestPath))
+            {
+                DataVisualizerAutomationResult result = FailureResult(
+                    "-dataVisualizerRequest is required."
+                );
+                File.WriteAllText(resultPath, JsonUtility.ToJson(result, true));
                 EditorApplication.Exit(2);
                 return;
             }
