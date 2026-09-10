@@ -550,6 +550,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
+            int resolvedReferenceCount = 0;
 
             // Collect all GUIDs first (fast, no asset loading)
             foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
@@ -560,17 +561,24 @@ namespace WallstopStudios.DataVisualizer.Editor
                     uniqueGuids.Add(guid);
                 }
 
-                AssetGuidDiscovery.AddResolvedGuids(type, GetObjectOrderForType(type), uniqueGuids);
+                resolvedReferenceCount += AssetGuidDiscovery.AddResolvedGuids(
+                    type,
+                    GetObjectOrderForType(type),
+                    uniqueGuids
+                );
                 string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
-                if (!uniqueGuids.Contains(savedObjectGuid))
-                {
-                    savedObjectGuid = AssetGuidDiscovery.NormalizeGuidForType(
+                if (
+                    !uniqueGuids.Contains(savedObjectGuid)
+                    && AssetGuidDiscovery.TryNormalizeGuidForType(
                         type,
-                        savedObjectGuid
-                    );
-                    if (savedObjectGuid != null)
+                        savedObjectGuid,
+                        out string normalizedSavedObjectGuid
+                    )
+                )
+                {
+                    if (uniqueGuids.Add(normalizedSavedObjectGuid))
                     {
-                        uniqueGuids.Add(savedObjectGuid);
+                        resolvedReferenceCount++;
                     }
                 }
             }
@@ -588,7 +596,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (EnableAsyncLoadDebugLog)
             {
                 Debug.Log(
-                    $"[DataVisualizer] Search cache GUID collection: {_pendingSearchCacheGuids.Count} GUIDs collected in {cacheStartTime.ElapsedMilliseconds}ms"
+                    $"[DataVisualizer] Search cache GUID collection: {_pendingSearchCacheGuids.Count} GUIDs collected ({resolvedReferenceCount} recovered from direct references) in {cacheStartTime.ElapsedMilliseconds}ms"
                 );
             }
 
@@ -1218,7 +1226,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             VisualElement root = rootVisualElement;
             root.Clear();
-            TryLoadStyleSheet(root);
+            LoadStyleSheetIfAvailable(root);
 
             VisualElement headerRow = new()
             {
@@ -1401,7 +1409,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .ExecuteLater(1); // Execute on next frame so window renders first
         }
 
-        private static void TryLoadStyleSheet(VisualElement root)
+        private static void LoadStyleSheetIfAvailable(VisualElement root)
         {
             StyleSheet styleSheet = null;
             Font font = null;
@@ -3861,30 +3869,31 @@ namespace WallstopStudios.DataVisualizer.Editor
                 List<string> objectGuids = GetObjectOrderForType(type);
                 string instanceGuid = AssetDatabase.AssetPathToGUID(assetPath);
                 if (
-                    !string.IsNullOrWhiteSpace(instanceGuid)
-                    && !objectGuids.Contains(instanceGuid, StringComparer.OrdinalIgnoreCase)
+                    !objectGuids.Contains(instanceGuid, StringComparer.OrdinalIgnoreCase)
+                    && AssetGuidOrder.PlaceLast(objectGuids, instanceGuid)
                 )
                 {
-                    objectGuids.Add(instanceGuid);
                     SetObjectOrderForType(type.FullName, objectGuids);
                 }
                 return;
             }
 
-            if (_isLoadingObjectsAsync)
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType == type)
             {
-                // A load is still streaming assets in by canonical order. Give the new instance an
-                // order past all of them so it sorts to the end and the loader's binary-search
-                // inserts stay consistent (they assume _selectedObjects is ordered by this index).
-                _selectedObjectOrderIndex[instance] = int.MaxValue;
                 string instanceGuid = AssetDatabase.AssetPathToGUID(assetPath);
                 if (!string.IsNullOrWhiteSpace(instanceGuid))
                 {
-                    _asyncDisplayOrderByGuid[instanceGuid] = int.MaxValue;
+                    if (!_asyncDisplayOrderByGuid.ContainsKey(instanceGuid))
+                    {
+                        List<string> asyncOrder = GetAsyncDisplayOrder();
+                        AssetGuidOrder.PlaceLast(asyncOrder, instanceGuid);
+                        ApplyAsyncDisplayOrder(asyncOrder);
+                    }
+
+                    InsertObjectByAsyncDisplayOrder(instance, instanceGuid);
                 }
             }
-
-            if (!_selectedObjects.Contains(instance))
+            else if (!_selectedObjects.Contains(instance))
             {
                 _selectedObjects.Add(instance);
             }
@@ -6485,6 +6494,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType == dataObject.GetType())
+            {
+                string dataObjectGuid = AssetDatabase.AssetPathToGUID(
+                    AssetDatabase.GetAssetPath(dataObject)
+                );
+                List<string> asyncOrder = GetAsyncDisplayOrder();
+                if (AssetGuidOrder.PlaceFirst(asyncOrder, dataObjectGuid))
+                {
+                    ApplyAsyncDisplayOrder(asyncOrder);
+                }
+            }
+
             _selectedObjects.Remove(dataObject);
             _selectedObjects.Insert(0, dataObject);
             _filteredObjects.Remove(dataObject);
@@ -6499,6 +6520,18 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (dataObject == null)
             {
                 return;
+            }
+
+            if (_isLoadingObjectsAsync && _asyncLoadTargetType == dataObject.GetType())
+            {
+                string dataObjectGuid = AssetDatabase.AssetPathToGUID(
+                    AssetDatabase.GetAssetPath(dataObject)
+                );
+                List<string> asyncOrder = GetAsyncDisplayOrder();
+                if (AssetGuidOrder.PlaceLast(asyncOrder, dataObjectGuid))
+                {
+                    ApplyAsyncDisplayOrder(asyncOrder);
+                }
             }
 
             _selectedObjects.Remove(dataObject);
@@ -6873,23 +6906,28 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            VisualElement customElement = TryGetCustomVisualElement();
-            if (customElement != null)
+            if (TryGetCustomVisualElement(out VisualElement customElement))
             {
                 _inspectorContainer.Add(customElement);
             }
         }
 
-        private VisualElement TryGetCustomVisualElement()
+        private bool TryGetCustomVisualElement(out VisualElement customElement)
         {
             if (_selectedObject is IGUIProvider guiProvider)
             {
-                return guiProvider.BuildGUI(
+                VisualElement builtElement = guiProvider.BuildGUI(
                     new DataVisualizerGUIContext(_currentInspectorScriptableObject)
                 );
+                if (builtElement != null)
+                {
+                    customElement = builtElement;
+                    return true;
+                }
             }
 
-            return null;
+            customElement = null;
+            return false;
         }
 
         private void OnNewLabelInputFocus()
@@ -7400,6 +7438,17 @@ namespace WallstopStudios.DataVisualizer.Editor
                         cloneDataObject.AfterClone(originalObject);
                     }
 
+                    if (_isLoadingObjectsAsync && _asyncLoadTargetType == cloneAsset.GetType())
+                    {
+                        string cloneGuid = AssetDatabase.AssetPathToGUID(uniquePath);
+                        string originalGuid = AssetDatabase.AssetPathToGUID(originalPath);
+                        List<string> asyncOrder = GetAsyncDisplayOrder();
+                        if (AssetGuidOrder.PlaceAfter(asyncOrder, cloneGuid, originalGuid))
+                        {
+                            ApplyAsyncDisplayOrder(asyncOrder);
+                        }
+                    }
+
                     int originalIndex = _selectedObjects.IndexOf(originalObject);
                     if (0 <= originalIndex)
                     {
@@ -7892,39 +7941,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             // from _selectedObjects when BuildObjectsView() runs, so active filters stay correct.
             foreach ((string guid, ScriptableObject obj) in loadedObjects)
             {
-                if (_selectedObjectOrderIndex.ContainsKey(obj))
-                {
-                    continue;
-                }
-
-                int order = _asyncDisplayOrderByGuid.TryGetValue(guid, out int knownOrder)
-                    ? knownOrder
-                    : int.MaxValue;
-                _selectedObjectOrderIndex[obj] = order;
-
-                // Binary search for the insertion point (the list stays sorted by display-order
-                // index), keeping batch insertion O(log n) comparisons instead of a linear scan.
-                int lo = 0;
-                int hi = _selectedObjects.Count;
-                while (lo < hi)
-                {
-                    int mid = (lo + hi) >> 1;
-                    int midOrder = _selectedObjectOrderIndex.TryGetValue(
-                        _selectedObjects[mid],
-                        out int midValue
-                    )
-                        ? midValue
-                        : int.MaxValue;
-                    if (midOrder < order)
-                    {
-                        lo = mid + 1;
-                    }
-                    else
-                    {
-                        hi = mid;
-                    }
-                }
-                _selectedObjects.Insert(lo, obj);
+                InsertObjectByAsyncDisplayOrder(obj, guid);
             }
 
             batchStartTime.Stop();
@@ -7953,6 +7970,42 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 BuildObjectsView();
             }
+        }
+
+        private void InsertObjectByAsyncDisplayOrder(ScriptableObject obj, string guid)
+        {
+            if (obj == null || _selectedObjectOrderIndex.ContainsKey(obj))
+            {
+                return;
+            }
+
+            int order = _asyncDisplayOrderByGuid.TryGetValue(guid, out int knownOrder)
+                ? knownOrder
+                : int.MaxValue;
+            _selectedObjectOrderIndex[obj] = order;
+
+            int low = 0;
+            int high = _selectedObjects.Count;
+            while (low < high)
+            {
+                int middle = (low + high) >> 1;
+                int middleOrder = _selectedObjectOrderIndex.TryGetValue(
+                    _selectedObjects[middle],
+                    out int knownMiddleOrder
+                )
+                    ? knownMiddleOrder
+                    : int.MaxValue;
+                if (middleOrder < order)
+                {
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+
+            _selectedObjects.Insert(low, obj);
         }
 
         private void ContinueLoadingObjects(Type type, int loadGeneration)
@@ -8966,6 +9019,41 @@ namespace WallstopStudios.DataVisualizer.Editor
             SaveUserStateToFile();
         }
 
+        private List<string> GetAsyncDisplayOrder()
+        {
+            return _asyncDisplayOrderByGuid
+                .OrderBy(entry => entry.Value)
+                .Select(entry => entry.Key)
+                .ToList();
+        }
+
+        private void ApplyAsyncDisplayOrder(IReadOnlyList<string> orderedGuids)
+        {
+            _asyncDisplayOrderByGuid.Clear();
+            for (int index = 0; index < orderedGuids.Count; index++)
+            {
+                _asyncDisplayOrderByGuid[orderedGuids[index]] = index;
+            }
+
+            _selectedObjectOrderIndex.Clear();
+            foreach (ScriptableObject obj in _selectedObjects)
+            {
+                if (obj == null)
+                {
+                    continue;
+                }
+
+                string path = AssetDatabase.GetAssetPath(obj);
+                string guid = string.IsNullOrWhiteSpace(path)
+                    ? null
+                    : AssetDatabase.AssetPathToGUID(path);
+                _selectedObjectOrderIndex[obj] =
+                    guid != null && _asyncDisplayOrderByGuid.TryGetValue(guid, out int mapIndex)
+                        ? mapIndex
+                        : int.MaxValue;
+            }
+        }
+
         private void UpdateAndSaveObjectOrderList(Type type, List<ScriptableObject> orderedObjects)
         {
             if (type == null || orderedObjects == null)
@@ -8999,48 +9087,16 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             // If async loading is still in progress, orderedObjects holds only the loaded subset.
-            // Merge the not-yet-loaded GUIDs (in their intended display order) so persisting a reorder
-            // mid-load does not drop them, then rebuild the in-flight order maps from the merged order
-            // so the remaining LoadObjectBatch inserts stay consistent with what the user just saved
-            // (otherwise later batches keep positioning new items by the stale pre-reorder order).
+            // Reorder that subset within its existing canonical slots and retain every unloaded GUID
+            // in place. Mutation paths update the canonical map first when they explicitly insert or
+            // move an item, so create/clone/top/bottom semantics also include pending assets.
             if (_isLoadingObjectsAsync && _asyncLoadTargetType == type)
             {
-                HashSet<string> present = new(orderedGuids, StringComparer.Ordinal);
-                foreach (
-                    string guid in _asyncDisplayOrderByGuid
-                        .OrderBy(kvp => kvp.Value)
-                        .Select(kvp => kvp.Key)
-                )
-                {
-                    if (present.Add(guid))
-                    {
-                        orderedGuids.Add(guid);
-                    }
-                }
-
-                _asyncDisplayOrderByGuid.Clear();
-                for (int i = 0; i < orderedGuids.Count; i++)
-                {
-                    _asyncDisplayOrderByGuid[orderedGuids[i]] = i;
-                }
-
-                _selectedObjectOrderIndex.Clear();
-                foreach (ScriptableObject obj in orderedObjects)
-                {
-                    if (obj == null)
-                    {
-                        continue;
-                    }
-
-                    string path = AssetDatabase.GetAssetPath(obj);
-                    string guid = string.IsNullOrWhiteSpace(path)
-                        ? null
-                        : AssetDatabase.AssetPathToGUID(path);
-                    _selectedObjectOrderIndex[obj] =
-                        guid != null && _asyncDisplayOrderByGuid.TryGetValue(guid, out int mapIndex)
-                            ? mapIndex
-                            : int.MaxValue;
-                }
+                orderedGuids = AssetGuidOrder.MergeLoadedOrder(
+                    GetAsyncDisplayOrder(),
+                    orderedGuids
+                );
+                ApplyAsyncDisplayOrder(orderedGuids);
             }
 
             SetObjectOrderForType(type.FullName, orderedGuids);

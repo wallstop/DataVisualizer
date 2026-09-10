@@ -55,6 +55,21 @@ metadata:
 - Validate direct GUIDs with `GetMainAssetTypeAtPath` and exact type equality. Do not
   instantiate arbitrary user types to probe script metadata or broaden the fallback
   into a project-wide asset scan.
+- Discovery is intentionally limited to exact main assets. Derived instances and
+  subassets do not satisfy a selected base/main type; keep this boundary covered by
+  tests instead of broadening equality to assignability.
+
+## Async Ordering
+
+- `_asyncDisplayOrderByGuid` is the full canonical order, including unloaded GUIDs;
+  `_selectedObjects` is only the currently loaded subset. Never serialize the subset
+  directly or append pending GUIDs after it.
+- During a partial load, reorder loaded GUIDs within their canonical slots so
+  unloaded entries retain position. For explicit create, clone, top, bottom, or
+  delete operations, mutate the full canonical GUID order first, then merge and
+  persist the loaded view.
+- Keep `_asyncDisplayOrderByGuid` and `_selectedObjectOrderIndex` synchronized after
+  every canonical-order mutation; pending batches use those indexes for insertion.
 
 ## Filtering and Search
 

@@ -18,36 +18,37 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             string[] candidates = discoveredGuids ?? Array.Empty<string>();
             HashSet<string> candidateLookup = null;
             bool candidateAdded = false;
+            string normalizedSavedGuid = null;
 
             if (referencedGuids != null && referencedGuids.Count > 0)
             {
                 candidateLookup = new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
-                int initialCount = candidateLookup.Count;
-                AddResolvedGuids(type, referencedGuids, candidateLookup);
-                candidateAdded = candidateLookup.Count > initialCount;
+                candidateAdded = AddResolvedGuids(type, referencedGuids, candidateLookup) > 0;
             }
 
-            normalizedSavedObjectGuid = NormalizeGuidForType(type, savedObjectGuid);
-            if (normalizedSavedObjectGuid != null)
+            if (TryNormalizeGuidForType(type, savedObjectGuid, out string normalizedGuid))
             {
+                normalizedSavedGuid = normalizedGuid;
                 candidateLookup ??= new HashSet<string>(
                     candidates,
                     StringComparer.OrdinalIgnoreCase
                 );
-                candidateAdded |= candidateLookup.Add(normalizedSavedObjectGuid);
+                candidateAdded |= candidateLookup.Add(normalizedSavedGuid);
             }
 
             if (!candidateAdded)
             {
+                normalizedSavedObjectGuid = normalizedSavedGuid;
                 return candidates;
             }
 
             string[] mergedCandidates = new string[candidateLookup.Count];
             candidateLookup.CopyTo(mergedCandidates);
+            normalizedSavedObjectGuid = normalizedSavedGuid;
             return mergedCandidates;
         }
 
-        public static void AddResolvedGuids(
+        public static int AddResolvedGuids(
             Type type,
             IEnumerable<string> referencedGuids,
             ISet<string> destination
@@ -55,9 +56,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         {
             if (type == null || referencedGuids == null || destination == null)
             {
-                return;
+                return 0;
             }
 
+            int addedCount = 0;
             foreach (string referencedGuid in referencedGuids)
             {
                 if (
@@ -68,15 +70,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     continue;
                 }
 
-                string normalizedGuid = NormalizeGuidForType(type, referencedGuid);
-                if (normalizedGuid != null)
+                if (
+                    TryNormalizeGuidForType(type, referencedGuid, out string normalizedGuid)
+                    && destination.Add(normalizedGuid)
+                )
                 {
-                    destination.Add(normalizedGuid);
+                    addedCount++;
                 }
             }
+
+            return addedCount;
         }
 
-        public static string NormalizeGuidForType(Type type, string assetGuid)
+        public static bool TryNormalizeGuidForType(
+            Type type,
+            string assetGuid,
+            out string normalizedGuid
+        )
         {
             if (
                 type == null
@@ -84,11 +94,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 || !TryResolveAssetGuidForType(assetGuid, type, out string assetPath)
             )
             {
-                return null;
+                normalizedGuid = null;
+                return false;
             }
 
             string canonicalGuid = AssetDatabase.AssetPathToGUID(assetPath);
-            return string.IsNullOrWhiteSpace(canonicalGuid) ? assetGuid : canonicalGuid;
+            normalizedGuid = string.IsNullOrWhiteSpace(canonicalGuid) ? assetGuid : canonicalGuid;
+            return true;
         }
 
         public static bool TryResolveAssetGuidForType(
@@ -97,22 +109,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             out string assetPath
         )
         {
-            assetPath = null;
             if (string.IsNullOrWhiteSpace(assetGuid) || type == null)
             {
+                assetPath = null;
                 return false;
             }
 
-            assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
+            string resolvedAssetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
             if (
-                string.IsNullOrWhiteSpace(assetPath)
-                || AssetDatabase.GetMainAssetTypeAtPath(assetPath) != type
+                string.IsNullOrWhiteSpace(resolvedAssetPath)
+                || AssetDatabase.GetMainAssetTypeAtPath(resolvedAssetPath) != type
             )
             {
                 assetPath = null;
                 return false;
             }
 
+            assetPath = resolvedAssetPath;
             return true;
         }
     }

@@ -109,10 +109,10 @@ namespace WallstopStudios.DataVisualizer
 
         protected internal virtual void OnValidate()
         {
-            TrySetAssetPath();
+            SetAssetPathIfAvailable();
         }
 
-        private void TrySetAssetPath()
+        private void SetAssetPathIfAvailable()
         {
 #if UNITY_EDITOR
             if (Application.isPlaying)
@@ -187,7 +187,7 @@ namespace WallstopStudios.DataVisualizer
 
         public virtual void AfterClone(ScriptableObject previous)
         {
-            TrySetAssetPath();
+            SetAssetPathIfAvailable();
             if (previous is BaseDataObject baseDataObject)
             {
                 _title = IncrementCloneSuffix(baseDataObject.Title);
@@ -238,7 +238,7 @@ namespace WallstopStudios.DataVisualizer
 
         public virtual void AfterCreate()
         {
-            TrySetAssetPath();
+            SetAssetPathIfAvailable();
         }
 
         public virtual void BeforeRename(string newName) { }

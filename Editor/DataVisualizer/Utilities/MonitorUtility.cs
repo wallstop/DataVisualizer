@@ -13,7 +13,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     {
         public static Rect GetPrimaryMonitorRect()
         {
-            Rect rect = TryGetPrimaryMonitorRect();
+            Rect rect = GetPrimaryMonitorRectOrZero();
             if ((rect.width <= 0 || rect.height <= 0) && Display.displays.Length != 0)
             {
                 rect = new Rect(0, 0, rect.width, rect.height);
@@ -22,7 +22,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return rect;
         }
 
-        private static Rect TryGetPrimaryMonitorRect()
+        private static Rect GetPrimaryMonitorRectOrZero()
         {
             try
             {

@@ -82,6 +82,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void Should_AssignNullOutput_When_GuidNormalizationFails()
+        {
+            Assert.IsFalse(
+                AssetGuidDiscovery.TryNormalizeGuidForType(
+                    typeof(EditorOnlyCreationData),
+                    "missing-guid",
+                    out string normalizedGuid
+                )
+            );
+            Assert.IsNull(normalizedGuid);
+        }
+
+        [Test]
         public void Should_RejectReferencedGuid_When_ExactTypeDoesNotMatch()
         {
             string rootFolder =
@@ -133,13 +146,91 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
                 HashSet<string> destination = new(StringComparer.OrdinalIgnoreCase);
-                AssetGuidDiscovery.AddResolvedGuids(
+                int addedCount = AssetGuidDiscovery.AddResolvedGuids(
                     typeof(EditorOnlyCreationData),
                     new[] { assetGuid, assetGuid.ToUpperInvariant() },
                     destination
                 );
 
                 CollectionAssert.AreEqual(new[] { assetGuid }, destination);
+                Assert.AreEqual(1, addedCount);
+                Assert.AreEqual(
+                    0,
+                    AssetGuidDiscovery.AddResolvedGuids(
+                        typeof(EditorOnlyCreationData),
+                        new[] { assetGuid },
+                        destination
+                    )
+                );
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(rootFolder);
+                AssetDatabase.Refresh();
+            }
+        }
+
+        [Test]
+        public void Should_RejectDerivedAsset_When_BaseTypeIsRequested()
+        {
+            string rootFolder =
+                "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
+            string assetPath = rootFolder + "/Derived.asset";
+
+            EnsureFolderExists(rootFolder);
+            DerivedEditorOnlyCreationData asset =
+                ScriptableObject.CreateInstance<DerivedEditorOnlyCreationData>();
+
+            try
+            {
+                AssetDatabase.CreateAsset(asset, assetPath);
+                AssetDatabase.SaveAssets();
+
+                string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
+                Assert.IsFalse(
+                    AssetGuidDiscovery.TryResolveAssetGuidForType(
+                        assetGuid,
+                        typeof(EditorOnlyCreationData),
+                        out string resolvedPath
+                    )
+                );
+                Assert.IsNull(resolvedPath);
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(rootFolder);
+                AssetDatabase.Refresh();
+            }
+        }
+
+        [Test]
+        public void Should_RejectSubasset_When_RequestedTypeIsNotMainAssetType()
+        {
+            string rootFolder =
+                "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
+            string assetPath = rootFolder + "/Main.asset";
+
+            EnsureFolderExists(rootFolder);
+            EditorOnlyCreationData mainAsset =
+                ScriptableObject.CreateInstance<EditorOnlyCreationData>();
+            EditorOnlyCreationSubasset subasset =
+                ScriptableObject.CreateInstance<EditorOnlyCreationSubasset>();
+
+            try
+            {
+                AssetDatabase.CreateAsset(mainAsset, assetPath);
+                AssetDatabase.AddObjectToAsset(subasset, mainAsset);
+                AssetDatabase.SaveAssets();
+
+                string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
+                Assert.IsFalse(
+                    AssetGuidDiscovery.TryResolveAssetGuidForType(
+                        assetGuid,
+                        typeof(EditorOnlyCreationSubasset),
+                        out string resolvedPath
+                    )
+                );
+                Assert.IsNull(resolvedPath);
             }
             finally
             {
@@ -165,7 +256,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
     }
 
-    public sealed class EditorOnlyCreationData : ScriptableObject { }
+    public class EditorOnlyCreationData : ScriptableObject { }
 
     public sealed class OtherEditorOnlyCreationData : ScriptableObject { }
+
+    public sealed class DerivedEditorOnlyCreationData : EditorOnlyCreationData { }
+
+    public sealed class EditorOnlyCreationSubasset : ScriptableObject { }
 }
