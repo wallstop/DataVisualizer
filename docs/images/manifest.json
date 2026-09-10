@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "layout",
+      "file": "data-visualizer-layout.jpg",
+      "alt": "Data Visualizer namespace, object list, and inspector panes",
+      "usedBy": ["index.md"]
+    },
+    {
+      "id": "settings",
+      "file": "data-visualizer-settings.jpg",
+      "alt": "Data Visualizer settings panel",
+      "usedBy": ["getting-started.md"]
+    },
+    {
+      "id": "instance-actions",
+      "file": "data-visualizer-instance-actions.jpg",
+      "alt": "Selected Data Visualizer object with instance actions",
+      "usedBy": ["user-guide.md"]
+    },
+    {
+      "id": "import",
+      "file": "data-visualizer-import.jpg",
+      "alt": "Data Visualizer import and label workflow",
+      "usedBy": ["user-guide.md"]
+    },
+    {
+      "id": "create",
+      "file": "data-visualizer-create.jpg",
+      "alt": "Data Visualizer create asset workflow",
+      "usedBy": ["user-guide.md"]
+    }
+  ]
+}

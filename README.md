@@ -10,7 +10,7 @@ This guide captures the key points from the companion [video walkthrough](https:
 
 ## Getting Started
 
-Open **Tools → Walltop Studios → Data Visualizer** and dock it alongside the Inspector. The tool persists your layout, selection, and tracked types between sessions, so you can jump back into your workflow immediately.
+Open **Tools → Wallstop Studios → Data Visualizer** and dock it alongside the Inspector. The tool persists your layout, selection, and tracked types between sessions, so you can jump back into your workflow immediately.
 
 ## Window Layout
 
@@ -130,7 +130,7 @@ or transaction rollback.
 
 **BaseDataObject** provides a ready-made base class for ScriptableObjects with built-in lifecycle support:
 - Centralizes namespace/type metadata so derived types inherit correct grouping automatically
-- Implements lifecycle interfaces (clone, create, rename, delete) with virtual hooks like `OnBeforeClone`, `OnAfterClone`, and `OnValidateRename`
+- Implements lifecycle interfaces (clone, create, and rename) with virtual hooks like `BeforeClone`, `AfterClone`, `BeforeCreate`, `AfterCreate`, `BeforeRename`, and `AfterRename`
 - Exposes helper methods for common operations (ping asset, select in Project, open related scenes)
 
 Derived classes override only what they need—GUID generation, cache resets, companion asset syncing—without duplicating boilerplate.

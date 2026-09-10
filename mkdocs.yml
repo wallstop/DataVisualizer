@@ -1,0 +1,48 @@
+site_name: Data Visualizer
+site_description: A responsive, programmable ScriptableObject editor for Unity
+site_url: https://wallstop.github.io/DataVisualizer/
+repo_url: https://github.com/wallstop/DataVisualizer
+repo_name: wallstop/DataVisualizer
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+strict: true
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - User guide: user-guide.md
+  - Automation: automation.md
+  - Performance: performance.md
+  - Compatibility: compatibility.md
+  - Development: development.md
