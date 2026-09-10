@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -380,6 +381,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         {
             public int repetition;
             public string caseName;
+            public int logicalCaseIndex;
             public int caseIndex;
             public bool warmup;
             public double elapsedMilliseconds;
@@ -931,7 +933,8 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                     {
                         repetition = _repetition,
                         caseName = caseName,
-                        caseIndex = caseIndex,
+                        logicalCaseIndex = caseIndex,
+                        caseIndex = _caseIndex,
                         warmup = warmup,
                         elapsedMilliseconds = elapsed,
                     }
@@ -993,7 +996,10 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             string[] guids = AssetDatabase.FindAssets("", new[] { FixtureRoot });
             int itemCount = 0;
             int duplicateShortNameCount = 0;
+            int firstDataCount = 0;
+            int secondDataCount = 0;
             HashSet<string> identities = new(StringComparer.Ordinal);
+            HashSet<int> fixtureIndexes = new();
             foreach (string guid in guids)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
@@ -1007,9 +1013,21 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 {
                     throw new InvalidOperationException("Fixture item path verification failed");
                 }
+                if (!fixtureIndexes.Add(itemIndex))
+                {
+                    throw new InvalidOperationException("Fixture contains duplicate item indexes");
+                }
+                Type expectedType = itemIndex % 4 switch
+                {
+                    0 => typeof(PlainData),
+                    1 => typeof(BaseData),
+                    2 => typeof(WallstopStudios.DataVisualizer.Benchmark.First.Data),
+                    _ => typeof(WallstopStudios.DataVisualizer.Benchmark.Second.Data),
+                };
                 var asset = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
                 if (
                     asset is not IBenchmarkFixture fixture
+                    || asset.GetType() != expectedType
                     || !identities.Add(fixture.Identity)
                     || fixture.Description != $"fixture-description-{itemIndex:D6}"
                     || fixture.CustomOrder != (itemIndex * 37 + 11) % 100000
@@ -1025,9 +1043,24 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 if (asset.GetType().Name == "Data")
                 {
                     duplicateShortNameCount++;
+                    if (asset.GetType() == typeof(WallstopStudios.DataVisualizer.Benchmark.First.Data))
+                    {
+                        firstDataCount++;
+                    }
+                    else
+                    {
+                        secondDataCount++;
+                    }
                 }
                 string[] labels = AssetDatabase.GetLabels(asset);
                 string expectedKind = itemIndex % 2 == 0 ? "ordinary" : "base-data-object";
+                int expectedNestedCount = itemIndex % 4 < 2 ? 8 : 4;
+                int nestedMultiplier = itemIndex % 4 switch
+                {
+                    1 => 2,
+                    3 => 3,
+                    _ => 1,
+                };
                 if (
                     !labels.Contains("benchmark")
                     || !labels.Contains(expectedKind)
@@ -1035,7 +1068,12 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                     || fixture.Nested == null
                     || fixture.Nested.key != fixture.Identity
                     || fixture.Nested.values == null
-                    || fixture.Nested.values.Count == 0
+                    || fixture.Nested.values.Count != expectedNestedCount
+                    || !fixture.Nested.values.SequenceEqual(
+                        Enumerable.Range(0, expectedNestedCount).Select(value =>
+                            value * nestedMultiplier + itemIndex
+                        )
+                    )
                 )
                 {
                     throw new InvalidOperationException("Fixture label verification failed");
@@ -1048,6 +1086,16 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             if (duplicateShortNameCount == 0)
             {
                 throw new InvalidOperationException("Duplicate short-name fixture coverage is missing");
+            }
+            if (
+                fixtureIndexes.Count != FixtureSize
+                || fixtureIndexes.Min() != 0
+                || fixtureIndexes.Max() != FixtureSize - 1
+                || firstDataCount != (FixtureSize + 1) / 4
+                || secondDataCount != FixtureSize / 4
+            )
+            {
+                throw new InvalidOperationException("Fixture type or index coverage is incomplete");
             }
             _result.fixtureAssetCount = itemCount;
             _result.duplicateShortNameCount = duplicateShortNameCount;
@@ -1403,25 +1451,40 @@ def write_comparison_report(path: Path, config: BenchmarkConfig, result: dict[st
         for item in result.get("playEntryMetrics", [])
         if isinstance(item, dict) and item.get("caseName")
     }
-    open_idle_result = evidence.get("open-idle") or result.get("playEntryOpenIdle") or result.get("playEntryOpen") or {}
-    open_indexing_result = result.get("playEntryOpenIndexing") or {}
-    closed_result = result.get("playEntryClosed") or {}
+    open_idle_result = (
+        evidence.get("open-idle")
+        or result.get("playEntryOpenIdle")
+        or result.get("playEntryOpen")
+        or {}
+    )
+    open_indexing_result = evidence.get("open-indexing") or result.get("playEntryOpenIndexing") or {}
+    closed_result = evidence.get("closed") or result.get("playEntryClosed") or {}
     target = result.get("playEntryTargetMilliseconds", 20)
     evidence_complete = all(case in evidence for case in PLAY_ENTRY_CASES)
     if result.get("suite") == "fixture":
         target_summary = "not measured (fixture suite)"
+    elif evidence_complete and any(
+        evidence[case].get("status") == "failed" for case in PLAY_ENTRY_CASES
+    ):
+        target_summary = "FAILED (required metric did not complete)"
+    elif evidence_complete and any(
+        evidence[case].get("status") == "unavailable" for case in PLAY_ENTRY_CASES
+    ):
+        target_summary = "UNAVAILABLE (required metric was not measured)"
     elif evidence_complete and all(
         evidence[case].get("status") == "measured"
         and evidence[case].get("targetStatus") == "pass"
         for case in PLAY_ENTRY_CASES
     ):
         target_summary = f"PASS (all three p95 values <= {target} ms)"
-    elif any(item.get("status") == "unavailable" for item in evidence.values()):
-        target_summary = "UNAVAILABLE (required metric was not measured)"
-    elif any(item.get("status") == "failed" for item in evidence.values()):
-        target_summary = "FAILED (required metric did not complete)"
-    else:
+    elif evidence_complete and all(
+        evidence[case].get("status") == "measured" for case in PLAY_ENTRY_CASES
+    ):
         target_summary = f"MISS (measured p95 values must be <= {target} ms)"
+    elif result.get("playEntryOpen") or result.get("playEntryOpenIdle"):
+        target_summary = f"MISS (measured p95 values must be <= {target} ms)"
+    else:
+        target_summary = "INCOMPLETE (required metric evidence is missing)"
     unavailable = result.get("unavailableMetrics") or []
 
     lines = [
@@ -1480,6 +1543,8 @@ def write_comparison_report(path: Path, config: BenchmarkConfig, result: dict[st
 
 
 def validate_result(config: BenchmarkConfig, result: dict[str, Any]) -> dict[str, Any]:
+    if result.get("schemaVersion") != SCHEMA_VERSION:
+        raise BenchmarkError("Unity benchmark result has an unsupported schema version")
     if result.get("status") != "completed":
         raise BenchmarkError(f"Unity benchmark did not complete: {result}")
     actual_version = result.get("unityVersion")
@@ -1507,14 +1572,19 @@ def validate_result(config: BenchmarkConfig, result: dict[str, Any]) -> dict[str
 def validate_metric_evidence(config: BenchmarkConfig, result: dict[str, Any]) -> None:
     """Require auditable status, samples, and alternating observations."""
 
-    metric_items = [
-        item
-        for item in result.get("playEntryMetrics", [])
-        if isinstance(item, dict) and item.get("caseName")
-    ]
+    metric_items = result.get("playEntryMetrics")
+    if not isinstance(metric_items, list):
+        raise BenchmarkError("Benchmark metric evidence must be an array")
+    if any(not isinstance(item, dict) for item in metric_items):
+        raise BenchmarkError("Benchmark metric evidence entries must be objects")
+    if any(not isinstance(item.get("caseName"), str) or not item["caseName"].strip() for item in metric_items):
+        raise BenchmarkError("Benchmark metric evidence entries need a caseName")
     metrics = {item["caseName"]: item for item in metric_items}
     if len(metrics) != len(metric_items):
         raise BenchmarkError("Benchmark reported duplicate metric evidence case names")
+    unknown = sorted(set(metrics) - set(PLAY_ENTRY_CASES))
+    if unknown:
+        raise BenchmarkError(f"Benchmark reported unknown metric evidence: {', '.join(unknown)}")
     missing = [case for case in PLAY_ENTRY_CASES if case not in metrics]
     if missing:
         raise BenchmarkError(f"Benchmark did not report metric evidence for: {', '.join(missing)}")
@@ -1532,16 +1602,32 @@ def validate_metric_evidence(config: BenchmarkConfig, result: dict[str, Any]) ->
             continue
         if status != "measured":
             raise BenchmarkError(f"Required Play-entry metric {case} is {status}")
-        if metric.get("warmupCount", 0) < PLAY_ENTRY_WARMUPS:
-            raise BenchmarkError(f"Metric {case} has fewer than five warm-ups")
-        if metric.get("sampleCount", 0) < PLAY_ENTRY_SAMPLES:
-            raise BenchmarkError(f"Metric {case} has fewer than thirty samples")
-        if len(metric.get("warmups") or []) < PLAY_ENTRY_WARMUPS:
-            raise BenchmarkError(f"Metric {case} omitted warm-up observations")
-        if len(metric.get("samples") or []) < PLAY_ENTRY_SAMPLES:
-            raise BenchmarkError(f"Metric {case} omitted measured observations")
+        if metric.get("warmupCount") != PLAY_ENTRY_WARMUPS:
+            raise BenchmarkError(f"Metric {case} must contain exactly five warm-ups")
+        if metric.get("sampleCount") != PLAY_ENTRY_SAMPLES:
+            raise BenchmarkError(f"Metric {case} must contain exactly thirty samples")
+        if len(metric.get("warmups") or []) != PLAY_ENTRY_WARMUPS:
+            raise BenchmarkError(f"Metric {case} omitted or added warm-up observations")
+        if len(metric.get("samples") or []) != PLAY_ENTRY_SAMPLES:
+            raise BenchmarkError(f"Metric {case} omitted or added measured observations")
+        if metric.get("warmupCount") != len(metric.get("warmups") or []):
+            raise BenchmarkError(f"Metric {case} has an inconsistent warm-up count")
+        if metric.get("sampleCount") != len(metric.get("samples") or []):
+            raise BenchmarkError(f"Metric {case} has an inconsistent sample count")
         if metric.get("targetStatus") not in {"pass", "miss"}:
             raise BenchmarkError(f"Metric {case} has an invalid target status")
+        p95 = metric.get("p95Milliseconds")
+        target = result.get("playEntryTargetMilliseconds", 20)
+        if not isinstance(p95, (int, float)) or isinstance(p95, bool) or not math.isfinite(p95):
+            raise BenchmarkError(f"Metric {case} has an invalid p95 value")
+        if not isinstance(target, (int, float)) or isinstance(target, bool) or not math.isfinite(target):
+            raise BenchmarkError("Benchmark target must be a finite number")
+        expected_target_status = "pass" if p95 <= target else "miss"
+        if metric.get("targetStatus") != expected_target_status:
+            raise BenchmarkError(f"Metric {case} has an inconsistent target status")
+        for sample in (metric.get("warmups") or []) + (metric.get("samples") or []):
+            if not isinstance(sample, (int, float)) or isinstance(sample, bool) or not math.isfinite(sample) or sample < 0:
+                raise BenchmarkError(f"Metric {case} contains an invalid elapsed time")
 
     if config.suite == "fixture":
         return
@@ -1556,13 +1642,35 @@ def validate_metric_evidence(config: BenchmarkConfig, result: dict[str, Any]) ->
             raise BenchmarkError("Play-entry observations must be objects")
         repetition = observation.get("repetition")
         case = observation.get("caseName")
-        if not isinstance(repetition, int) or case not in PLAY_ENTRY_CASES:
+        if (
+            not isinstance(repetition, int)
+            or isinstance(repetition, bool)
+            or case not in PLAY_ENTRY_CASES
+        ):
             raise BenchmarkError("Play-entry observations need repetition and caseName")
         case_index = observation.get("caseIndex")
-        if not isinstance(case_index, int) or not isinstance(observation.get("warmup"), bool):
+        logical_case_index = observation.get("logicalCaseIndex")
+        if (
+            not isinstance(case_index, int)
+            or isinstance(case_index, bool)
+            or not isinstance(logical_case_index, int)
+            or isinstance(logical_case_index, bool)
+            or not isinstance(observation.get("warmup"), bool)
+        ):
             raise BenchmarkError("Play-entry observations need caseIndex and warmup")
-        if not isinstance(observation.get("elapsedMilliseconds"), (int, float)):
+        if logical_case_index != PLAY_ENTRY_CASES.index(case):
+            raise BenchmarkError("Play-entry observation logical case index is invalid")
+        elapsed = observation.get("elapsedMilliseconds")
+        if (
+            not isinstance(elapsed, (int, float))
+            or isinstance(elapsed, bool)
+            or not math.isfinite(elapsed)
+            or elapsed < 0
+        ):
             raise BenchmarkError("Play-entry observations need elapsedMilliseconds")
+        warmup = observation["warmup"]
+        if warmup != (repetition < PLAY_ENTRY_WARMUPS):
+            raise BenchmarkError("Play-entry observation has an inconsistent warm-up label")
         expected_order = case_order_for_repetition(repetition)
         if case_index < 0 or case_index >= len(expected_order) or expected_order[case_index] != case:
             raise BenchmarkError("Play-entry observation caseIndex does not match the planned order")

@@ -65,12 +65,20 @@
       "required": ["operation"],
       "additionalProperties": false,
       "properties": {
-        "operation": { "type": "integer", "minimum": 0, "maximum": 5 },
-        "guids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "operation": { "type": "integer", "minimum": 0, "maximum": 6 },
+        "guids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
         "value": { "type": "string" },
         "labels": { "type": "array", "items": { "type": "string" } },
         "assemblyQualifiedTypeName": { "type": ["string", "null"] },
-        "destinationFolder": { "type": ["string", "null"] }
+        "destinationFolder": { "type": ["string", "null"] },
+        "propertyPath": { "type": "string", "minLength": 1 },
+        "serializedValue": {
+          "$ref": "#/$defs/assetOperation/$defs/serializedValue"
+        }
       },
       "anyOf": [
         {
@@ -86,14 +94,140 @@
             "assemblyQualifiedTypeName": { "type": "string", "minLength": 1 }
           },
           "required": ["value", "assemblyQualifiedTypeName"]
+        },
+        {
+          "properties": { "operation": { "const": 6 } },
+          "required": ["guids", "propertyPath", "serializedValue"]
         }
       ],
       "allOf": [
         {
           "if": { "properties": { "operation": { "const": 2 } } },
           "then": { "required": ["labels"] }
+        },
+        {
+          "if": { "properties": { "operation": { "const": 5 } } },
+          "then": {
+            "properties": { "guids": { "maxItems": 1 } }
+          }
+        },
+        {
+          "if": { "properties": { "operation": { "const": 6 } } },
+          "then": { "required": ["guids", "propertyPath", "serializedValue"] }
         }
-      ]
+      ],
+      "$defs": {
+        "serializedValue": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "type": "integer", "minimum": 0, "maximum": 19 },
+            "stringValue": { "type": "string" },
+            "boolValue": { "type": "boolean" },
+            "intValue": { "type": "integer" },
+            "longValue": { "type": "integer" },
+            "floatValue": { "type": "number" },
+            "doubleValue": { "type": "number" },
+            "objectReferenceGuid": { "type": "string" },
+            "colorValue": { "$ref": "#/$defs/assetOperation/$defs/color" },
+            "vector2Value": { "$ref": "#/$defs/assetOperation/$defs/vector2" },
+            "vector3Value": { "$ref": "#/$defs/assetOperation/$defs/vector3" },
+            "vector4Value": { "$ref": "#/$defs/assetOperation/$defs/vector4" },
+            "quaternionValue": { "$ref": "#/$defs/assetOperation/$defs/vector4" },
+            "rectValue": { "$ref": "#/$defs/assetOperation/$defs/rect" },
+            "boundsValue": { "$ref": "#/$defs/assetOperation/$defs/bounds" },
+            "vector2IntValue": { "$ref": "#/$defs/assetOperation/$defs/vector2Int" },
+            "vector3IntValue": { "$ref": "#/$defs/assetOperation/$defs/vector3Int" },
+            "rectIntValue": { "$ref": "#/$defs/assetOperation/$defs/rectInt" },
+            "boundsIntValue": { "$ref": "#/$defs/assetOperation/$defs/boundsInt" }
+          }
+        },
+        "color": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "r": { "type": "number" },
+            "g": { "type": "number" },
+            "b": { "type": "number" },
+            "a": { "type": "number" }
+          }
+        },
+        "vector2": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+        },
+        "vector3": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "z": { "type": "number" }
+          }
+        },
+        "vector4": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "z": { "type": "number" },
+            "w": { "type": "number" }
+          }
+        },
+        "rect": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "width": { "type": "number" },
+            "height": { "type": "number" }
+          }
+        },
+        "bounds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "center": { "$ref": "#/$defs/vector3" },
+            "size": { "$ref": "#/$defs/vector3" }
+          }
+        },
+        "vector2Int": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "x": { "type": "integer" }, "y": { "type": "integer" } }
+        },
+        "vector3Int": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "integer" },
+            "y": { "type": "integer" },
+            "z": { "type": "integer" }
+          }
+        },
+        "rectInt": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "integer" },
+            "y": { "type": "integer" },
+            "width": { "type": "integer" },
+            "height": { "type": "integer" }
+          }
+        },
+        "boundsInt": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "position": { "$ref": "#/$defs/vector3Int" },
+            "size": { "$ref": "#/$defs/vector3Int" }
+          }
+        }
+      }
     }
   }
 }

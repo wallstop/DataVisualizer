@@ -16,6 +16,55 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
         Delete = 3,
         Create = 4,
         Clone = 5,
+        SetSerializedProperty = 6,
+    }
+
+    public enum DataVisualizerSerializedValueKind
+    {
+        String = 0,
+        Boolean = 1,
+        Integer = 2,
+        Long = 3,
+        Float = 4,
+        Double = 5,
+        Enum = 6,
+        ObjectReferenceGuid = 7,
+        Color = 8,
+        Vector2 = 9,
+        Vector3 = 10,
+        Vector4 = 11,
+        Quaternion = 12,
+        Rect = 13,
+        Bounds = 14,
+        Vector2Int = 15,
+        Vector3Int = 16,
+        RectInt = 17,
+        BoundsInt = 18,
+        ArraySize = 19,
+    }
+
+    [Serializable]
+    public sealed class DataVisualizerSerializedValue
+    {
+        public DataVisualizerSerializedValueKind kind;
+        public string stringValue = string.Empty;
+        public bool boolValue;
+        public int intValue;
+        public long longValue;
+        public float floatValue;
+        public double doubleValue;
+        public string objectReferenceGuid = string.Empty;
+        public UnityEngine.Color colorValue;
+        public UnityEngine.Vector2 vector2Value;
+        public UnityEngine.Vector3 vector3Value;
+        public UnityEngine.Vector4 vector4Value;
+        public UnityEngine.Quaternion quaternionValue;
+        public UnityEngine.Rect rectValue;
+        public UnityEngine.Bounds boundsValue;
+        public UnityEngine.Vector2Int vector2IntValue;
+        public UnityEngine.Vector3Int vector3IntValue;
+        public UnityEngine.RectInt rectIntValue;
+        public UnityEngine.BoundsInt boundsIntValue;
     }
 
     [Serializable]
@@ -27,6 +76,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
         public string[] labels = Array.Empty<string>();
         public string assemblyQualifiedTypeName;
         public string destinationFolder;
+        public string propertyPath;
+        public DataVisualizerSerializedValue serializedValue;
     }
 
     [Serializable]
@@ -35,7 +86,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
         public string guid;
         public string originalPath;
         public string resultingPath;
+        public string resultingGuid;
         public bool succeeded;
+        public bool mutationApplied;
         public string diagnostic;
     }
 
@@ -362,6 +415,22 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                     item.resultingPath = string.Empty;
                     return true;
 
+                case DataVisualizerAssetOperationKind.SetSerializedProperty:
+                    if (
+                        !TryValidateSerializedProperty(
+                            path,
+                            request.propertyPath,
+                            request.serializedValue,
+                            out diagnostic
+                        )
+                    )
+                    {
+                        return false;
+                    }
+
+                    item.resultingPath = path;
+                    return true;
+
                 default:
                     diagnostic = "The requested asset operation is unsupported.";
                     return false;
@@ -431,6 +500,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                         return false;
                     }
                     return true;
+
+                case DataVisualizerAssetOperationKind.SetSerializedProperty:
+                    return ApplySerializedProperty(
+                        path,
+                        request.propertyPath,
+                        request.serializedValue,
+                        out diagnostic
+                    );
 
                 default:
                     diagnostic = "The requested asset operation is unsupported.";

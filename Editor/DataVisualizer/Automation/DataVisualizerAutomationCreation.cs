@@ -111,6 +111,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                     duplicable.BeforeClone(source);
                 }
                 AssetDatabase.CreateAsset(clone, targetPath);
+                item.mutationApplied = true;
                 AssetDatabase.SaveAssets();
                 ScriptableObject cloneAsset =
                     AssetDatabase.LoadMainAssetAtPath(targetPath) as ScriptableObject;
@@ -124,8 +125,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                     cloneDataObject.AfterClone(source);
                 }
                 AssetDatabase.SaveAssets();
-                item.guid = AssetDatabase.AssetPathToGUID(targetPath);
-                item.succeeded = !string.IsNullOrWhiteSpace(item.guid);
+                item.resultingGuid = AssetDatabase.AssetPathToGUID(targetPath);
+                item.succeeded = !string.IsNullOrWhiteSpace(item.resultingGuid);
                 if (!item.succeeded)
                 {
                     item.diagnostic = "Unity did not assign a GUID to the cloned asset.";
@@ -133,7 +134,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             }
             catch (Exception exception)
             {
-                item.diagnostic = $"Clone operation failed: {exception.Message}";
+                item.diagnostic = item.mutationApplied
+                    ? $"Clone asset was created, but its lifecycle hook failed: {exception.Message}"
+                    : $"Clone operation failed: {exception.Message}";
             }
             finally
             {
@@ -221,6 +224,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                     creatable.BeforeCreate();
                 }
                 AssetDatabase.CreateAsset(instance, targetPath);
+                item.mutationApplied = true;
                 AssetDatabase.SaveAssets();
                 ScriptableObject createdAsset =
                     AssetDatabase.LoadMainAssetAtPath(targetPath) as ScriptableObject;
@@ -234,8 +238,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                     created.AfterCreate();
                 }
                 AssetDatabase.SaveAssets();
-                item.guid = AssetDatabase.AssetPathToGUID(targetPath);
-                item.succeeded = !string.IsNullOrWhiteSpace(item.guid);
+                item.resultingGuid = AssetDatabase.AssetPathToGUID(targetPath);
+                item.succeeded = !string.IsNullOrWhiteSpace(item.resultingGuid);
                 if (!item.succeeded)
                 {
                     item.diagnostic = "Unity did not assign a GUID to the created asset.";
@@ -243,7 +247,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             }
             catch (Exception exception)
             {
-                item.diagnostic = $"Create operation failed: {exception.Message}";
+                item.diagnostic = item.mutationApplied
+                    ? $"Asset was created, but its lifecycle hook failed: {exception.Message}"
+                    : $"Create operation failed: {exception.Message}";
             }
             finally
             {

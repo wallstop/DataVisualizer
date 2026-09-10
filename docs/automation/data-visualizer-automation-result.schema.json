@@ -43,7 +43,9 @@
               "guid": { "type": ["string", "null"] },
               "originalPath": { "type": ["string", "null"] },
               "resultingPath": { "type": ["string", "null"] },
+              "resultingGuid": { "type": ["string", "null"] },
               "succeeded": { "type": "boolean" },
+              "mutationApplied": { "type": "boolean" },
               "diagnostic": { "type": ["string", "null"] }
             }
           }

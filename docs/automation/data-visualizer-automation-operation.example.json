@@ -5,7 +5,6 @@
   "assetOperation": {
     "operation": 0,
     "guids": ["0123456789abcdef0123456789abcdef"],
-    "value": "RenamedData",
-    "destinationFolder": "Assets/Data"
+    "value": "RenamedData"
   }
 }

@@ -181,6 +181,45 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void Should_RejectSerializedPropertyWithoutSourceGuid()
+        {
+            DataVisualizerAssetOperationResult result =
+                DataVisualizerAutomation.PreviewAssetOperation(
+                    new DataVisualizerAssetOperationRequest
+                    {
+                        operation = DataVisualizerAssetOperationKind.SetSerializedProperty,
+                        propertyPath = "value",
+                        serializedValue = new DataVisualizerSerializedValue
+                        {
+                            kind = DataVisualizerSerializedValueKind.Integer,
+                            intValue = 3,
+                        },
+                    }
+                );
+
+            Assert.IsFalse(result.succeeded);
+            StringAssert.Contains("GUID", result.diagnostic);
+        }
+
+        [Test]
+        public void Should_RoundTripSerializedValueJson()
+        {
+            DataVisualizerSerializedValue source = new()
+            {
+                kind = DataVisualizerSerializedValueKind.Vector3,
+                vector3Value = new UnityEngine.Vector3(1f, 2f, 3f),
+            };
+
+            DataVisualizerSerializedValue copy =
+                UnityEngine.JsonUtility.FromJson<DataVisualizerSerializedValue>(
+                    UnityEngine.JsonUtility.ToJson(source)
+                );
+
+            Assert.AreEqual(source.kind, copy.kind);
+            Assert.AreEqual(source.vector3Value, copy.vector3Value);
+        }
+
+        [Test]
         public void Should_RejectUnsupportedAutomationSchemaVersion()
         {
             DataVisualizerAutomationResult result = DataVisualizerAutomation.DispatchRequestJson(

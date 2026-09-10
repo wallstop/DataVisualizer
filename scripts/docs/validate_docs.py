@@ -10,6 +10,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+try:
+    from jsonschema import Draft202012Validator
+except ImportError:  # pragma: no cover - CI installs requirements-docs.txt
+    Draft202012Validator = None
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
@@ -71,6 +76,7 @@ def validate_markdown() -> dict[Path, set[str]]:
 
 def validate_examples() -> None:
     automation = DOCS / "automation"
+    schemas: dict[str, Any] = {}
     for schema_name in (
         "data-visualizer-automation-request.schema.json",
         "data-visualizer-automation-result.schema.json",
@@ -78,9 +84,22 @@ def validate_examples() -> None:
         schema = load_json(automation / schema_name)
         if not schema.get("$schema") or not schema.get("$id"):
             raise DocumentationError(f"{schema_name} must declare $schema and $id")
+        if Draft202012Validator is not None:
+            try:
+                Draft202012Validator.check_schema(schema)
+            except Exception as error:
+                raise DocumentationError(f"{schema_name} is not a valid Draft 2020-12 schema: {error}") from error
+        schemas[schema_name] = schema
 
     for example in sorted(automation.glob("*.example.json")):
         request = load_json(example)
+        if Draft202012Validator is not None:
+            try:
+                Draft202012Validator(schemas["data-visualizer-automation-request.schema.json"]).validate(request)
+            except Exception as error:
+                raise DocumentationError(
+                    f"{example.relative_to(ROOT)} does not satisfy the request schema: {error}"
+                ) from error
         required = ("schemaVersion", "requestId", "operation")
         if request.get("schemaVersion") != 1 or any(
             key not in request for key in required
@@ -108,7 +127,13 @@ def validate_examples() -> None:
                 raise DocumentationError(
                     f"{example.relative_to(ROOT)} Create operations need a type and value"
                 )
-            if nested_operation == 5 and len(asset_operation.get("guids", [])) != 1:
+            guids = asset_operation.get("guids")
+            if nested_operation == 5 and (
+                not isinstance(guids, list)
+                or len(guids) != 1
+                or not isinstance(guids[0], str)
+                or not guids[0].strip()
+            ):
                 raise DocumentationError(
                     f"{example.relative_to(ROOT)} Clone operations need one GUID"
                 )

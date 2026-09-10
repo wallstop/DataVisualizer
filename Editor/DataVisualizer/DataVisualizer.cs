@@ -4169,7 +4169,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     // order past all of them so it sorts to the end and the loader's binary-search
                     // inserts stay consistent (they assume _selectedObjects is ordered by this index).
                     _selectedObjectOrderIndex[instance] = int.MaxValue;
-                    string instanceGuid = AssetDatabase.AssetPathToGUID(uniquePath);
+                    string instanceGuid = AssetDatabase.AssetPathToGUID(createdPath);
                     if (!string.IsNullOrWhiteSpace(instanceGuid))
                     {
                         _asyncDisplayOrderByGuid[instanceGuid] = int.MaxValue;
@@ -7681,7 +7681,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 EditorUtility.DisplayDialog(
                     "Error Cloning Asset",
-                    $"Failed to create cloned asset at '{uniquePath}': {e.Message}",
+                    $"Failed to create cloned asset from '{originalPath}': {e.Message}",
                     "OK"
                 );
             }

@@ -31,13 +31,17 @@ DataVisualizerAssetOperationResult preview =
 ```
 
 Metadata is ordered by path and GUID and uses assembly-qualified type names. Asset
-operation results include the request GUID, original/resulting paths, per-item
-diagnostics, and `complete`/`succeeded` status. Preview validates targets and move
+operation results include the request GUID, original/resulting paths, resulting GUIDs
+for Create/Clone, per-item diagnostics, and `complete`/`succeeded` status. Preview validates targets and move
 destinations without running lifecycle hooks; apply revalidates before mutating.
 Create and clone use the same operation surface: Create takes an assembly-qualified
 type, asset name, and optional destination folder; Clone takes one source GUID and
 an optional clone name. Create/clone run `ICreatable`/`IDuplicable` hooks in the
 same before-create/before-clone, save, after-create/after-clone order as the UI.
+Serialized-property operations take a property path and an explicit value kind
+(`String`, `Boolean`, numeric, enum, Unity value, collection size, or asset-reference
+GUID). Unsupported or mismatched property kinds fail before mutation; preview never
+authors serialized data.
 
 ## JSON schema version 1
 

@@ -66,12 +66,14 @@ class BenchmarkDriverTests(unittest.TestCase):
                     {
                         "repetition": repetition,
                         "caseName": case,
+                        "logicalCaseIndex": cases.index(case),
                         "caseIndex": case_index,
                         "warmup": repetition < 5,
                         "elapsedMilliseconds": 10.0,
                     }
                 )
         return {
+            "schemaVersion": "1",
             "suite": "all",
             "playEntryMetrics": [
                 {
@@ -82,6 +84,8 @@ class BenchmarkDriverTests(unittest.TestCase):
                     "sampleCount": 30,
                     "warmups": [10.0] * 5,
                     "samples": [10.0] * 30,
+                    "medianMilliseconds": 10.0,
+                    "p95Milliseconds": 10.0,
                     "targetStatus": "pass",
                 }
                 for case in cases
@@ -117,6 +121,22 @@ class BenchmarkDriverTests(unittest.TestCase):
             config = self._all_suite_config(temporary)
             result = self._measured_metric_result()
             result["playEntryObservations"][0]["caseIndex"] = 2
+            with self.assertRaises(BenchmarkError):
+                validate_metric_evidence(config, result)
+
+    def test_validate_metric_evidence_rejects_wrong_warmup_label(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = self._all_suite_config(temporary)
+            result = self._measured_metric_result()
+            result["playEntryObservations"][0]["warmup"] = False
+            with self.assertRaises(BenchmarkError):
+                validate_metric_evidence(config, result)
+
+    def test_validate_metric_evidence_rejects_inconsistent_target_status(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = self._all_suite_config(temporary)
+            result = self._measured_metric_result()
+            result["playEntryMetrics"][0]["targetStatus"] = "miss"
             with self.assertRaises(BenchmarkError):
                 validate_metric_evidence(config, result)
 
@@ -198,6 +218,7 @@ class BenchmarkDriverTests(unittest.TestCase):
             )
             config = config_from_args(arguments, root)
             result = {
+                "schemaVersion": "1",
                 "status": "completed",
                 "unityVersion": "6000.4.6f1",
                 "fixtureSize": 100,
@@ -234,6 +255,7 @@ class BenchmarkDriverTests(unittest.TestCase):
                 ]
             )
             result = {
+                "schemaVersion": "1",
                 "status": "completed",
                 "unityVersion": "6000.4.6f1",
                 "fixtureSize": 100,
@@ -326,6 +348,8 @@ class BenchmarkDriverTests(unittest.TestCase):
             self.assertIn("AssetDatabase.Refresh();", source)
             self.assertIn("SharedReference", source)
             self.assertIn("Shared fixture asset could not be reloaded", source)
+            self.assertIn("logicalCaseIndex", source)
+            self.assertIn("expectedType", source)
             self.assertIn("_phase = Phase.VerifyFixture;", source)
 
     def test_planned_execution_records_measurement_boundary(self):
@@ -522,7 +546,42 @@ class BenchmarkDriverTests(unittest.TestCase):
             }
             report = comparison_report_path(config)
             write_comparison_report(report, config, result)
-            self.assertIn("UNAVAILABLE", report.read_text(encoding="utf-8"))
+            self.assertIn("FAILED", report.read_text(encoding="utf-8"))
+
+    def test_comparison_report_uses_all_new_metric_evidence_rows(self):
+        parser = build_argument_parser()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(__file__).resolve().parents[2]
+            arguments = parser.parse_args(
+                [
+                    "--host-project",
+                    "/host/DataVisualizer",
+                    "--unity-version",
+                    "6000.4.6f1",
+                    "--fixture-size",
+                    "100",
+                    "--suite",
+                    "all",
+                    "--output-dir",
+                    temporary,
+                    "--mode",
+                    "mcp",
+                ]
+            )
+            config = config_from_args(arguments, root)
+            result = self._measured_metric_result()
+            result.update(
+                {
+                    "fixtureSize": 100,
+                    "playEntryTargetMilliseconds": 20,
+                    "playEntryTargetMet": True,
+                }
+            )
+            report = comparison_report_path(config)
+            write_comparison_report(report, config, result)
+            contents = report.read_text(encoding="utf-8")
+            self.assertEqual(contents.count("10.000 ms"), 6)
+            self.assertIn("PASS", contents)
 
     def test_direct_command_waits_for_deferred_finish(self):
         parser = build_argument_parser()
