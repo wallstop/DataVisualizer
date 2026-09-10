@@ -34,6 +34,10 @@ Metadata is ordered by path and GUID and uses assembly-qualified type names. Ass
 operation results include the request GUID, original/resulting paths, per-item
 diagnostics, and `complete`/`succeeded` status. Preview validates targets and move
 destinations without running lifecycle hooks; apply revalidates before mutating.
+Create and clone use the same operation surface: Create takes an assembly-qualified
+type, asset name, and optional destination folder; Clone takes one source GUID and
+an optional clone name. Create/clone run `ICreatable`/`IDuplicable` hooks in the
+same before-create/before-clone, save, after-create/after-clone order as the UI.
 
 ## JSON schema version 1
 
@@ -45,6 +49,7 @@ The shipped schemas and examples are available here:
 - [Result schema](automation/data-visualizer-automation-result.schema.json)
 - [Metadata request example](automation/data-visualizer-automation-request.example.json)
 - [Asset operation example](automation/data-visualizer-automation-operation.example.json)
+- [Create asset example](automation/data-visualizer-automation-create.example.json)
 
 In-process code can call `DispatchRequest` or `ExecuteRequestJson`. A direct Unity
 run uses:

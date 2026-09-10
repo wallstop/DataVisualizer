@@ -24,17 +24,102 @@ from benchmark_driver import (
     config_from_args,
     direct_unity_command,
     direct_cleanup_unity_command,
+    case_order_for_repetition,
+    case_schedule,
     extract_unity_result,
     parse_mcp_tool_result,
     parse_fixture_size,
     planned_execution,
     render_bootstrap,
+    validate_metric_evidence,
     validate_result,
     write_comparison_report,
 )
 
 
 class BenchmarkDriverTests(unittest.TestCase):
+    def _all_suite_config(self, temporary):
+        parser = build_argument_parser()
+        root = Path(__file__).resolve().parents[2]
+        arguments = parser.parse_args(
+            [
+                "--host-project",
+                "/host/DataVisualizer",
+                "--unity-version",
+                "6000.4.6f1",
+                "--fixture-size",
+                "100",
+                "--output-dir",
+                temporary,
+                "--mode",
+                "mcp",
+            ]
+        )
+        return config_from_args(arguments, root)
+
+    def _measured_metric_result(self):
+        cases = ("open-idle", "open-indexing", "closed")
+        observations = []
+        for repetition in range(35):
+            for case_index, case in enumerate(case_order_for_repetition(repetition)):
+                observations.append(
+                    {
+                        "repetition": repetition,
+                        "caseName": case,
+                        "caseIndex": case_index,
+                        "warmup": repetition < 5,
+                        "elapsedMilliseconds": 10.0,
+                    }
+                )
+        return {
+            "suite": "all",
+            "playEntryMetrics": [
+                {
+                    "caseName": case,
+                    "status": "measured",
+                    "reason": "measured by Unity Stopwatch",
+                    "warmupCount": 5,
+                    "sampleCount": 30,
+                    "warmups": [10.0] * 5,
+                    "samples": [10.0] * 30,
+                    "targetStatus": "pass",
+                }
+                for case in cases
+            ],
+            "playEntryObservations": observations,
+        }
+
+    def test_case_order_and_schedule_are_deterministic(self):
+        self.assertEqual(case_order_for_repetition(0), ["open-idle", "open-indexing", "closed"])
+        self.assertEqual(case_order_for_repetition(1), ["closed", "open-indexing", "open-idle"])
+        schedule = case_schedule()
+        self.assertEqual(len(schedule), 35)
+        self.assertEqual(schedule[0]["cases"], case_order_for_repetition(0))
+        self.assertEqual(schedule[-1]["cases"], case_order_for_repetition(34))
+
+    def test_validate_metric_evidence_requires_labeled_observations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = self._all_suite_config(temporary)
+            result = self._measured_metric_result()
+            validate_metric_evidence(config, result)
+            result["playEntryObservations"][0].pop("caseName")
+            with self.assertRaises(BenchmarkError):
+                validate_metric_evidence(config, result)
+
+    def test_validate_metric_evidence_rejects_missing_metrics(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = self._all_suite_config(temporary)
+            with self.assertRaises(BenchmarkError):
+                validate_metric_evidence(config, {"suite": "all"})
+
+    def test_validate_metric_evidence_rejects_wrong_case_index(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = self._all_suite_config(temporary)
+            result = self._measured_metric_result()
+            result["playEntryObservations"][0]["caseIndex"] = 2
+            with self.assertRaises(BenchmarkError):
+                validate_metric_evidence(config, result)
+
     def test_matrix_parser_preserves_requested_sizes_and_versions(self):
         parser = build_matrix_argument_parser()
         arguments = parser.parse_args(
@@ -143,6 +228,8 @@ class BenchmarkDriverTests(unittest.TestCase):
                     temporary,
                     "--mode",
                     "mcp",
+                    "--suite",
+                    "fixture",
                     "--keep-fixture",
                 ]
             )
@@ -150,10 +237,18 @@ class BenchmarkDriverTests(unittest.TestCase):
                 "status": "completed",
                 "unityVersion": "6000.4.6f1",
                 "fixtureSize": 100,
-                "fixtureVerified": True,
-                "fixtureAssetCount": 100,
-                "cleanupCompleted": False,
-            }
+                    "fixtureVerified": True,
+                    "fixtureAssetCount": 100,
+                    "cleanupCompleted": False,
+                    "playEntryMetrics": [
+                        {
+                            "caseName": case,
+                            "status": "unavailable",
+                            "reason": "fixture suite does not measure Play-entry latency",
+                        }
+                        for case in ("open-idle", "open-indexing", "closed")
+                    ],
+                }
             self.assertEqual(validate_result(config_from_args(arguments, root), result), result)
 
     def test_parse_fixture_size_accepts_supported_values(self):
@@ -377,6 +472,57 @@ class BenchmarkDriverTests(unittest.TestCase):
             self.assertIn("`30` | 25.000 ms | 25.000 ms", contents)
             self.assertIn("Window open / indexing", contents)
             self.assertIn("`indexed-search`", contents)
+
+    def test_comparison_report_marks_unavailable_metric_explicitly(self):
+        parser = build_argument_parser()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(__file__).resolve().parents[2]
+            arguments = parser.parse_args(
+                [
+                    "--host-project",
+                    "/host/DataVisualizer",
+                    "--unity-version",
+                    "6000.4.6f1",
+                    "--fixture-size",
+                    "100",
+                    "--suite",
+                    "play-entry",
+                    "--output-dir",
+                    temporary,
+                    "--mode",
+                    "mcp",
+                ]
+            )
+            config = config_from_args(arguments, root)
+            result = {
+                "status": "completed",
+                "suite": "play-entry",
+                "fixtureSize": 100,
+                "playEntryMetrics": [
+                    {
+                        "caseName": "open-idle",
+                        "status": "measured",
+                        "targetStatus": "pass",
+                        "warmups": [1] * 5,
+                        "samples": [1] * 30,
+                        "medianMilliseconds": 1,
+                        "p95Milliseconds": 1,
+                    },
+                    {
+                        "caseName": "open-indexing",
+                        "status": "unavailable",
+                        "reason": "window unavailable",
+                    },
+                    {
+                        "caseName": "closed",
+                        "status": "failed",
+                        "reason": "play request failed",
+                    },
+                ],
+            }
+            report = comparison_report_path(config)
+            write_comparison_report(report, config, result)
+            self.assertIn("UNAVAILABLE", report.read_text(encoding="utf-8"))
 
     def test_direct_command_waits_for_deferred_finish(self):
         parser = build_argument_parser()

@@ -2,6 +2,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using NUnit.Framework;
     using WallstopStudios.DataVisualizer.Editor.Automation;
+    using WallstopStudios.DataVisualizer.Editor.Data;
 
     public sealed class DataVisualizerAutomationTests
     {
@@ -139,6 +140,44 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.IsFalse(result.succeeded);
             Assert.AreEqual(2, result.items.Count);
             StringAssert.Contains("more than once", result.items[1].diagnostic);
+        }
+
+        [Test]
+        public void Should_PreviewCreateWithoutCreatingAnAsset()
+        {
+            DataVisualizerAssetOperationResult result =
+                DataVisualizerAutomation.PreviewAssetOperation(
+                    new DataVisualizerAssetOperationRequest
+                    {
+                        operation = DataVisualizerAssetOperationKind.Create,
+                        assemblyQualifiedTypeName =
+                            typeof(DataVisualizerSettings).AssemblyQualifiedName,
+                        destinationFolder = "Assets",
+                        value = "AutomationPreviewOnly",
+                    }
+                );
+
+            Assert.IsTrue(result.succeeded);
+            Assert.IsTrue(result.preview);
+            Assert.AreEqual(1, result.items.Count);
+            Assert.IsTrue(string.IsNullOrWhiteSpace(result.items[0].guid));
+            StringAssert.EndsWith("AutomationPreviewOnly.asset", result.items[0].resultingPath);
+        }
+
+        [Test]
+        public void Should_RejectCloneWithoutExactlyOneSourceGuid()
+        {
+            DataVisualizerAssetOperationResult result =
+                DataVisualizerAutomation.PreviewAssetOperation(
+                    new DataVisualizerAssetOperationRequest
+                    {
+                        operation = DataVisualizerAssetOperationKind.Clone,
+                        guids = System.Array.Empty<string>(),
+                    }
+                );
+
+            Assert.IsFalse(result.succeeded);
+            StringAssert.Contains("exactly one", result.diagnostic);
         }
 
         [Test]

@@ -24,6 +24,9 @@ from typing import Any, Iterable
 
 
 FIXTURE_SIZES = (100, 1_000, 10_000, 50_000)
+PLAY_ENTRY_CASES = ("open-idle", "open-indexing", "closed")
+PLAY_ENTRY_WARMUPS = 5
+PLAY_ENTRY_SAMPLES = 30
 BOOTSTRAP_PATH = "Assets/Editor/__DataVisualizerBenchmarkEntryPoint.cs"
 ENTRYPOINT = "WallstopStudios.DataVisualizer.Benchmark.DataVisualizerBenchmarkEntryPoint"
 SCHEMA_VERSION = "1"
@@ -31,6 +34,24 @@ SCHEMA_VERSION = "1"
 
 class BenchmarkError(RuntimeError):
     """Raised for invalid benchmark configuration or an unsuccessful run."""
+
+
+def case_order_for_repetition(repetition: int) -> list[str]:
+    """Return the deterministic alternating case order for a repetition."""
+
+    if repetition < 0:
+        raise BenchmarkError("repetition must be non-negative")
+    cases = list(PLAY_ENTRY_CASES)
+    return cases if repetition % 2 == 0 else list(reversed(cases))
+
+
+def case_schedule(repetitions: int = PLAY_ENTRY_WARMUPS + PLAY_ENTRY_SAMPLES) -> list[dict[str, Any]]:
+    if repetitions <= 0:
+        raise BenchmarkError("repetitions must be positive")
+    return [
+        {"repetition": repetition, "cases": case_order_for_repetition(repetition)}
+        for repetition in range(repetitions)
+    ]
 
 
 @dataclass(frozen=True)
@@ -179,20 +200,30 @@ namespace WallstopStudios.DataVisualizer.Benchmark
     {
         void Configure(int index, BenchmarkSharedData shared);
         string Identity { get; }
+        string Description { get; }
+        int CustomOrder { get; }
+        BenchmarkNestedData Nested { get; }
         BenchmarkSharedData SharedReference { get; }
     }
 
     public sealed class PlainData : ScriptableObject, IBenchmarkFixture
     {
         public string identity;
+        public string description;
+        public int customOrder;
         public BenchmarkNestedData nested = new();
 
         public string Identity => identity;
+        public string Description => description;
+        public int CustomOrder => customOrder;
+        public BenchmarkNestedData Nested => nested;
         public BenchmarkSharedData SharedReference => nested?.shared;
 
         public void Configure(int index, BenchmarkSharedData shared)
         {
             identity = $"plain-{index:D6}";
+            description = $"fixture-description-{index:D6}";
+            customOrder = (index * 37 + 11) % 100000;
             nested = MakeNested(identity, shared, index);
         }
 
@@ -210,14 +241,19 @@ namespace WallstopStudios.DataVisualizer.Benchmark
     public sealed class BaseData : WallstopStudios.DataVisualizer.BaseDataObject, IBenchmarkFixture
     {
         public string identity;
+        public int customOrder;
         public BenchmarkNestedData nested = new();
 
         public string Identity => identity;
+        public int CustomOrder => customOrder;
+        public BenchmarkNestedData Nested => nested;
         public BenchmarkSharedData SharedReference => nested?.shared;
 
         public void Configure(int index, BenchmarkSharedData shared)
         {
             identity = $"base-{index:D6}";
+            Description = $"fixture-description-{index:D6}";
+            customOrder = (index * 37 + 11) % 100000;
             nested = new BenchmarkNestedData
             {
                 key = identity,
@@ -233,12 +269,19 @@ namespace WallstopStudios.DataVisualizer.Benchmark.First
     public sealed class Data : UnityEngine.ScriptableObject, WallstopStudios.DataVisualizer.Benchmark.IBenchmarkFixture
     {
         public string identity;
+        public string description;
+        public int customOrder;
         public WallstopStudios.DataVisualizer.Benchmark.BenchmarkNestedData nested = new();
         public string Identity => identity;
+        public string Description => description;
+        public int CustomOrder => customOrder;
+        public WallstopStudios.DataVisualizer.Benchmark.BenchmarkNestedData Nested => nested;
         public WallstopStudios.DataVisualizer.Benchmark.BenchmarkSharedData SharedReference => nested?.shared;
         public void Configure(int index, WallstopStudios.DataVisualizer.Benchmark.BenchmarkSharedData shared)
         {
             identity = $"first-{index:D6}";
+            description = $"fixture-description-{index:D6}";
+            customOrder = (index * 37 + 11) % 100000;
             nested = new WallstopStudios.DataVisualizer.Benchmark.BenchmarkNestedData
             {
                 key = identity,
@@ -254,12 +297,17 @@ namespace WallstopStudios.DataVisualizer.Benchmark.Second
     public sealed class Data : WallstopStudios.DataVisualizer.BaseDataObject, WallstopStudios.DataVisualizer.Benchmark.IBenchmarkFixture
     {
         public string identity;
+        public int customOrder;
         public WallstopStudios.DataVisualizer.Benchmark.BenchmarkNestedData nested = new();
         public string Identity => identity;
+        public int CustomOrder => customOrder;
+        public WallstopStudios.DataVisualizer.Benchmark.BenchmarkNestedData Nested => nested;
         public WallstopStudios.DataVisualizer.Benchmark.BenchmarkSharedData SharedReference => nested?.shared;
         public void Configure(int index, WallstopStudios.DataVisualizer.Benchmark.BenchmarkSharedData shared)
         {
             identity = $"second-{index:D6}";
+            Description = $"fixture-description-{index:D6}";
+            customOrder = (index * 37 + 11) % 100000;
             nested = new WallstopStudios.DataVisualizer.Benchmark.BenchmarkNestedData
             {
                 key = identity,
@@ -313,6 +361,31 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         }
 
         [Serializable]
+        private sealed class MetricEvidence
+        {
+            public string caseName;
+            public string status;
+            public string reason;
+            public int warmupCount;
+            public int sampleCount;
+            public double[] warmups = Array.Empty<double>();
+            public double[] samples = Array.Empty<double>();
+            public double p95Milliseconds;
+            public double medianMilliseconds;
+            public string targetStatus;
+        }
+
+        [Serializable]
+        private sealed class PlayEntryObservation
+        {
+            public int repetition;
+            public string caseName;
+            public int caseIndex;
+            public bool warmup;
+            public double elapsedMilliseconds;
+        }
+
+        [Serializable]
         private sealed class BenchmarkResult
         {
             public string schemaVersion = "1";
@@ -350,6 +423,8 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             public SampleSet playEntryOpenIdle = new();
             public SampleSet playEntryOpenIndexing = new();
             public SampleSet playEntryClosed = new();
+            public MetricEvidence[] playEntryMetrics = Array.Empty<MetricEvidence>();
+            public PlayEntryObservation[] playEntryObservations = Array.Empty<PlayEntryObservation>();
             public string[] unavailableMetrics = Array.Empty<string>();
         }
 
@@ -364,6 +439,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         private static readonly List<double> OpenIndexingSamples = new();
         private static readonly List<double> ClosedWarmups = new();
         private static readonly List<double> ClosedSamples = new();
+        private static readonly List<PlayEntryObservation> PlayEntryObservations = new();
         private static BenchmarkResult _result;
         private static Phase _phase;
         private static int _repetition;
@@ -387,6 +463,13 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             }
 
             _started = true;
+            OpenWarmups.Clear();
+            OpenSamples.Clear();
+            OpenIndexingWarmups.Clear();
+            OpenIndexingSamples.Clear();
+            ClosedWarmups.Clear();
+            ClosedSamples.Clear();
+            PlayEntryObservations.Clear();
             CaptureAndConfigurePlayModeSettings();
             _phase = Phase.Prepare;
             _result = CreateResult();
@@ -822,22 +905,37 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 List<double> warmups;
                 List<double> samples;
                 int caseIndex = CurrentCaseIndex();
+                string caseName;
                 if (caseIndex == 0)
                 {
                     warmups = OpenWarmups;
                     samples = OpenSamples;
+                    caseName = "open-idle";
                 }
                 else if (caseIndex == 1)
                 {
                     warmups = OpenIndexingWarmups;
                     samples = OpenIndexingSamples;
+                    caseName = "open-indexing";
                 }
                 else
                 {
                     warmups = ClosedWarmups;
                     samples = ClosedSamples;
+                    caseName = "closed";
                 }
-                (warmups.Count < WarmupCount ? warmups : samples).Add(elapsed);
+                bool warmup = warmups.Count < WarmupCount;
+                (warmup ? warmups : samples).Add(elapsed);
+                PlayEntryObservations.Add(
+                    new PlayEntryObservation
+                    {
+                        repetition = _repetition,
+                        caseName = caseName,
+                        caseIndex = caseIndex,
+                        warmup = warmup,
+                        elapsedMilliseconds = elapsed,
+                    }
+                );
                 _waitTicks = 0;
                 EditorApplication.isPlaying = false;
                 _phase = Phase.AwaitEditMode;
@@ -904,11 +1002,20 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                     continue;
                 }
                 itemCount++;
+                string itemName = Path.GetFileNameWithoutExtension(path);
+                if (!int.TryParse(itemName.Replace("Item_", ""), out int itemIndex))
+                {
+                    throw new InvalidOperationException("Fixture item path verification failed");
+                }
                 var asset = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
                 if (
                     asset is not IBenchmarkFixture fixture
                     || !identities.Add(fixture.Identity)
+                    || fixture.Description != $"fixture-description-{itemIndex:D6}"
+                    || fixture.CustomOrder != (itemIndex * 37 + 11) % 100000
                     || fixture.SharedReference != shared
+                    || (fixture is WallstopStudios.DataVisualizer.BaseDataObject)
+                        != (itemIndex % 2 == 1)
                 )
                 {
                     throw new InvalidOperationException(
@@ -920,12 +1027,16 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                     duplicateShortNameCount++;
                 }
                 string[] labels = AssetDatabase.GetLabels(asset);
-                string itemName = Path.GetFileNameWithoutExtension(path);
-                if (!int.TryParse(itemName.Replace("Item_", ""), out int itemIndex))
-                {
-                    throw new InvalidOperationException("Fixture item path verification failed");
-                }
-                if (!labels.Contains("benchmark") || !labels.Contains("group-" + (itemIndex % 8).ToString("D2")))
+                string expectedKind = itemIndex % 2 == 0 ? "ordinary" : "base-data-object";
+                if (
+                    !labels.Contains("benchmark")
+                    || !labels.Contains(expectedKind)
+                    || !labels.Contains("group-" + (itemIndex % 8).ToString("D2"))
+                    || fixture.Nested == null
+                    || fixture.Nested.key != fixture.Identity
+                    || fixture.Nested.values == null
+                    || fixture.Nested.values.Count == 0
+                )
                 {
                     throw new InvalidOperationException("Fixture label verification failed");
                 }
@@ -954,6 +1065,23 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             _result.playEntryOpenIdle = _result.playEntryOpen;
             _result.playEntryOpenIndexing = MakeSampleSet(OpenIndexingWarmups, OpenIndexingSamples);
             _result.playEntryClosed = MakeSampleSet(ClosedWarmups, ClosedSamples);
+            _result.playEntryMetrics = new[]
+            {
+                MakeMetricEvidence("open-idle", _result.playEntryOpenIdle, OpenWarmups, OpenSamples),
+                MakeMetricEvidence(
+                    "open-indexing",
+                    _result.playEntryOpenIndexing,
+                    OpenIndexingWarmups,
+                    OpenIndexingSamples
+                ),
+                MakeMetricEvidence("closed", _result.playEntryClosed, ClosedWarmups, ClosedSamples),
+            };
+            _result.playEntryObservations = PlayEntryObservations.ToArray();
+            if (Suite != "fixture" && _result.playEntryMetrics.Any(metric => metric.status != "measured"))
+            {
+                _result.status = "failed";
+                _result.error = "One or more required Play-entry metrics did not complete.";
+            }
             _result.playEntryTargetMet =
                 _result.playEntryOpenIdle.samples.Length == SampleCount
                 && _result.playEntryOpenIndexing.samples.Length == SampleCount
@@ -993,6 +1121,36 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             {
                 EditorApplication.Exit(_result.status == "completed" ? 0 : 1);
             }
+        }
+
+        private static MetricEvidence MakeMetricEvidence(
+            string caseName,
+            SampleSet sampleSet,
+            List<double> warmups,
+            List<double> samples
+        )
+        {
+            bool measured = warmups.Count >= WarmupCount && samples.Count >= SampleCount;
+            string status = measured ? "measured" : Suite == "fixture" ? "unavailable" : "failed";
+            return new MetricEvidence
+            {
+                caseName = caseName,
+                status = status,
+                reason = measured
+                    ? "Unity Stopwatch measured the complete warm-up/sample set."
+                    : Suite == "fixture"
+                        ? "The fixture suite does not measure Play-entry latency."
+                        : "The required Play-entry sample set did not complete.",
+                warmupCount = warmups.Count,
+                sampleCount = samples.Count,
+                warmups = warmups.ToArray(),
+                samples = samples.ToArray(),
+                p95Milliseconds = sampleSet.p95Milliseconds,
+                medianMilliseconds = sampleSet.medianMilliseconds,
+                targetStatus = measured
+                    ? sampleSet.p95Milliseconds <= PlayEntryTargetMilliseconds ? "pass" : "miss"
+                    : status,
+            };
         }
 
         private static void Fail(Exception error)
@@ -1214,11 +1372,12 @@ def planned_execution(config: BenchmarkConfig) -> dict[str, Any]:
         },
         "warmups": 5,
         "samples": 30,
-        "playEntryCases": ["open-idle", "open-indexing", "closed"],
+        "playEntryCases": list(PLAY_ENTRY_CASES),
         "playEntryCaseOrder": [
-            ["open-idle", "open-indexing", "closed"],
-            ["closed", "open-indexing", "open-idle"],
+            case_order_for_repetition(0),
+            case_order_for_repetition(1),
         ],
+        "playEntrySchedule": case_schedule(),
         "timingBoundary": "Unity Stopwatch/Profiler-side operation timing; orchestration excluded",
     }
 
@@ -1239,18 +1398,30 @@ def _metric_line(value: Any) -> str:
 def write_comparison_report(path: Path, config: BenchmarkConfig, result: dict[str, Any]) -> None:
     """Write a concise, reviewable companion to the machine-readable JSON report."""
 
-    open_idle_result = result.get("playEntryOpenIdle") or result.get("playEntryOpen") or {}
+    evidence = {
+        item.get("caseName"): item
+        for item in result.get("playEntryMetrics", [])
+        if isinstance(item, dict) and item.get("caseName")
+    }
+    open_idle_result = evidence.get("open-idle") or result.get("playEntryOpenIdle") or result.get("playEntryOpen") or {}
     open_indexing_result = result.get("playEntryOpenIndexing") or {}
     closed_result = result.get("playEntryClosed") or {}
     target = result.get("playEntryTargetMilliseconds", 20)
-    target_met = result.get("playEntryTargetMet")
-    independent_cases_present = bool(result.get("playEntryOpenIndexing"))
+    evidence_complete = all(case in evidence for case in PLAY_ENTRY_CASES)
     if result.get("suite") == "fixture":
         target_summary = "not measured (fixture suite)"
-    elif target_met is True and independent_cases_present:
+    elif evidence_complete and all(
+        evidence[case].get("status") == "measured"
+        and evidence[case].get("targetStatus") == "pass"
+        for case in PLAY_ENTRY_CASES
+    ):
         target_summary = f"PASS (all three p95 values <= {target} ms)"
+    elif any(item.get("status") == "unavailable" for item in evidence.values()):
+        target_summary = "UNAVAILABLE (required metric was not measured)"
+    elif any(item.get("status") == "failed" for item in evidence.values()):
+        target_summary = "FAILED (required metric did not complete)"
     else:
-        target_summary = f"MISS (all three p95 values must be <= {target} ms)"
+        target_summary = f"MISS (measured p95 values must be <= {target} ms)"
     unavailable = result.get("unavailableMetrics") or []
 
     lines = [
@@ -1284,11 +1455,11 @@ def write_comparison_report(path: Path, config: BenchmarkConfig, result: dict[st
         f"- Target: `<= {target} ms` p95 for all three cases",
         f"- Acceptance: **{target_summary}**",
         "",
-        "| Case | Warmups | Samples | Median | p95 |",
-        "| --- | ---: | ---: | ---: | ---: |",
-        f"| Window open / idle | `{len(open_idle_result.get('warmups') or [])}` | `{len(open_idle_result.get('samples') or [])}` | {_metric_line(open_idle_result.get('medianMilliseconds'))} | {_metric_line(open_idle_result.get('p95Milliseconds'))} |",
-        f"| Window open / indexing | `{len(open_indexing_result.get('warmups') or [])}` | `{len(open_indexing_result.get('samples') or [])}` | {_metric_line(open_indexing_result.get('medianMilliseconds'))} | {_metric_line(open_indexing_result.get('p95Milliseconds'))} |",
-        f"| Window closed | `{len(closed_result.get('warmups') or [])}` | `{len(closed_result.get('samples') or [])}` | {_metric_line(closed_result.get('medianMilliseconds'))} | {_metric_line(closed_result.get('p95Milliseconds'))} |",
+        "| Case | Status | Warmups | Samples | Median | p95 |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+        f"| Window open / idle | `{evidence.get('open-idle', {}).get('status', 'legacy')}` | `{len(open_idle_result.get('warmups') or [])}` | `{len(open_idle_result.get('samples') or [])}` | {_metric_line(open_idle_result.get('medianMilliseconds'))} | {_metric_line(open_idle_result.get('p95Milliseconds'))} |",
+        f"| Window open / indexing | `{evidence.get('open-indexing', {}).get('status', 'legacy')}` | `{len(open_indexing_result.get('warmups') or [])}` | `{len(open_indexing_result.get('samples') or [])}` | {_metric_line(open_indexing_result.get('medianMilliseconds'))} | {_metric_line(open_indexing_result.get('p95Milliseconds'))} |",
+        f"| Window closed | `{evidence.get('closed', {}).get('status', 'legacy')}` | `{len(closed_result.get('warmups') or [])}` | `{len(closed_result.get('samples') or [])}` | {_metric_line(closed_result.get('medianMilliseconds'))} | {_metric_line(closed_result.get('p95Milliseconds'))} |",
         "",
         "## Unavailable metrics",
         "",
@@ -1329,7 +1500,86 @@ def validate_result(config: BenchmarkConfig, result: dict[str, Any]) -> dict[str
         )
     if not config.keep_fixture and result.get("cleanupCompleted") is not True:
         raise BenchmarkError("Unity benchmark did not report completed fixture cleanup")
+    validate_metric_evidence(config, result)
     return result
+
+
+def validate_metric_evidence(config: BenchmarkConfig, result: dict[str, Any]) -> None:
+    """Require auditable status, samples, and alternating observations."""
+
+    metric_items = [
+        item
+        for item in result.get("playEntryMetrics", [])
+        if isinstance(item, dict) and item.get("caseName")
+    ]
+    metrics = {item["caseName"]: item for item in metric_items}
+    if len(metrics) != len(metric_items):
+        raise BenchmarkError("Benchmark reported duplicate metric evidence case names")
+    missing = [case for case in PLAY_ENTRY_CASES if case not in metrics]
+    if missing:
+        raise BenchmarkError(f"Benchmark did not report metric evidence for: {', '.join(missing)}")
+
+    for case in PLAY_ENTRY_CASES:
+        metric = metrics[case]
+        status = metric.get("status")
+        if status not in {"measured", "unavailable", "failed"}:
+            raise BenchmarkError(f"Metric {case} has an invalid status: {status}")
+        if not isinstance(metric.get("reason"), str) or not metric["reason"].strip():
+            raise BenchmarkError(f"Metric {case} must include a reason")
+        if config.suite == "fixture":
+            if status != "unavailable":
+                raise BenchmarkError(f"Fixture-only metric {case} must be unavailable")
+            continue
+        if status != "measured":
+            raise BenchmarkError(f"Required Play-entry metric {case} is {status}")
+        if metric.get("warmupCount", 0) < PLAY_ENTRY_WARMUPS:
+            raise BenchmarkError(f"Metric {case} has fewer than five warm-ups")
+        if metric.get("sampleCount", 0) < PLAY_ENTRY_SAMPLES:
+            raise BenchmarkError(f"Metric {case} has fewer than thirty samples")
+        if len(metric.get("warmups") or []) < PLAY_ENTRY_WARMUPS:
+            raise BenchmarkError(f"Metric {case} omitted warm-up observations")
+        if len(metric.get("samples") or []) < PLAY_ENTRY_SAMPLES:
+            raise BenchmarkError(f"Metric {case} omitted measured observations")
+        if metric.get("targetStatus") not in {"pass", "miss"}:
+            raise BenchmarkError(f"Metric {case} has an invalid target status")
+
+    if config.suite == "fixture":
+        return
+
+    observations = result.get("playEntryObservations")
+    if not isinstance(observations, list) or not observations:
+        raise BenchmarkError("Measured Play-entry results must include labeled observations")
+    by_repetition: dict[int, list[str]] = {}
+    counts: dict[tuple[str, bool], int] = {}
+    for observation in observations:
+        if not isinstance(observation, dict):
+            raise BenchmarkError("Play-entry observations must be objects")
+        repetition = observation.get("repetition")
+        case = observation.get("caseName")
+        if not isinstance(repetition, int) or case not in PLAY_ENTRY_CASES:
+            raise BenchmarkError("Play-entry observations need repetition and caseName")
+        case_index = observation.get("caseIndex")
+        if not isinstance(case_index, int) or not isinstance(observation.get("warmup"), bool):
+            raise BenchmarkError("Play-entry observations need caseIndex and warmup")
+        if not isinstance(observation.get("elapsedMilliseconds"), (int, float)):
+            raise BenchmarkError("Play-entry observations need elapsedMilliseconds")
+        expected_order = case_order_for_repetition(repetition)
+        if case_index < 0 or case_index >= len(expected_order) or expected_order[case_index] != case:
+            raise BenchmarkError("Play-entry observation caseIndex does not match the planned order")
+        by_repetition.setdefault(repetition, []).append(case)
+        key = (case, observation["warmup"])
+        counts[key] = counts.get(key, 0) + 1
+    expected_repetitions = set(range(PLAY_ENTRY_WARMUPS + PLAY_ENTRY_SAMPLES))
+    if set(by_repetition) != expected_repetitions:
+        raise BenchmarkError("Play-entry observations must contain all planned repetitions")
+    for repetition, cases in by_repetition.items():
+        if cases != case_order_for_repetition(repetition):
+            raise BenchmarkError(f"Play-entry repetition {repetition} is not in the planned case order")
+    for case in PLAY_ENTRY_CASES:
+        if counts.get((case, True), 0) < PLAY_ENTRY_WARMUPS:
+            raise BenchmarkError(f"Play-entry case {case} has fewer than five labeled warm-ups")
+        if counts.get((case, False), 0) < PLAY_ENTRY_SAMPLES:
+            raise BenchmarkError(f"Play-entry case {case} has fewer than thirty labeled samples")
 
 
 def parse_mcp_tool_result(payload: dict[str, Any]) -> Any:

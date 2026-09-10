@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "requestId": "create-data-001",
+  "operation": 10,
+  "assetOperation": {
+    "operation": 4,
+    "value": "PlayerData",
+    "assemblyQualifiedTypeName": "Example.PlayerData, Example.Editor",
+    "destinationFolder": "Assets/Data"
+  }
+}

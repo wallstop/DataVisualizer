@@ -11,7 +11,6 @@ namespace WallstopStudios.DataVisualizer.Editor
     using System.Linq;
     using System.Reflection;
     using System.Text;
-    using System.Text.RegularExpressions;
     using Data;
     using Extensions;
     using Search;
@@ -27,6 +26,7 @@ namespace WallstopStudios.DataVisualizer.Editor
     using UnityEngine.UIElements;
     using Utilities;
     using Helper;
+    using WallstopStudios.DataVisualizer.Editor.Automation;
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
 
@@ -4132,30 +4132,33 @@ namespace WallstopStudios.DataVisualizer.Editor
                     )
                 )
                 .SanitizePath();
-            DirectoryHelper.EnsureDirectoryExists(typedDirectory);
-
-            string proposedName = $"{newName}.asset";
-            string proposedPath = Path.Combine(typedDirectory, proposedName).SanitizePath();
-            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
-            if (!string.Equals(proposedPath, uniquePath, StringComparison.Ordinal))
+            DataVisualizerAssetOperationResult operation =
+                DataVisualizerAutomation.ApplyAssetOperation(
+                    new DataVisualizerAssetOperationRequest
+                    {
+                        operation = DataVisualizerAssetOperationKind.Create,
+                        assemblyQualifiedTypeName = type.AssemblyQualifiedName,
+                        destinationFolder = typedDirectory,
+                        value = newName,
+                    }
+                );
+            if (!operation.succeeded)
             {
-                errorLabel.text = "Name is not unique.";
+                errorLabel.text = operation.diagnostic;
                 errorLabel.style.display = DisplayStyle.Flex;
                 return;
             }
 
-            ScriptableObject instance = ScriptableObject.CreateInstance(type);
-            if (instance is ICreatable creatable)
+            string createdPath = operation.items[0].resultingPath;
+            ScriptableObject instance = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
+                createdPath
+            );
+            if (instance == null)
             {
-                creatable.BeforeCreate();
+                errorLabel.text = "The created asset could not be loaded.";
+                errorLabel.style.display = DisplayStyle.Flex;
+                return;
             }
-            else
-            {
-                creatable = null;
-            }
-            AssetDatabase.CreateAsset(instance, uniquePath);
-            AssetDatabase.SaveAssets();
-            creatable?.AfterCreate();
 
             CloseActivePopover();
             if (type == _namespaceController.SelectedType)
@@ -7620,78 +7623,28 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            ScriptableObject cloneInstance = Instantiate(originalObject);
-            if (cloneInstance == null)
-            {
-                EditorUtility.DisplayDialog(
-                    "Error",
-                    "Failed to instantiate a clone of the object.",
-                    "OK"
-                );
-                return;
-            }
-
-            string originalDirectory = Path.GetDirectoryName(originalPath);
-            if (string.IsNullOrWhiteSpace(originalDirectory))
-            {
-                EditorUtility.DisplayDialog(
-                    "Error",
-                    "Cannot clone object: Original asset path is invalid.",
-                    "OK"
-                );
-                return;
-            }
-
-            const string pattern = @"\(Clone(\s+-?\d+)?\)";
-
-            string directory = originalDirectory.SanitizePath();
-            string originalName = Path.GetFileNameWithoutExtension(originalPath);
-            originalName = Regex.Replace(originalName, pattern, string.Empty);
-            if (originalName.EndsWith(' '))
-            {
-                int lastIndex = originalName.Length - 1;
-                for (; 0 <= lastIndex; --lastIndex)
-                {
-                    if (!char.IsWhiteSpace(originalName[lastIndex]))
-                    {
-                        break;
-                    }
-                }
-
-                originalName = originalName.Substring(0, lastIndex + 1);
-            }
-
-            string extension = Path.GetExtension(originalPath);
-            string proposedPath;
-            string uniquePath;
-            int count = 0;
-            do
-            {
-                string proposedName =
-                    $"{originalName} (Clone{(count++ == 0 ? string.Empty : $" {count}")}){extension}";
-                proposedPath = Path.Combine(directory, proposedName).SanitizePath();
-                uniquePath = AssetDatabase.GenerateUniqueAssetPath(proposedPath);
-            } while (!string.Equals(uniquePath, proposedPath, StringComparison.Ordinal));
-
             try
             {
-                if (cloneInstance is IDuplicable duplicable)
+                string originalGuid = AssetDatabase.AssetPathToGUID(originalPath);
+                DataVisualizerAssetOperationResult operation =
+                    DataVisualizerAutomation.ApplyAssetOperation(
+                        new DataVisualizerAssetOperationRequest
+                        {
+                            operation = DataVisualizerAssetOperationKind.Clone,
+                            guids = new[] { originalGuid },
+                        }
+                    );
+                if (!operation.succeeded)
                 {
-                    duplicable.BeforeClone(originalObject);
+                    EditorUtility.DisplayDialog("Error Cloning Asset", operation.diagnostic, "OK");
+                    return;
                 }
-                AssetDatabase.CreateAsset(cloneInstance, uniquePath);
-                AssetDatabase.SaveAssets();
 
                 ScriptableObject cloneAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(
-                    uniquePath
+                    operation.items[0].resultingPath
                 );
                 if (cloneAsset != null)
                 {
-                    if (cloneAsset is IDuplicable cloneDataObject)
-                    {
-                        cloneDataObject.AfterClone(originalObject);
-                    }
-
                     int originalIndex = _selectedObjects.IndexOf(originalObject);
                     if (0 <= originalIndex)
                     {
@@ -7718,7 +7671,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 else
                 {
-                    Debug.LogError($"Failed to load the cloned asset at {uniquePath}");
+                    Debug.LogError(
+                        $"Failed to load the cloned asset at {operation.items[0].resultingPath}"
+                    );
                     BuildObjectsView();
                 }
             }

@@ -14,6 +14,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
         Move = 1,
         SetLabels = 2,
         Delete = 3,
+        Create = 4,
+        Clone = 5,
     }
 
     [Serializable]
@@ -23,6 +25,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
         public string[] guids = Array.Empty<string>();
         public string value = string.Empty;
         public string[] labels = Array.Empty<string>();
+        public string assemblyQualifiedTypeName;
+        public string destinationFolder;
     }
 
     [Serializable]
@@ -79,7 +83,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 return FailOperation(result, "An asset operation request is required.");
             }
 
-            if (request.guids == null || request.guids.Length == 0)
+            if (
+                request.operation != DataVisualizerAssetOperationKind.Create
+                && (request.guids == null || request.guids.Length == 0)
+            )
             {
                 return FailOperation(result, "At least one asset GUID is required.");
             }
@@ -87,6 +94,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             if (!Enum.IsDefined(typeof(DataVisualizerAssetOperationKind), request.operation))
             {
                 return FailOperation(result, "The requested asset operation is unsupported.");
+            }
+
+            if (
+                request.operation == DataVisualizerAssetOperationKind.Create
+                || request.operation == DataVisualizerAssetOperationKind.Clone
+            )
+            {
+                return ExecuteAssetCreationOperation(request, preview);
             }
 
             if (

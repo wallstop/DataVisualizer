@@ -21,6 +21,34 @@
     "configurationJson": { "type": ["string", "null"] },
     "managedTypes": { "type": "array" },
     "metadata": { "type": ["object", "null"] },
-    "assetOperation": { "type": ["object", "null"] }
+    "assetOperation": { "$ref": "#/$defs/assetOperationResult" }
+  },
+  "$defs": {
+    "assetOperationResult": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["preview", "succeeded", "complete", "items"],
+      "properties": {
+        "preview": { "type": "boolean" },
+        "succeeded": { "type": "boolean" },
+        "complete": { "type": "boolean" },
+        "diagnostic": { "type": ["string", "null"] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["succeeded"],
+            "properties": {
+              "guid": { "type": ["string", "null"] },
+              "originalPath": { "type": ["string", "null"] },
+              "resultingPath": { "type": ["string", "null"] },
+              "succeeded": { "type": "boolean" },
+              "diagnostic": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    }
   }
 }

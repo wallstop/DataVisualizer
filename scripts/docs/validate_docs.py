@@ -92,6 +92,26 @@ def validate_examples() -> None:
             raise DocumentationError(f"{example.relative_to(ROOT)} has an empty requestId")
         if not isinstance(request["operation"], int) or not 0 <= request["operation"] <= 10:
             raise DocumentationError(f"{example.relative_to(ROOT)} has an invalid operation")
+        asset_operation = request.get("assetOperation")
+        if asset_operation is not None:
+            nested_operation = (
+                asset_operation.get("operation") if isinstance(asset_operation, dict) else None
+            )
+            if not isinstance(nested_operation, int) or not 0 <= nested_operation <= 5:
+                raise DocumentationError(
+                    f"{example.relative_to(ROOT)} has an invalid asset operation"
+                )
+            if nested_operation == 4 and not all(
+                isinstance(asset_operation.get(key), str) and asset_operation[key].strip()
+                for key in ("value", "assemblyQualifiedTypeName")
+            ):
+                raise DocumentationError(
+                    f"{example.relative_to(ROOT)} Create operations need a type and value"
+                )
+            if nested_operation == 5 and len(asset_operation.get("guids", [])) != 1:
+                raise DocumentationError(
+                    f"{example.relative_to(ROOT)} Clone operations need one GUID"
+                )
 
 
 def jpeg_dimensions(image: Path) -> tuple[int, int]:
