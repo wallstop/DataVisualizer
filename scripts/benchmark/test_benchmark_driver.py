@@ -1,12 +1,21 @@
 import argparse
 import json
 import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from benchmark_matrix import build_argument_parser as build_matrix_argument_parser
-from benchmark_matrix import driver_command, parse_sizes
+from benchmark_matrix import (
+    DEFAULT_TIMEOUT_SECONDS,
+    display_command,
+    driver_command,
+    matrix_paths,
+    parse_sizes,
+    run_matrix,
+)
 from benchmark_driver import (
     BenchmarkError,
     PathMapping,
@@ -43,10 +52,41 @@ class BenchmarkDriverTests(unittest.TestCase):
         )
         self.assertEqual(arguments.unity_version, ["6000.4.6f1", "2022.3.50f1"])
         self.assertEqual(arguments.sizes, (100, 50_000))
+        self.assertEqual(arguments.timeout_seconds, DEFAULT_TIMEOUT_SECONDS)
         command = driver_command(arguments, arguments.unity_version[0], 50_000)
         self.assertIn("benchmark_driver.py", command[1])
         self.assertIn("--fixture-size", command)
         self.assertIn("50000", command)
+
+    def test_matrix_display_command_redacts_mcp_token(self):
+        displayed = display_command(["python", "--mcp-token", "secret", "--mode", "mcp"])
+        self.assertEqual(displayed, ["python", "--mcp-token", "REDACTED", "--mode", "mcp"])
+
+    def test_matrix_persists_partial_failure_evidence(self):
+        parser = build_matrix_argument_parser()
+        with tempfile.TemporaryDirectory() as temporary:
+            arguments = parser.parse_args(
+                [
+                    "--host-project",
+                    "/host/DataVisualizer",
+                    "--unity-version",
+                    "6000.4.6f1",
+                    "--sizes",
+                    "100",
+                    "--output-dir",
+                    temporary,
+                ]
+            )
+            with patch(
+                "benchmark_matrix.subprocess.run",
+                return_value=subprocess.CompletedProcess([], 1),
+            ):
+                with self.assertRaises(BenchmarkError):
+                    run_matrix(arguments)
+            matrix_path, _ = matrix_paths(Path(temporary).resolve(), "fixture")
+            matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+            self.assertEqual(matrix["status"], "failed")
+            self.assertEqual(matrix["runs"][0]["status"], "failed")
 
     def test_matrix_parser_rejects_duplicate_sizes(self):
         with self.assertRaises(argparse.ArgumentTypeError):
@@ -188,6 +228,8 @@ class BenchmarkDriverTests(unittest.TestCase):
             self.assertIn("private const int FixtureSize = 50000;", source)
             self.assertIn("private static void CreateFixtureBatch()", source)
             self.assertIn("AssetDatabase.Refresh();", source)
+            self.assertIn("SharedReference", source)
+            self.assertIn("Shared fixture asset could not be reloaded", source)
             self.assertIn("_phase = Phase.VerifyFixture;", source)
 
     def test_planned_execution_records_measurement_boundary(self):

@@ -21,7 +21,11 @@ python3 scripts/benchmark/benchmark_matrix.py \
 ```
 
 Pass `--unity-version` more than once for a compatibility matrix and use
-`--sizes 100,1000,10000,50000` to make the requested fixture set explicit.
+`--sizes 100,1000,10000,50000` to make the requested fixture set explicit. The
+matrix default timeout is two hours per cell because 50,000-asset generation
+is a stress operation; use `--timeout-seconds` to choose a different limit.
+The aggregate manifest is updated after every cell and is retained with a
+`running` or `failed` status if the matrix cannot finish.
 Unavailable Unity versions, player smoke, and metrics not implemented by the
 driver remain reported as unavailable rather than passing.
 

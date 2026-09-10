@@ -14,6 +14,7 @@ from benchmark_driver import FIXTURE_SIZES, BenchmarkError, parse_fixture_size
 
 
 DRIVER_PATH = Path(__file__).with_name("benchmark_driver.py").resolve()
+DEFAULT_TIMEOUT_SECONDS = 7_200.0
 
 
 def parse_sizes(value: str) -> tuple[int, ...]:
@@ -35,13 +36,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default=FIXTURE_SIZES,
         help="Comma-separated fixture sizes (default: 100,1000,10000,50000).",
     )
-    parser.add_argument("--suite", choices=("fixture", "play-entry", "all"), default="fixture")
+    parser.add_argument(
+        "--suite", choices=("fixture", "play-entry", "all"), default="fixture"
+    )
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--mode", choices=("direct", "mcp"), default="direct")
     parser.add_argument("--unity-path", default="unity")
     parser.add_argument("--mcp-url")
     parser.add_argument("--mcp-token")
-    parser.add_argument("--timeout-seconds", type=float, default=1_800.0)
+    parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--keep-fixture", action="store_true")
     parser.add_argument("--path-map")
     parser.add_argument("--dry-run", action="store_true")
@@ -85,43 +88,37 @@ def matrix_paths(output_dir: Path, suite: str) -> tuple[Path, Path]:
     return output_dir / f"{stem}.json", output_dir / f"{stem}.md"
 
 
+def display_command(command: list[str]) -> list[str]:
+    displayed: list[str] = []
+    redact_next = False
+    for item in command:
+        if redact_next:
+            displayed.append("REDACTED")
+            redact_next = False
+        else:
+            displayed.append(item)
+        if item == "--mcp-token":
+            redact_next = True
+    return displayed
+
+
+def persist_matrix(output_dir: Path, suite: str, matrix: dict[str, Any]) -> None:
+    json_path, markdown_path = matrix_paths(output_dir, suite)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(
+        json.dumps(matrix, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    write_markdown(markdown_path, matrix)
+
+
 def run_matrix(args: argparse.Namespace) -> dict[str, Any]:
     if args.timeout_seconds <= 0:
         raise BenchmarkError("--timeout-seconds must be positive")
     output_dir = args.output_dir.expanduser().resolve()
     runs: list[dict[str, Any]] = []
-    for version in args.unity_version:
-        for size in args.sizes:
-            command = driver_command(args, version, size)
-            entry: dict[str, Any] = {
-                "unityVersion": version,
-                "fixtureSize": size,
-                "command": command,
-                "status": "planned",
-            }
-            if not args.dry_run:
-                completed = subprocess.run(command, check=False)
-                report = output_dir / f"data-visualizer-{args.suite}-{size}-{version}.json"
-                entry["returnCode"] = completed.returncode
-                entry["report"] = str(report)
-                if report.is_file():
-                    result = json.loads(report.read_text(encoding="utf-8"))
-                    entry["status"] = result.get("status", "unknown")
-                    entry["fixtureVerified"] = result.get("fixtureVerified", False)
-                    entry["cleanupCompleted"] = result.get("cleanupCompleted", False)
-                else:
-                    entry["status"] = "missing-report"
-                if entry["returnCode"] != 0 or entry["status"] != "completed":
-                    runs.append(entry)
-                    raise BenchmarkError(f"Matrix run failed: {entry}")
-                comparison = report.with_suffix(".md")
-                if comparison.is_file():
-                    entry["comparison"] = str(comparison)
-            runs.append(entry)
-
-    matrix = {
+    matrix: dict[str, Any] = {
         "schemaVersion": "1",
-        "status": "planned" if args.dry_run else "completed",
+        "status": "planned" if args.dry_run else "running",
         "hostProject": args.host_project,
         "mode": args.mode,
         "suite": args.suite,
@@ -138,10 +135,56 @@ def run_matrix(args: argparse.Namespace) -> dict[str, Any]:
         ],
     }
     if not args.dry_run:
-        json_path, markdown_path = matrix_paths(output_dir, args.suite)
-        json_path.parent.mkdir(parents=True, exist_ok=True)
-        json_path.write_text(json.dumps(matrix, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        write_markdown(markdown_path, matrix)
+        persist_matrix(output_dir, args.suite, matrix)
+    for version in args.unity_version:
+        for size in args.sizes:
+            command = driver_command(args, version, size)
+            entry: dict[str, Any] = {
+                "unityVersion": version,
+                "fixtureSize": size,
+                "command": display_command(command),
+                "status": "planned",
+            }
+            if not args.dry_run:
+                try:
+                    completed = subprocess.run(command, check=False)
+                    report = output_dir / f"data-visualizer-{args.suite}-{size}-{version}.json"
+                    entry["returnCode"] = completed.returncode
+                    entry["report"] = str(report)
+                    if report.is_file():
+                        result = json.loads(report.read_text(encoding="utf-8"))
+                        entry["status"] = result.get("status", "unknown")
+                        entry["fixtureVerified"] = result.get("fixtureVerified", False)
+                        entry["cleanupCompleted"] = result.get("cleanupCompleted", False)
+                    else:
+                        entry["status"] = "missing-report"
+                    if entry["returnCode"] != 0 or entry["status"] != "completed":
+                        raise BenchmarkError(f"Matrix run failed: {entry}")
+                    comparison = report.with_suffix(".md")
+                    if comparison.is_file():
+                        entry["comparison"] = str(comparison)
+                except BenchmarkError as error:
+                    entry["status"] = "failed"
+                    entry["error"] = str(error)
+                    runs.append(entry)
+                    matrix["status"] = "failed"
+                    matrix["error"] = str(error)
+                    persist_matrix(output_dir, args.suite, matrix)
+                    raise
+                except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as error:
+                    entry["status"] = "failed"
+                    entry["error"] = str(error)
+                    runs.append(entry)
+                    matrix["status"] = "failed"
+                    matrix["error"] = str(error)
+                    persist_matrix(output_dir, args.suite, matrix)
+                    raise BenchmarkError(f"Matrix run failed: {entry}") from error
+            runs.append(entry)
+            if not args.dry_run:
+                persist_matrix(output_dir, args.suite, matrix)
+    if not args.dry_run:
+        matrix["status"] = "completed"
+        persist_matrix(output_dir, args.suite, matrix)
     return matrix
 
 

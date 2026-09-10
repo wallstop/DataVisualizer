@@ -179,6 +179,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
     {
         void Configure(int index, BenchmarkSharedData shared);
         string Identity { get; }
+        BenchmarkSharedData SharedReference { get; }
     }
 
     public sealed class PlainData : ScriptableObject, IBenchmarkFixture
@@ -187,6 +188,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         public BenchmarkNestedData nested = new();
 
         public string Identity => identity;
+        public BenchmarkSharedData SharedReference => nested?.shared;
 
         public void Configure(int index, BenchmarkSharedData shared)
         {
@@ -211,6 +213,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         public BenchmarkNestedData nested = new();
 
         public string Identity => identity;
+        public BenchmarkSharedData SharedReference => nested?.shared;
 
         public void Configure(int index, BenchmarkSharedData shared)
         {
@@ -232,6 +235,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark.First
         public string identity;
         public WallstopStudios.DataVisualizer.Benchmark.BenchmarkNestedData nested = new();
         public string Identity => identity;
+        public WallstopStudios.DataVisualizer.Benchmark.BenchmarkSharedData SharedReference => nested?.shared;
         public void Configure(int index, WallstopStudios.DataVisualizer.Benchmark.BenchmarkSharedData shared)
         {
             identity = $"first-{index:D6}";
@@ -252,6 +256,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark.Second
         public string identity;
         public WallstopStudios.DataVisualizer.Benchmark.BenchmarkNestedData nested = new();
         public string Identity => identity;
+        public WallstopStudios.DataVisualizer.Benchmark.BenchmarkSharedData SharedReference => nested?.shared;
         public void Configure(int index, WallstopStudios.DataVisualizer.Benchmark.BenchmarkSharedData shared)
         {
             identity = $"second-{index:D6}";
@@ -537,6 +542,13 @@ namespace WallstopStudios.DataVisualizer.Benchmark
 
         private static void CreateFixtureBatch()
         {
+            _fixtureShared = AssetDatabase.LoadAssetAtPath<BenchmarkSharedData>(
+                FixtureRoot + "/Shared.asset"
+            );
+            if (_fixtureShared == null)
+            {
+                throw new InvalidOperationException("Shared fixture asset could not be reloaded");
+            }
             Type[] types =
             {
                 typeof(PlainData),
@@ -854,6 +866,13 @@ namespace WallstopStudios.DataVisualizer.Benchmark
 
         private static void VerifyFixture()
         {
+            BenchmarkSharedData shared = AssetDatabase.LoadAssetAtPath<BenchmarkSharedData>(
+                FixtureRoot + "/Shared.asset"
+            );
+            if (shared == null)
+            {
+                throw new InvalidOperationException("Shared fixture asset is missing");
+            }
             string[] guids = AssetDatabase.FindAssets("", new[] { FixtureRoot });
             int itemCount = 0;
             int duplicateShortNameCount = 0;
@@ -867,9 +886,15 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 }
                 itemCount++;
                 var asset = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
-                if (asset is not IBenchmarkFixture fixture || !identities.Add(fixture.Identity))
+                if (
+                    asset is not IBenchmarkFixture fixture
+                    || !identities.Add(fixture.Identity)
+                    || fixture.SharedReference != shared
+                )
                 {
-                    throw new InvalidOperationException("Fixture identity/type verification failed");
+                    throw new InvalidOperationException(
+                        "Fixture identity/type/shared-reference verification failed"
+                    );
                 }
                 if (asset.GetType().Name == "Data")
                 {
@@ -966,6 +991,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 AssetDatabase.DeleteAsset(FixtureRoot);
                 AssetDatabase.Refresh();
             }
+            _fixtureShared = null;
         }
 
         private static void WriteResult()
