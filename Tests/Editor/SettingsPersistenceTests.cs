@@ -162,6 +162,28 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual(expectedTypeFullName, userState.lastSelectedTypeFullName);
         }
 
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase("   ")]
+        [TestCase("{")]
+        [TestCase("{\"lastSelectedTypeFullName\":}")]
+        public void Should_ReturnNullWithoutThrowing_When_LoadingInvalidUserStateJson(string json)
+        {
+            Assert.IsNull(DataVisualizerUserState.FromJson(json));
+        }
+
+        [Test]
+        public void Should_DeserializeCurrentFields_When_LoadingValidUserStateJson()
+        {
+            const string json =
+                "{\"lastSelectedNamespaceKey\":\"Gameplay\",\"lastSelectedTypeFullName\":\"Example.CurrentData\"}";
+
+            DataVisualizerUserState userState = DataVisualizerUserState.FromJson(json);
+
+            Assert.AreEqual("Gameplay", userState.lastSelectedNamespaceKey);
+            Assert.AreEqual("Example.CurrentData", userState.lastSelectedTypeFullName);
+        }
+
         private static void AssertCollapseStateDirtySemantics(
             Func<string, bool, bool> setCollapsed,
             Func<string, bool> removeCollapsed
