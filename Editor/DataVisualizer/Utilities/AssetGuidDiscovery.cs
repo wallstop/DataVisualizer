@@ -20,13 +20,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool candidateAdded = false;
             string normalizedSavedGuid = null;
 
-            IReadOnlyList<string> indexedGuids = AssetGuidTypeIndex.GetKnownGuids(type);
-            if (0 < indexedGuids.Count)
+            string[] indexedGuids = AssetGuidTypeIndex.GetKnownGuids(type);
+            if (0 < indexedGuids.Length)
             {
                 candidateLookup = new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
-                foreach (string indexedGuid in indexedGuids)
+                for (int index = 0; index < indexedGuids.Length; index++)
                 {
-                    candidateAdded |= candidateLookup.Add(indexedGuid);
+                    candidateAdded |= candidateLookup.Add(indexedGuids[index]);
                 }
             }
 

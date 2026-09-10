@@ -74,10 +74,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void Should_KeepIndexedGuidsSeparate_When_ShortTypeNamesCollide()
         {
-            IReadOnlyList<string> firstGuids = AssetGuidTypeIndex.GetKnownGuids(
+            string[] firstGuids = AssetGuidTypeIndex.GetKnownGuids(
                 typeof(CollisionA.OrderCollisionData)
             );
-            IReadOnlyList<string> secondGuids = AssetGuidTypeIndex.GetKnownGuids(
+            string[] secondGuids = AssetGuidTypeIndex.GetKnownGuids(
                 typeof(CollisionB.OrderCollisionData)
             );
 

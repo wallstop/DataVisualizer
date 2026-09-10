@@ -27,7 +27,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public static bool IsComplete => _state == CompleteState;
 
-        public static IReadOnlyList<string> GetKnownGuids(Type type)
+        public static string[] GetKnownGuids(Type type)
         {
             if (type == null || !GuidsByType.TryGetValue(type, out HashSet<string> guids))
             {
