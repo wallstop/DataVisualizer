@@ -86,6 +86,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             }
 
             bool mutationSucceeded = false;
+            HashSet<string> plannedDestinations = new(StringComparer.OrdinalIgnoreCase);
             foreach (string guid in request.guids)
             {
                 DataVisualizerAssetOperationItemResult item = new() { guid = guid };
@@ -98,6 +99,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
 
                 item.originalPath = path;
                 if (!TryPrepareOperation(request, path, item, out diagnostic))
+                {
+                    item.diagnostic = diagnostic;
+                    continue;
+                }
+
+                if (
+                    !TryReserveDestination(
+                        request.operation,
+                        item.resultingPath,
+                        plannedDestinations,
+                        out diagnostic
+                    )
+                )
                 {
                     item.diagnostic = diagnostic;
                     continue;
@@ -296,6 +310,32 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                     diagnostic = "The requested asset operation is unsupported.";
                     return false;
             }
+        }
+
+        private static bool TryReserveDestination(
+            DataVisualizerAssetOperationKind operation,
+            string resultingPath,
+            HashSet<string> plannedDestinations,
+            out string diagnostic
+        )
+        {
+            if (
+                operation != DataVisualizerAssetOperationKind.Rename
+                && operation != DataVisualizerAssetOperationKind.Move
+            )
+            {
+                diagnostic = string.Empty;
+                return true;
+            }
+
+            if (plannedDestinations.Add(resultingPath))
+            {
+                diagnostic = string.Empty;
+                return true;
+            }
+
+            diagnostic = "Another item in this request uses the same destination path.";
+            return false;
         }
 
         private static bool TryValidateName(string value, out string diagnostic)
