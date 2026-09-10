@@ -6,6 +6,25 @@ asset count and content before timing, emits raw Unity-side samples as JSON,
 and removes the fixture and generated bootstrap by default. Nothing generated
 by the driver belongs in the UPM/npm package.
 
+Use `benchmark_matrix.py` to repeat a selected suite over all supported fixture
+sizes and one or more explicitly installed Unity versions. It writes an
+aggregate JSON/Markdown manifest next to the individual reports and fails on
+the first missing or unsuccessful run:
+
+```bash
+python3 scripts/benchmark/benchmark_matrix.py \
+  --mode mcp \
+  --host-project /Users/wallstop/Code/DataVisualizer \
+  --unity-version 6000.4.6f1 \
+  --suite fixture \
+  --output-dir /tmp/data-visualizer-results
+```
+
+Pass `--unity-version` more than once for a compatibility matrix and use
+`--sizes 100,1000,10000,50000` to make the requested fixture set explicit.
+Unavailable Unity versions, player smoke, and metrics not implemented by the
+driver remain reported as unavailable rather than passing.
+
 The driver supports two execution modes:
 
 ```bash

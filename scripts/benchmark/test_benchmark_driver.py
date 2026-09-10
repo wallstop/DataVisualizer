@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from benchmark_matrix import build_argument_parser as build_matrix_argument_parser
+from benchmark_matrix import driver_command, parse_sizes
 from benchmark_driver import (
     BenchmarkError,
     PathMapping,
@@ -22,6 +24,33 @@ from benchmark_driver import (
 
 
 class BenchmarkDriverTests(unittest.TestCase):
+    def test_matrix_parser_preserves_requested_sizes_and_versions(self):
+        parser = build_matrix_argument_parser()
+        arguments = parser.parse_args(
+            [
+                "--host-project",
+                "/host/DataVisualizer",
+                "--unity-version",
+                "6000.4.6f1",
+                "--unity-version",
+                "2022.3.50f1",
+                "--sizes",
+                "100,50000",
+                "--output-dir",
+                "/tmp/benchmark",
+            ]
+        )
+        self.assertEqual(arguments.unity_version, ["6000.4.6f1", "2022.3.50f1"])
+        self.assertEqual(arguments.sizes, (100, 50_000))
+        command = driver_command(arguments, arguments.unity_version[0], 50_000)
+        self.assertIn("benchmark_driver.py", command[1])
+        self.assertIn("--fixture-size", command)
+        self.assertIn("50000", command)
+
+    def test_matrix_parser_rejects_duplicate_sizes(self):
+        with self.assertRaises(argparse.ArgumentTypeError):
+            parse_sizes("100,100")
+
     def test_parse_fixture_size_accepts_supported_values(self):
         self.assertEqual(parse_fixture_size("10,000"), 10_000)
 
