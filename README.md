@@ -85,6 +85,34 @@ The filter field above the Namespace list narrows types and namespaces with case
 
 Data Visualizer exposes several extension points for custom workflows:
 
+### Editor automation
+
+Editor integrations can use the window-independent
+`WallstopStudios.DataVisualizer.Editor.Automation.DataVisualizerAutomation` facade
+without opening Data Visualizer. The current typed surface supports configuration
+read/apply and JSON import/export, deterministic managed-type discovery, paged
+main-asset metadata queries, asset refresh, and GUID-based selection/opening.
+Configuration and mutation operations reject Play Mode and invalid project paths;
+metadata results use assembly-qualified type names and report complete pages.
+
+```csharp
+using WallstopStudios.DataVisualizer.Editor.Automation;
+
+DataVisualizerConfiguration configuration =
+    DataVisualizerAutomation.ReadConfiguration();
+DataVisualizerAssetMetadataPage page =
+    DataVisualizerAutomation.QueryAssetMetadata(
+        assemblyQualifiedTypeName: null,
+        page: 0,
+        pageSize: 100
+    );
+```
+
+The facade is intentionally explicit and bounded. Asset mutation previews,
+serialized-property operations, cancellation/progress, and the file-based JSON
+request adapter remain follow-up work; callers should inspect each operation
+result instead of assuming a modal UI path or transaction rollback.
+
 **Attributes** let you override display namespace or friendly names on ScriptableObject classes. Useful when code organization doesn't match your content taxonomy.
 
 **BaseDataObject** provides a ready-made base class for ScriptableObjects with built-in lifecycle support:
