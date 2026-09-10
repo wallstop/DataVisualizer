@@ -220,8 +220,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 searchFolders = new[] { searchFolder };
             }
 
-            DataVisualizerAssetMetadata[] metadata = AssetDatabase
-                .FindAssets("t:ScriptableObject", searchFolders)
+            string[] assetGuids =
+                searchFolders == null
+                    ? AssetDatabase.FindAssets("t:ScriptableObject")
+                    : AssetDatabase.FindAssets("t:ScriptableObject", searchFolders);
+            DataVisualizerAssetMetadata[] metadata = assetGuids
                 .Select(guid => new { guid, path = AssetDatabase.GUIDToAssetPath(guid) })
                 .Where(asset => !string.IsNullOrWhiteSpace(asset.path))
                 .Select(asset =>
