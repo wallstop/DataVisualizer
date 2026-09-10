@@ -88,13 +88,13 @@ Data Visualizer exposes several extension points for custom workflows:
 **Attributes** let you override display namespace or friendly names on ScriptableObject classes. Useful when code organization doesn't match your content taxonomy.
 
 **BaseDataObject** provides a ready-made base class for ScriptableObjects with built-in lifecycle support:
-- Centralizes namespace/type metadata so derived types inherit correct grouping automatically
-- Implements lifecycle interfaces (clone, create, rename, delete) with virtual hooks like `OnBeforeClone`, `OnAfterClone`, and `OnValidateRename`
-- Exposes helper methods for common operations (ping asset, select in Project, open related scenes)
+- Stores an asset GUID, title, and description for display and stable identity
+- Implements clone, create, and rename lifecycle interfaces with virtual `BeforeClone`, `AfterClone`, `BeforeCreate`, `AfterCreate`, `BeforeRename`, and `AfterRename` hooks
+- Supports custom UI Toolkit content through the virtual `BuildGUI` method
 
 Derived classes override only what they need—GUID generation, cache resets, companion asset syncing—without duplicating boilerplate.
 
-**Lifecycle Interfaces** hook into asset events (before/after clone, rename, delete, create). Enforce invariants like regenerating IDs or pushing audit logs to telemetry without writing per-asset editor scripts.
+**Lifecycle Interfaces** hook into asset events before and after clone, create, and rename operations. Enforce invariants like regenerating IDs or pushing audit logs to telemetry without writing per-asset editor scripts.
 
 **UI Toolkit Extensions** render custom UI alongside the default inspector. Return a `VisualElement` tree—graphs, thumbnails, validation badges, or any UI Toolkit component—and Data Visualizer slots it in automatically. Because the entire window runs on UI Toolkit, this approach scales to complex dashboards without leaving the unified workflow.
 
