@@ -8,7 +8,7 @@
 | Skill | When to Use |
 | --- | --- |
 | [manage-skills](./manage-skills/SKILL.md) | Create, edit, split, or remove agent skills in .llm/skills using the standard SKILL.md format (agentskills.io). Use when adding a new skill, updating any skill's frontmatter or body, regenerating the skills index, or when a .llm markdown file approaches the 300-line limit. |
-| [ship-changes](./ship-changes/SKILL.md) | Validate and ship changes in the Data Visualizer package - CSharpier formatting, .llm harness linters, npm pack, Unity EditMode/PlayMode suites, commit subjects, and PR requirements. Use before committing, pushing, or opening a pull request. |
+| [ship-changes](./ship-changes/SKILL.md) | Validate and ship changes in the Data Visualizer package - CSharpier formatting, .llm harness linters, npm pack, Unity EditMode/PlayMode suites, commit subjects, and PR handoff requirements. Use before committing, pushing, or opening a pull request. |
 
 ## Workflow Skills
 
