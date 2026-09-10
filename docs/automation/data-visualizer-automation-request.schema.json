@@ -4,6 +4,7 @@
   "title": "Data Visualizer automation request",
   "type": "object",
   "required": ["schemaVersion", "requestId", "operation"],
+  "additionalProperties": false,
   "properties": {
     "schemaVersion": { "const": 1 },
     "requestId": { "type": "string", "minLength": 1 },
@@ -22,10 +23,37 @@
     "guid": { "type": ["string", "null"] },
     "assetOperation": { "$ref": "#/$defs/assetOperation" }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "operation": { "const": 1 } } },
+      "then": { "required": ["configuration"] }
+    },
+    {
+      "if": { "properties": { "operation": { "const": 2 } } },
+      "then": { "required": ["configurationJson"] }
+    },
+    {
+      "if": { "properties": { "operation": { "const": 7 } } },
+      "then": { "required": ["guid"] }
+    },
+    {
+      "if": { "properties": { "operation": { "const": 8 } } },
+      "then": { "required": ["guid"] }
+    },
+    {
+      "if": { "properties": { "operation": { "const": 9 } } },
+      "then": { "required": ["assetOperation"] }
+    },
+    {
+      "if": { "properties": { "operation": { "const": 10 } } },
+      "then": { "required": ["assetOperation"] }
+    }
+  ],
   "$defs": {
     "configuration": {
       "type": "object",
       "required": ["dataFolderPath", "persistStateInSettingsAsset", "selectActiveObject"],
+      "additionalProperties": false,
       "properties": {
         "dataFolderPath": { "type": "string", "minLength": 1 },
         "persistStateInSettingsAsset": { "type": "boolean" },
@@ -35,12 +63,19 @@
     "assetOperation": {
       "type": "object",
       "required": ["operation", "guids"],
+      "additionalProperties": false,
       "properties": {
         "operation": { "type": "integer", "minimum": 0, "maximum": 3 },
         "guids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
         "value": { "type": "string" },
         "labels": { "type": "array", "items": { "type": "string" } }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "operation": { "const": 2 } } },
+          "then": { "required": ["labels"] }
+        }
+      ]
     }
   }
 }

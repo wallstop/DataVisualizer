@@ -23,6 +23,7 @@ from benchmark_driver import (
     comparison_report_path,
     config_from_args,
     direct_unity_command,
+    direct_cleanup_unity_command,
     extract_unity_result,
     parse_mcp_tool_result,
     parse_fixture_size,
@@ -258,8 +259,63 @@ class BenchmarkDriverTests(unittest.TestCase):
             self.assertEqual(plan["warmups"], 5)
             self.assertIn("Unity Stopwatch", plan["timingBoundary"])
             self.assertEqual(plan["playEntryCases"], ["open-idle", "open-indexing", "closed"])
+            self.assertEqual(
+                plan["playEntryCaseOrder"][1], ["closed", "open-indexing", "open-idle"]
+            )
+            self.assertEqual(
+                plan["hostOutput"], f"/host/results/data-visualizer-all-1000-6000.4.6f1.json"
+            )
             self.assertEqual(plan["comparisonOutput"], str(comparison_report_path(config)))
             json.dumps(plan)
+
+    def test_bootstrap_refuses_unowned_fixture_and_alternates_cases(self):
+        parser = build_argument_parser()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(__file__).resolve().parents[2]
+            arguments = parser.parse_args(
+                [
+                    "--host-project",
+                    "/host/DataVisualizer",
+                    "--unity-version",
+                    "6000.4.6f1",
+                    "--fixture-size",
+                    "100",
+                    "--output-dir",
+                    temporary,
+                    "--mode",
+                    "mcp",
+                ]
+            )
+            source = render_bootstrap(config_from_args(arguments, root), "")
+            self.assertIn("refusing to delete an unowned benchmark fixture", source)
+            self.assertIn("return _repetition % 2 == 0 ? _caseIndex : 2 - _caseIndex;", source)
+            self.assertIn("originalEnterPlayModeOptionsEnabled", source)
+            self.assertIn("Unity refused to delete the benchmark fixture", source)
+
+    def test_direct_cleanup_command_is_bounded_and_uses_cleanup_entrypoint(self):
+        parser = build_argument_parser()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(__file__).resolve().parents[2]
+            arguments = parser.parse_args(
+                [
+                    "--host-project",
+                    temporary,
+                    "--unity-version",
+                    "6000.4.6f1",
+                    "--fixture-size",
+                    "100",
+                    "--output-dir",
+                    temporary,
+                    "--mode",
+                    "direct",
+                ]
+            )
+            command = direct_cleanup_unity_command(
+                config_from_args(arguments, root), Path(temporary) / "result.json"
+            )
+            self.assertIn(".Cleanup", command[command.index("-executeMethod") + 1])
+            self.assertIn("-quit", command)
+            self.assertEqual(command[command.index("-projectPath") + 1], str(Path(temporary).resolve()))
 
     def test_comparison_report_preserves_target_miss_and_raw_sample_counts(self):
         parser = build_argument_parser()

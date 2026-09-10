@@ -337,6 +337,8 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             public float pixelsPerPoint;
             public string theme;
             public string windowRect;
+            public bool originalEnterPlayModeOptionsEnabled;
+            public string originalEnterPlayModeOptions;
             public bool enterPlayModeOptionsEnabled;
             public string enterPlayModeOptions;
             public double fixtureGenerationMilliseconds;
@@ -404,6 +406,9 @@ namespace WallstopStudios.DataVisualizer.Benchmark
 
         public static string Cleanup()
         {
+            EditorApplication.update -= Tick;
+            _window?.Close();
+            _window = null;
             try
             {
                 bool preserveSuccessfulFixture = KeepFixture && _result?.status == "completed";
@@ -508,6 +513,8 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 dpi = Screen.dpi,
                 pixelsPerPoint = EditorGUIUtility.pixelsPerPoint,
                 theme = EditorGUIUtility.isProSkin ? "dark" : "light",
+                originalEnterPlayModeOptionsEnabled = _originalEnterPlayModeOptionsEnabled,
+                originalEnterPlayModeOptions = _originalEnterPlayModeOptions.ToString(),
                 enterPlayModeOptionsEnabled = EditorSettings.enterPlayModeOptionsEnabled,
                 enterPlayModeOptions = EditorSettings.enterPlayModeOptions.ToString(),
                 unavailableMetrics = new[]
@@ -528,7 +535,12 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         private static void Prepare()
         {
             Clock.Restart();
-            CleanupFixture();
+            if (AssetDatabase.IsValidFolder(FixtureRoot))
+            {
+                throw new InvalidOperationException(
+                    "Fixture path already exists; refusing to delete an unowned benchmark fixture"
+                );
+            }
             AssetDatabase.CreateFolder("Assets", "__DataVisualizerBenchmarkFixture");
 
             _fixtureShared = ScriptableObject.CreateInstance<BenchmarkSharedData>();
@@ -623,6 +635,11 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             _phase = Phase.StartPlayCase;
         }
 
+        private static int CurrentCaseIndex()
+        {
+            return _repetition % 2 == 0 ? _caseIndex : 2 - _caseIndex;
+        }
+
         private static void StartPlayCase()
         {
             if (Suite != "all" && Suite != "play-entry")
@@ -631,7 +648,8 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 return;
             }
 
-            if (_caseIndex == 0)
+            int caseIndex = CurrentCaseIndex();
+            if (caseIndex == 0)
             {
                 EnsureWindowOpen();
                 _waitTicks = 0;
@@ -639,7 +657,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 return;
             }
 
-            if (_caseIndex == 1)
+            if (caseIndex == 1)
             {
                 _window?.Close();
                 _window = null;
@@ -803,12 +821,13 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                 double elapsed = ElapsedMilliseconds(_playRequestTimestamp);
                 List<double> warmups;
                 List<double> samples;
-                if (_caseIndex == 0)
+                int caseIndex = CurrentCaseIndex();
+                if (caseIndex == 0)
                 {
                     warmups = OpenWarmups;
                     samples = OpenSamples;
                 }
-                else if (_caseIndex == 1)
+                else if (caseIndex == 1)
                 {
                     warmups = OpenIndexingWarmups;
                     samples = OpenIndexingSamples;
@@ -926,6 +945,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
 
         private static void Finish()
         {
+            EditorApplication.update -= Tick;
             if (_result.status != "failed")
             {
                 _result.status = "completed";
@@ -969,7 +989,6 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             {
                 RestorePlayModeSettings();
             }
-            EditorApplication.update -= Tick;
             if (ExitEditor)
             {
                 EditorApplication.Exit(_result.status == "completed" ? 0 : 1);
@@ -988,8 +1007,15 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         {
             if (AssetDatabase.IsValidFolder(FixtureRoot))
             {
-                AssetDatabase.DeleteAsset(FixtureRoot);
+                if (!AssetDatabase.DeleteAsset(FixtureRoot))
+                {
+                    throw new InvalidOperationException("Unity refused to delete the benchmark fixture");
+                }
                 AssetDatabase.Refresh();
+                if (AssetDatabase.IsValidFolder(FixtureRoot))
+                {
+                    throw new InvalidOperationException("Benchmark fixture still exists after deletion");
+                }
             }
             _fixtureShared = null;
         }
@@ -1165,6 +1191,11 @@ def comparison_report_path(config: BenchmarkConfig) -> Path:
 
 
 def planned_execution(config: BenchmarkConfig) -> dict[str, Any]:
+    mapped_output = (
+        None
+        if config.path_mapping is None
+        else config.path_mapping.translate(report_path(config))
+    )
     return {
         "schemaVersion": SCHEMA_VERSION,
         "mode": config.mode,
@@ -1173,6 +1204,7 @@ def planned_execution(config: BenchmarkConfig) -> dict[str, Any]:
         "fixtureSize": config.fixture_size,
         "suite": config.suite,
         "output": str(report_path(config)),
+        "hostOutput": mapped_output,
         "comparisonOutput": str(comparison_report_path(config)),
         "pathMap": None
         if config.path_mapping is None
@@ -1183,6 +1215,10 @@ def planned_execution(config: BenchmarkConfig) -> dict[str, Any]:
         "warmups": 5,
         "samples": 30,
         "playEntryCases": ["open-idle", "open-indexing", "closed"],
+        "playEntryCaseOrder": [
+            ["open-idle", "open-indexing", "closed"],
+            ["closed", "open-indexing", "open-idle"],
+        ],
         "timingBoundary": "Unity Stopwatch/Profiler-side operation timing; orchestration excluded",
     }
 
@@ -1424,6 +1460,14 @@ def run_direct(config: BenchmarkConfig, bootstrap: str, output: Path) -> dict[st
                 f"Direct Unity benchmark failed (exit {process.returncode}): {result}"
             )
         return result
+    except (BenchmarkError, OSError, ValueError, subprocess.TimeoutExpired) as error:
+        try:
+            recover_direct_cleanup(config, output)
+        except BenchmarkError as cleanup_error:
+            raise BenchmarkError(
+                f"Benchmark failed: {error}; recovery cleanup failed: {cleanup_error}"
+            ) from error
+        raise
     finally:
         source.unlink(missing_ok=True)
         source.with_suffix(source.suffix + ".meta").unlink(missing_ok=True)
@@ -1442,6 +1486,46 @@ def direct_unity_command(config: BenchmarkConfig, output: Path) -> list[str]:
         "-logFile",
         str(output.with_suffix(".unity.log")),
     ]
+
+
+def direct_cleanup_unity_command(config: BenchmarkConfig, output: Path) -> list[str]:
+    """Build a bounded recovery command that runs in a fresh Unity process."""
+
+    return [
+        config.unity_path,
+        "-batchmode",
+        "-projectPath",
+        config.host_project,
+        "-executeMethod",
+        ENTRYPOINT + ".Cleanup",
+        "-quit",
+        "-logFile",
+        str(output.with_suffix(".cleanup.unity.log")),
+    ]
+
+
+def recover_direct_cleanup(config: BenchmarkConfig, output: Path) -> None:
+    """Run recovery cleanup and prove that the disposable fixture is gone."""
+
+    try:
+        cleanup = subprocess.run(
+            direct_cleanup_unity_command(config, output),
+            cwd=config.host_project,
+            timeout=min(config.timeout_seconds, 120.0),
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise BenchmarkError(f"Unity cleanup process failed: {error}") from error
+    project = Path(config.host_project)
+    fixture = project / "Assets" / "__DataVisualizerBenchmarkFixture"
+    fixture_meta = project / "Assets" / "__DataVisualizerBenchmarkFixture.meta"
+    failures = []
+    if cleanup.returncode != 0:
+        failures.append(f"Unity cleanup exited {cleanup.returncode}")
+    if fixture.exists() or fixture_meta.exists():
+        failures.append(f"fixture remains at {fixture}")
+    if failures:
+        raise BenchmarkError("; ".join(failures))
 
 
 def run_mcp(config: BenchmarkConfig, bootstrap: str, output: Path) -> dict[str, Any]:
@@ -1553,6 +1637,7 @@ def run_mcp(config: BenchmarkConfig, bootstrap: str, output: Path) -> dict[str, 
                 raise BenchmarkError(f"MCP Unity benchmark timed out: {value}")
             time.sleep(0.5)
     finally:
+        cleanup_errors: list[str] = []
         cleanup_client = McpClient(config.mcp_url, config.mcp_token, 5.0)
         cleanup_deadline = time.monotonic() + 30.0
         try:
@@ -1568,14 +1653,14 @@ def run_mcp(config: BenchmarkConfig, bootstrap: str, output: Path) -> dict[str, 
             cleanup_client = client
             if isinstance(cleanup_result, str) and cleanup_result.startswith("cleanup-failed"):
                 raise BenchmarkError(cleanup_result)
-        except BenchmarkError:
-            print("warning: MCP fixture cleanup failed", file=sys.stderr)
+        except BenchmarkError as error:
+            cleanup_errors.append(f"fixture: {error}")
         try:
             cleanup_client.call_tool(
                 "delete_asset", {"asset": BOOTSTRAP_PATH, "confirm": True}
             )
-        except BenchmarkError:
-            print("warning: MCP bootstrap cleanup failed", file=sys.stderr)
+        except BenchmarkError as error:
+            cleanup_errors.append(f"bootstrap: {error}")
         try:
             cleanup_client.call_tool(
                 "delete_asset", {"asset": remote_result_path, "confirm": True}
@@ -1595,8 +1680,10 @@ def run_mcp(config: BenchmarkConfig, bootstrap: str, output: Path) -> dict[str, 
                         "timeout": 5_000,
                     },
                 )
-            except BenchmarkError:
-                print("warning: MCP result cleanup failed", file=sys.stderr)
+            except BenchmarkError as error:
+                cleanup_errors.append(f"result: {error}")
+        if cleanup_errors:
+            raise BenchmarkError("MCP cleanup failed: " + "; ".join(cleanup_errors))
 
 
 def run(config: BenchmarkConfig, root: Path) -> dict[str, Any]:

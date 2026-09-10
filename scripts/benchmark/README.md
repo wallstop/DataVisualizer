@@ -48,14 +48,24 @@ python3 scripts/benchmark/benchmark_driver.py \
   --unity-version 6000.4.6f1 \
   --fixture-size 100 \
   --suite play-entry \
-  --output-dir /tmp/data-visualizer-results
+--output-dir /tmp/data-visualizer-results
 ```
+
+The fixture path is run-owned: a pre-existing
+`Assets/__DataVisualizerBenchmarkFixture` causes the run to stop without
+deleting it. If direct Unity times out or returns an unsuccessful result, the
+driver starts a fresh bounded Unity cleanup process before removing its
+generated bootstrap. Cleanup must prove that both the fixture directory and
+its `.meta` file are absent; MCP cleanup failures also fail the run. A stale
+fixture from an interrupted run therefore needs explicit inspection and
+cleanup before retrying.
 
 `--host-project` is the path visible to the Unity process. When the driver and
 host use different path namespaces, pass `--path-map
-LOCAL_PREFIX=HOST_PREFIX`; the mapping is validated before execution. MCP mode
-uses the existing `UNITY_MCP_URL`/`UNITY_MCP_TOKEN` configuration and never
-assumes that the host path is visible inside the container.
+LOCAL_PREFIX=HOST_PREFIX`; the mapping is validated before execution and the
+translated host report path is retained in the dry-run plan. MCP mode uses the
+existing `UNITY_MCP_URL`/`UNITY_MCP_TOKEN` configuration and never assumes
+that the host path is visible inside the container.
 
 Supported fixture sizes are 100, 1,000, 10,000, and 50,000. Fixtures contain
 ordinary ScriptableObjects, `BaseDataObject` assets, nested lists, shared

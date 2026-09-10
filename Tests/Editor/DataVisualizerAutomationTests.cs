@@ -68,6 +68,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void Should_RejectUnknownMetadataTypeIdentity()
+        {
+            Assert.Throws<System.ArgumentException>(() =>
+                DataVisualizerAutomation.QueryAssetMetadata(
+                    "Missing.Type, Missing.Assembly",
+                    0,
+                    100
+                )
+            );
+        }
+
+        [Test]
         public void Should_RejectAssetPathThatEscapesProjectAssets()
         {
             DataVisualizerConfiguration configuration = new()
@@ -113,16 +125,37 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void Should_PreflightDuplicateAssetGuidsBeforeMutation()
+        {
+            DataVisualizerAssetOperationResult result =
+                DataVisualizerAutomation.PreviewAssetOperation(
+                    new DataVisualizerAssetOperationRequest
+                    {
+                        operation = DataVisualizerAssetOperationKind.Delete,
+                        guids = new[] { "missing-guid", "missing-guid" },
+                    }
+                );
+
+            Assert.IsFalse(result.succeeded);
+            Assert.AreEqual(2, result.items.Count);
+            StringAssert.Contains("more than once", result.items[1].diagnostic);
+        }
+
+        [Test]
         public void Should_RejectUnsupportedAutomationSchemaVersion()
         {
             DataVisualizerAutomationResult result = DataVisualizerAutomation.DispatchRequestJson(
-                "{\"schemaVersion\":2,\"requestId\":\"schema-2\"}"
+                "{\"schemaVersion\":2,\"requestId\":\"schema-2\",\"operation\":0}"
             );
 
             Assert.IsFalse(result.succeeded);
             Assert.IsTrue(result.complete);
             StringAssert.Contains("schema version", result.diagnostic);
             Assert.AreEqual("schema-2", result.requestId);
+            Assert.AreEqual(
+                DataVisualizerAutomationRequestKind.ReadConfiguration,
+                result.operation
+            );
         }
 
         [Test]
@@ -135,6 +168,33 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.IsFalse(result.succeeded);
             Assert.IsTrue(result.complete);
             StringAssert.Contains("malformed", result.diagnostic);
+        }
+
+        [Test]
+        public void Should_RejectUnknownAndDuplicateAutomationProperties()
+        {
+            DataVisualizerAutomationResult unknown = DataVisualizerAutomation.DispatchRequestJson(
+                "{\"schemaVersion\":1,\"requestId\":\"unknown\",\"operation\":0,\"unexpected\":true}"
+            );
+            Assert.IsFalse(unknown.succeeded);
+            StringAssert.Contains("unknown property", unknown.diagnostic);
+
+            DataVisualizerAutomationResult duplicate = DataVisualizerAutomation.DispatchRequestJson(
+                "{\"schemaVersion\":1,\"requestId\":\"first\",\"requestId\":\"second\",\"operation\":0}"
+            );
+            Assert.IsFalse(duplicate.succeeded);
+            StringAssert.Contains("repeats property", duplicate.diagnostic);
+        }
+
+        [Test]
+        public void Should_RejectUnsupportedAutomationOperationValue()
+        {
+            DataVisualizerAutomationResult result = DataVisualizerAutomation.DispatchRequestJson(
+                "{\"schemaVersion\":1,\"requestId\":\"operation-99\",\"operation\":99}"
+            );
+
+            Assert.IsFalse(result.succeeded);
+            StringAssert.Contains("unsupported", result.diagnostic);
         }
     }
 }

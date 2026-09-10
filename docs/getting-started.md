@@ -6,11 +6,12 @@ Add the package through **Window → Package Manager → + → Add package from 
 URL**, using the repository URL:
 
 ```text
-https://github.com/wallstop/DataVisualizer.git?path=/Packages/com.wallstop-studios.data-visualizer
+https://github.com/wallstop/DataVisualizer.git
 ```
 
-For a local package, add the repository folder containing `package.json` to the
-project's `Packages/` directory or use a local path in the Package Manager.
+The repository root is the UPM package because it contains `package.json`.
+For a local package, add this repository folder to the project's `Packages/`
+directory or use its local path in the Package Manager.
 
 The minimum declared Unity version is **2021.3**. The package has no runtime
 package dependencies. Odin Inspector remains optional; the default inspector path

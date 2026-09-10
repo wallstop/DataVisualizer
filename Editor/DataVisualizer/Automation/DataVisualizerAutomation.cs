@@ -155,7 +155,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
 
         public static DataVisualizerConfiguration ReadConfiguration()
         {
-            DataVisualizerSettings settings = LoadSettings();
+            DataVisualizerSettings settings = LoadSettings(createIfMissing: false);
+            if (settings == null)
+            {
+                return new DataVisualizerConfiguration();
+            }
             return new DataVisualizerConfiguration
             {
                 dataFolderPath = settings.DataFolderPath,
@@ -277,6 +281,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             if (pageSize is < 1 or > 500)
             {
                 throw new ArgumentOutOfRangeException(nameof(pageSize));
+            }
+
+            if (!string.IsNullOrWhiteSpace(assemblyQualifiedTypeName))
+            {
+                Type requestedType = Type.GetType(assemblyQualifiedTypeName, throwOnError: false);
+                if (requestedType == null || !IsManagedType(requestedType))
+                {
+                    throw new ArgumentException(
+                        "assemblyQualifiedTypeName must identify a discovered managed ScriptableObject type.",
+                        nameof(assemblyQualifiedTypeName)
+                    );
+                }
             }
 
             string[] searchFolders = null;
@@ -409,11 +425,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 && !type.IsNestedPrivate
                 && !typeof(Editor).IsAssignableFrom(type)
                 && !typeof(EditorWindow).IsAssignableFrom(type)
+                && !IsScriptableSingleton(type)
                 && type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
                 && type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true;
         }
 
-        private static DataVisualizerSettings LoadSettings()
+        private static bool IsScriptableSingleton(Type type)
+        {
+            Type baseType = type?.BaseType;
+            return baseType?.IsGenericType == true
+                && baseType.GetGenericTypeDefinition() == typeof(ScriptableSingleton<>);
+        }
+
+        private static DataVisualizerSettings LoadSettings(bool createIfMissing = true)
         {
             DataVisualizerSettings settings = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(
                 SettingsPath
@@ -432,6 +456,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             if (foundSettings.Length > 0)
             {
                 return foundSettings[0];
+            }
+
+            if (!createIfMissing)
+            {
+                return null;
             }
 
             string directory = Path.GetDirectoryName(SettingsPath)?.Replace('\\', '/');
@@ -468,7 +497,34 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
 
                 DataVisualizerUserState stateToPersist = new();
                 stateToPersist.HydrateFrom(settings);
-                File.WriteAllText(userStatePath, JsonUtility.ToJson(stateToPersist, true));
+                string temporaryPath = userStatePath + ".tmp";
+                File.WriteAllText(temporaryPath, JsonUtility.ToJson(stateToPersist, true));
+                try
+                {
+                    if (File.Exists(userStatePath))
+                    {
+                        try
+                        {
+                            File.Replace(temporaryPath, userStatePath, null);
+                        }
+                        catch (PlatformNotSupportedException)
+                        {
+                            File.Copy(temporaryPath, userStatePath, true);
+                            File.Delete(temporaryPath);
+                        }
+                    }
+                    else
+                    {
+                        File.Move(temporaryPath, userStatePath);
+                    }
+                }
+                finally
+                {
+                    if (File.Exists(temporaryPath))
+                    {
+                        File.Delete(temporaryPath);
+                    }
+                }
                 diagnostic = string.Empty;
                 return true;
             }
@@ -491,8 +547,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 return new DataVisualizerUserState();
             }
 
-            return DataVisualizerUserState.FromJson(File.ReadAllText(path))
-                ?? new DataVisualizerUserState();
+            DataVisualizerUserState state = DataVisualizerUserState.FromJson(
+                File.ReadAllText(path)
+            );
+            if (state == null)
+            {
+                throw new InvalidDataException("The persisted Data Visualizer state is malformed.");
+            }
+            return state;
         }
     }
 }

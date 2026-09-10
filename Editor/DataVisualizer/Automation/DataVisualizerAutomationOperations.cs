@@ -10,10 +10,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
 
     public enum DataVisualizerAssetOperationKind
     {
-        Rename,
-        Move,
-        SetLabels,
-        Delete,
+        Rename = 0,
+        Move = 1,
+        SetLabels = 2,
+        Delete = 3,
     }
 
     [Serializable]
@@ -47,6 +47,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
 
     public static partial class DataVisualizerAutomation
     {
+        private sealed class PreparedAssetOperation
+        {
+            public string guid;
+            public string path;
+            public DataVisualizerAssetOperationItemResult item;
+        }
+
         public static DataVisualizerAssetOperationResult PreviewAssetOperation(
             DataVisualizerAssetOperationRequest request
         )
@@ -77,6 +84,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 return FailOperation(result, "At least one asset GUID is required.");
             }
 
+            if (!Enum.IsDefined(typeof(DataVisualizerAssetOperationKind), request.operation))
+            {
+                return FailOperation(result, "The requested asset operation is unsupported.");
+            }
+
+            if (
+                request.operation == DataVisualizerAssetOperationKind.SetLabels
+                && request.labels == null
+            )
+            {
+                return FailOperation(result, "labels is required for SetLabels operations.");
+            }
+
             if (!preview && EditorApplication.isPlayingOrWillChangePlaymode)
             {
                 return FailOperation(
@@ -86,72 +106,163 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             }
 
             bool mutationSucceeded = false;
+            bool preflightFailed = false;
+            HashSet<string> sourcePaths = new(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> seenGuids = new(StringComparer.OrdinalIgnoreCase);
             HashSet<string> plannedDestinations = new(StringComparer.OrdinalIgnoreCase);
+            List<PreparedAssetOperation> prepared = new();
             foreach (string guid in request.guids)
             {
                 DataVisualizerAssetOperationItemResult item = new() { guid = guid };
                 result.items.Add(item);
-                if (!TryResolvePath(guid, out string path, out string diagnostic))
+                if (!seenGuids.Add(guid ?? string.Empty))
                 {
-                    item.diagnostic = diagnostic;
-                    continue;
-                }
-
-                item.originalPath = path;
-                if (!TryPrepareOperation(request, path, item, out diagnostic))
-                {
-                    item.diagnostic = diagnostic;
-                    continue;
-                }
-
-                if (
-                    !TryReserveDestination(
-                        request.operation,
-                        item.resultingPath,
-                        plannedDestinations,
-                        out diagnostic
-                    )
-                )
-                {
-                    item.diagnostic = diagnostic;
-                    continue;
-                }
-
-                if (preview)
-                {
-                    item.succeeded = true;
+                    item.diagnostic = "The same asset GUID appears more than once in this request.";
+                    preflightFailed = true;
                     continue;
                 }
 
                 try
                 {
-                    if (ApplyOperation(request, guid, path, item, out diagnostic))
+                    if (!TryResolvePath(guid, out string path, out string diagnostic))
                     {
-                        item.succeeded = true;
+                        item.diagnostic = diagnostic;
+                        preflightFailed = true;
+                        continue;
+                    }
+
+                    item.originalPath = path;
+                    sourcePaths.Add(path);
+                    if (!TryPrepareOperation(request, path, item, out diagnostic))
+                    {
+                        item.diagnostic = diagnostic;
+                        preflightFailed = true;
+                        continue;
+                    }
+
+                    if (
+                        !TryReserveDestination(
+                            request.operation,
+                            item.resultingPath,
+                            plannedDestinations,
+                            out diagnostic
+                        )
+                    )
+                    {
+                        item.diagnostic = diagnostic;
+                        preflightFailed = true;
+                        continue;
+                    }
+
+                    prepared.Add(
+                        new PreparedAssetOperation
+                        {
+                            guid = guid,
+                            path = path,
+                            item = item,
+                        }
+                    );
+                }
+                catch (Exception exception)
+                {
+                    item.diagnostic = $"Asset operation validation failed: {exception.Message}";
+                    preflightFailed = true;
+                }
+            }
+
+            foreach (PreparedAssetOperation operation in prepared)
+            {
+                if (
+                    !string.IsNullOrWhiteSpace(operation.item.resultingPath)
+                    && sourcePaths.Contains(operation.item.resultingPath)
+                    && !string.Equals(
+                        operation.path,
+                        operation.item.resultingPath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    operation.item.diagnostic =
+                        "Batch destination conflicts with another source path; no items were changed.";
+                    preflightFailed = true;
+                }
+            }
+
+            if (preflightFailed)
+            {
+                return CompleteOperation(result);
+            }
+
+            foreach (PreparedAssetOperation operation in prepared)
+            {
+                if (preview)
+                {
+                    operation.item.succeeded = true;
+                    continue;
+                }
+
+                try
+                {
+                    if (
+                        ApplyOperation(
+                            request,
+                            operation.guid,
+                            operation.path,
+                            operation.item,
+                            out string diagnostic
+                        )
+                    )
+                    {
+                        operation.item.succeeded = true;
                         mutationSucceeded = true;
                     }
                     else
                     {
-                        item.diagnostic = diagnostic;
+                        operation.item.diagnostic = diagnostic;
                     }
                 }
                 catch (Exception exception)
                 {
-                    item.diagnostic = $"Asset operation failed: {exception.Message}";
+                    operation.item.diagnostic = $"Asset operation failed: {exception.Message}";
+                    mutationSucceeded |=
+                        request.operation == DataVisualizerAssetOperationKind.Rename
+                        && string.Equals(
+                            AssetDatabase.AssetPathToGUID(operation.item.resultingPath),
+                            operation.guid,
+                            StringComparison.OrdinalIgnoreCase
+                        );
                 }
             }
 
             if (!preview && mutationSucceeded)
             {
-                AssetDatabase.SaveAssets();
-                if (request.operation == DataVisualizerAssetOperationKind.Delete)
+                try
                 {
-                    AssetDatabase.Refresh();
+                    AssetDatabase.SaveAssets();
+                    if (request.operation == DataVisualizerAssetOperationKind.Delete)
+                    {
+                        AssetDatabase.Refresh();
+                    }
+                }
+                catch (Exception exception)
+                {
+                    result.diagnostic =
+                        $"Asset operation finalization failed after applying item changes: {exception.Message}";
                 }
             }
 
+            return CompleteOperation(result);
+        }
+
+        private static DataVisualizerAssetOperationResult CompleteOperation(
+            DataVisualizerAssetOperationResult result
+        )
+        {
             result.complete = true;
-            result.succeeded = result.items.Count > 0 && result.items.All(item => item.succeeded);
+            result.succeeded =
+                string.IsNullOrWhiteSpace(result.diagnostic)
+                && result.items.Count > 0
+                && result.items.All(item => item.succeeded);
             if (!result.succeeded && string.IsNullOrWhiteSpace(result.diagnostic))
             {
                 result.diagnostic = "One or more asset operations failed.";
