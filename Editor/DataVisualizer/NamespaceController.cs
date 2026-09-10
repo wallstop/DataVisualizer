@@ -85,14 +85,16 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             element.RemoveFromClassList(StyleConstants.SelectedClass);
-            parent = element.parent;
-            if (parent == null)
+            VisualElement candidateParent = element.parent;
+            if (candidateParent == null)
             {
+                parent = default;
                 currentIndex = default;
                 return false;
             }
 
-            currentIndex = parent.IndexOf(element);
+            parent = candidateParent;
+            currentIndex = candidateParent.IndexOf(element);
             return true;
         }
 
@@ -528,9 +530,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private bool TryGet(Type type, out VisualElement element)
         {
-            if (type != null)
+            if (type != null && _namespaceCache.TryGetValue(type, out VisualElement cachedElement))
             {
-                return _namespaceCache.TryGetValue(type, out element);
+                element = cachedElement;
+                return true;
             }
 
             element = default;
@@ -645,8 +648,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             out VisualElement namespaceElement
         )
         {
-            namespaceElement = typeElement?.parent?.parent;
-            return namespaceElement != null;
+            VisualElement candidateNamespace = typeElement?.parent?.parent;
+            if (candidateNamespace == null)
+            {
+                namespaceElement = null;
+                return false;
+            }
+
+            namespaceElement = candidateNamespace;
+            return true;
         }
 
         private static void ApplyNamespaceCollapsedState(
@@ -736,13 +746,16 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            List<string> currentManagedList = GetManagedTypeNames(namespaceKey);
+            HashSet<string> currentManagedTypeNames = new(
+                GetManagedTypeNames(namespaceKey),
+                StringComparer.Ordinal
+            );
             List<string> removedTypeNames = new();
             bool changed = false;
             foreach (Type type in typesToRemove)
             {
                 string typeName = type.FullName;
-                if (!IsTypeRemovable(type) || !currentManagedList.Remove(typeName))
+                if (!IsTypeRemovable(type) || !currentManagedTypeNames.Remove(typeName))
                 {
                     continue;
                 }
@@ -755,7 +768,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (changed)
             {
-                if (currentManagedList.Count == 0)
+                if (currentManagedTypeNames.Count == 0)
                 {
                     RemoveNamespaceCollapseState(dataVisualizer, namespaceKey);
                 }

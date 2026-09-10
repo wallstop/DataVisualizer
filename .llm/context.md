@@ -77,9 +77,25 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     assembly must compile without editor references.
 11. Unity 6000.5+ compatibility: prefer `EntityId` over the retired
     `GetInstanceID` flow where the migration applies.
-12. Unity generates `.meta` files for every non-dot path; commit them alongside new
+12. Custom `Try*` methods return `bool` and expose successful values through `out`
+    parameters. Use names such as `*OrNull`, `*OrDefault`, or `*IfAvailable` when a
+    method instead returns a sentinel or performs a best-effort action.
+13. Assign every custom `out` parameter just in time, directly before each return;
+    do not initialize outputs at method entry and rely on later branches to replace
+    them.
+14. Collection mutation helpers return a changed flag or affected-item count when
+    callers can use it for persistence decisions, diagnostics, or observability.
+15. Before replacing `RemoveAt` with swap-back or `RemoveAll`, check multiplicity
+    and order semantics. A single stable removal is linear, not quadratic; swap-back
+    is valid only for unordered collections, and `RemoveAll` is for predicate-based
+    bulk removal.
+16. Use read-only collection interfaces for consumers. Mutation helpers that resize
+    a collection should accept the concrete supported mutable type when a broader
+    interface permits invalid inputs or adds measured dispatch cost; specialize only
+    for collection shapes used by production callers.
+17. Unity generates `.meta` files for every non-dot path; commit them alongside new
     files. Dot-folders (`.llm`, `.github`) never get `.meta` files.
-13. Keep agent/dev files out of the npm tarball: `package.json` `files` whitelists
+18. Keep agent/dev files out of the npm tarball: `package.json` `files` whitelists
     only `Editor`, `Runtime`, `Tests`, `docs`, and their `.meta` companions.
 
 ### Skills Discipline

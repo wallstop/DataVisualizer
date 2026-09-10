@@ -1,6 +1,6 @@
 ---
 name: ship-changes
-description: Validate and ship changes in the Data Visualizer package - CSharpier formatting, .llm harness linters, npm pack, Unity EditMode/PlayMode suites, commit subjects, and PR requirements. Use before committing, pushing, or opening a pull request.
+description: Validate and ship changes in the Data Visualizer package - CSharpier formatting, .llm harness linters, npm pack, Unity EditMode/PlayMode suites, commit subjects, and PR handoff requirements. Use before committing, pushing, or opening a pull request.
 metadata:
   category: Core
 ---
@@ -45,7 +45,12 @@ Run the narrowest sufficient layer; escalate on failure:
 
 Include: behavior summary, reproduction/validation steps, screenshots or GIFs for UI
 tweaks, and a risk callout plus rollback plan. Confirm CSharpier, `npm pack`, and both
-Unity test suites before requesting review.
+Unity test suites before handoff.
+
+Never explicitly request a review from a person, team, bot, or automation. Do not
+mention a reviewer in a comment, call a reviewer-request API, or otherwise trigger a
+review. Monitor and address reviews that arrive through the repository's existing
+configuration or that another participant submits independently.
 
 ## Related Skills
 

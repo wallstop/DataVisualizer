@@ -10,6 +10,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using WallstopStudios.DataVisualizer.Editor.Data;
     using WallstopStudios.DataVisualizer.Editor.Styles;
     using WallstopStudios.DataVisualizer.Editor.Unity;
+    using WallstopStudios.DataVisualizer.Editor.Utilities;
     using CollisionA = WallstopStudios.DataVisualizer.Tests.Editor.TypeIdentityCollision.First.Data;
     using CollisionB = WallstopStudios.DataVisualizer.Tests.Editor.TypeIdentityCollision.Second.Data;
 
@@ -143,7 +144,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
 
                 Assert.IsTrue(
-                    DataVisualizer.TryResolveAssetGuidForType(
+                    AssetGuidDiscovery.TryResolveAssetGuidForType(
                         assetGuid,
                         typeof(SelectionPersistenceGuidData),
                         out string resolvedPath
@@ -151,7 +152,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 );
                 Assert.AreEqual(assetPath, resolvedPath);
                 Assert.IsFalse(
-                    DataVisualizer.TryResolveAssetGuidForType(
+                    AssetGuidDiscovery.TryResolveAssetGuidForType(
                         assetGuid,
                         typeof(OtherSelectionPersistenceGuidData),
                         out _
@@ -184,10 +185,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
                 string upperGuid = assetGuid.ToUpperInvariant();
-                string[] includedGuids = DataVisualizer.IncludeResolvedSavedObjectGuid(
+                string[] includedGuids = AssetGuidDiscovery.MergeCandidates(
                     typeof(SelectionPersistenceGuidData),
-                    upperGuid,
                     Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    upperGuid,
                     out string normalizedSavedObjectGuid
                 );
 
@@ -220,10 +222,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
                 string upperGuid = assetGuid.ToUpperInvariant();
-                string[] includedGuids = DataVisualizer.IncludeResolvedSavedObjectGuid(
+                string[] includedGuids = AssetGuidDiscovery.MergeCandidates(
                     typeof(SelectionPersistenceGuidData),
-                    upperGuid,
                     new[] { assetGuid },
+                    Array.Empty<string>(),
+                    upperGuid,
                     out string normalizedSavedObjectGuid
                 );
 
@@ -256,10 +259,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 string savedGuid = AssetDatabase.AssetPathToGUID(assetPath);
 
-                string[] includedGuids = DataVisualizer.IncludeResolvedSavedObjectGuid(
+                string[] includedGuids = AssetGuidDiscovery.MergeCandidates(
                     typeof(SelectionPersistenceGuidData),
-                    savedGuid,
                     new[] { savedGuid },
+                    Array.Empty<string>(),
+                    savedGuid,
                     out string normalizedSavedObjectGuid
                 );
 
@@ -292,10 +296,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 string savedGuid = AssetDatabase.AssetPathToGUID(assetPath);
 
-                string[] includedGuids = DataVisualizer.IncludeResolvedSavedObjectGuid(
+                string[] includedGuids = AssetGuidDiscovery.MergeCandidates(
                     typeof(SelectionPersistenceGuidData),
-                    savedGuid,
                     new[] { savedGuid },
+                    Array.Empty<string>(),
+                    savedGuid,
                     out string normalizedSavedObjectGuid
                 );
 
