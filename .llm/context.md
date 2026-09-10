@@ -85,9 +85,17 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     them.
 14. Collection mutation helpers return a changed flag or affected-item count when
     callers can use it for persistence decisions, diagnostics, or observability.
-15. Unity generates `.meta` files for every non-dot path; commit them alongside new
+15. Before replacing `RemoveAt` with swap-back or `RemoveAll`, check multiplicity
+    and order semantics. A single stable removal is linear, not quadratic; swap-back
+    is valid only for unordered collections, and `RemoveAll` is for predicate-based
+    bulk removal.
+16. Use read-only collection interfaces for consumers. Mutation helpers that resize
+    a collection should accept the concrete supported mutable type when a broader
+    interface permits invalid inputs or adds measured dispatch cost; specialize only
+    for collection shapes used by production callers.
+17. Unity generates `.meta` files for every non-dot path; commit them alongside new
     files. Dot-folders (`.llm`, `.github`) never get `.meta` files.
-16. Keep agent/dev files out of the npm tarball: `package.json` `files` whitelists
+18. Keep agent/dev files out of the npm tarball: `package.json` `files` whitelists
     only `Editor`, `Runtime`, `Tests`, `docs`, and their `.meta` companions.
 
 ### Skills Discipline

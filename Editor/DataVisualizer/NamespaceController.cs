@@ -746,13 +746,16 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            List<string> currentManagedList = GetManagedTypeNames(namespaceKey);
+            HashSet<string> currentManagedTypeNames = new(
+                GetManagedTypeNames(namespaceKey),
+                StringComparer.Ordinal
+            );
             List<string> removedTypeNames = new();
             bool changed = false;
             foreach (Type type in typesToRemove)
             {
                 string typeName = type.FullName;
-                if (!IsTypeRemovable(type) || !currentManagedList.Remove(typeName))
+                if (!IsTypeRemovable(type) || !currentManagedTypeNames.Remove(typeName))
                 {
                     continue;
                 }
@@ -765,7 +768,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (changed)
             {
-                if (currentManagedList.Count == 0)
+                if (currentManagedTypeNames.Count == 0)
                 {
                     RemoveNamespaceCollapseState(dataVisualizer, namespaceKey);
                 }

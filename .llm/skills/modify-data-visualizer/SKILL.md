@@ -70,6 +70,12 @@ metadata:
   persist the loaded view.
 - Keep `_asyncDisplayOrderByGuid` and `_selectedObjectOrderIndex` synchronized after
   every canonical-order mutation; pending batches use those indexes for insertion.
+- GUID order is stable and persisted. Never use swap-back removal in these lists.
+  A move performs one `RemoveAt` plus one insertion; do not replace it with
+  `RemoveAll`, which adds a predicate scan and discards the original index.
+- Order mutators operate on the production-owned `List<string>`; read-only merge
+  inputs remain `IReadOnlyList<string>`. Benchmark actual call-site shapes before
+  introducing array/interface overloads rather than adding unused specializations.
 
 ## Filtering and Search
 

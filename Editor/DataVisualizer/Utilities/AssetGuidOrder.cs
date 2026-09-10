@@ -47,17 +47,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return mergedOrder;
         }
 
-        public static bool PlaceFirst(IList<string> order, string guid)
+        public static bool PlaceFirst(List<string> order, string guid)
         {
             return PlaceAt(order, guid, 0);
         }
 
-        public static bool PlaceLast(IList<string> order, string guid)
+        public static bool PlaceLast(List<string> order, string guid)
         {
             return PlaceAt(order, guid, order?.Count ?? 0);
         }
 
-        public static bool PlaceAfter(IList<string> order, string guid, string anchorGuid)
+        public static bool PlaceAfter(List<string> order, string guid, string anchorGuid)
         {
             if (
                 order == null
@@ -71,6 +71,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             int originalIndex = IndexOf(order, guid);
             if (originalIndex >= 0)
             {
+                // Stable removal is required because this list is the persisted display order.
+                // This path removes at most one item; swap-back would scramble neighboring GUIDs.
                 order.RemoveAt(originalIndex);
             }
 
@@ -80,7 +82,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return originalIndex != targetIndex;
         }
 
-        private static bool PlaceAt(IList<string> order, string guid, int targetIndex)
+        private static bool PlaceAt(List<string> order, string guid, int targetIndex)
         {
             if (order == null || string.IsNullOrWhiteSpace(guid))
             {
@@ -90,6 +92,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             int originalIndex = IndexOf(order, guid);
             if (originalIndex >= 0)
             {
+                // Preserve relative order. This is one removal, not a repeated RemoveAt loop.
                 order.RemoveAt(originalIndex);
                 if (originalIndex < targetIndex)
                 {
@@ -122,7 +125,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return result;
         }
 
-        private static int IndexOf(IList<string> order, string guid)
+        private static int IndexOf(List<string> order, string guid)
         {
             if (string.IsNullOrWhiteSpace(guid))
             {
