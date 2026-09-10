@@ -82,5 +82,34 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.IsFalse(result.succeeded);
             StringAssert.Contains("inside", result.diagnostic);
         }
+
+        [Test]
+        public void Should_RejectEmptyAssetOperationRequest()
+        {
+            DataVisualizerAssetOperationResult result =
+                DataVisualizerAutomation.PreviewAssetOperation(null);
+
+            Assert.IsFalse(result.succeeded);
+            Assert.IsTrue(result.complete);
+            StringAssert.Contains("request", result.diagnostic);
+        }
+
+        [Test]
+        public void Should_ReportMissingAssetInPreview()
+        {
+            DataVisualizerAssetOperationResult result =
+                DataVisualizerAutomation.PreviewAssetOperation(
+                    new DataVisualizerAssetOperationRequest
+                    {
+                        operation = DataVisualizerAssetOperationKind.Delete,
+                        guids = new[] { "missing-guid" },
+                    }
+                );
+
+            Assert.IsFalse(result.succeeded);
+            Assert.IsTrue(result.complete);
+            Assert.AreEqual(1, result.items.Count);
+            StringAssert.Contains("not found", result.items[0].diagnostic);
+        }
     }
 }

@@ -93,7 +93,11 @@ without opening Data Visualizer. The current typed surface supports configuratio
 read/apply and JSON import/export, deterministic managed-type discovery, paged
 main-asset metadata queries, asset refresh, and GUID-based selection/opening.
 Configuration and mutation operations reject Play Mode and invalid project paths;
-metadata results use assembly-qualified type names and report complete pages.
+metadata results use assembly-qualified type names and report complete pages. Typed
+asset operations support preview/apply rename, move, label, and delete requests;
+results retain the requested GUID, original/resulting paths, per-item diagnostics,
+and partial-completion status. Rename hooks run in the same order as the editor UI,
+and moves preserve Unity asset GUIDs.
 
 ```csharp
 using WallstopStudios.DataVisualizer.Editor.Automation;
@@ -108,10 +112,10 @@ DataVisualizerAssetMetadataPage page =
     );
 ```
 
-The facade is intentionally explicit and bounded. Asset mutation previews,
-serialized-property operations, cancellation/progress, and the file-based JSON
-request adapter remain follow-up work; callers should inspect each operation
-result instead of assuming a modal UI path or transaction rollback.
+The facade is intentionally explicit and bounded. Serialized-property operations,
+cancellation/progress, and the file-based JSON request adapter remain follow-up
+work; callers should inspect each operation result instead of assuming a modal UI
+path or transaction rollback.
 
 **Attributes** let you override display namespace or friendly names on ScriptableObject classes. Useful when code organization doesn't match your content taxonomy.
 

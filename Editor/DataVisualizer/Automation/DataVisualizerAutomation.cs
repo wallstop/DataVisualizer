@@ -148,7 +148,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
         }
     }
 
-    public static class DataVisualizerAutomation
+    public static partial class DataVisualizerAutomation
     {
         private const string SettingsPath = "Assets/Editor/DataVisualizerSettings.asset";
         private const string UserStateFileName = "DataVisualizerUserState.json";
