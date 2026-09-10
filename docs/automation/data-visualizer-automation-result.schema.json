@@ -21,9 +21,28 @@
     "configurationJson": { "type": ["string", "null"] },
     "managedTypes": { "type": "array" },
     "metadata": { "type": ["object", "null"] },
+    "indexProgress": { "$ref": "#/$defs/indexProgress" },
     "assetOperation": { "$ref": "#/$defs/assetOperationResult" }
   },
   "$defs": {
+    "indexProgress": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "windowAvailable": { "type": "boolean" },
+        "isPlayModeSuspended": { "type": "boolean" },
+        "isLoadingObjects": { "type": "boolean" },
+        "isLoadingSearchCache": { "type": "boolean" },
+        "isSearchCachePopulated": { "type": "boolean" },
+        "refreshPending": { "type": "boolean" },
+        "loadedObjectCount": { "type": "integer", "minimum": 0 },
+        "objectLoadTotalCount": { "type": "integer", "minimum": 0 },
+        "pendingObjectCount": { "type": "integer", "minimum": 0 },
+        "pendingSearchCacheCount": { "type": "integer", "minimum": 0 },
+        "selectedTypeAssemblyQualifiedName": { "type": ["string", "null"] },
+        "isComplete": { "type": "boolean" }
+      }
+    },
     "assetOperationResult": {
       "type": ["object", "null"],
       "additionalProperties": false,

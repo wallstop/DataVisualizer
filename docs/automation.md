@@ -42,6 +42,8 @@ Serialized-property operations take a property path and an explicit value kind
 (`String`, `Boolean`, numeric, enum, Unity value, collection size, or asset-reference
 GUID). Unsupported or mismatched property kinds fail before mutation; preview never
 authors serialized data.
+`GetIndexProgress()` and the JSON refresh result expose whether the window is present,
+which queues are active, pending counts, and whether the search/index work is complete.
 
 ## JSON schema version 1
 

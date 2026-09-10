@@ -124,6 +124,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
     }
 
     [Serializable]
+    public sealed class DataVisualizerIndexProgress
+    {
+        public bool windowAvailable;
+        public bool isPlayModeSuspended;
+        public bool isLoadingObjects;
+        public bool isLoadingSearchCache;
+        public bool isSearchCachePopulated;
+        public bool refreshPending;
+        public int loadedObjectCount;
+        public int objectLoadTotalCount;
+        public int pendingObjectCount;
+        public int pendingSearchCacheCount;
+        public string selectedTypeAssemblyQualifiedName;
+        public bool isComplete;
+    }
+
+    [Serializable]
     public sealed class DataVisualizerOperationResult
     {
         public bool succeeded;
@@ -362,7 +379,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
             }
 
             AssetDatabase.Refresh();
+            DataVisualizer.SignalRefresh();
             return DataVisualizerOperationResult.Success();
+        }
+
+        public static DataVisualizerIndexProgress GetIndexProgress()
+        {
+            return DataVisualizer.Instance == null
+                ? new DataVisualizerIndexProgress { isComplete = false }
+                : DataVisualizer.Instance.GetIndexProgressForAutomation();
         }
 
         public static DataVisualizerOperationResult SelectAsset(string guid)

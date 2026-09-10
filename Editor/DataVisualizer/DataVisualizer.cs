@@ -880,6 +880,32 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        internal DataVisualizerIndexProgress GetIndexProgressForAutomation()
+        {
+            Type selectedType = _namespaceController?.SelectedType;
+            int totalCount = Math.Max(0, _asyncLoadTotalCount - _asyncLoadSkippedCount);
+            return new DataVisualizerIndexProgress
+            {
+                windowAvailable = true,
+                isPlayModeSuspended = _isPlayModeSuspended,
+                isLoadingObjects = _isLoadingObjectsAsync,
+                isLoadingSearchCache = _isLoadingSearchCacheAsync,
+                isSearchCachePopulated = _isSearchCachePopulated,
+                refreshPending = _needsRefresh || _refreshQueuedDuringPlayMode,
+                loadedObjectCount = _selectedObjects.Count,
+                objectLoadTotalCount = totalCount,
+                pendingObjectCount = _pendingObjectGuids.Count,
+                pendingSearchCacheCount = _pendingSearchCacheGuids.Count,
+                selectedTypeAssemblyQualifiedName = selectedType?.AssemblyQualifiedName,
+                isComplete =
+                    !_isLoadingObjectsAsync
+                    && !_isLoadingSearchCacheAsync
+                    && _isSearchCachePopulated
+                    && !_needsRefresh
+                    && !_refreshQueuedDuringPlayMode,
+            };
+        }
+
         private void ScheduleRefresh()
         {
             if (_isPlayModeSuspended)

@@ -220,6 +220,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void Should_ReportUnavailableIndexProgressWithoutAWindow()
+        {
+            DataVisualizerIndexProgress progress = DataVisualizerAutomation.GetIndexProgress();
+
+            Assert.IsFalse(progress.windowAvailable);
+            Assert.IsFalse(progress.isComplete);
+        }
+
+        [Test]
         public void Should_RejectUnsupportedAutomationSchemaVersion()
         {
             DataVisualizerAutomationResult result = DataVisualizerAutomation.DispatchRequestJson(

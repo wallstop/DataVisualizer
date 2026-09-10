@@ -50,6 +50,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
         public string configurationJson;
         public List<DataVisualizerTypeDescriptor> managedTypes = new();
         public DataVisualizerAssetMetadataPage metadata;
+        public DataVisualizerIndexProgress indexProgress;
         public DataVisualizerAssetOperationResult assetOperation;
     }
 
@@ -157,7 +158,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                         return SucceedResult(result);
 
                     case DataVisualizerAutomationRequestKind.RefreshAssets:
-                        return CopyOperationResult(result, RefreshAssets());
+                        DataVisualizerOperationResult refreshResult = RefreshAssets();
+                        result.indexProgress = GetIndexProgress();
+                        return CopyOperationResult(result, refreshResult);
 
                     case DataVisualizerAutomationRequestKind.SelectAsset:
                         return CopyOperationResult(result, SelectAsset(request.guid));
