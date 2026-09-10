@@ -207,12 +207,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 return;
             }
 
+            if (!TryValidateFilePaths(requestPath, resultPath, out string pathDiagnostic))
+            {
+                TryWriteResultFile(resultPath, FailureResult(pathDiagnostic));
+                EditorApplication.Exit(2);
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(requestPath))
             {
                 DataVisualizerAutomationResult result = FailureResult(
                     "-dataVisualizerRequest is required."
                 );
-                File.WriteAllText(resultPath, JsonUtility.ToJson(result, true));
+                TryWriteResultFile(resultPath, result);
                 EditorApplication.Exit(2);
                 return;
             }
@@ -222,7 +229,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 DataVisualizerAutomationResult result = DispatchRequestJson(
                     File.ReadAllText(requestPath)
                 );
-                File.WriteAllText(resultPath, JsonUtility.ToJson(result, true));
+                if (!TryWriteResultFile(resultPath, result, out string writeDiagnostic))
+                {
+                    Debug.LogError(writeDiagnostic);
+                    EditorApplication.Exit(2);
+                    return;
+                }
                 EditorApplication.Exit(result.succeeded ? 0 : 1);
             }
             catch (Exception exception)
@@ -230,8 +242,127 @@ namespace WallstopStudios.DataVisualizer.Editor.Automation
                 DataVisualizerAutomationResult result = FailureResult(
                     $"Automation file execution failed: {exception.Message}"
                 );
-                File.WriteAllText(resultPath, JsonUtility.ToJson(result, true));
+                if (!TryWriteResultFile(resultPath, result, out string writeDiagnostic))
+                {
+                    Debug.LogError(writeDiagnostic);
+                    EditorApplication.Exit(2);
+                    return;
+                }
                 EditorApplication.Exit(1);
+            }
+        }
+
+        private static bool TryValidateFilePaths(
+            string requestPath,
+            string resultPath,
+            out string diagnostic
+        )
+        {
+            diagnostic = string.Empty;
+            if (!Path.IsPathRooted(requestPath) || !Path.IsPathRooted(resultPath))
+            {
+                diagnostic = "Automation request and result paths must be absolute.";
+                return false;
+            }
+
+            try
+            {
+                requestPath = Path.GetFullPath(requestPath);
+                resultPath = Path.GetFullPath(resultPath);
+                if (string.Equals(requestPath, resultPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    diagnostic = "Automation request and result paths must be different.";
+                    return false;
+                }
+
+                string assetsRoot = Path.GetFullPath(Application.dataPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (IsWithinPath(requestPath, assetsRoot) || IsWithinPath(resultPath, assetsRoot))
+                {
+                    diagnostic =
+                        "Automation request and result files cannot be inside the Assets folder.";
+                    return false;
+                }
+            }
+            catch (Exception exception)
+                when (exception is ArgumentException or IOException or NotSupportedException)
+            {
+                diagnostic = $"Automation request/result paths are invalid: {exception.Message}";
+                return false;
+            }
+            return true;
+        }
+
+        private static bool IsWithinPath(string candidate, string directory)
+        {
+            return candidate.Equals(directory, StringComparison.OrdinalIgnoreCase)
+                || candidate.StartsWith(
+                    directory + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase
+                )
+                || candidate.StartsWith(
+                    directory + Path.AltDirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase
+                );
+        }
+
+        private static bool TryWriteResultFile(string path, DataVisualizerAutomationResult result)
+        {
+            return TryWriteResultFile(path, result, out _);
+        }
+
+        private static bool TryWriteResultFile(
+            string path,
+            DataVisualizerAutomationResult result,
+            out string diagnostic
+        )
+        {
+            string temporaryPath = path + ".tmp";
+            try
+            {
+                string parent = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(parent))
+                {
+                    Directory.CreateDirectory(parent);
+                }
+                File.WriteAllText(temporaryPath, JsonUtility.ToJson(result, true));
+                if (File.Exists(path))
+                {
+                    try
+                    {
+                        File.Replace(temporaryPath, path, null);
+                    }
+                    catch (PlatformNotSupportedException)
+                    {
+                        File.Copy(temporaryPath, path, true);
+                        File.Delete(temporaryPath);
+                    }
+                }
+                else
+                {
+                    File.Move(temporaryPath, path);
+                }
+                diagnostic = string.Empty;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                diagnostic = $"Automation result could not be written: {exception.Message}";
+                return false;
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(temporaryPath))
+                    {
+                        File.Delete(temporaryPath);
+                    }
+                }
+                catch
+                {
+                    // Preserve the primary result-write diagnostic.
+                }
             }
         }
 

@@ -57,8 +57,10 @@ run uses:
 
 The file entrypoint reads one request, writes one final structured result, and exits
 with code `0` for success, `1` for a failed request, or `2` for invalid runner
-arguments. It does not start a watcher, daemon, HTTP listener, or custom MCP
-server.
+arguments. Request and result paths must be absolute, different files outside
+the project's `Assets` folder. The result is written through a temporary file
+replacement so a failed write cannot overwrite the previous complete result.
+It does not start a watcher, daemon, HTTP listener, or custom MCP server.
 
 ## Boundaries
 
