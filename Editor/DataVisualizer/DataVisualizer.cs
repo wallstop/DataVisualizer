@@ -550,11 +550,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
+            string dataFolderPath = Settings.DataFolderPath;
 
             // Collect all GUIDs first (fast, no asset loading)
             foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
             {
-                string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
+                string[] guids = AssetGuidDiscovery.FindCandidates(type, dataFolderPath);
                 foreach (string guid in guids)
                 {
                     if (uniqueGuids.Add(guid))
@@ -7548,7 +7549,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             string[] allGuids = IncludeResolvedSavedObjectGuid(
                 type,
                 savedObjectGuid,
-                AssetDatabase.FindAssets($"t:{type.Name}"),
+                AssetGuidDiscovery.FindCandidates(type, Settings.DataFolderPath),
                 out string normalizedSavedObjectGuid
             );
             if (!string.IsNullOrWhiteSpace(savedObjectGuid) && normalizedSavedObjectGuid == null)
