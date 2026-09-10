@@ -37,7 +37,9 @@ assumes that the host path is visible inside the container.
 Supported fixture sizes are 100, 1,000, 10,000, and 50,000. Fixtures contain
 ordinary ScriptableObjects, `BaseDataObject` assets, nested lists, shared
 references, labels, deterministic ordering, and two distinct `Data` types with
-the same short name. A report records the package revision, requested and
+the same short name. Fixture creation is saved and refreshed in bounded
+editor-update batches, so stress fixtures do not monopolize one editor tick. A
+report records the package revision, requested and
 actual Unity versions, OS/CPU/memory/storage-adjacent editor metadata,
 graphics/DPI/theme/window information, reload settings, fixture timings, raw
 Play-entry samples, warm-up counts, medians, and p95 values.

@@ -68,6 +68,7 @@ class BenchmarkDriverTests(unittest.TestCase):
             source = render_bootstrap(config, "")
             self.assertIsNone(re.search(r"__[A-Z_]+__", source))
             self.assertIn("private const int FixtureSize = 100;", source)
+            self.assertIn("private const int FixtureBatchSize = 500;", source)
             self.assertIn('private const string Suite = "fixture";', source)
 
     def test_planned_execution_records_measurement_boundary(self):

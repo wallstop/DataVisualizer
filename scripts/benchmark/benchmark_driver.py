@@ -281,6 +281,7 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         private const int SampleCount = 30;
         private const int MaximumWaitTicks = 300;
         private const double PlayEntryTargetMilliseconds = 20.0;
+        private const int FixtureBatchSize = 500;
 
         private enum Phase
         {
@@ -289,6 +290,8 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             StartPlayCase,
             AwaitOpenIdle,
             AwaitOpenIndexing,
+            CreateFixture,
+            VerifyFixture,
             AwaitPlayEntry,
             AwaitEditMode,
             Finish,
@@ -365,6 +368,9 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         private static bool _originalEnterPlayModeOptionsEnabled;
         private static EnterPlayModeOptions _originalEnterPlayModeOptions;
         private static bool _playModeSettingsCaptured;
+        private static BenchmarkSharedData _fixtureShared;
+        private static int _nextFixtureIndex;
+        private static long _fixtureGenerationStartTimestamp;
 
         public static string Run()
         {
@@ -438,6 +444,12 @@ namespace WallstopStudios.DataVisualizer.Benchmark
                     case Phase.Prepare:
                         Prepare();
                         break;
+                    case Phase.CreateFixture:
+                        CreateFixtureBatch();
+                        break;
+                    case Phase.VerifyFixture:
+                        VerifyFixtureAndContinue();
+                        break;
                     case Phase.StartPlayCase:
                         StartPlayCase();
                         break;
@@ -506,13 +518,67 @@ namespace WallstopStudios.DataVisualizer.Benchmark
         private static void Prepare()
         {
             Clock.Restart();
-            long generationStart = Stopwatch.GetTimestamp();
+            CleanupFixture();
+            AssetDatabase.CreateFolder("Assets", "__DataVisualizerBenchmarkFixture");
+
+            _fixtureShared = ScriptableObject.CreateInstance<BenchmarkSharedData>();
+            _fixtureShared.identity = "shared-reference-000000";
+            AssetDatabase.CreateAsset(_fixtureShared, FixtureRoot + "/Shared.asset");
+            _nextFixtureIndex = 0;
+            _fixtureGenerationStartTimestamp = Stopwatch.GetTimestamp();
+            _result.status = "fixture-generating";
+            _phase = Phase.CreateFixture;
+        }
+
+        private static void CreateFixtureBatch()
+        {
+            Type[] types =
+            {
+                typeof(PlainData),
+                typeof(BaseData),
+                typeof(WallstopStudios.DataVisualizer.Benchmark.First.Data),
+                typeof(WallstopStudios.DataVisualizer.Benchmark.Second.Data),
+            };
+            int end = Math.Min(_nextFixtureIndex + FixtureBatchSize, FixtureSize);
             using (FixtureGenerationMarker.Auto())
             {
-                CreateFixture();
+                for (; _nextFixtureIndex < end; _nextFixtureIndex++)
+                {
+                    int index = _nextFixtureIndex;
+                    Type type = types[index % types.Length];
+                    var fixture = (ScriptableObject)ScriptableObject.CreateInstance(type);
+                    ((IBenchmarkFixture)fixture).Configure(index, _fixtureShared);
+                    string path = FixtureRoot + "/Item_" + index.ToString("D6") + ".asset";
+                    AssetDatabase.CreateAsset(fixture, path);
+                    AssetDatabase.SetLabels(
+                        fixture,
+                        new[]
+                        {
+                            "benchmark",
+                            index % 2 == 0 ? "ordinary" : "base-data-object",
+                            "group-" + (index % 8).ToString("D2"),
+                        }
+                    );
+                }
             }
-            _result.fixtureGenerationMilliseconds = ElapsedMilliseconds(generationStart);
 
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            if (_nextFixtureIndex >= FixtureSize)
+            {
+                _result.fixtureGenerationMilliseconds = ElapsedMilliseconds(
+                    _fixtureGenerationStartTimestamp
+                );
+                _phase = Phase.VerifyFixture;
+            }
+            else
+            {
+                _result.status = $"fixture-generating-{_nextFixtureIndex}/{FixtureSize}";
+            }
+        }
+
+        private static void VerifyFixtureAndContinue()
+        {
             long validationStart = Stopwatch.GetTimestamp();
             using (FixtureValidationMarker.Auto())
             {
@@ -779,43 +845,6 @@ namespace WallstopStudios.DataVisualizer.Benchmark
             {
                 _phase = Phase.StartPlayCase;
             }
-        }
-
-        private static void CreateFixture()
-        {
-            CleanupFixture();
-            AssetDatabase.CreateFolder("Assets", "__DataVisualizerBenchmarkFixture");
-
-            var shared = ScriptableObject.CreateInstance<BenchmarkSharedData>();
-            shared.identity = "shared-reference-000000";
-            AssetDatabase.CreateAsset(shared, FixtureRoot + "/Shared.asset");
-
-            Type[] types =
-            {
-                typeof(PlainData),
-                typeof(BaseData),
-                typeof(WallstopStudios.DataVisualizer.Benchmark.First.Data),
-                typeof(WallstopStudios.DataVisualizer.Benchmark.Second.Data),
-            };
-            for (int index = 0; index < FixtureSize; index++)
-            {
-                Type type = types[index % types.Length];
-                var fixture = (ScriptableObject)ScriptableObject.CreateInstance(type);
-                ((IBenchmarkFixture)fixture).Configure(index, shared);
-                string path = FixtureRoot + "/Item_" + index.ToString("D6") + ".asset";
-                AssetDatabase.CreateAsset(fixture, path);
-                AssetDatabase.SetLabels(
-                    fixture,
-                    new[]
-                    {
-                        "benchmark",
-                        index % 2 == 0 ? "ordinary" : "base-data-object",
-                        "group-" + (index % 8).ToString("D2"),
-                    }
-                );
-            }
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         }
 
         private static void VerifyFixture()
