@@ -2,8 +2,8 @@
 // Adapted from Ambiguous-Interactive/unity-helpers at edbfe9b245c2ca20c461c746566b9c46fc133457 (MIT).
 /**
  * C# source policy enforcement: member ordering (#672), nested-type placement (#575), method
- * naming (#47), block formatting for multi-line comments (#57), and the Runtime LINQ boundary
- * (#61).
+ * naming (#47), block formatting for multi-line comments (#57), and bounded LINQ-free source
+ * areas (#61).
  *
  * The member ordering is the owner's, from #672. Every tier below is ordered public → protected →
  * internal → private, including const:
@@ -840,8 +840,8 @@ function multilineLineCommentViolations(text) {
   return violations;
 }
 
-/** `System.Linq` references in shipped Runtime code, excluding comments and literals. */
-function runtimeLinqViolations(text) {
+/** `System.Linq` references in LINQ-free source areas, excluding comments and literals. */
+function prohibitedLinqViolations(text) {
   const masked = maskNoise(text);
   const violations = [];
   const reference = /\bSystem\s*\.\s*Linq\b/g;
@@ -849,7 +849,7 @@ function runtimeLinqViolations(text) {
   while ((match = reference.exec(masked)) !== null) {
     violations.push({
       line: lineOf(text, match.index),
-      kind: "runtime LINQ dependency"
+      kind: "prohibited LINQ dependency"
     });
   }
   return violations;
@@ -947,7 +947,7 @@ function analyzeFile(text, prohibitLinq = false) {
   const bodies = typeBodies(masked);
   const violations = multilineLineCommentViolations(text);
   if (prohibitLinq) {
-    violations.push(...runtimeLinqViolations(text));
+    violations.push(...prohibitedLinqViolations(text));
   }
   const edits = [];
 
@@ -1259,6 +1259,10 @@ function isRuntimeSource(relative) {
   return relative.split("/").includes("Runtime");
 }
 
+function isPersistedStateSource(relative) {
+  return /(^|\/)Editor\/DataVisualizer\/Data\//.test(relative);
+}
+
 function main(argv) {
   const fix = argv.includes("--fix");
   const verbose = argv.includes("--verbose");
@@ -1286,7 +1290,7 @@ function main(argv) {
     // an absolute drive path, which path.join would incorrectly append beneath the checkout.
     const file = path.isAbsolute(relative) ? relative : path.join(REPO_ROOT, relative);
     let text = fs.readFileSync(file, "utf8");
-    const prohibitLinq = isRuntimeSource(relative);
+    const prohibitLinq = isRuntimeSource(relative) || isPersistedStateSource(relative);
     let result = analyzeFile(text, prohibitLinq);
 
     if (fix && 0 < result.edits.length) {
@@ -1320,9 +1324,10 @@ function main(argv) {
     }
 
     for (const violation of result.violations) {
-      if (violation.kind === "runtime LINQ dependency") {
+      if (violation.kind === "prohibited LINQ dependency") {
         remaining.push(
-          `${relative}:${violation.line}: shipped Runtime code must not depend on System.Linq (#61)`
+          `${relative}:${violation.line}: Runtime and persisted editor-state code must not depend ` +
+            `on System.Linq (#61)`
         );
         continue;
       }
@@ -1374,7 +1379,7 @@ function main(argv) {
     console.error(
       `[csharp-member-order] ${remaining.length} C# source policy violation(s). ` +
         "Use block comments for multi-line prose; use underscore-free PascalCase method names; " +
-        "keep shipped Runtime code free of System.Linq; " +
+        "keep Runtime and persisted editor-state code free of System.Linq; " +
         "reorder members into the #672 ordering " +
         "(const, events, delegates, static properties, " +
         "static fields, properties, fields, constructors, static methods, methods; each tier public → " +
@@ -1405,7 +1410,7 @@ module.exports = {
   classifyMember,
   memberRank,
   multilineLineCommentViolations,
-  runtimeLinqViolations
+  prohibitedLinqViolations
 };
 
 if (require.main === module) {

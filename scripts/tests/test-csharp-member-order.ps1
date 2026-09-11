@@ -230,7 +230,27 @@ public sealed class NoLinqDependency
     }
 }
 
-Invoke-TestCase 'Passes_EditorLinqDependency' {
+Invoke-TestCase 'Fails_OnPersistedStateModelLinqDependency' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Editor/DataVisualizer/Data/UsesLinq.cs' -Content @'
+namespace Fixture
+{
+    using System.Linq;
+
+    public sealed class UsesLinq { }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'persisted state model LINQ dependencies should fail'
+        Assert-True ($result.Output -match '#61') "failure should identify the LINQ rule: $($result.Output)"
+        Assert-True ($result.Output -match 'Editor/DataVisualizer/Data/UsesLinq.cs:3') "failure should identify the import: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Passes_OtherEditorLinqDependency' {
     $root = New-TempRoot -Prefix 'member-order-'
     try {
         Write-FixtureFile -Root $root -RelativePath 'Editor/UsesLinq.cs' -Content @'
@@ -242,7 +262,7 @@ namespace Fixture
 }
 '@
         $result = Invoke-MemberOrderLint -Root $root
-        Assert-True ($result.ExitCode -eq 0) "the Runtime-only rule should not reject Editor LINQ: $($result.Output)"
+        Assert-True ($result.ExitCode -eq 0) "the bounded LINQ rule should allow other Editor LINQ: $($result.Output)"
     } finally {
         Remove-TempRoot $root
     }

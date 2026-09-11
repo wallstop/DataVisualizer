@@ -2,7 +2,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using UnityEngine.Serialization;
 
     [Serializable]
@@ -37,8 +36,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                         : combinationType,
 #pragma warning restore CS0618 // Type or member is obsolete
                 typeFullName = typeFullName ?? string.Empty,
-                andLabels = andLabels?.ToList() ?? new List<string>(),
-                orLabels = orLabels?.ToList() ?? new List<string>(),
+                andLabels = PersistedStateCopy.CloneStrings(andLabels),
+                orLabels = PersistedStateCopy.CloneStrings(orLabels),
             };
         }
     }

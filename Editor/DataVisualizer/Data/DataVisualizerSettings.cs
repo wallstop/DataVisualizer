@@ -2,7 +2,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using Helper;
     using UnityEditor;
     using UnityEngine;
@@ -106,27 +105,20 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
             lastSelectedNamespaceKey = userState.lastSelectedNamespaceKey;
             lastSelectedTypeFullName = userState.lastSelectedTypeFullName;
-            namespaceOrder = userState.namespaceOrder?.ToList() ?? new List<string>();
-            typeOrders =
-                userState.typeOrders?.Select(order => order.Clone()).ToList()
-                ?? new List<NamespaceTypeOrder>();
-            lastObjectSelections =
-                userState.lastObjectSelections?.Select(selection => selection.Clone()).ToList()
-                ?? new List<LastObjectSelectionEntry>();
-
-            namespaceCollapseStates =
-                userState.namespaceCollapseStates?.Select(state => state.Clone()).ToList()
-                ?? new List<NamespaceCollapseState>();
-            objectOrders =
-                userState.objectOrders?.Select(order => order.Clone()).ToList()
-                ?? new List<TypeObjectOrder>();
-            managedTypeNames = userState.managedTypeNames?.ToList() ?? new List<string>();
-            labelFilterConfigs =
-                userState.labelFilterConfigs?.Select(config => config.Clone()).ToList()
-                ?? new List<TypeLabelFilterConfig>();
-            processorStates =
-                userState.processorStates?.Select(state => state.Clone()).ToList()
-                ?? new List<ProcessorState>();
+            namespaceOrder = PersistedStateCopy.CloneStrings(userState.namespaceOrder);
+            typeOrders = PersistedStateCopy.CloneNamespaceTypeOrders(userState.typeOrders);
+            lastObjectSelections = PersistedStateCopy.CloneLastObjectSelections(
+                userState.lastObjectSelections
+            );
+            namespaceCollapseStates = PersistedStateCopy.CloneNamespaceCollapseStates(
+                userState.namespaceCollapseStates
+            );
+            objectOrders = PersistedStateCopy.CloneTypeObjectOrders(userState.objectOrders);
+            managedTypeNames = PersistedStateCopy.CloneStrings(userState.managedTypeNames);
+            labelFilterConfigs = PersistedStateCopy.CloneTypeLabelFilterConfigs(
+                userState.labelFilterConfigs
+            );
+            processorStates = PersistedStateCopy.CloneProcessorStates(userState.processorStates);
             MarkDirty();
         }
 

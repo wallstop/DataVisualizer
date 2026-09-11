@@ -2,7 +2,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
 
     [Serializable]
     public sealed class NamespaceTypeOrder
@@ -71,9 +70,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 return null;
             }
 
-            return types.FirstOrDefault(type =>
-                string.Equals(type?.FullName, typeFullName, StringComparison.Ordinal)
-            );
+            foreach (Type type in types)
+            {
+                if (string.Equals(type?.FullName, typeFullName, StringComparison.Ordinal))
+                {
+                    return type;
+                }
+            }
+
+            return null;
         }
 
         private static int IndexOf(IReadOnlyList<string> values, string value)
@@ -99,7 +104,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return new NamespaceTypeOrder
             {
                 namespaceKey = namespaceKey ?? string.Empty,
-                typeNames = typeNames?.ToList() ?? new List<string>(),
+                typeNames = PersistedStateCopy.CloneStrings(typeNames),
             };
         }
     }
