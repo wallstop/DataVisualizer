@@ -64,7 +64,6 @@ namespace WallstopStudios.DataVisualizer.Helper
             )
             {
                 AssetDatabase.CreateFolder(parentPath, currentFolderName);
-                Debug.Log($"Created folder: {relativeDirectoryPath}");
             }
 #endif
         }
