@@ -178,7 +178,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_IncludeEverything_When_NoLabelsConfigured()
+        public void ShouldIncludeEverythingWhenNoLabelsConfigured()
         {
             TypeLabelFilterConfig config = Config(LabelCombinationType.And, None, None);
             Assert.IsTrue(LabelFilterEvaluator.Matches(new[] { "anything" }, config));
@@ -186,13 +186,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_IncludeEverything_When_ConfigIsNull()
+        public void ShouldIncludeEverythingWhenConfigIsNull()
         {
             Assert.IsTrue(LabelFilterEvaluator.Matches(new[] { "x" }, null));
         }
 
         [TestCaseSource(nameof(Cases))]
-        public bool Matches_RespectsCombinationRules(
+        public bool MatchesRespectsCombinationRules(
             string[] objectLabels,
             TypeLabelFilterConfig config
         ) => LabelFilterEvaluator.Matches(objectLabels, config);

@@ -31,7 +31,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_MarkSettingsDirty_When_SelectActiveObjectChanges()
+        public void ShouldMarkSettingsDirtyWhenSelectActiveObjectChanges()
         {
             DataVisualizerSettings settings =
                 ScriptableObject.CreateInstance<DataVisualizerSettings>();
@@ -52,7 +52,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_NotMarkSettingsDirty_When_SelectActiveObjectIsUnchanged()
+        public void ShouldNotMarkSettingsDirtyWhenSelectActiveObjectIsUnchanged()
         {
             DataVisualizerSettings settings =
                 ScriptableObject.CreateInstance<DataVisualizerSettings>();
@@ -72,7 +72,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_MarkSettingsDirty_When_SelectActiveObjectPreferenceChangesThroughWindowHelper()
+        public void ShouldMarkSettingsDirtyWhenSelectActiveObjectPreferenceChangesThroughWindowHelper()
         {
             DataVisualizerSettings settings =
                 ScriptableObject.CreateInstance<DataVisualizerSettings>();
@@ -92,7 +92,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ReportDirtyOnlyForActualCollapseStateChanges_When_UsingSettingsStore()
+        public void ShouldReportDirtyOnlyForActualCollapseStateChangesWhenUsingSettingsStore()
         {
             DataVisualizerSettings settings =
                 ScriptableObject.CreateInstance<DataVisualizerSettings>();
@@ -147,7 +147,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ReportDirtyOnlyForActualCollapseStateChanges_When_UsingUserStateStore()
+        public void ShouldReportDirtyOnlyForActualCollapseStateChangesWhenUsingUserStateStore()
         {
             DataVisualizerUserState userState = new();
 
@@ -173,7 +173,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "{\"lastSelectedNamespaceKey\":\"\\\"lastSelectedTypeFullName\\\"\",\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\"}",
             "Example.Namespace.LegacyData"
         )]
-        public void Should_MigrateLegacySelectedTypeName_When_LoadingUserStateJson(
+        public void ShouldMigrateLegacySelectedTypeNameWhenLoadingUserStateJson(
             string json,
             string expectedTypeFullName
         )
@@ -188,13 +188,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase("   ")]
         [TestCase("{")]
         [TestCase("{\"lastSelectedTypeFullName\":}")]
-        public void Should_ReturnNullWithoutThrowing_When_LoadingInvalidUserStateJson(string json)
+        public void ShouldReturnNullWithoutThrowingWhenLoadingInvalidUserStateJson(string json)
         {
             Assert.IsNull(DataVisualizerUserState.FromJson(json));
         }
 
         [Test]
-        public void Should_DeserializeCurrentFields_When_LoadingValidUserStateJson()
+        public void ShouldDeserializeCurrentFieldsWhenLoadingValidUserStateJson()
         {
             const string json =
                 "{\"lastSelectedNamespaceKey\":\"Gameplay\",\"lastSelectedTypeFullName\":\"Example.CurrentData\"}";

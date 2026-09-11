@@ -15,7 +15,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         };
 
         [Test]
-        public void Should_ReserveObsoleteZeroValue_When_EnumIsDeclaredInPackage()
+        public void ShouldReserveObsoleteZeroValueWhenEnumIsDeclaredInPackage()
         {
             Type[] enumTypes = PackageAssemblies
                 .SelectMany(assembly => assembly.GetTypes())

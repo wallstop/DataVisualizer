@@ -120,7 +120,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
-        public IEnumerator Should_KeepSearchFieldHeight_When_PlaceholderChangesToTypedText()
+        public IEnumerator ShouldKeepSearchFieldHeightWhenPlaceholderChangesToTypedText()
         {
             StyleSheet styleSheet = LoadStyleSheet();
             Assert.NotNull(styleSheet);
@@ -169,7 +169,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
-        public IEnumerator Should_KeepTypeRowHeight_When_FilterChangesVisibleRows()
+        public IEnumerator ShouldKeepTypeRowHeightWhenFilterChangesVisibleRows()
         {
             StyleSheet styleSheet = LoadStyleSheet();
             Assert.NotNull(styleSheet);

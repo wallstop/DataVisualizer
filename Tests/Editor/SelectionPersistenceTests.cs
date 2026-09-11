@@ -17,7 +17,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     public sealed class SelectionPersistenceTests
     {
         [Test]
-        public void Should_FindNamespaceGroup_When_TypeElementIsNestedInNamespace()
+        public void ShouldFindNamespaceGroupWhenTypeElementIsNestedInNamespace()
         {
             VisualElement namespaceList = new() { name = "namespace-list" };
             VisualElement namespaceGroup = new() { name = "namespace-group" };
@@ -37,7 +37,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_NotReturnObjectRow_When_FindingNamespaceGroup()
+        public void ShouldNotReturnObjectRowWhenFindingNamespaceGroup()
         {
             VisualElement namespaceList = new() { name = "namespace-list" };
             VisualElement namespaceGroup = new() { name = "namespace-group" };
@@ -58,7 +58,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ReturnFirstNamespaceKey_When_SavedNamespaceIsUnavailable()
+        public void ShouldReturnFirstNamespaceKeyWhenSavedNamespaceIsUnavailable()
         {
             Dictionary<string, int> namespaceOrder = new()
             {
@@ -71,7 +71,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_UseOrdinalNamespaceKeyTieBreaker_When_NamespaceOrderCollides()
+        public void ShouldUseOrdinalNamespaceKeyTieBreakerWhenNamespaceOrderCollides()
         {
             Dictionary<string, int> namespaceOrder = new() { ["Beta"] = 0, ["Alpha"] = 0 };
 
@@ -79,7 +79,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ResolveSavedTypeByFullName_When_SavedNamespaceIsStale()
+        public void ShouldResolveSavedTypeByFullNameWhenSavedNamespaceIsStale()
         {
             Type firstType = typeof(CollisionA.OrderCollisionData);
             Type secondType = typeof(CollisionB.OrderCollisionData);
@@ -102,7 +102,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_RemoveStoredObjectSelection_When_GuidIsCleared()
+        public void ShouldRemoveStoredObjectSelectionWhenGuidIsCleared()
         {
             DataVisualizerUserState userState = new();
             const string typeFullName = "Example.Type";
@@ -125,7 +125,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ResolveSavedObjectGuidOnlyForExactType()
+        public void ShouldResolveSavedObjectGuidOnlyForExactType()
         {
             string folderName =
                 "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
@@ -167,7 +167,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_IncludeDirectlyResolvedSavedGuid_When_FindAssetsMissesIt()
+        public void ShouldIncludeDirectlyResolvedSavedGuidWhenFindAssetsMissesIt()
         {
             string folderName =
                 "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
@@ -204,7 +204,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_NormalizeSavedGuid_When_FindAssetsReturnsDifferentCasing()
+        public void ShouldNormalizeSavedGuidWhenFindAssetsReturnsDifferentCasing()
         {
             string folderName =
                 "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
@@ -241,7 +241,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_PreserveSavedGuid_When_FindAssetsAlreadyReturnedIt()
+        public void ShouldPreserveSavedGuidWhenFindAssetsAlreadyReturnedIt()
         {
             string folderName =
                 "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
@@ -278,7 +278,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ClearSavedGuid_When_FindAssetsReturnedWrongExactType()
+        public void ShouldClearSavedGuidWhenFindAssetsReturnedWrongExactType()
         {
             string folderName =
                 "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
@@ -315,7 +315,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_TreatDeletedAssetPathAsRelevant_When_PathIsAsset()
+        public void ShouldTreatDeletedAssetPathAsRelevantWhenPathIsAsset()
         {
             Assert.IsTrue(
                 DataVisualizerAssetProcessor.IsDeletedAssetPathRelevant("Assets/Deleted.asset")

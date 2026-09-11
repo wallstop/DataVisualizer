@@ -18,7 +18,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_CenterRect_When_PlacementAreaHasNonzeroOrigin()
+        public void ShouldCenterRectWhenPlacementAreaHasNonzeroOrigin()
         {
             Rect actual = MonitorUtility.CalculateCenteredRect(
                 new Rect(1920, 100, 1600, 900),
@@ -30,7 +30,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_CenterRect_When_PlacementAreaHasNegativeOrigin()
+        public void ShouldCenterRectWhenPlacementAreaHasNegativeOrigin()
         {
             Rect actual = MonitorUtility.CalculateCenteredRect(
                 new Rect(-1920, -200, 1920, 1080),
@@ -45,7 +45,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase(true, false, false, TestName = "Previously placed floating window")]
         [TestCase(false, true, false, TestName = "Restored docked window")]
         [TestCase(true, true, false, TestName = "Previously placed docked window")]
-        public void Should_ApplyInitialPlacement_OnlyForNewFloatingWindow(
+        public void ShouldApplyInitialPlacementOnlyForNewFloatingWindow(
             bool initialSizeApplied,
             bool isDocked,
             bool expected
@@ -57,7 +57,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ReturnPreferredRect_When_TwoProvidersAreUsable()
+        public void ShouldReturnPreferredRectWhenTwoProvidersAreUsable()
         {
             Rect expected = new(-1720, 80, 1600, 900);
 
@@ -72,7 +72,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ReturnFallbackRect_When_PreferredProviderFails()
+        public void ShouldReturnFallbackRectWhenPreferredProviderFails()
         {
             Rect expected = new(0, 0, 2560, 1440);
 
@@ -87,7 +87,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ReturnFalse_When_BothProvidersFail()
+        public void ShouldReturnFalseWhenBothProvidersFail()
         {
             bool result = MonitorUtility.TryResolveMonitorRect(
                 () => Rect.zero,
@@ -111,7 +111,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase(0f, float.NegativeInfinity, 1920f, 1080f, TestName = "Infinite y")]
         [TestCase(0f, 0f, float.PositiveInfinity, 1080f, TestName = "Infinite width")]
         [TestCase(0f, 0f, 1920f, float.NegativeInfinity, TestName = "Infinite height")]
-        public void Should_ReturnFallbackRect_When_PreferredRectIsInvalid(
+        public void ShouldReturnFallbackRectWhenPreferredRectIsInvalid(
             float x,
             float y,
             float width,
@@ -131,7 +131,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ReturnFallbackRect_When_PreferredProviderThrows()
+        public void ShouldReturnFallbackRectWhenPreferredProviderThrows()
         {
             Rect expected = new(40, 50, 1600, 900);
 

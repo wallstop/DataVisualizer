@@ -72,6 +72,24 @@ public sealed class Bad
     }
 }
 
+Invoke-TestCase 'Fails_OnUnderscoredMethodName' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'BadMethodName.cs' -Content @'
+public sealed class BadMethodName
+{
+    public void Should_Run() { }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'underscored method name should fail'
+        Assert-True ($result.Output -match '#47') "failure should identify the naming rule: $($result.Output)"
+        Assert-True ($result.Output -match 'Should_Run') "failure should identify the method: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
 Invoke-TestCase 'Fails_WhenNestedTypeIsInterspersed' {
     $root = New-TempRoot -Prefix 'member-order-'
     try {
