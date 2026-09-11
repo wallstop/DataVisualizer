@@ -136,6 +136,8 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     into managed type names. Use a descriptive prefix such as `Native` when the
     idiomatic name would collide with a Unity or framework type. `.editorconfig`
     enforces these declarations as warnings.
+28. Name every C# method in PascalCase without underscores, including test methods.
+    The C# source lint enforces this convention independently of IDE diagnostics.
 
 ### Skills Discipline
 
@@ -174,7 +176,7 @@ pre-commit config on staged `.cs` files.
 
 - Unity Test Framework; EditMode specs live in `Tests/Editor`, grouped by feature
   (`NamespaceOrderingTests`, `SelectionPersistenceTests`); name methods
-  `Should_<Expectation>_When_<Condition>`.
+  `ShouldExpectationWhenCondition`.
 - Gate pull requests on both EditMode and PlayMode suites; aim for coverage on
   ordering, filtering, and cloning paths before tagging a release.
 - Add PlayMode coverage for `BaseDataObject` lifecycle callbacks and asset-state

@@ -7,7 +7,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     public sealed class AssetGuidOrderTests
     {
         [Test]
-        public void Should_PreserveUnloadedSlots_When_LoadedSubsetIsReordered()
+        public void ShouldPreserveUnloadedSlotsWhenLoadedSubsetIsReordered()
         {
             List<string> mergedOrder = AssetGuidOrder.MergeLoadedOrder(
                 new[] { "a", "b", "c", "d" },
@@ -18,7 +18,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_AppendCreatedGuidAfterPendingGuids_When_LoadIsPartial()
+        public void ShouldAppendCreatedGuidAfterPendingGuidsWhenLoadIsPartial()
         {
             List<string> canonicalOrder = new() { "a", "b", "c", "d" };
             AssetGuidOrder.PlaceLast(canonicalOrder, "new");
@@ -32,7 +32,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_MoveGuidAfterPendingGuids_When_PlacedLastDuringPartialLoad()
+        public void ShouldMoveGuidAfterPendingGuidsWhenPlacedLastDuringPartialLoad()
         {
             List<string> canonicalOrder = new() { "a", "b", "c", "d" };
             AssetGuidOrder.PlaceLast(canonicalOrder, "a");
@@ -46,7 +46,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_MoveGuidBeforePendingGuids_When_PlacedFirstDuringPartialLoad()
+        public void ShouldMoveGuidBeforePendingGuidsWhenPlacedFirstDuringPartialLoad()
         {
             List<string> canonicalOrder = new() { "a", "b", "c", "d" };
             AssetGuidOrder.PlaceFirst(canonicalOrder, "c");
@@ -60,7 +60,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_InsertCloneAfterOriginal_When_LoadIsPartial()
+        public void ShouldInsertCloneAfterOriginalWhenLoadIsPartial()
         {
             List<string> canonicalOrder = new() { "a", "b", "c", "d" };
             AssetGuidOrder.PlaceAfter(canonicalOrder, "clone", "b");
@@ -74,7 +74,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_AppendUnknownLoadedGuid_When_CanonicalOrderDoesNotContainIt()
+        public void ShouldAppendUnknownLoadedGuidWhenCanonicalOrderDoesNotContainIt()
         {
             List<string> mergedOrder = AssetGuidOrder.MergeLoadedOrder(
                 new[] { "a", "b" },
@@ -85,7 +85,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_NotRestoreDeletedGuid_When_MergingPartialLoad()
+        public void ShouldNotRestoreDeletedGuidWhenMergingPartialLoad()
         {
             List<string> canonicalOrder = new() { "a", "c", "d" };
 

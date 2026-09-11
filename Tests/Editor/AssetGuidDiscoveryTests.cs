@@ -81,7 +81,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_IncludeNeverRegisteredAsset_When_ProjectIndexRebuildCompletes()
+        public void ShouldIncludeNeverRegisteredAssetWhenProjectIndexRebuildCompletes()
         {
             string[] typeFilterGuids = AssetDatabase.FindAssets(
                 $"t:{nameof(EditorOnlyCreationData)}"
@@ -100,7 +100,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_KeepIndexedGuidsSeparate_When_ShortTypeNamesCollide()
+        public void ShouldKeepIndexedGuidsSeparateWhenShortTypeNamesCollide()
         {
             string[] firstGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(
                 typeof(CollisionA.OrderCollisionData)
@@ -116,7 +116,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ApplyEveryAssetChangeCollection_When_IndexIsComplete()
+        public void ShouldApplyEveryAssetChangeCollectionWhenIndexIsComplete()
         {
             string importedAssetPath = _indexRootFolder + "/ImportedAfterIndex.asset";
             string movedAssetPath = _indexRootFolder + "/MovedAfterIndex.asset";
@@ -161,7 +161,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_IsolateIndexState_When_UsingSeparateInstances()
+        public void ShouldIsolateIndexStateWhenUsingSeparateInstances()
         {
             AssetGuidTypeIndex isolatedIndex = new();
 
@@ -194,7 +194,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_IncludeReferencedAsset_When_TypeFilterDoesNotReturnIt()
+        public void ShouldIncludeReferencedAssetWhenTypeFilterDoesNotReturnIt()
         {
             string rootFolder =
                 "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
@@ -247,7 +247,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_ReturnOriginalArray_When_NoReferencedGuidNeedsAdding()
+        public void ShouldReturnOriginalArrayWhenNoReferencedGuidNeedsAdding()
         {
             string[] discoveredGuids = { "already-discovered" };
 
@@ -264,7 +264,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_AssignNullOutput_When_GuidNormalizationFails()
+        public void ShouldAssignNullOutputWhenGuidNormalizationFails()
         {
             Assert.IsFalse(
                 AssetGuidDiscovery.TryNormalizeGuidForType(
@@ -277,7 +277,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_RejectReferencedGuid_When_ExactTypeDoesNotMatch()
+        public void ShouldRejectReferencedGuidWhenExactTypeDoesNotMatch()
         {
             string rootFolder =
                 "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
@@ -311,7 +311,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_DeduplicateResolvedGuids_When_AddingToExistingSet()
+        public void ShouldDeduplicateResolvedGuidsWhenAddingToExistingSet()
         {
             string rootFolder =
                 "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
@@ -353,7 +353,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_RejectDerivedAsset_When_BaseTypeIsRequested()
+        public void ShouldRejectDerivedAssetWhenBaseTypeIsRequested()
         {
             string rootFolder =
                 "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
@@ -386,7 +386,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_RejectSubasset_When_RequestedTypeIsNotMainAssetType()
+        public void ShouldRejectSubassetWhenRequestedTypeIsNotMainAssetType()
         {
             string rootFolder =
                 "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");

@@ -596,7 +596,22 @@ function callableNameBefore(masked, parenIndex) {
     cursor -= 1;
   }
   if (0 <= cursor && masked[cursor] === ">") {
-    return ">";
+    let depth = 1;
+    cursor -= 1;
+    while (0 <= cursor && 0 < depth) {
+      if (masked[cursor] === ">") {
+        depth += 1;
+      } else if (masked[cursor] === "<") {
+        depth -= 1;
+      }
+      cursor -= 1;
+    }
+    if (depth !== 0) {
+      return null;
+    }
+    while (0 <= cursor && /\s/.test(masked[cursor])) {
+      cursor -= 1;
+    }
   }
   let end = cursor + 1;
   while (0 <= cursor && /[A-Za-z0-9_]/.test(masked[cursor])) {
@@ -791,8 +806,11 @@ function memberName(masked, member) {
         continue;
       }
     }
-    if (0 <= paren && callableNameBefore(masked, paren) !== null) {
-      return /~?[A-Za-z_]\w*\s*$/.exec(prefix.prefix)?.[0]?.trim() ?? null;
+    if (0 <= paren) {
+      const callable = callableNameBefore(masked, paren);
+      if (callable !== null) {
+        return callable;
+      }
     }
     let scan = 0 <= paren ? skipBalanced(masked, paren) : member.headerStart;
     if (scan < 0) {
@@ -842,7 +860,8 @@ function directivePrefixEnd(text, start, end) {
 /**
  * Every violation in one file, plus the rewrite that removes them.
  *
- * Two rules produce violations here: the #672 member ordering and the #575 nested-type placement.
+ * Three rules produce violations here: the #47 method naming, #672 member ordering, and #575
+ * nested-type placement.
  * When every member of a body sits in one conditional region and classifies cleanly, one edit
  * reorders the whole body (members stable-sorted into the canonical tiers, nested types appended
  * after them). Otherwise the ordering is still compared -- with the baseline reset at every
@@ -869,6 +888,23 @@ function analyzeFile(text) {
     const orderedMembers = members.filter((member) => !member.isType && !member.trailing);
     let orderingOffenders = [];
     let unclassifiable = 0;
+
+    // --- #47 method naming ---------------------------------------------------------------
+    for (const member of orderedMembers) {
+      const classified = classifyMember(masked, member, body.name);
+      if (classified.tier !== "method" && classified.tier !== "static method") {
+        continue;
+      }
+      const name = memberName(masked, member);
+      if (name !== null && name.includes("_")) {
+        violations.push({
+          line: lineOf(text, member.headerStart),
+          kind: "underscored method",
+          name,
+          container: body.name
+        });
+      }
+    }
 
     let previousRank = -1;
     let previousRegion = null;
@@ -1203,6 +1239,13 @@ function main(argv) {
     }
 
     for (const violation of result.violations) {
+      if (violation.kind === "underscored method") {
+        remaining.push(
+          `${relative}:${violation.line}: method '${violation.name}' in ` +
+            `'${violation.container}' must use PascalCase without underscores (#47)`
+        );
+        continue;
+      }
       if (violation.kind === "unclassified member") {
         remaining.push(
           `${relative}:${violation.line}: a member of '${violation.container}' defeats the ` +
@@ -1235,8 +1278,9 @@ function main(argv) {
   }
   if (0 < remaining.length) {
     console.error(
-      `[csharp-member-order] ${remaining.length} member-placement violation(s). ` +
-        "Reorder members into the #672 ordering (const, events, delegates, static properties, " +
+      `[csharp-member-order] ${remaining.length} C# source policy violation(s). ` +
+        "Use underscore-free PascalCase method names; reorder members into the #672 ordering " +
+        "(const, events, delegates, static properties, " +
         "static fields, properties, fields, constructors, static methods, methods; each tier public → " +
         "protected → internal → private) and move nested types to the end of their containing " +
         "type (issue #575)."

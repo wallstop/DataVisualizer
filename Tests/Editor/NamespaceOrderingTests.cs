@@ -13,7 +13,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     public sealed class NamespaceOrderingTests
     {
         [Test]
-        public void Should_OrderTypesByFullName_When_ShortTypeNamesCollide()
+        public void ShouldOrderTypesByFullNameWhenShortTypeNamesCollide()
         {
             Type firstType = typeof(CollisionA.OrderCollisionData);
             Type secondType = typeof(CollisionB.OrderCollisionData);
@@ -33,7 +33,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_FallBackToFullNameOrdering_When_NoCustomOrderExists()
+        public void ShouldFallBackToFullNameOrderingWhenNoCustomOrderExists()
         {
             Type firstType = typeof(CollisionA.OrderCollisionData);
             Type secondType = typeof(CollisionB.OrderCollisionData);
@@ -54,7 +54,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_OrderTypesByFullName_When_SeedingPersistedOrder()
+        public void ShouldOrderTypesByFullNameWhenSeedingPersistedOrder()
         {
             Type firstType = typeof(CollisionA.OrderCollisionData);
             Type secondType = typeof(CollisionB.OrderCollisionData);
@@ -72,7 +72,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_UseFullNameTieBreaker_When_DisplayNamesCollide()
+        public void ShouldUseFullNameTieBreakerWhenDisplayNamesCollide()
         {
             Type firstType = typeof(CollisionA.OrderCollisionData);
             Type secondType = typeof(CollisionB.OrderCollisionData);
@@ -91,7 +91,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_FindTypeByFullName_When_ShortTypeNamesCollide()
+        public void ShouldFindTypeByFullNameWhenShortTypeNamesCollide()
         {
             Type firstType = typeof(CollisionA.OrderCollisionData);
             Type secondType = typeof(CollisionB.OrderCollisionData);
@@ -104,7 +104,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void Should_PreserveOtherNamespaces_When_RemovingManagedTypeNames()
+        public void ShouldPreserveOtherNamespacesWhenRemovingManagedTypeNames()
         {
             string[] managedTypeNames =
             {
