@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Adapted from Ambiguous-Interactive/unity-helpers at edbfe9b245c2ca20c461c746566b9c46fc133457 (MIT).
 /**
- * One member ordering, enforced at 100% (#672), plus the nested-type placement rule it extends
- * (#575): a nested type is declared at the END of its containing type, never between members.
+ * C# source policy enforcement: member ordering (#672), nested-type placement (#575), method
+ * naming (#47), and block formatting for multi-line comments (#57).
  *
  * The member ordering is the owner's, from #672. Every tier below is ordered public → protected →
  * internal → private, including const:
@@ -107,7 +107,7 @@ const OPENERS = { "(": ")", "[": "]", "{": "}" };
  * brace matching cannot be thrown by a brace inside either. Interpolated strings are masked whole,
  * braces included, which keeps the balance the caller relies on.
  */
-function maskNoise(text) {
+function maskNoise(text, onLineComment) {
   const out = text.split("");
   const blank = (start, end) => {
     for (let i = start; i < end && i < out.length; i += 1) {
@@ -123,6 +123,9 @@ function maskNoise(text) {
     const next = text[index + 1];
 
     if (char === "/" && next === "/") {
+      if (onLineComment) {
+        onLineComment(index);
+      }
       let end = text.indexOf("\n", index);
       end = end < 0 ? text.length : end;
       blank(index, end);
@@ -782,6 +785,60 @@ function lineOf(text, index) {
   return line;
 }
 
+/** Consecutive ordinary `//` blocks, excluding XML docs and tool control directives. */
+function multilineLineCommentViolations(text) {
+  const lines = text.split("\n");
+  const violations = [];
+  const comments = new Map();
+  let line = 1;
+  let lineStart = 0;
+
+  maskNoise(text, (commentStart) => {
+    while (lineStart <= commentStart) {
+      const newline = text.indexOf("\n", lineStart);
+      if (newline < 0 || commentStart < newline) {
+        break;
+      }
+      line += 1;
+      lineStart = newline + 1;
+    }
+
+    const prefix = text.slice(lineStart, commentStart);
+    const contentStart = commentStart + 2;
+    if (/^[ \t]*$/.test(prefix) && text[contentStart] !== "/") {
+      const lineEnd = text.indexOf("\n", contentStart);
+      const content = text.slice(contentStart, lineEnd < 0 ? text.length : lineEnd);
+      comments.set(line, /^[ \t]*(?:ReSharper\b|noinspection\b)/.test(content));
+    }
+  });
+
+  let index = 1;
+  while (index <= lines.length) {
+    if (!comments.has(index)) {
+      index += 1;
+      continue;
+    }
+
+    const start = index;
+    while (index <= lines.length && comments.has(index)) {
+      index += 1;
+    }
+    const blockLength = index - start;
+    let allToolDirectives = true;
+    for (let commentLine = start; commentLine < index; commentLine += 1) {
+      allToolDirectives = allToolDirectives && comments.get(commentLine);
+    }
+    if (1 < blockLength && !allToolDirectives) {
+      violations.push({
+        line: start,
+        kind: "multiline line comment"
+      });
+    }
+  }
+
+  return violations;
+}
+
 /** The member's declaring identifier, for the violation message. */
 function memberName(masked, member) {
   const prefix = declarationPrefix(masked, member.headerStart, member.end);
@@ -872,7 +929,7 @@ function analyzeFile(text) {
   const masked = maskNoise(text);
   const keys = regionKeys(text);
   const bodies = typeBodies(masked);
-  const violations = [];
+  const violations = multilineLineCommentViolations(text);
   const edits = [];
 
   for (const body of bodies) {
@@ -1239,6 +1296,13 @@ function main(argv) {
     }
 
     for (const violation of result.violations) {
+      if (violation.kind === "multiline line comment") {
+        remaining.push(
+          `${relative}:${violation.line}: consecutive ordinary line comments must use one ` +
+            `indented block comment; keep // for single-line comments and tool directives (#57)`
+        );
+        continue;
+      }
       if (violation.kind === "underscored method") {
         remaining.push(
           `${relative}:${violation.line}: method '${violation.name}' in ` +
@@ -1279,7 +1343,8 @@ function main(argv) {
   if (0 < remaining.length) {
     console.error(
       `[csharp-member-order] ${remaining.length} C# source policy violation(s). ` +
-        "Use underscore-free PascalCase method names; reorder members into the #672 ordering " +
+        "Use block comments for multi-line prose; use underscore-free PascalCase method names; " +
+        "reorder members into the #672 ordering " +
         "(const, events, delegates, static properties, " +
         "static fields, properties, fields, constructors, static methods, methods; each tier public → " +
         "protected → internal → private) and move nested types to the end of their containing " +
@@ -1307,7 +1372,8 @@ module.exports = {
   declarationPrefix,
   accessorKind,
   classifyMember,
-  memberRank
+  memberRank,
+  multilineLineCommentViolations
 };
 
 if (require.main === module) {

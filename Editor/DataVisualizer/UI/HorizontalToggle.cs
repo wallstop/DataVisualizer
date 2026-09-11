@@ -5,8 +5,10 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
     using UnityEngine.UIElements;
     using UnityEngine.UIElements.Experimental;
 
-    // Instantiated only from C# (never from UXML), so the deprecated UxmlFactory/UxmlTraits
-    // pair is intentionally omitted.
+    /*
+        Instantiated only from C# (never from UXML), so the deprecated UxmlFactory/UxmlTraits
+        pair is intentionally omitted.
+    */
     public sealed class HorizontalToggle : VisualElement
     {
         private const float AnimationDurationMs = 150f;

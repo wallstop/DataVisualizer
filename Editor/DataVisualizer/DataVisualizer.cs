@@ -76,15 +76,19 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const int AsyncLoadBatchSize = 100;
         private const int AsyncLoadPriorityBatchSize = 100;
 
-        // Uniform row height for the virtualized object ListView. Measured live: the .object-item
-        // box renders at ~40px; the slot is forced to this height and centers the box, so the extra
-        // 6px becomes a 3px gap above and below each row.
+        /*
+            Uniform row height for the virtualized object ListView. Measured live: the .object-item
+            box renders at ~40px; the slot is forced to this height and centers the box, so the extra
+            6px becomes a 3px gap above and below each row.
+        */
         private const float ObjectRowFixedHeight = 46f;
 
         internal static DataVisualizer Instance;
 
-        // Debug logging for testing async loading
-        // Set to true to see detailed loading performance logs in Unity Console
+        /*
+            Debug logging for testing async loading
+            Set to true to see detailed loading performance logs in Unity Console
+        */
         private static readonly bool EnableAsyncLoadDebugLog = false;
 
         private static readonly Color[] PredefinedLabelColors =
@@ -101,9 +105,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private static readonly StringBuilder CachedStringBuilder = new();
 
-        // Action buttons stop pointer-down here so clicking one doesn't retarget the ListView's
-        // selection (which otherwise drops the current selection when using go-up/go-down/etc.) or
-        // start a row drag from a button.
+        /*
+            Action buttons stop pointer-down here so clicking one doesn't retarget the ListView's
+            selection (which otherwise drops the current selection when using go-up/go-down/etc.) or
+            start a row drag from a button.
+        */
         private static readonly EventCallback<PointerDownEvent> StopRowChildPointerDown = evt =>
             evt.StopPropagation();
 
@@ -260,12 +266,16 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _searchPopover;
         private bool _isSearchCachePopulated;
 
-        // Managed ScriptableObject types for the current search-cache load, computed once per
-        // PopulateSearchCacheAsync run and reused across its batches.
+        /*
+            Managed ScriptableObject types for the current search-cache load, computed once per
+            PopulateSearchCacheAsync run and reused across its batches.
+        */
         private HashSet<Type> _searchCacheManagedTypes;
 
-        // Incremented on each PopulateSearchCacheAsync run so stale scheduled batch callbacks from a
-        // superseded run no-op instead of draining the new queue or marking the cache ready early.
+        /*
+            Incremented on each PopulateSearchCacheAsync run so stale scheduled batch callbacks from a
+            superseded run no-op instead of draining the new queue or marking the cache ready early.
+        */
         private int _searchCacheGeneration;
         private string _lastSearchString;
 
@@ -324,30 +334,40 @@ namespace WallstopStudios.DataVisualizer.Editor
         private bool _isLoadingObjectsAsync;
         private bool _isLoadingSearchCacheAsync;
 
-        // Total asset count for the in-progress async load, captured once from the
-        // initial FindAssets so per-batch progress updates never rescan the project.
+        /*
+            Total asset count for the in-progress async load, captured once from the
+            initial FindAssets so per-batch progress updates never rescan the project.
+        */
         private int _asyncLoadTotalCount;
 
-        // GUIDs FindAssets returned for the loading type that resolve to a missing asset or a subclass
-        // the exact-type load skips; subtracted from the indicator total so it reflects only loadable
-        // assets and doesn't appear stuck below 100%.
+        /*
+            GUIDs FindAssets returned for the loading type that resolve to a missing asset or a subclass
+            the exact-type load skips; subtracted from the indicator total so it reflects only loadable
+            assets and doesn't appear stuck below 100%.
+        */
         private int _asyncLoadSkippedCount;
 
-        // Incremented on each fresh (non-continuation) async load. Scheduled callbacks (auto-select,
-        // the background batch pump) capture this at schedule time and no-op if a newer load has
-        // superseded them, so a stale callback can't select the wrong asset or interleave batches.
+        /*
+            Incremented on each fresh (non-continuation) async load. Scheduled callbacks (auto-select,
+            the background batch pump) capture this at schedule time and no-op if a newer load has
+            superseded them, so a stale callback can't select the wrong asset or interleave batches.
+        */
         private int _asyncLoadGeneration;
 
-        // Canonical display order (asset GUID -> position) for the in-progress async load: saved
-        // custom order first, then the remaining assets by path. LoadObjectBatch positions loaded
-        // assets by this so user ordering survives batched loading instead of being overwritten by
-        // an alphabetical sort. Rebuilt at the start of each LoadObjectTypesAsync.
+        /*
+            Canonical display order (asset GUID -> position) for the in-progress async load: saved
+            custom order first, then the remaining assets by path. LoadObjectBatch positions loaded
+            assets by this so user ordering survives batched loading instead of being overwritten by
+            an alphabetical sort. Rebuilt at the start of each LoadObjectTypesAsync.
+        */
         private readonly Dictionary<string, int> _asyncDisplayOrderByGuid = new(
             StringComparer.Ordinal
         );
 
-        // Display-order index cached per already-inserted object so batch insertion stays cheap
-        // (no per-comparison AssetDatabase calls). Cleared whenever _selectedObjects is reset.
+        /*
+            Display-order index cached per already-inserted object so batch insertion stays cheap
+            (no per-comparison AssetDatabase calls). Cleared whenever _selectedObjects is reset.
+        */
         private readonly Dictionary<ScriptableObject, int> _selectedObjectOrderIndex = new();
 
         private Label _dataFolderPathDisplay;
@@ -549,9 +569,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ?.FirstOrDefault();
         }
 
-        // Removes and returns up to batchSize items from the front of the queue. A Queue keeps this
-        // O(batchSize) instead of the O(n) element shift List.RemoveRange(0, batchSize) incurs each
-        // batch (which compounds to O(n^2) over a full drain on large projects).
+        /*
+            Removes and returns up to batchSize items from the front of the queue. A Queue keeps this
+            O(batchSize) instead of the O(n) element shift List.RemoveRange(0, batchSize) incurs each
+            batch (which compounds to O(n^2) over a full drain on large projects).
+        */
         private static List<string> DequeueBatch(Queue<string> queue, int batchSize)
         {
             List<string> batch = new(batchSize);
@@ -1145,8 +1167,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
             root.Add(_confirmNamespaceAddPopover);
 
-            // CreateGUI is now complete - window structure is ready
-            // Defer ALL content building to next frame so window appears instantly
+            /*
+                CreateGUI is now complete - window structure is ready
+                Defer ALL content building to next frame so window appears instantly
+            */
             rootVisualElement
                 .schedule.Execute(() =>
                 {
@@ -1423,8 +1447,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
 
-            // Don't load types here - it blocks the UI from appearing
-            // LoadScriptableObjectTypes() is now deferred to CreateGUI
+            /*
+                Don't load types here - it blocks the UI from appearing
+                LoadScriptableObjectTypes() is now deferred to CreateGUI
+            */
             rootVisualElement.RegisterCallback<KeyDownEvent>(
                 HandleGlobalKeyDown,
                 TrickleDown.TrickleDown
@@ -1722,9 +1748,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _pendingSearchCacheGuids.Enqueue(guid);
             }
 
-            // Do NOT mark the cache populated here — the assets aren't loaded until the batches
-            // below finish. Marking it ready after only collecting GUIDs made PerformSearch run
-            // against an empty/partial cache. It is marked populated on completion instead.
+            /*
+                Do NOT mark the cache populated here — the assets aren't loaded until the batches
+                below finish. Marking it ready after only collecting GUIDs made PerformSearch run
+                against an empty/partial cache. It is marked populated on completion instead.
+            */
             cacheStartTime.Stop();
 
             if (EnableAsyncLoadDebugLog)
@@ -1763,8 +1791,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             int batchSize = Mathf.Min(AsyncLoadBatchSize, _pendingSearchCacheGuids.Count);
             List<string> batch = DequeueBatch(_pendingSearchCacheGuids, batchSize);
 
-            // Load batch. GUIDs in _pendingSearchCacheGuids are already unique (deduped up front),
-            // so no per-batch de-duplication is needed here.
+            /*
+                Load batch. GUIDs in _pendingSearchCacheGuids are already unique (deduped up front),
+                so no per-batch de-duplication is needed here.
+            */
             List<ScriptableObject> loadedObjects = new();
 
             foreach (string guid in batch)
@@ -1778,9 +1808,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ScriptableObject obj = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
                 if (obj != null)
                 {
-                    // Verify it's a managed type (O(1) against the set cached for this run). No cache
-                    // membership check needed: the cache was cleared and GUIDs are unique, so the
-                    // object can't already be present, and Contains() grows costlier as it fills.
+                    /*
+                        Verify it's a managed type (O(1) against the set cached for this run). No cache
+                        membership check needed: the cache was cleared and GUIDs are unique, so the
+                        object can't already be present, and Contains() grows costlier as it fills.
+                    */
                     if (_searchCacheManagedTypes.Contains(obj.GetType()))
                     {
                         loadedObjects.Add(obj);
@@ -1788,9 +1820,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            // Append this batch. The cache is sorted once when loading completes (below); it isn't
-            // used for search until then, so per-item BinarySearch+Insert would just be wasted
-            // O(n^2) shifting work.
+            /*
+                Append this batch. The cache is sorted once when loading completes (below); it isn't
+                used for search until then, so per-item BinarySearch+Insert would just be wasted
+                O(n^2) shifting work.
+            */
             _allManagedObjectsCache.AddRange(loadedObjects);
 
             // Continue with next batch
@@ -1822,9 +1856,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        // Re-runs the active search once the search cache finishes loading, so results that were
-        // unavailable while it loaded in the background appear. Only acts while the search popover is
-        // open, so it never reopens a popover the user has dismissed.
+        /*
+            Re-runs the active search once the search cache finishes loading, so results that were
+            unavailable while it loaded in the background appear. Only acts while the search popover is
+            open, so it never reopens a popover the user has dismissed.
+        */
         private void RefreshActiveSearch()
         {
             if (_activePopover != _searchPopover || string.IsNullOrWhiteSpace(_lastSearchString))
@@ -1908,9 +1944,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 previousTypeFullName
             );
 
-            // Load once. For an unchanged type the SelectType call near the end no-ops its own load,
-            // so reload here (a refresh must re-scan). For a changed type, let that single SelectType
-            // call do the load — doing both would load the same type twice.
+            /*
+                Load once. For an unchanged type the SelectType call near the end no-ops its own load,
+                so reload here (a refresh must re-scan). For a changed type, let that single SelectType
+                call do the load — doing both would load the same type twice.
+            */
             bool selectionTypeChanged = _namespaceController.SelectedType != selectedType;
             if (selectedType == null)
             {
@@ -1922,9 +1960,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             else
             {
-                // The refresh resolved a different type (e.g. the previous type was removed); the
-                // SelectType call below will load it. Clear the old type's objects now so the object
-                // column doesn't show the previous type's assets until that async load's view rebuild.
+                /*
+                    The refresh resolved a different type (e.g. the previous type was removed); the
+                    SelectType call below will load it. Clear the old type's objects now so the object
+                    column doesn't show the previous type's assets until that async load's view rebuild.
+                */
                 _selectedObjects.Clear();
                 _filteredObjects.Clear();
                 _selectedObjectOrderIndex.Clear();
@@ -1969,10 +2009,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            // Only select eagerly if the previously-selected object is already loaded (found in the
-            // priority batch). Otherwise leave it to LoadObjectTypesAsync's generation-guarded
-            // deferred auto-select, which restores the real selection once its batch loads instead of
-            // persisting a fallback GUID over it.
+            /*
+                Only select eagerly if the previously-selected object is already loaded (found in the
+                priority batch). Otherwise leave it to LoadObjectTypesAsync's generation-guarded
+                deferred auto-select, which restores the real selection once its batch loads instead of
+                persisting a fallback GUID over it.
+            */
             if (selectedObject != null && _selectedObjects.Contains(selectedObject))
             {
                 SelectObject(selectedObject);
@@ -2075,11 +2117,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Build namespace view first so type selection is visible
             BuildNamespaceView();
 
-            // Register the restored type via SelectType, which sets the selected type BEFORE loading.
-            // That way the load's synchronous saved/first-object selection doesn't re-enter SelectType
-            // (which would start a second load), the object list filters correctly for the restored
-            // type, and an empty type shows its empty view rather than a stale one. SelectType also
-            // loads the objects, restores the saved selection, and refreshes the dependent UI.
+            /*
+                Register the restored type via SelectType, which sets the selected type BEFORE loading.
+                That way the load's synchronous saved/first-object selection doesn't re-enter SelectType
+                (which would start a second load), the object list filters correctly for the restored
+                type, and an empty type shows its empty view rather than a stale one. SelectType also
+                loads the objects, restores the saved selection, and refreshes the dependent UI.
+            */
             _namespaceController.SelectType(this, selectedType);
 
             VisualElement typeElementToSelect = FindTypeElement(selectedType);
@@ -2242,9 +2286,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            // The type's objects still stream in asynchronously; running a processor now would only
-            // touch the already-loaded subset while the dialog implies the whole type. Wait for the
-            // load to finish so the processor operates on the complete set.
+            /*
+                The type's objects still stream in asynchronously; running a processor now would only
+                touch the already-loaded subset while the dialog implies the whole type. Wait for the
+                load to finish so the processor operates on the complete set.
+            */
             if (_isLoadingObjectsAsync && _asyncLoadTargetType == _namespaceController.SelectedType)
             {
                 EditorUtility.DisplayDialog(
@@ -2510,16 +2556,20 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (!_isSearchCachePopulated)
             {
-                // If the cache isn't populated and isn't already (re)building — e.g. after the window
-                // was hidden and shown again, which clears the cache without rebuilding it (population
-                // otherwise only runs once in CreateGUI) — kick it off now so this query resolves.
+                /*
+                    If the cache isn't populated and isn't already (re)building — e.g. after the window
+                    was hidden and shown again, which clears the cache without rebuilding it (population
+                    otherwise only runs once in CreateGUI) — kick it off now so this query resolves.
+                */
                 if (!_isLoadingSearchCacheAsync)
                 {
                     PopulateSearchCacheAsync();
                 }
 
-                // Keep the popover open with a status line instead of dismissing the user's query;
-                // RefreshActiveSearch re-runs this search automatically once the cache is ready.
+                /*
+                    Keep the popover open with a status line instead of dismissing the user's query;
+                    RefreshActiveSearch re-runs this search automatically once the cache is ready.
+                */
                 Label buildingLabel = new("Building search index…")
                 {
                     style =
@@ -2926,11 +2976,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (typeChanged)
             {
-                // Persist the navigation target as this type's last selection so the async loader
-                // both prioritizes loading it and auto-selects it once its batch is in. SelectType
-                // already starts LoadObjectTypesAsync; loading again here (as before) cleared
-                // _selectedObjects mid-flight, interleaved duplicate batches, and left the loader to
-                // auto-select the *previous* saved object instead of the one the user clicked.
+                /*
+                    Persist the navigation target as this type's last selection so the async loader
+                    both prioritizes loading it and auto-selects it once its batch is in. SelectType
+                    already starts LoadObjectTypesAsync; loading again here (as before) cleared
+                    _selectedObjects mid-flight, interleaved duplicate batches, and left the loader to
+                    auto-select the *previous* saved object instead of the one the user clicked.
+                */
                 string targetGuid = AssetDatabase.AssetPathToGUID(
                     AssetDatabase.GetAssetPath(targetObject)
                 );
@@ -2946,9 +2998,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (!_selectedObjects.Contains(targetObject))
             {
-                // Same type, but the target's batch has not streamed in yet. Persist it as this type's
-                // last selection and reload with it prioritized so it loads first and is auto-selected —
-                // otherwise SelectObject would update the inspector while its ListView row is missing.
+                /*
+                    Same type, but the target's batch has not streamed in yet. Persist it as this type's
+                    last selection and reload with it prioritized so it loads first and is auto-selected —
+                    otherwise SelectObject would update the inspector while its ListView row is missing.
+                */
                 string targetGuid = AssetDatabase.AssetPathToGUID(
                     AssetDatabase.GetAssetPath(targetObject)
                 );
@@ -5331,9 +5385,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 makeItem = MakeObjectRow,
                 unbindItem = (element, _) => element.userData = null,
                 reorderable = true,
-                // Animated gives the "floaty" reorder feel (rows slide to make room). Its drag-handle
-                // column is hidden via USS (.unity-list-view__reorderable-handle) so it doesn't add the
-                // left gutter the user flagged; the whole row stays draggable.
+                /*
+                    Animated gives the "floaty" reorder feel (rows slide to make room). Its drag-handle
+                    column is hidden via USS (.unity-list-view__reorderable-handle) so it doesn't add the
+                    left gutter the user flagged; the whole row stays draggable.
+                */
                 reorderMode = ListViewReorderMode.Animated,
                 showBorder = false,
                 style = { flexGrow = 1 },
@@ -5567,8 +5623,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private static bool IsLoadableType(Type type)
         {
-            // Fast type validation without expensive CreateInstance calls
-            // This allows namespace/type list to appear immediately
+            /*
+                Fast type validation without expensive CreateInstance calls
+                This allows namespace/type list to appear immediately
+            */
             return type != typeof(ScriptableObject)
                 && !type.IsAbstract
                 && !type.IsGenericType
@@ -5580,11 +5638,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 && type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
                 && type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true;
 
-            // Note: We removed CreateInstance validation because:
-            // 1. It was slow (1-2 seconds for large projects)
-            // 2. It caused "Reset() called with object" errors for some ScriptableObjects
-            // 3. The real validation happens when loading actual assets anyway
-            // 4. Types that can't be instantiated simply won't have any assets to load
+            /*
+                Note: We removed CreateInstance validation because:
+                1. It was slow (1-2 seconds for large projects)
+                2. It caused "Reset() called with object" errors for some ScriptableObjects
+                3. The real validation happens when loading actual assets anyway
+                4. Types that can't be instantiated simply won't have any assets to load
+            */
         }
 
         private static bool IsSubclassOf(Type typeToCheck, Type baseClass)
@@ -5749,8 +5809,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             _emptyObjectLabel.style.display = DisplayStyle.None;
             _objectListView.style.display = DisplayStyle.Flex;
 
-            // Drag-reorder is only safe (maps 1:1 to the saved order) when no label filter is hiding
-            // items, i.e. the filtered list matches the full list.
+            /*
+                Drag-reorder is only safe (maps 1:1 to the saved order) when no label filter is hiding
+                items, i.e. the filtered list matches the full list.
+            */
             _objectListView.reorderable = _filteredObjects.Count == _selectedObjects.Count;
 
             _objectListView.RefreshItems();
@@ -5788,8 +5850,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                         && string.Equals(
                             AssetDatabase.AssetPathToGUID(path),
                             savedObjectGuid,
-                            // Case-insensitive to match the priority guard in LoadObjectTypesAsync, so
-                            // a saved GUID that loaded is never skipped here over casing.
+                            /*
+                                Case-insensitive to match the priority guard in LoadObjectTypesAsync, so
+                                a saved GUID that loaded is never skipped here over casing.
+                            */
                             StringComparison.OrdinalIgnoreCase
                         );
                 });
@@ -5817,10 +5881,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             }
 
-            // Cancel any existing async load for a different type
-            // Cancel any in-flight load when starting a fresh one — even for the SAME type (e.g. a
-            // refresh) — otherwise the old scheduled pump and its _pendingObjectGuids interleave with
-            // the new load and corrupt ordering/selection.
+            /*
+                Cancel any existing async load for a different type
+                Cancel any in-flight load when starting a fresh one — even for the SAME type (e.g. a
+                refresh) — otherwise the old scheduled pump and its _pendingObjectGuids interleave with
+                the new load and corrupt ordering/selection.
+            */
             if (_isLoadingObjectsAsync && !priorityLoad)
             {
                 if (EnableAsyncLoadDebugLog)
@@ -5874,9 +5940,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             _asyncLoadTotalCount = allGuids.Length;
             _asyncLoadSkippedCount = 0;
 
-            // No assets of this type: skip the async loader entirely so it doesn't flash the
-            // "Loading objects..." overlay before immediately completing. Clear any stale
-            // selection/indicator and show the empty view now.
+            /*
+                No assets of this type: skip the async loader entirely so it doesn't flash the
+                "Loading objects..." overlay before immediately completing. Clear any stale
+                selection/indicator and show the empty view now.
+            */
             if (allGuids.Length == 0)
             {
                 _isLoadingObjectsAsync = false;
@@ -5888,9 +5956,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            // Establish the canonical display order for this load: custom-ordered assets first (in
-            // their saved sequence), then everything else by asset path. LoadObjectBatch positions
-            // assets by this map so drag/move ordering is preserved across async batches.
+            /*
+                Establish the canonical display order for this load: custom-ordered assets first (in
+                their saved sequence), then everything else by asset path. LoadObjectBatch positions
+                assets by this map so drag/move ordering is preserved across async batches.
+            */
             _asyncDisplayOrderByGuid.Clear();
             {
                 HashSet<string> allGuidLookup = new(allGuids, StringComparer.Ordinal);
@@ -5946,9 +6016,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Ensure custom order is respected, with saved object ALWAYS at the front
             List<string> orderedPriorityGuids = new();
 
-            // Saved object ALWAYS comes first (critical for restoring selection)
-            // Even if it's in custom order, we need it loaded immediately
-            // O(1) membership for the ordering below instead of repeated O(n) List.Contains scans.
+            /*
+                Saved object ALWAYS comes first (critical for restoring selection)
+                Even if it's in custom order, we need it loaded immediately
+                O(1) membership for the ordering below instead of repeated O(n) List.Contains scans.
+            */
             HashSet<string> priorityGuidSet = new(priorityGuids, StringComparer.Ordinal);
 
             if (
@@ -5993,8 +6065,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             }
 
-            // LoadObjectBatch updates the indicator with the real loaded count, so there's no
-            // pre-load UpdateLoadingIndicator here (it briefly showed progress before anything loaded).
+            /*
+                LoadObjectBatch updates the indicator with the real loaded count, so there's no
+                pre-load UpdateLoadingIndicator here (it briefly showed progress before anything loaded).
+            */
             LoadObjectBatch(type, priorityBatch, true);
 
             // Queue remaining priority items
@@ -6003,9 +6077,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _pendingObjectGuids.Enqueue(orderedPriorityGuids[i]);
             }
 
-            // Order the remaining GUIDs by the canonical display order already computed above rather
-            // than re-deriving asset paths and sorting again (that duplicate work is noticeable on
-            // large projects). _asyncDisplayOrderByGuid was built path-sorted, so order is preserved.
+            /*
+                Order the remaining GUIDs by the canonical display order already computed above rather
+                than re-deriving asset paths and sorting again (that duplicate work is noticeable on
+                large projects). _asyncDisplayOrderByGuid was built path-sorted, so order is preserved.
+            */
             List<string> remainingSorted = remainingGuids
                 .OrderBy(guid =>
                     _asyncDisplayOrderByGuid.TryGetValue(guid, out int order) ? order : int.MaxValue
@@ -6039,13 +6115,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            // Now that the priority batch AND the first remainder batch are loaded, select the
-            // saved/first object synchronously (still in this frame, so a type switch goes straight
-            // from the old inspector to the new one with no stale UI or "loading"/"select an object"
-            // flash). Running it here rather than right after the (possibly empty) priority batch means
-            // a fresh type with no saved selection and no custom order still auto-selects its first
-            // real asset instead of showing a populated list with a blank inspector. Remaining objects
-            // keep streaming in asynchronously below.
+            /*
+                Now that the priority batch AND the first remainder batch are loaded, select the
+                saved/first object synchronously (still in this frame, so a type switch goes straight
+                from the old inspector to the new one with no stale UI or "loading"/"select an object"
+                flash). Running it here rather than right after the (possibly empty) priority batch means
+                a fresh type with no saved selection and no custom order still auto-selects its first
+                real asset instead of showing a populated list with a blank inspector. Remaining objects
+                keep streaming in asynchronously below.
+            */
             if (!priorityLoad)
             {
                 BuildObjectsView();
@@ -6082,8 +6160,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 else
                 {
-                    // The type has no assets — clear the stale selection and inspector instead of
-                    // leaving the previously selected object showing.
+                    /*
+                        The type has no assets — clear the stale selection and inspector instead of
+                        leaving the previously selected object showing.
+                    */
                     SelectObject(null);
                 }
             }
@@ -6165,10 +6245,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 _suppressListSelectionCallback = false;
 
-                // Repaint rows so the custom .object-item.selected box style tracks the new selection.
-                // bindItem is the only place that class is applied and the ListView's own --selected
-                // fill is intentionally transparent, so a plain click needs an explicit refresh.
-                // RefreshItems rebinds visible rows only, so it is cheap.
+                /*
+                    Repaint rows so the custom .object-item.selected box style tracks the new selection.
+                    bindItem is the only place that class is applied and the ListView's own --selected
+                    fill is intentionally transparent, so a plain click needs an explicit refresh.
+                    RefreshItems rebinds visible rows only, so it is cheap.
+                */
                 _objectListView.RefreshItems();
             }
 
@@ -7075,21 +7157,27 @@ namespace WallstopStudios.DataVisualizer.Editor
             _namespaceController.Build(this, ref _namespaceListContainer);
         }
 
-        // Builds the reusable skeleton of an object row (no per-object data) for the ListView's
-        // makeItem. Button handlers resolve the current object from the row's userData at click time
-        // so the element can be safely reused across items (as ListView virtualization requires).
+        /*
+            Builds the reusable skeleton of an object row (no per-object data) for the ListView's
+            makeItem. Button handlers resolve the current object from the row's userData at click time
+            so the element can be safely reused across items (as ListView virtualization requires).
+        */
         private VisualElement MakeObjectRow()
         {
-            // Outer element: the ListView forces this to fixedItemHeight (FixedHeight virtualization),
-            // so it stays a transparent slot that vertically centers the visible box. The box can't
-            // carry its own vertical margin without breaking the ListView's fixed-height scroll math,
-            // so the inter-row gap comes from centering a shorter box inside the taller slot.
+            /*
+                Outer element: the ListView forces this to fixedItemHeight (FixedHeight virtualization),
+                so it stays a transparent slot that vertically centers the visible box. The box can't
+                carry its own vertical margin without breaking the ListView's fixed-height scroll math,
+                so the inter-row gap comes from centering a shorter box inside the taller slot.
+            */
             VisualElement row = new() { name = "object-row-slot" };
             row.AddToClassList(StyleConstants.ClickableClass);
             row.style.flexDirection = FlexDirection.Column;
             row.style.justifyContent = Justify.Center;
-            // Force the slot to the full fixed-item height so the shorter box centers within it
-            // (the ListView otherwise shrinks the slot to the box, leaving no room to center/gap).
+            /*
+                Force the slot to the full fixed-item height so the shorter box centers within it
+                (the ListView otherwise shrinks the slot to the box, leaving no room to center/gap).
+            */
             row.style.height = ObjectRowFixedHeight;
 
             VisualElement box = new() { name = "object-item-box" };
@@ -7216,8 +7304,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             return row;
         }
 
-        // Populates a row skeleton for a specific object at a display index. Serves as the ListView
-        // bindItem.
+        /*
+            Populates a row skeleton for a specific object at a display index. Serves as the ListView
+            bindItem.
+        */
         private void BindObjectRow(VisualElement row, ScriptableObject dataObject, int index)
         {
             if (row == null || dataObject == null)
@@ -7258,8 +7348,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 goDownButton.EnableInClassList("go-button", !disabled);
             }
 
-            // Custom green-border selection styling follows the selected object across ListView
-            // element reuse (applied to the visible box, not the transparent outer slot).
+            /*
+                Custom green-border selection styling follows the selected object across ListView
+                element reuse (applied to the visible box, not the transparent outer slot).
+            */
             row.Q<VisualElement>("object-item-box")
                 ?.EnableInClassList(StyleConstants.SelectedClass, _selectedObject == dataObject);
         }
@@ -7320,9 +7412,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             FocusMovedObject(dataObject);
         }
 
-        // Selects the just-moved object, deferred one tick so it wins over the ListView's own
-        // pointer-driven selection for the button click (which can land on the wrong row after the
-        // reorder). Keeps the selection sticky and focuses the item the user acted on.
+        /*
+            Selects the just-moved object, deferred one tick so it wins over the ListView's own
+            pointer-driven selection for the button click (which can land on the wrong row after the
+            reorder). Keeps the selection sticky and focuses the item the user acted on.
+        */
         private void FocusMovedObject(ScriptableObject dataObject)
         {
             if (dataObject == null)
@@ -7330,9 +7424,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            // Deferred one tick so it runs after the ListView's own pointer-driven selection for the
-            // button click. Always re-selects and scrolls the moved item fully into view — bypassing
-            // SelectObject's already-selected early-out, which would otherwise skip the scroll.
+            /*
+                Deferred one tick so it runs after the ListView's own pointer-driven selection for the
+                button click. Always re-selects and scrolls the moved item fully into view — bypassing
+                SelectObject's already-selected early-out, which would otherwise skip the scroll.
+            */
             rootVisualElement
                 .schedule.Execute(() =>
                 {
@@ -8337,11 +8433,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            // Insert into _selectedObjects at each asset's canonical position (custom order first,
-            // then by path) so user ordering survives batched loading. The position index is cached
-            // per object so comparisons stay O(1) with no per-comparison AssetDatabase calls.
-            // NOTE: intentionally does NOT touch _filteredObjects — ApplyLabelFilter() rebuilds that
-            // from _selectedObjects when BuildObjectsView() runs, so active filters stay correct.
+            /*
+                Insert into _selectedObjects at each asset's canonical position (custom order first,
+                then by path) so user ordering survives batched loading. The position index is cached
+                per object so comparisons stay O(1) with no per-comparison AssetDatabase calls.
+                NOTE: intentionally does NOT touch _filteredObjects — ApplyLabelFilter() rebuilds that
+                from _selectedObjects when BuildObjectsView() runs, so active filters stay correct.
+            */
             foreach ((string guid, ScriptableObject obj) in loadedObjects)
             {
                 InsertObjectByAsyncDisplayOrder(obj, guid);
@@ -8355,12 +8453,16 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             }
 
-            // Skipped = GUIDs in this batch that resolved to a missing/mismatched-type asset. Track
-            // them so the indicator total below reflects only loadable assets.
+            /*
+                Skipped = GUIDs in this batch that resolved to a missing/mismatched-type asset. Track
+                them so the indicator total below reflects only loadable assets.
+            */
             _asyncLoadSkippedCount += guids.Count - loadedObjects.Count;
 
-            // Update loading indicator if async loading is in progress. Uses the count
-            // captured when the load started instead of rescanning the whole project per batch.
+            /*
+                Update loading indicator if async loading is in progress. Uses the count
+                captured when the load started instead of rescanning the whole project per batch.
+            */
             if (_isLoadingObjectsAsync && _asyncLoadTargetType != null)
             {
                 UpdateLoadingIndicator(
@@ -8468,10 +8570,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Type selectedType = _namespaceController.SelectedType;
 
-            // Show indicator only if:
-            // 1. We're currently loading objects asynchronously
-            // 2. The type being loaded matches the currently selected type
-            // 3. There are still objects remaining to load
+            /*
+                Show indicator only if:
+                1. We're currently loading objects asynchronously
+                2. The type being loaded matches the currently selected type
+                3. There are still objects remaining to load
+            */
             if (
                 _isLoadingObjectsAsync
                 && _asyncLoadTargetType == selectedType
@@ -8575,17 +8679,21 @@ namespace WallstopStudios.DataVisualizer.Editor
                 break;
             }
 
-            // Ignore deselect-to-empty (e.g. a click on an action button clearing the ListView
-            // selection) so the current selection stays sticky through reorder/go-up/go-down.
+            /*
+                Ignore deselect-to-empty (e.g. a click on an action button clearing the ListView
+                selection) so the current selection stays sticky through reorder/go-up/go-down.
+            */
             if (selected != null)
             {
                 SelectObject(selected);
             }
         }
 
-        // Persists the new order after a ListView drag-reorder. The ListView has already reordered
-        // its itemsSource (_filteredObjects) in place; reorder is only enabled when the filtered
-        // list equals the full list (see BuildObjectsView), so we can persist it directly.
+        /*
+            Persists the new order after a ListView drag-reorder. The ListView has already reordered
+            its itemsSource (_filteredObjects) in place; reorder is only enabled when the filtered
+            list equals the full list (see BuildObjectsView), so we can persist it directly.
+        */
         private void OnObjectListItemReordered(int fromIndex, int toIndex)
         {
             Type selectedType = _namespaceController.SelectedType;
@@ -8609,8 +8717,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            // Ensure the dropped item ends up fully in view — drag auto-panning can leave it at the
-            // edge. Deferred so the ListView finishes settling the reordered layout first.
+            /*
+                Ensure the dropped item ends up fully in view — drag auto-panning can leave it at the
+                edge. Deferred so the ListView finishes settling the reordered layout first.
+            */
             if (0 <= toIndex && toIndex < _filteredObjects.Count)
             {
                 int scrollIndex = toIndex;
@@ -9282,10 +9392,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            // If async loading is still in progress, orderedObjects holds only the loaded subset.
-            // Reorder that subset within its existing canonical slots and retain every unloaded GUID
-            // in place. Mutation paths update the canonical map first when they explicitly insert or
-            // move an item, so create/clone/top/bottom semantics also include pending assets.
+            /*
+                If async loading is still in progress, orderedObjects holds only the loaded subset.
+                Reorder that subset within its existing canonical slots and retain every unloaded GUID
+                in place. Mutation paths update the canonical map first when they explicitly insert or
+                move an item, so create/clone/top/bottom semantics also include pending assets.
+            */
             if (_isLoadingObjectsAsync && _asyncLoadTargetType == type)
             {
                 orderedGuids = AssetGuidOrder.MergeLoadedOrder(

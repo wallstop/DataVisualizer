@@ -84,8 +84,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 false
             );
 
-            // OR mode, only OR labels: at least one must be present.
-            // Regression guard for the bug where OR-mode matched every object.
+            /*
+                OR mode, only OR labels: at least one must be present.
+                Regression guard for the bug where OR-mode matched every object.
+            */
             yield return Case(
                 "Or_one_present",
                 LabelCombinationType.Or,
@@ -155,8 +157,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 false
             );
 
-            // The obsolete 'None' combination is treated as AND, matching the None->And migration in
-            // TypeLabelFilterConfig and the enum's real default. Locks that intended behavior.
+            /*
+                The obsolete 'None' combination is treated as AND, matching the None->And migration in
+                TypeLabelFilterConfig and the enum's real default. Locks that intended behavior.
+            */
 #pragma warning disable CS0618 // Intentionally exercising the obsolete value.
             yield return Case(
                 "None_is_and_all_present",

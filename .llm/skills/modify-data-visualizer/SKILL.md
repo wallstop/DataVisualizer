@@ -33,6 +33,8 @@ metadata:
   load paths and keep debug logging behind `EnableAsyncLoadDebugLog`.
 - Selection persistence is regression-prone; changes to selection or ordering need a
   `SelectionPersistenceTests`-style EditMode test.
+- Use indented block comments for explanations spanning multiple lines; reserve `//`
+  for one-line notes and tool directives, and retain `///` for XML documentation.
 
 ## Persistence Safety
 

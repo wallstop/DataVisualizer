@@ -33,6 +33,8 @@ grouped by feature (`NamespaceOrderingTests`, `SelectionPersistenceTests`,
 - Prefer data-driven cases with `TestCaseData` + `SetName` so failures read as
   scenario names (see `LabelFilterEvaluatorTests`).
 - One assertion cluster per behavior; cover null/empty inputs explicitly.
+- Use indented `/* ... */` blocks for multi-line test explanations. Standalone
+  one-line notes may use `//`; API documentation continues to use `///`.
 
 See the full template: [EditModeTestTemplate.cs](../../code-samples/EditModeTestTemplate.cs).
 

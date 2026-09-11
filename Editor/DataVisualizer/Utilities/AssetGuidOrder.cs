@@ -71,8 +71,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             int originalIndex = IndexOf(order, guid);
             if (0 <= originalIndex)
             {
-                // Stable removal is required because this list is the persisted display order.
-                // This path removes at most one item; swap-back would scramble neighboring GUIDs.
+                /*
+                    Stable removal is required because this list is the persisted display order.
+                    This path removes at most one item; swap-back would scramble neighboring GUIDs.
+                */
                 order.RemoveAt(originalIndex);
             }
 

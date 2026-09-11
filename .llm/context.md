@@ -144,6 +144,9 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     enforces these declarations as warnings.
 28. Name every C# method in PascalCase without underscores, including test methods.
     The C# source lint enforces this convention independently of IDE diagnostics.
+29. Use `//` for standalone single-line comments and tool control directives only.
+    Write ordinary multi-line explanations as one indented `/* ... */` block. Keep
+    `///` XML documentation line-oriented. The C# source lint enforces this rule.
 
 ### Skills Discipline
 
