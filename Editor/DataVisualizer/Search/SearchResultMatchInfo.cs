@@ -2,7 +2,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
 
     public sealed class SearchResultMatchInfo
     {
@@ -34,9 +33,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         {
             get
             {
-                return matchedFields
-                    .SelectMany(mf => mf.matchedTerms)
-                    .Distinct(StringComparer.OrdinalIgnoreCase);
+                HashSet<string> seenTerms = new(StringComparer.OrdinalIgnoreCase);
+                foreach (MatchDetail matchDetail in matchedFields)
+                {
+                    foreach (string matchedTerm in matchDetail.matchedTerms)
+                    {
+                        if (seenTerms.Add(matchedTerm))
+                        {
+                            yield return matchedTerm;
+                        }
+                    }
+                }
             }
         }
 

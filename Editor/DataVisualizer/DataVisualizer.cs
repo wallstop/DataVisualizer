@@ -2638,7 +2638,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _searchPopover.style.maxHeight = StyleKeyword.Null;
                 foreach ((ScriptableObject resultObj, SearchResultMatchInfo resultInfo) in results)
                 {
-                    List<string> termsMatchingThisObject = resultInfo.AllMatchedTerms.ToList();
+                    List<string> termsMatchingThisObject = new(resultInfo.AllMatchedTerms);
                     VisualElement resultItem = new() { name = "result-item", userData = resultObj };
                     resultItem.AddToClassList(SearchResultItemClass);
                     resultItem.AddToClassList(StyleConstants.ClickableClass);
