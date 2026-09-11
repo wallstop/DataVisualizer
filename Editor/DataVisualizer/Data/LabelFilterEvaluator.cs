@@ -45,9 +45,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 ? andSatisfied || orSatisfied // at least one ACTIVE clause must match
                 : (!hasAnd || andSatisfied) && (!hasOr || orSatisfied); // every active clause
 
-            // Local, non-capturing helpers keep this allocation-free: Matches runs once per object
-            // during filtering, so a per-call HashSet or closure would add real GC pressure. Asset
-            // label sets are tiny, so linear membership over the provided list is cheap.
+            /*
+                Local, non-capturing helpers keep this allocation-free: Matches runs once per object
+                during filtering, so a per-call HashSet or closure would add real GC pressure. Asset
+                label sets are tiny, so linear membership over the provided list is cheap.
+            */
             static bool AllPresent(List<string> required, IReadOnlyList<string> labels)
             {
                 for (int i = 0; i < required.Count; i++)

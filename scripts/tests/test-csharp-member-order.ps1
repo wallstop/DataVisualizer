@@ -107,6 +107,82 @@ public sealed class BadGenericMethodName
     }
 }
 
+Invoke-TestCase 'Fails_OnConsecutiveOrdinaryLineComments' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'BadComment.cs' -Content @'
+public sealed class BadComment
+{
+    // First line of one explanation.
+    // Second line of the same explanation.
+    public void Run() { }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'consecutive ordinary line comments should fail'
+        Assert-True ($result.Output -match '#57') "failure should identify the comment rule: $($result.Output)"
+        Assert-True ($result.Output -match 'BadComment.cs:3') "failure should identify the first line: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_OnLeadingBomConsecutiveOrdinaryLineComments' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        $content = [char]0xFEFF + @'
+// First line of one explanation.
+// Second line of the same explanation.
+public sealed class BadBomComment { }
+'@
+        Write-FixtureFile -Root $root -RelativePath 'BadBomComment.cs' -Content $content
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'a BOM must not hide leading consecutive comments'
+        Assert-True ($result.Output -match 'BadBomComment.cs:1') "failure should identify the first line: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Passes_SupportedCommentForms' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'SupportedComments.cs' -Content @'
+// ReSharper disable FirstInspection
+// ReSharper disable SecondInspection
+public sealed class SupportedComments
+{
+    /// <summary>
+    /// XML documentation remains line-oriented.
+    /// </summary>
+    public int Value { get; set; }
+
+    public string Example { get; } = @"
+// Content inside a multi-line string is not a comment.
+// Consecutive content lines must remain valid.
+";
+
+    /*
+        Ordinary explanations spanning lines use an indented block.
+        Single-line comments remain valid too.
+    */
+    public void Run() { }
+
+    /*
+// Content inside a block comment is not a line-comment block.
+// Its leading markers must remain valid too.
+    */
+    // One standalone note is valid.
+    private void Stop() { }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 0) "supported comment forms should pass: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
 Invoke-TestCase 'Fails_WhenNestedTypeIsInterspersed' {
     $root = New-TempRoot -Prefix 'member-order-'
     try {

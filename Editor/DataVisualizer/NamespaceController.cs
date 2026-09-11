@@ -498,8 +498,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             string namespaceKey = GetNamespaceKey(_selectedType);
             SaveNamespaceAndTypeSelectionState(dataVisualizer, namespaceKey, _selectedType);
             dataVisualizer.LoadObjectTypesAsync(_selectedType);
-            // LoadObjectTypesAsync rebuilds the object view and selects the saved/first object
-            // synchronously from the priority batch, then streams the remaining objects in.
+            /*
+                LoadObjectTypesAsync rebuilds the object view and selects the saved/first object
+                synchronously from the priority batch, then streams the remaining objects in.
+            */
             dataVisualizer.BuildProcessorColumnView();
             dataVisualizer.UpdateCreateObjectButtonStyle();
             dataVisualizer.UpdateLabelAreaAndFilter();
