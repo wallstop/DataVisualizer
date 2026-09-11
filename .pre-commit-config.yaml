@@ -32,8 +32,8 @@ repos:
         entry: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
         language: system
         pass_filenames: false
-        files: (\.asmdef|\.ruleset)$|^scripts/lint-assembly-warnings\.ps1$
-        description: Requires one strict warnings-as-errors ruleset beside every assembly definition.
+        files: (\.asmdef|\.ruleset|\.rsp)$|^scripts/lint-assembly-warnings\.ps1$
+        description: Requires maximum compiler warnings and one strict ruleset beside every assembly definition.
       - id: lint-llm-instructions
         name: Lint the .llm agent harness
         entry: pwsh -NoProfile -File scripts/lint-llm-instructions.ps1
