@@ -105,6 +105,26 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private static readonly StringBuilder CachedStringBuilder = new();
 
+        private static readonly ReusableDisposalScope<(
+            DataVisualizer window,
+            HashSet<VisualElement> typeElements
+        )> TypeSearchCleanupScopes = new(FinalizeTypeSearch);
+
+        private static readonly ReusableDisposalScope<(
+            DataVisualizer window,
+            string filter
+        )> TypePopoverCleanupScopes = new(FinalizeTypePopover);
+
+        private static readonly ReusableDisposalScope<(
+            DataVisualizer window,
+            bool buildObjectsView
+        )> LabelFilterCleanupScopes = new(FinalizeLabelFilter);
+
+        private static readonly ReusableDisposalScope<(
+            DataVisualizer window,
+            VisualElement draggedElement
+        )> DragCleanupScopes = new(FinalizeDrag);
+
         /*
             Action buttons stop pointer-down here so clicking one doesn't retarget the ListView's
             selection (which otherwise drops the current selection when using go-up/go-down/etc.) or
@@ -2476,7 +2496,12 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             HashSet<VisualElement> typeElements =
                 _namespaceController._namespaceCache.Values.ToHashSet();
-            try
+            using (
+                ReusableDisposalLease<(
+                    DataVisualizer window,
+                    HashSet<VisualElement> typeElements
+                )> cleanup = TypeSearchCleanupScopes.Acquire((this, typeElements))
+            )
             {
                 if (
                     string.IsNullOrWhiteSpace(searchText)
@@ -2509,29 +2534,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                         ? DisplayStyle.Flex
                         : DisplayStyle.None;
                 }
-            }
-            finally
-            {
-                int hiddenNamespaces = 0;
-                foreach (
-                    VisualElement parent in _namespaceController
-                        ._namespaceCache.Values.Select(value => value.parent?.parent)
-                        .Where(parent => parent != null)
-                        .Distinct()
-                )
-                {
-                    bool allInvisible = parent
-                        .IterateChildrenRecursively()
-                        .Where(typeElements.Contains)
-                        .All(child => child.style.display == DisplayStyle.None);
-                    parent.style.display = allInvisible ? DisplayStyle.None : DisplayStyle.Flex;
-                    if (allInvisible)
-                    {
-                        hiddenNamespaces++;
-                    }
-                }
-
-                HiddenNamespaces = hiddenNamespaces;
             }
         }
 
@@ -4636,7 +4638,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            try
+            using (
+                ReusableDisposalLease<(DataVisualizer window, string filter)> cleanup =
+                    TypePopoverCleanupScopes.Acquire((this, filter))
+            )
             {
                 _currentTypePopoverItems.Clear();
                 _typePopoverHighlightIndex = -1;
@@ -4912,10 +4917,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     _typeAddPopover.style.maxHeight = StyleKeyword.Null;
                 }
-            }
-            finally
-            {
-                _lastTypeAddSearchTerm = filter;
             }
         }
 
@@ -5688,6 +5689,67 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             return 0 <= indexB ? 1 : string.Compare(keyA, keyB, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void FinalizeTypeSearch(
+            (DataVisualizer window, HashSet<VisualElement> typeElements) state
+        )
+        {
+            int hiddenNamespaces = 0;
+            foreach (
+                VisualElement parent in state
+                    .window._namespaceController._namespaceCache.Values.Select(value =>
+                        value.parent?.parent
+                    )
+                    .Where(parent => parent != null)
+                    .Distinct()
+            )
+            {
+                bool allInvisible = parent
+                    .IterateChildrenRecursively()
+                    .Where(state.typeElements.Contains)
+                    .All(child => child.style.display == DisplayStyle.None);
+                parent.style.display = allInvisible ? DisplayStyle.None : DisplayStyle.Flex;
+                if (allInvisible)
+                {
+                    hiddenNamespaces++;
+                }
+            }
+
+            state.window.HiddenNamespaces = hiddenNamespaces;
+        }
+
+        private static void FinalizeTypePopover((DataVisualizer window, string filter) state)
+        {
+            state.window._lastTypeAddSearchTerm = state.filter;
+        }
+
+        private static void FinalizeLabelFilter(
+            (DataVisualizer window, bool buildObjectsView) state
+        )
+        {
+            state.window.UpdateLabelsCollapsedClickableState();
+            state.window.UpdateAdvancedClickableState();
+            if (state.buildObjectsView)
+            {
+                state.window.BuildObjectsView();
+            }
+        }
+
+        private static void FinalizeDrag(
+            (DataVisualizer window, VisualElement draggedElement) state
+        )
+        {
+            state.draggedElement.UnregisterCallback<PointerMoveEvent>(
+                state.window.OnCapturedPointerMove
+            );
+            state.draggedElement.UnregisterCallback<PointerUpEvent>(
+                state.window.OnCapturedPointerUp
+            );
+            state.draggedElement.UnregisterCallback<PointerCaptureOutEvent>(
+                state.window.OnPointerCaptureOut
+            );
+            state.window.CancelDrag();
         }
 
         internal void UpdateLabelAreaAndFilter()
@@ -6711,7 +6773,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void ApplyLabelFilter(bool buildObjectsView = true)
         {
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            try
+            using (
+                ReusableDisposalLease<(DataVisualizer window, bool buildObjectsView)> cleanup =
+                    LabelFilterCleanupScopes.Acquire((this, buildObjectsView))
+            )
             {
                 if (config == null || _namespaceController.SelectedType == null)
                 {
@@ -6783,15 +6848,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                                 ? $"<b><color=yellow>{hidden}</color></b> objects hidden by label filter."
                                 : $"<b><color=red>{hidden}</color></b> objects hidden by label filter.";
                     }
-                }
-            }
-            finally
-            {
-                UpdateLabelsCollapsedClickableState();
-                UpdateAdvancedClickableState();
-                if (buildObjectsView)
-                {
-                    BuildObjectsView();
                 }
             }
         }
@@ -8794,6 +8850,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             DragType dropType = _activeDragType;
 
             VisualElement draggedElement = _draggedElement;
+            using ReusableDisposalLease<(
+                DataVisualizer window,
+                VisualElement draggedElement
+            )> cleanup = DragCleanupScopes.Acquire((this, draggedElement));
             try
             {
                 _draggedElement.ReleasePointer(pointerId);
@@ -8826,14 +8886,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             catch (Exception e)
             {
                 Debug.LogError($"Error during drop execution for {dropType}. {e}");
-            }
-            finally
-            {
-                draggedElement.UnregisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
-                draggedElement.UnregisterCallback<PointerUpEvent>(OnCapturedPointerUp);
-                draggedElement.UnregisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
-
-                CancelDrag();
             }
 
             evt.StopPropagation();

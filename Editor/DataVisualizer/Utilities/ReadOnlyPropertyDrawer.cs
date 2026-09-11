@@ -9,6 +9,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     [CustomPropertyDrawer(typeof(ReadOnlyAttribute))]
     internal sealed class DxReadOnlyPropertyDrawer : PropertyDrawer
     {
+        private static readonly ReusableDisposalScope<bool> GuiEnabledScopes = new(enabled =>
+            GUI.enabled = enabled
+        );
+
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
             return EditorGUI.GetPropertyHeight(property, label, true);
@@ -16,10 +20,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            bool previousGUIState = GUI.enabled;
+            using ReusableDisposalLease<bool> cleanup = GuiEnabledScopes.Acquire(GUI.enabled);
             GUI.enabled = false;
             _ = EditorGUI.PropertyField(position, property, label);
-            GUI.enabled = previousGUIState;
         }
     }
 #endif

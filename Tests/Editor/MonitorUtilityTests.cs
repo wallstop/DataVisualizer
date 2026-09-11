@@ -46,6 +46,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        private static void CloseLayoutTestWindows()
+        {
+            foreach (LayoutTestWindow window in Resources.FindObjectsOfTypeAll<LayoutTestWindow>())
+            {
+                window.Close();
+            }
+        }
+
         private static void RestoreBoolPreference(string key, bool existed, bool value)
         {
             if (existed)
@@ -269,8 +277,27 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 oversizedPreference
             );
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    CloseDataVisualizerWindows();
+                    RestoreBoolPreference(
+                        InitialSizeAppliedKey,
+                        hadInitialSizeApplied,
+                        initialSizeApplied
+                    );
+                    RestoreStringPreference(
+                        PreferredWindowSizeKey,
+                        hadPreferredSize,
+                        preferredSize
+                    );
+                    RestoreStringPreference(
+                        TemporaryWindowClampSizeKey,
+                        hadTemporaryClampSize,
+                        temporaryClampSize
+                    );
+                });
                 CloseDataVisualizerWindows();
                 yield return null;
                 EditorPrefs.SetBool(InitialSizeAppliedKey, false);
@@ -355,20 +382,57 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     )
                 );
             }
-            finally
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldKeepRestoredWindowDockedWhenInitialPlacementPreferenceIsCleared()
+        {
+            bool hadInitialSizeApplied = EditorPrefs.HasKey(InitialSizeAppliedKey);
+            bool initialSizeApplied = EditorPrefs.GetBool(InitialSizeAppliedKey);
+            bool hadTemporaryClampSize = EditorPrefs.HasKey(TemporaryWindowClampSizeKey);
+            string temporaryClampSize = EditorPrefs.GetString(TemporaryWindowClampSizeKey);
+
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    CloseDataVisualizerWindows();
+                    CloseLayoutTestWindows();
+                    RestoreBoolPreference(
+                        InitialSizeAppliedKey,
+                        hadInitialSizeApplied,
+                        initialSizeApplied
+                    );
+                    RestoreStringPreference(
+                        TemporaryWindowClampSizeKey,
+                        hadTemporaryClampSize,
+                        temporaryClampSize
+                    );
+                });
                 CloseDataVisualizerWindows();
-                RestoreBoolPreference(
-                    InitialSizeAppliedKey,
-                    hadInitialSizeApplied,
-                    initialSizeApplied
+                CloseLayoutTestWindows();
+                yield return null;
+
+                EditorWindow.GetWindow<LayoutTestWindow>("Data Visualizer Test Anchor");
+                DataVisualizerWindow window = EditorWindow.GetWindow<DataVisualizerWindow>(
+                    "Data Visualizer",
+                    false,
+                    typeof(LayoutTestWindow)
                 );
-                RestoreStringPreference(PreferredWindowSizeKey, hadPreferredSize, preferredSize);
-                RestoreStringPreference(
-                    TemporaryWindowClampSizeKey,
-                    hadTemporaryClampSize,
-                    temporaryClampSize
-                );
+                yield return null;
+
+                Assert.That(window.docked, Is.True, "The test window must be genuinely docked.");
+                EditorPrefs.SetBool(InitialSizeAppliedKey, false);
+
+                DataVisualizerWindow.ShowWindow();
+                yield return null;
+
+                DataVisualizerWindow[] windows =
+                    Resources.FindObjectsOfTypeAll<DataVisualizerWindow>();
+                Assert.That(windows, Has.Length.EqualTo(1));
+                Assert.That(windows[0], Is.SameAs(window));
+                Assert.That(window.docked, Is.True);
+                Assert.That(EditorPrefs.GetBool(InitialSizeAppliedKey), Is.False);
             }
         }
 

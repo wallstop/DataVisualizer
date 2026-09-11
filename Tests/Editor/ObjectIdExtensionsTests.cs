@@ -11,8 +11,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             ScriptableObject first = ScriptableObject.CreateInstance<ScriptableObject>();
             ScriptableObject second = ScriptableObject.CreateInstance<ScriptableObject>();
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    Object.DestroyImmediate(first);
+                    Object.DestroyImmediate(second);
+                });
                 string firstId = first.GetObjectIdString();
                 string secondId = second.GetObjectIdString();
 
@@ -39,11 +44,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     "The legacy InstanceID branch must produce a numeric (int) id string."
                 );
 #endif
-            }
-            finally
-            {
-                Object.DestroyImmediate(first);
-                Object.DestroyImmediate(second);
             }
         }
     }
