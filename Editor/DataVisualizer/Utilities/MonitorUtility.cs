@@ -16,11 +16,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public static bool TryGetEditorPlacementRect(out Rect rect)
         {
-            // EditorGUIUtility.GetMainWindowPosition and EditorWindow.position both use Unity
-            // Editor screen-space points: x increases right, y increases down, and coordinates
-            // may be negative on secondary displays. Keep this boundary entirely in Unity's
-            // coordinate space: Screen.currentResolution is expressed in display pixels and must
-            // not be used as an unconverted fallback.
+            /*
+                EditorGUIUtility.GetMainWindowPosition and EditorWindow.position both use Unity
+                Editor screen-space points: x increases right, y increases down, and coordinates
+                may be negative on secondary displays. Keep this boundary entirely in Unity's
+                coordinate space: Screen.currentResolution is expressed in display pixels and must
+                not be used as an unconverted fallback.
+            */
             return TryResolveEditorPlacementRect(EditorGUIUtility.GetMainWindowPosition, out rect);
         }
 
@@ -153,8 +155,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             out Rect rect
         )
         {
-            // Retained as a general source-compatible resolver. Initial editor placement uses
-            // TryResolveEditorPlacementRect so it cannot cross coordinate spaces via a fallback.
+            /*
+                Retained as a general source-compatible resolver. Initial editor placement uses
+                TryResolveEditorPlacementRect so it cannot cross coordinate spaces via a fallback.
+            */
             if (TryGetUsableRect(preferredRectProvider, out Rect preferredRect))
             {
                 rect = preferredRect;

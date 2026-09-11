@@ -392,8 +392,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
             window.WriteWindowSize(PrefsPreferredWindowSizeKey, preferredSize);
             window.BeginPackageWindowPlacement(centeredRect.size, preferredSize);
-            // centeredRect and EditorWindow.position are both Unity Editor screen-space points.
-            // Unity owns the pixels-per-point conversion for the destination view.
+            /*
+                centeredRect and EditorWindow.position are both Unity Editor screen-space points.
+                Unity owns the pixels-per-point conversion for the destination view.
+            */
             window.position = centeredRect;
             window.SchedulePackageWindowPlacementCompletion();
             EditorPrefs.SetBool(PrefsInitialSizeAppliedKey, true);
