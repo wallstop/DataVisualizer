@@ -136,8 +136,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             SelectionPersistenceGuidData asset =
                 ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(folderPath);
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(asset, assetPath);
                 AssetDatabase.SaveAssets();
 
@@ -159,11 +164,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     )
                 );
             }
-            finally
-            {
-                AssetDatabase.DeleteAsset(folderPath);
-                AssetDatabase.Refresh();
-            }
         }
 
         [Test]
@@ -178,8 +178,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             SelectionPersistenceGuidData asset =
                 ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(folderPath);
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(asset, assetPath);
                 AssetDatabase.SaveAssets();
 
@@ -196,11 +201,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 CollectionAssert.AreEqual(new[] { assetGuid }, includedGuids);
                 Assert.AreEqual(assetGuid, normalizedSavedObjectGuid);
             }
-            finally
-            {
-                AssetDatabase.DeleteAsset(folderPath);
-                AssetDatabase.Refresh();
-            }
         }
 
         [Test]
@@ -215,8 +215,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             SelectionPersistenceGuidData asset =
                 ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(folderPath);
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(asset, assetPath);
                 AssetDatabase.SaveAssets();
 
@@ -233,11 +238,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 CollectionAssert.AreEqual(new[] { assetGuid }, includedGuids);
                 Assert.AreEqual(assetGuid, normalizedSavedObjectGuid);
             }
-            finally
-            {
-                AssetDatabase.DeleteAsset(folderPath);
-                AssetDatabase.Refresh();
-            }
         }
 
         [Test]
@@ -252,8 +252,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             SelectionPersistenceGuidData asset =
                 ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(folderPath);
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(asset, assetPath);
                 AssetDatabase.SaveAssets();
 
@@ -270,11 +275,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 CollectionAssert.AreEqual(new[] { savedGuid }, includedGuids);
                 Assert.AreEqual(savedGuid, normalizedSavedObjectGuid);
             }
-            finally
-            {
-                AssetDatabase.DeleteAsset(folderPath);
-                AssetDatabase.Refresh();
-            }
         }
 
         [Test]
@@ -289,8 +289,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             OtherSelectionPersistenceGuidData asset =
                 ScriptableObject.CreateInstance<OtherSelectionPersistenceGuidData>();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(folderPath);
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(asset, assetPath);
                 AssetDatabase.SaveAssets();
 
@@ -306,11 +311,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 CollectionAssert.AreEqual(new[] { savedGuid }, includedGuids);
                 Assert.IsNull(normalizedSavedObjectGuid);
-            }
-            finally
-            {
-                AssetDatabase.DeleteAsset(folderPath);
-                AssetDatabase.Refresh();
             }
         }
 

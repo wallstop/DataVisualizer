@@ -277,8 +277,27 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 oversizedPreference
             );
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    CloseDataVisualizerWindows();
+                    RestoreBoolPreference(
+                        InitialSizeAppliedKey,
+                        hadInitialSizeApplied,
+                        initialSizeApplied
+                    );
+                    RestoreStringPreference(
+                        PreferredWindowSizeKey,
+                        hadPreferredSize,
+                        preferredSize
+                    );
+                    RestoreStringPreference(
+                        TemporaryWindowClampSizeKey,
+                        hadTemporaryClampSize,
+                        temporaryClampSize
+                    );
+                });
                 CloseDataVisualizerWindows();
                 yield return null;
                 EditorPrefs.SetBool(InitialSizeAppliedKey, false);
@@ -363,21 +382,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     )
                 );
             }
-            finally
-            {
-                CloseDataVisualizerWindows();
-                RestoreBoolPreference(
-                    InitialSizeAppliedKey,
-                    hadInitialSizeApplied,
-                    initialSizeApplied
-                );
-                RestoreStringPreference(PreferredWindowSizeKey, hadPreferredSize, preferredSize);
-                RestoreStringPreference(
-                    TemporaryWindowClampSizeKey,
-                    hadTemporaryClampSize,
-                    temporaryClampSize
-                );
-            }
         }
 
         [UnityTest]
@@ -386,8 +390,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             bool hadInitialSizeApplied = EditorPrefs.HasKey(InitialSizeAppliedKey);
             bool initialSizeApplied = EditorPrefs.GetBool(InitialSizeAppliedKey);
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    CloseDataVisualizerWindows();
+                    CloseLayoutTestWindows();
+                    RestoreBoolPreference(
+                        InitialSizeAppliedKey,
+                        hadInitialSizeApplied,
+                        initialSizeApplied
+                    );
+                });
                 CloseDataVisualizerWindows();
                 CloseLayoutTestWindows();
                 yield return null;
@@ -412,16 +426,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.That(windows[0], Is.SameAs(window));
                 Assert.That(window.docked, Is.True);
                 Assert.That(EditorPrefs.GetBool(InitialSizeAppliedKey), Is.False);
-            }
-            finally
-            {
-                CloseDataVisualizerWindows();
-                CloseLayoutTestWindows();
-                RestoreBoolPreference(
-                    InitialSizeAppliedKey,
-                    hadInitialSizeApplied,
-                    initialSizeApplied
-                );
             }
         }
 

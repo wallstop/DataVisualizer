@@ -125,8 +125,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             StyleSheet styleSheet = LoadStyleSheet();
             Assert.NotNull(styleSheet);
             LayoutTestWindow window = CreateWindow(styleSheet, 360, 160);
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(window.Close);
                 TextField[] fields = SearchFieldClassNames
                     .Select(className =>
                     {
@@ -162,10 +163,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     );
                 }
             }
-            finally
-            {
-                window.Close();
-            }
         }
 
         [UnityTest]
@@ -174,8 +171,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             StyleSheet styleSheet = LoadStyleSheet();
             Assert.NotNull(styleSheet);
             LayoutTestWindow window = CreateWindow(styleSheet, 360, 180);
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(window.Close);
                 VisualElement container = new()
                 {
                     name = "type-add-list-content",
@@ -234,10 +232,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     firstRow.resolvedStyle.height,
                     Is.EqualTo(unfilteredHeight).Within(LayoutTolerance)
                 );
-            }
-            finally
-            {
-                window.Close();
             }
         }
     }

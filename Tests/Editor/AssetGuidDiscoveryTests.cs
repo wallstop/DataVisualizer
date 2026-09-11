@@ -165,8 +165,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             AssetGuidTypeIndex isolatedIndex = new();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(isolatedIndex.Cancel);
                 Assert.IsFalse(isolatedIndex.IsComplete);
                 CollectionAssert.IsEmpty(
                     isolatedIndex.GetKnownGuids(typeof(EditorOnlyCreationData))
@@ -187,10 +188,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 CollectionAssert.Contains(isolatedGuids, _neverRegisteredGuid);
                 Assert.IsTrue(AssetGuidTypeIndex.Shared.IsComplete);
             }
-            finally
-            {
-                isolatedIndex.Cancel();
-            }
         }
 
         [Test]
@@ -209,8 +206,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             EditorOnlyCreationData asset =
                 ScriptableObject.CreateInstance<EditorOnlyCreationData>();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(rootFolder);
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(asset, assetPath);
                 AssetDatabase.SaveAssets();
 
@@ -238,11 +240,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     typeof(EditorOnlyCreationData),
                     AssetDatabase.GetMainAssetTypeAtPath(AssetDatabase.GUIDToAssetPath(assetGuid))
                 );
-            }
-            finally
-            {
-                AssetDatabase.DeleteAsset(rootFolder);
-                AssetDatabase.Refresh();
             }
         }
 
@@ -287,8 +284,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             OtherEditorOnlyCreationData asset =
                 ScriptableObject.CreateInstance<OtherEditorOnlyCreationData>();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(rootFolder);
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(asset, assetPath);
                 AssetDatabase.SaveAssets();
 
@@ -303,11 +305,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 Assert.IsEmpty(mergedGuids);
             }
-            finally
-            {
-                AssetDatabase.DeleteAsset(rootFolder);
-                AssetDatabase.Refresh();
-            }
         }
 
         [Test]
@@ -321,8 +318,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             EditorOnlyCreationData asset =
                 ScriptableObject.CreateInstance<EditorOnlyCreationData>();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(rootFolder);
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(asset, assetPath);
                 AssetDatabase.SaveAssets();
 
@@ -345,11 +347,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     )
                 );
             }
-            finally
-            {
-                AssetDatabase.DeleteAsset(rootFolder);
-                AssetDatabase.Refresh();
-            }
         }
 
         [Test]
@@ -363,8 +360,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             DerivedEditorOnlyCreationData asset =
                 ScriptableObject.CreateInstance<DerivedEditorOnlyCreationData>();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(rootFolder);
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(asset, assetPath);
                 AssetDatabase.SaveAssets();
 
@@ -377,11 +379,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     )
                 );
                 Assert.IsNull(resolvedPath);
-            }
-            finally
-            {
-                AssetDatabase.DeleteAsset(rootFolder);
-                AssetDatabase.Refresh();
             }
         }
 
@@ -398,8 +395,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             EditorOnlyCreationSubasset subasset =
                 ScriptableObject.CreateInstance<EditorOnlyCreationSubasset>();
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(rootFolder);
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(mainAsset, assetPath);
                 AssetDatabase.AddObjectToAsset(subasset, mainAsset);
                 AssetDatabase.SaveAssets();
@@ -413,11 +415,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     )
                 );
                 Assert.IsNull(resolvedPath);
-            }
-            finally
-            {
-                AssetDatabase.DeleteAsset(rootFolder);
-                AssetDatabase.Refresh();
             }
         }
     }

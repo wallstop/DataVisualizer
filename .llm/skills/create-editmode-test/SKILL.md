@@ -22,7 +22,7 @@ metadata:
 
 ## Naming
 
-Methods are `Should_<Expectation>_When_<Condition>`; classes end in `Tests` and are
+Methods are `ShouldExpectationWhenCondition`; classes end in `Tests` and are
 grouped by feature (`NamespaceOrderingTests`, `SelectionPersistenceTests`,
 `LabelFilterEvaluatorTests`).
 
@@ -35,6 +35,21 @@ grouped by feature (`NamespaceOrderingTests`, `SelectionPersistenceTests`,
 - One assertion cluster per behavior; cover null/empty inputs explicitly.
 - Use indented `/* ... */` blocks for multi-line test explanations. Standalone
   one-line notes may use `//`; API documentation continues to use `///`.
+
+## Cleanup Scopes
+
+- Use `TestCleanupScope` with `using` for temporary assets, Unity objects, editor
+  windows, preferences, subscriptions, and isolated service state. Do not add a
+  hand-written cleanup `try/finally`.
+- Call `Defer` immediately after acquiring the resource or before the first mutation.
+  Keep dependent cleanup steps in one callback when their order matters; separate
+  callbacks execute in reverse registration order.
+- A `using` scope may span `yield return` in a `[UnityTest]`; the generated iterator
+  still disposes it when the test completes or fails.
+- `TestCleanupScope.Dispose()` reports cleanup exceptions through Unity logging and
+  continues later cleanup actions, so one failure cannot strand the remaining state.
+- Exercise production disposal helpers directly for default leases, copied/double
+  disposal, slot reuse, reentrancy, and throwing cleanup.
 
 See the full template: [EditModeTestTemplate.cs](../../code-samples/EditModeTestTemplate.cs).
 

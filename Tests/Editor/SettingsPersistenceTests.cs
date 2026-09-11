@@ -35,8 +35,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             DataVisualizerSettings settings =
                 ScriptableObject.CreateInstance<DataVisualizerSettings>();
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
                 settings.selectActiveObject = false;
                 EditorUtility.ClearDirty(settings);
 
@@ -45,10 +46,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.IsTrue(settings.selectActiveObject);
                 Assert.IsTrue(EditorUtility.IsDirty(settings));
             }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(settings);
-            }
         }
 
         [Test]
@@ -56,18 +53,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             DataVisualizerSettings settings =
                 ScriptableObject.CreateInstance<DataVisualizerSettings>();
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
                 settings.selectActiveObject = true;
                 EditorUtility.ClearDirty(settings);
 
                 Assert.IsFalse(settings.SetSelectActiveObject(true));
                 Assert.IsTrue(settings.selectActiveObject);
                 Assert.IsFalse(EditorUtility.IsDirty(settings));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(settings);
             }
         }
 
@@ -76,18 +70,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             DataVisualizerSettings settings =
                 ScriptableObject.CreateInstance<DataVisualizerSettings>();
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
                 settings.selectActiveObject = false;
                 EditorUtility.ClearDirty(settings);
 
                 Assert.IsTrue(DataVisualizer.ApplySelectActiveObjectPreference(settings, true));
                 Assert.IsTrue(settings.selectActiveObject);
                 Assert.IsTrue(EditorUtility.IsDirty(settings));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(settings);
             }
         }
 
@@ -96,8 +87,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             DataVisualizerSettings settings =
                 ScriptableObject.CreateInstance<DataVisualizerSettings>();
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
                 const string namespaceKey = "Gameplay";
 
                 EditorUtility.ClearDirty(settings);
@@ -139,10 +131,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     "removing absent state is unchanged"
                 );
                 Assert.IsFalse(EditorUtility.IsDirty(settings));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(settings);
             }
         }
 

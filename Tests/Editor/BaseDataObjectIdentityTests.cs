@@ -14,8 +14,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             TestDataObject dataObject = ScriptableObject.CreateInstance<TestDataObject>();
             string assetPath = AssetDatabase.GenerateUniqueAssetPath(AssetPathPrefix + ".asset");
 
-            try
+            using (TestCleanupScope cleanup = new())
             {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(assetPath);
+                    if (dataObject != null && !AssetDatabase.Contains(dataObject))
+                    {
+                        Object.DestroyImmediate(dataObject);
+                    }
+                    AssetDatabase.Refresh();
+                });
                 AssetDatabase.CreateAsset(dataObject, assetPath);
                 AssetDatabase.SaveAssets();
                 string canonicalGuid = AssetDatabase.AssetPathToGUID(assetPath);
@@ -38,15 +47,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     canonicalGuid,
                     reloadedSerializedObject.FindProperty("_assetGuid").stringValue
                 );
-            }
-            finally
-            {
-                AssetDatabase.DeleteAsset(assetPath);
-                if (dataObject != null && !AssetDatabase.Contains(dataObject))
-                {
-                    Object.DestroyImmediate(dataObject);
-                }
-                AssetDatabase.Refresh();
             }
         }
     }

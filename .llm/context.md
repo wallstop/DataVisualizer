@@ -152,6 +152,12 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     platform documentation, represent pointer-sized native values with pointer-sized
     managed types, and document every supported platform branch that was not executed
     during validation.
+31. Represent reversible state, resource cleanup, and mandatory exit work with a named
+    `IDisposable` scope consumed directly by `using`, not a hand-written `try/finally`.
+    Register cleanup before the first side effect. Production hot paths prefer copy-safe
+    readonly struct leases backed by reusable owner storage; leases are default-safe and
+    idempotent, and `Dispose()` never throws. Retain `try/catch` where the purpose is
+    exception isolation or translation rather than lifetime management.
 
 ### Skills Discipline
 
