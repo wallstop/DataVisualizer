@@ -791,7 +791,7 @@ function multilineLineCommentViolations(text) {
   const violations = [];
   const comments = new Map();
   let line = 1;
-  let lineStart = 0;
+  let lineStart = text.charCodeAt(0) === 0xfeff ? 1 : 0;
 
   maskNoise(text, (commentStart) => {
     while (lineStart <= commentStart) {

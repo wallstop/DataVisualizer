@@ -127,6 +127,23 @@ public sealed class BadComment
     }
 }
 
+Invoke-TestCase 'Fails_OnLeadingBomConsecutiveOrdinaryLineComments' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        $content = [char]0xFEFF + @'
+// First line of one explanation.
+// Second line of the same explanation.
+public sealed class BadBomComment { }
+'@
+        Write-FixtureFile -Root $root -RelativePath 'BadBomComment.cs' -Content $content
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'a BOM must not hide leading consecutive comments'
+        Assert-True ($result.Output -match 'BadBomComment.cs:1') "failure should identify the first line: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
 Invoke-TestCase 'Passes_SupportedCommentForms' {
     $root = New-TempRoot -Prefix 'member-order-'
     try {
