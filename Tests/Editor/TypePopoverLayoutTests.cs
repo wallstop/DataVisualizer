@@ -22,6 +22,103 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "type-search-field",
         };
 
+        private static Label CreateTypeRow(string text)
+        {
+            Label row = new(text);
+            row.AddToClassList("type-selection-list-item");
+            return row;
+        }
+
+        private static LayoutTestWindow CreateWindow(
+            StyleSheet styleSheet,
+            float width,
+            float height
+        )
+        {
+            LayoutTestWindow window = EditorWindow.CreateWindow<LayoutTestWindow>();
+            window.titleContent = new GUIContent(nameof(TypePopoverLayoutTests));
+            window.position = new Rect(100, 100, width, height);
+            window.rootVisualElement.styleSheets.Add(styleSheet);
+            window.rootVisualElement.style.width = width;
+            window.rootVisualElement.style.height = height;
+            window.ShowUtility();
+            return window;
+        }
+
+        private static StyleSheet LoadStyleSheet()
+        {
+            StyleSheet styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                DataVisualizerStyleSheetPath
+            );
+            if (styleSheet != null)
+            {
+                return styleSheet;
+            }
+
+            return AssetDatabase
+                .FindAssets("DataVisualizerStyles t:StyleSheet")
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Where(path =>
+                    path.EndsWith(
+                        "/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss",
+                        System.StringComparison.Ordinal
+                    )
+                )
+                .Select(AssetDatabase.LoadAssetAtPath<StyleSheet>)
+                .FirstOrDefault(sheet => sheet != null);
+        }
+
+        private static IEnumerator WaitForResolvedHeights(params VisualElement[] elements)
+        {
+            float[] previousHeights = null;
+            for (int frame = 0; frame < 30; frame++)
+            {
+                yield return null;
+
+                bool allReady = elements.All(element =>
+                    element?.panel != null && IsPositiveFinite(element.resolvedStyle.height)
+                );
+                if (!allReady)
+                {
+                    previousHeights = null;
+                    continue;
+                }
+
+                float[] currentHeights = elements
+                    .Select(element => element.resolvedStyle.height)
+                    .ToArray();
+                if (
+                    previousHeights != null
+                    && currentHeights
+                        .Zip(
+                            previousHeights,
+                            (current, previous) => Mathf.Abs(current - previous) <= LayoutTolerance
+                        )
+                        .All(stable => stable)
+                )
+                {
+                    yield break;
+                }
+
+                previousHeights = currentHeights;
+            }
+
+            string heightSummary = string.Join(
+                ", ",
+                elements.Select(element =>
+                    element == null
+                        ? "<null>"
+                        : $"{element.name}:{element.resolvedStyle.height} panel={element.panel != null}"
+                )
+            );
+            Assert.Fail($"Timed out waiting for stable positive layout heights: {heightSummary}");
+        }
+
+        private static bool IsPositiveFinite(float value)
+        {
+            return 0 < value && !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
         [UnityTest]
         public IEnumerator Should_KeepSearchFieldHeight_When_PlaceholderChangesToTypedText()
         {
@@ -142,103 +239,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 window.Close();
             }
-        }
-
-        private static Label CreateTypeRow(string text)
-        {
-            Label row = new(text);
-            row.AddToClassList("type-selection-list-item");
-            return row;
-        }
-
-        private static LayoutTestWindow CreateWindow(
-            StyleSheet styleSheet,
-            float width,
-            float height
-        )
-        {
-            LayoutTestWindow window = EditorWindow.CreateWindow<LayoutTestWindow>();
-            window.titleContent = new GUIContent(nameof(TypePopoverLayoutTests));
-            window.position = new Rect(100, 100, width, height);
-            window.rootVisualElement.styleSheets.Add(styleSheet);
-            window.rootVisualElement.style.width = width;
-            window.rootVisualElement.style.height = height;
-            window.ShowUtility();
-            return window;
-        }
-
-        private static StyleSheet LoadStyleSheet()
-        {
-            StyleSheet styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                DataVisualizerStyleSheetPath
-            );
-            if (styleSheet != null)
-            {
-                return styleSheet;
-            }
-
-            return AssetDatabase
-                .FindAssets("DataVisualizerStyles t:StyleSheet")
-                .Select(AssetDatabase.GUIDToAssetPath)
-                .Where(path =>
-                    path.EndsWith(
-                        "/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss",
-                        System.StringComparison.Ordinal
-                    )
-                )
-                .Select(AssetDatabase.LoadAssetAtPath<StyleSheet>)
-                .FirstOrDefault(sheet => sheet != null);
-        }
-
-        private static IEnumerator WaitForResolvedHeights(params VisualElement[] elements)
-        {
-            float[] previousHeights = null;
-            for (int frame = 0; frame < 30; frame++)
-            {
-                yield return null;
-
-                bool allReady = elements.All(element =>
-                    element?.panel != null && IsPositiveFinite(element.resolvedStyle.height)
-                );
-                if (!allReady)
-                {
-                    previousHeights = null;
-                    continue;
-                }
-
-                float[] currentHeights = elements
-                    .Select(element => element.resolvedStyle.height)
-                    .ToArray();
-                if (
-                    previousHeights != null
-                    && currentHeights
-                        .Zip(
-                            previousHeights,
-                            (current, previous) => Mathf.Abs(current - previous) <= LayoutTolerance
-                        )
-                        .All(stable => stable)
-                )
-                {
-                    yield break;
-                }
-
-                previousHeights = currentHeights;
-            }
-
-            string heightSummary = string.Join(
-                ", ",
-                elements.Select(element =>
-                    element == null
-                        ? "<null>"
-                        : $"{element.name}:{element.resolvedStyle.height} panel={element.panel != null}"
-                )
-            );
-            Assert.Fail($"Timed out waiting for stable positive layout heights: {heightSummary}");
-        }
-
-        private static bool IsPositiveFinite(float value)
-        {
-            return 0 < value && !float.IsNaN(value) && !float.IsInfinity(value);
         }
     }
 }

@@ -52,31 +52,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         // --- Windows P/Invoke Definitions and Helper ---
 #if UNITY_EDITOR_WIN
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT
-        {
-            public int X;
-            public int Y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private struct MONITORINFO
-        {
-            public uint cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
-            public uint dwFlags;
-        }
-
         private const uint MONITOR_DEFAULTTOPRIMARY = 0x00000001;
 
         [DllImport("user32.dll")]
@@ -161,28 +136,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             IntPtr receiver,
             IntPtr selector
         );
-
-        // Define the CGRect struct matching macOS's definition (usually contains CGPoint origin, CGSize size)
-        [StructLayout(LayoutKind.Sequential)]
-        private struct CGPoint
-        {
-            public double x;
-            public double y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct CGSize
-        {
-            public double width;
-            public double height;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct CGRect
-        {
-            public CGPoint origin;
-            public CGSize size;
-        }
 
         private static Rect GetPrimaryMonitorRect_Mac_PInvoke() // Renamed function
         {

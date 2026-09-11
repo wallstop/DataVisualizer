@@ -15,6 +15,10 @@ on:
       - ".github/workflows/llm-lint.yml"
       - ".pre-commit-config.yaml"
       - ".devcontainer/**"
+      - "Editor/**/*.cs"
+      - "Runtime/**/*.cs"
+      - "Tests/**/*.cs"
+      - "Generator~/**/*.cs"
   pull_request:
     paths:
       - ".llm/**"
@@ -28,6 +32,10 @@ on:
       - ".github/workflows/llm-lint.yml"
       - ".pre-commit-config.yaml"
       - ".devcontainer/**"
+      - "Editor/**/*.cs"
+      - "Runtime/**/*.cs"
+      - "Tests/**/*.cs"
+      - "Generator~/**/*.cs"
 
 concurrency:
   group: llm-lint-${{ github.ref }}
@@ -55,6 +63,9 @@ jobs:
 
       - name: Lint LLM instructions
         run: pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput
+
+      - name: Enforce C# member ordering
+        run: node scripts/lint-csharp-member-order.js --verbose
 
       - name: Run harness self-tests
         run: pwsh -NoProfile -File scripts/tests/run-all.ps1

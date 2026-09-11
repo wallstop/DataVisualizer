@@ -18,6 +18,28 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static string _firstCollisionGuid;
         private static string _secondCollisionGuid;
 
+        private static void EnsureFolderExists(string folder)
+        {
+            string[] parts = folder.Split('/');
+            string current = parts[0];
+            for (int index = 1; index < parts.Length; index++)
+            {
+                string next = current + "/" + parts[index];
+                if (!AssetDatabase.IsValidFolder(next))
+                {
+                    AssetDatabase.CreateFolder(current, parts[index]);
+                }
+
+                current = next;
+            }
+        }
+
+        private static string CreateAsset(ScriptableObject asset, string assetPath)
+        {
+            AssetDatabase.CreateAsset(asset, assetPath);
+            return AssetDatabase.AssetPathToGUID(assetPath);
+        }
+
         [OneTimeSetUp]
         public void BuildProjectAssetTypeIndex()
         {
@@ -397,28 +419,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.DeleteAsset(rootFolder);
                 AssetDatabase.Refresh();
             }
-        }
-
-        private static void EnsureFolderExists(string folder)
-        {
-            string[] parts = folder.Split('/');
-            string current = parts[0];
-            for (int index = 1; index < parts.Length; index++)
-            {
-                string next = current + "/" + parts[index];
-                if (!AssetDatabase.IsValidFolder(next))
-                {
-                    AssetDatabase.CreateFolder(current, parts[index]);
-                }
-
-                current = next;
-            }
-        }
-
-        private static string CreateAsset(ScriptableObject asset, string assetPath)
-        {
-            AssetDatabase.CreateAsset(asset, assetPath);
-            return AssetDatabase.AssetPathToGUID(assetPath);
         }
     }
 }

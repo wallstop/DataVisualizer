@@ -22,18 +22,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         public string DataFolderPath => _dataFolderPath;
 
         [Tooltip(
-            "Path relative to the project root (e.g., Assets/Data) where DataObject assets might be located or created."
-        )]
-        [SerializeField]
-        internal string _dataFolderPath = DefaultDataFolderPath;
-
-        [Tooltip(
             "If true, window state (selection, order, collapse) is saved in a special ScriptableObject. If false, state is saved within this settings asset file."
         )]
         public bool persistStateInSettingsAsset;
 
         [Tooltip("If true, when selecting an Object, it will be selected in the Inspector.")]
         public bool selectActiveObject;
+
+        [Tooltip(
+            "Path relative to the project root (e.g., Assets/Data) where DataObject assets might be located or created."
+        )]
+        [SerializeField]
+        internal string _dataFolderPath = DefaultDataFolderPath;
 
         [Header("Saved State (Internal - Use only if EditorPrefs is disabled)")]
         [SerializeField]
@@ -77,19 +77,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         [SerializeField]
         [ReadOnly]
         internal List<ProcessorState> processorStates = new();
-
-        private void OnValidate()
-        {
-            if (Application.isEditor && !Application.isPlaying)
-            {
-                if (string.IsNullOrWhiteSpace(_dataFolderPath))
-                {
-                    _dataFolderPath = DefaultDataFolderPath;
-                }
-
-                _dataFolderPath = _dataFolderPath.SanitizePath();
-            }
-        }
 
         public void MarkDirty()
         {
@@ -141,6 +128,38 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 userState.processorStates?.Select(state => state.Clone()).ToList()
                 ?? new List<ProcessorState>();
             MarkDirty();
+        }
+
+        public bool SetNamespaceCollapsed(string namespaceKey, bool isCollapsed)
+        {
+            if (string.IsNullOrWhiteSpace(namespaceKey))
+            {
+                return false;
+            }
+
+            namespaceCollapseStates ??= new List<NamespaceCollapseState>();
+            bool changed = NamespaceCollapseState.SetCollapsed(
+                namespaceCollapseStates,
+                namespaceKey,
+                isCollapsed
+            );
+            if (changed)
+            {
+                MarkDirty();
+            }
+
+            return changed;
+        }
+
+        public bool RemoveNamespaceCollapseState(string namespaceKey)
+        {
+            bool changed = NamespaceCollapseState.Remove(namespaceCollapseStates, namespaceKey);
+            if (changed)
+            {
+                MarkDirty();
+            }
+
+            return changed;
         }
 
         internal List<string> GetOrCreateObjectOrderList(string typeFullName)
@@ -243,38 +262,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return entry != null;
         }
 
-        public bool SetNamespaceCollapsed(string namespaceKey, bool isCollapsed)
-        {
-            if (string.IsNullOrWhiteSpace(namespaceKey))
-            {
-                return false;
-            }
-
-            namespaceCollapseStates ??= new List<NamespaceCollapseState>();
-            bool changed = NamespaceCollapseState.SetCollapsed(
-                namespaceCollapseStates,
-                namespaceKey,
-                isCollapsed
-            );
-            if (changed)
-            {
-                MarkDirty();
-            }
-
-            return changed;
-        }
-
-        public bool RemoveNamespaceCollapseState(string namespaceKey)
-        {
-            bool changed = NamespaceCollapseState.Remove(namespaceCollapseStates, namespaceKey);
-            if (changed)
-            {
-                MarkDirty();
-            }
-
-            return changed;
-        }
-
         internal NamespaceCollapseState GetOrCreateCollapseState(string namespaceKey)
         {
             NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
@@ -288,6 +275,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             entry = new NamespaceCollapseState { namespaceKey = namespaceKey, isCollapsed = false }; // Default expanded
             namespaceCollapseStates.Add(entry);
             return entry;
+        }
+
+        private void OnValidate()
+        {
+            if (Application.isEditor && !Application.isPlaying)
+            {
+                if (string.IsNullOrWhiteSpace(_dataFolderPath))
+                {
+                    _dataFolderPath = DefaultDataFolderPath;
+                }
+
+                _dataFolderPath = _dataFolderPath.SanitizePath();
+            }
         }
     }
 }

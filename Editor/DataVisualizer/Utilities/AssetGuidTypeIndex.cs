@@ -13,6 +13,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private const string ProjectAssetsPrefix = "Assets/";
         private const string AssetExtension = ".asset";
 
+        public event Action IndexCompleted;
+
+        public static AssetGuidTypeIndex Shared { get; } = new();
+
+        public bool IsComplete => _state == AssetGuidTypeIndexState.Complete;
+
         private readonly Queue<string> _pendingAssetPaths = new();
         private readonly Dictionary<string, (Type Type, string Guid)> _assetsByPath = new(
             StringComparer.OrdinalIgnoreCase
@@ -21,15 +27,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         private AssetGuidTypeIndexState _state;
 
-        public static AssetGuidTypeIndex Shared { get; } = new();
-
-        public event Action IndexCompleted;
-
-        public bool IsComplete => _state == AssetGuidTypeIndexState.Complete;
-
         public AssetGuidTypeIndex()
         {
             _state = AssetGuidTypeIndexState.Idle;
+        }
+
+        private static bool IsProjectAssetPath(string path)
+        {
+            // Unity AssetDatabase paths use forward slashes on every supported platform.
+            return path?.StartsWith(ProjectAssetsPrefix, StringComparison.OrdinalIgnoreCase) == true
+                && path.EndsWith(AssetExtension, StringComparison.OrdinalIgnoreCase);
         }
 
         public string[] GetKnownGuids(Type type)
@@ -72,6 +79,28 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         {
             EnsureStarted();
             return RunStateMachine(budgetMilliseconds);
+        }
+
+        public bool ApplyAssetChanges(
+            IReadOnlyList<string> importedAssets,
+            IReadOnlyList<string> deletedAssets,
+            IReadOnlyList<string> movedAssets,
+            IReadOnlyList<string> movedFromAssetPaths
+        )
+        {
+            if (_state == AssetGuidTypeIndexState.Idle)
+            {
+                return false;
+            }
+
+            bool deletedPathsRemoved = RemovePaths(deletedAssets);
+            bool movedPathsRemoved = RemovePaths(movedFromAssetPaths);
+            bool importedPathsIndexed = IndexPaths(importedAssets);
+            bool movedPathsIndexed = IndexPaths(movedAssets);
+            return deletedPathsRemoved
+                || movedPathsRemoved
+                || importedPathsIndexed
+                || movedPathsIndexed;
         }
 
         private bool RunStateMachine(double budgetMilliseconds)
@@ -121,28 +150,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
             TransitionTo(AssetGuidTypeIndexState.Complete);
             return true;
-        }
-
-        public bool ApplyAssetChanges(
-            IReadOnlyList<string> importedAssets,
-            IReadOnlyList<string> deletedAssets,
-            IReadOnlyList<string> movedAssets,
-            IReadOnlyList<string> movedFromAssetPaths
-        )
-        {
-            if (_state == AssetGuidTypeIndexState.Idle)
-            {
-                return false;
-            }
-
-            bool deletedPathsRemoved = RemovePaths(deletedAssets);
-            bool movedPathsRemoved = RemovePaths(movedFromAssetPaths);
-            bool importedPathsIndexed = IndexPaths(importedAssets);
-            bool movedPathsIndexed = IndexPaths(movedAssets);
-            return deletedPathsRemoved
-                || movedPathsRemoved
-                || importedPathsIndexed
-                || movedPathsIndexed;
         }
 
         private void ProcessEditorUpdate()
@@ -252,13 +259,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             return true;
-        }
-
-        private static bool IsProjectAssetPath(string path)
-        {
-            // Unity AssetDatabase paths use forward slashes on every supported platform.
-            return path?.StartsWith(ProjectAssetsPrefix, StringComparison.OrdinalIgnoreCase) == true
-                && path.EndsWith(AssetExtension, StringComparison.OrdinalIgnoreCase);
         }
 
         private void TransitionTo(AssetGuidTypeIndexState nextState)

@@ -124,6 +124,13 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     callbacks on the instance, and expose only one explicit static shared instance when
     production needs global coordination. Static classes remain appropriate for pure
     functions, extension methods, constants, and platform interop.
+26. Within each C# type, order members as: constants, events, delegates, static
+    properties, static fields, properties, fields, constructors, static methods,
+    methods, then nested types. Within every tier use public, protected, internal,
+    private. Do not reorder across conditional-compilation boundaries or static
+    initialization dependencies. Run `npm run lint:csharp-member-order`; use its
+    `:fix` variant for safe source-slice permutations, then resolve reported barriers
+    manually.
 
 ### Skills Discipline
 
@@ -140,6 +147,7 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
 dotnet tool restore
 dotnet tool run csharpier -- format Editor Runtime Tests
 dotnet tool run csharpier -- check Editor Runtime Tests
+npm run lint:csharp-member-order
 pwsh -NoProfile -File scripts/generate-skills-index.ps1
 pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput
 pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -VerboseOutput
@@ -151,10 +159,11 @@ unity -projectPath <path-to-host-project> -batchmode -quit -runTests -testPlatfo
 unity -projectPath <path-to-host-project> -batchmode -quit -runTests -testPlatform playmode
 ```
 
-Layers: the pre-commit framework hook runs the fast `.llm` checks on staged files;
+Layers: the pre-commit framework hook runs CSharpier, C# member-order, and the fast
+`.llm` checks on staged files;
 `npm run lint:llm` is the local gate; CI (`.github/workflows/llm-lint.yml`) runs
-everything on ubuntu and windows. CSharpier runs via the pre-commit config on staged
-`.cs` files.
+everything on ubuntu and windows. CSharpier and member ordering run via the
+pre-commit config on staged `.cs` files.
 
 ### Testing
 

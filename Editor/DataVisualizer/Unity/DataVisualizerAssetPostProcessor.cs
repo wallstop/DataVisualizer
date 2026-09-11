@@ -11,6 +11,33 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
 
     public sealed class DataVisualizerAssetProcessor : AssetPostprocessor
     {
+        public static bool IsDeletedAssetPathRelevant(string path)
+        {
+            return path?.EndsWith(".asset", StringComparison.OrdinalIgnoreCase) == true;
+        }
+
+        internal static bool IsRelevantAsset(HashSet<Type> relevantTypes, string path)
+        {
+            if (!IsDeletedAssetPathRelevant(path))
+            {
+                return false;
+            }
+
+            ScriptableObject so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+            if (
+                so != null
+                && (
+                    relevantTypes.Contains(so.GetType())
+                    || typeof(DataVisualizerSettings).IsAssignableFrom(so.GetType())
+                )
+            )
+            {
+                return true;
+            }
+
+            return false;
+        }
+
         private static void OnPostprocessAllAssets(
             string[] importedAssets,
             string[] deletedAssets,
@@ -53,33 +80,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             {
                 EditorApplication.delayCall += DataVisualizer.SignalRefresh;
             }
-        }
-
-        public static bool IsDeletedAssetPathRelevant(string path)
-        {
-            return path?.EndsWith(".asset", StringComparison.OrdinalIgnoreCase) == true;
-        }
-
-        internal static bool IsRelevantAsset(HashSet<Type> relevantTypes, string path)
-        {
-            if (!IsDeletedAssetPathRelevant(path))
-            {
-                return false;
-            }
-
-            ScriptableObject so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
-            if (
-                so != null
-                && (
-                    relevantTypes.Contains(so.GetType())
-                    || typeof(DataVisualizerSettings).IsAssignableFrom(so.GetType())
-                )
-            )
-            {
-                return true;
-            }
-
-            return false;
         }
     }
 #endif

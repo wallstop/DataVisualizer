@@ -107,39 +107,44 @@ namespace WallstopStudios.DataVisualizer
         [TextArea]
         protected string _description = string.Empty;
 
-        protected internal virtual void OnValidate()
+        private static string IncrementCloneSuffix(string input)
         {
-            SetAssetPathIfAvailable();
-        }
-
-        private void SetAssetPathIfAvailable()
-        {
-#if UNITY_EDITOR
-            if (Application.isPlaying)
+            if (string.IsNullOrWhiteSpace(input))
             {
-                return;
+                return " (Clone)";
             }
 
-            string assetPath = AssetDatabase.GetAssetPath(this);
-            if (string.IsNullOrWhiteSpace(assetPath))
+            Match match = CloneRegex.Match(input);
+            if (!match.Success)
             {
-                return;
+                return input + " (Clone)";
             }
 
-            string canonicalGuid = AssetDatabase.AssetPathToGUID(assetPath);
-            if (string.IsNullOrWhiteSpace(canonicalGuid))
+            string baseName = match.Groups[1].Value;
+            string existingCloneSuffix = match.Groups[2].Value;
+            string numberPart = match.Groups[3].Value;
+
+            if (string.IsNullOrWhiteSpace(existingCloneSuffix))
             {
-                return;
+                return input + " (Clone)";
             }
 
-            if (string.Equals(_assetGuid, canonicalGuid, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(numberPart))
             {
-                return;
+                return (
+                        string.IsNullOrWhiteSpace(baseName) && input.Trim() == "(Clone)"
+                            ? ""
+                            : baseName
+                    ) + " (Clone 1)";
             }
 
-            _assetGuid = canonicalGuid;
-            EditorUtility.SetDirty(this);
-#endif
+            if (!int.TryParse(numberPart, out int cloneNumber))
+            {
+                return baseName + " (Clone 1)";
+            }
+
+            cloneNumber++;
+            return baseName + " (Clone " + cloneNumber + ")";
         }
 
         public virtual VisualElement BuildGUI(DataVisualizerGUIContext context)
@@ -194,46 +199,6 @@ namespace WallstopStudios.DataVisualizer
             }
         }
 
-        private static string IncrementCloneSuffix(string input)
-        {
-            if (string.IsNullOrWhiteSpace(input))
-            {
-                return " (Clone)";
-            }
-
-            Match match = CloneRegex.Match(input);
-            if (!match.Success)
-            {
-                return input + " (Clone)";
-            }
-
-            string baseName = match.Groups[1].Value;
-            string existingCloneSuffix = match.Groups[2].Value;
-            string numberPart = match.Groups[3].Value;
-
-            if (string.IsNullOrWhiteSpace(existingCloneSuffix))
-            {
-                return input + " (Clone)";
-            }
-
-            if (string.IsNullOrWhiteSpace(numberPart))
-            {
-                return (
-                        string.IsNullOrWhiteSpace(baseName) && input.Trim() == "(Clone)"
-                            ? ""
-                            : baseName
-                    ) + " (Clone 1)";
-            }
-
-            if (!int.TryParse(numberPart, out int cloneNumber))
-            {
-                return baseName + " (Clone 1)";
-            }
-
-            cloneNumber++;
-            return baseName + " (Clone " + cloneNumber + ")";
-        }
-
         public virtual void BeforeCreate() { }
 
         public virtual void AfterCreate()
@@ -244,5 +209,40 @@ namespace WallstopStudios.DataVisualizer
         public virtual void BeforeRename(string newName) { }
 
         public virtual void AfterRename(string newName) { }
+
+        protected internal virtual void OnValidate()
+        {
+            SetAssetPathIfAvailable();
+        }
+
+        private void SetAssetPathIfAvailable()
+        {
+#if UNITY_EDITOR
+            if (Application.isPlaying)
+            {
+                return;
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(this);
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                return;
+            }
+
+            string canonicalGuid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (string.IsNullOrWhiteSpace(canonicalGuid))
+            {
+                return;
+            }
+
+            if (string.Equals(_assetGuid, canonicalGuid, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _assetGuid = canonicalGuid;
+            EditorUtility.SetDirty(this);
+#endif
+        }
     }
 }

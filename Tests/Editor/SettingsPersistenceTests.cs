@@ -9,6 +9,27 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class SettingsPersistenceTests
     {
+        private static void AssertCollapseStateDirtySemantics(
+            Func<string, bool, bool> setCollapsed,
+            Func<string, bool> removeCollapsed
+        )
+        {
+            const string namespaceKey = "Gameplay";
+
+            Assert.IsTrue(setCollapsed(namespaceKey, false), "first write stores expanded state");
+            Assert.IsFalse(
+                setCollapsed(namespaceKey, false),
+                "duplicate expanded write is unchanged"
+            );
+            Assert.IsTrue(setCollapsed(namespaceKey, true), "changed collapse state is dirty");
+            Assert.IsFalse(
+                setCollapsed(namespaceKey, true),
+                "duplicate collapsed write is unchanged"
+            );
+            Assert.IsTrue(removeCollapsed(namespaceKey), "removing stored state is dirty");
+            Assert.IsFalse(removeCollapsed(namespaceKey), "removing absent state is unchanged");
+        }
+
         [Test]
         public void Should_MarkSettingsDirty_When_SelectActiveObjectChanges()
         {
@@ -182,27 +203,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             Assert.AreEqual("Gameplay", userState.lastSelectedNamespaceKey);
             Assert.AreEqual("Example.CurrentData", userState.lastSelectedTypeFullName);
-        }
-
-        private static void AssertCollapseStateDirtySemantics(
-            Func<string, bool, bool> setCollapsed,
-            Func<string, bool> removeCollapsed
-        )
-        {
-            const string namespaceKey = "Gameplay";
-
-            Assert.IsTrue(setCollapsed(namespaceKey, false), "first write stores expanded state");
-            Assert.IsFalse(
-                setCollapsed(namespaceKey, false),
-                "duplicate expanded write is unchanged"
-            );
-            Assert.IsTrue(setCollapsed(namespaceKey, true), "changed collapse state is dirty");
-            Assert.IsFalse(
-                setCollapsed(namespaceKey, true),
-                "duplicate collapsed write is unchanged"
-            );
-            Assert.IsTrue(removeCollapsed(namespaceKey), "removing stored state is dirty");
-            Assert.IsFalse(removeCollapsed(namespaceKey), "removing absent state is unchanged");
         }
     }
 }

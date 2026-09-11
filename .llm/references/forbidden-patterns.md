@@ -24,3 +24,4 @@ Patterns that must not appear in this codebase, with the compliant alternative.
 | Direct lifecycle-state writes and scheduler changes across helpers | one transition owner and state-machine runner | prevent contradictory transitions and orphaned recurring work |
 | Implicit enum values or a valid zero-valued enum member | explicit ordinals plus an obsolete zero sentinel | Unity serializes enum ordinals; reordering implicit members silently changes data |
 | Static classes that own mutable service state, events, or lifecycle work | sealed instance service plus one explicit shared instance if needed | instances isolate tests and make ownership visible |
+| C# members outside the repository tier/access order, or nested types interspersed with members | `npm run lint:csharp-member-order:fix`, followed by manual barrier fixes | consistent layout keeps APIs scannable and nested declarations from obscuring behavior |

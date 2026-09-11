@@ -14,6 +14,7 @@ Run the narrowest sufficient layer; escalate on failure:
 | Layer | Scope | Command |
 | --- | --- | --- |
 | Pre-commit hook | staged files | automatic (`pre-commit` + `.pre-commit-config.yaml`) |
+| C# member layout | all C# types | `npm run lint:csharp-member-order` |
 | Local gate | whole harness | `npm run lint:llm` |
 | Harness self-tests | scripts | `pwsh -NoProfile -File scripts/tests/run-all.ps1` |
 | Packaging | tarball integrity | `npm pack` |
@@ -23,7 +24,9 @@ Run the narrowest sufficient layer; escalate on failure:
 ## Pre-Commit Checklist
 
 1. Changed `.cs` files: `dotnet tool run csharpier -- format <paths>` (the hook runs
-   it automatically on staged C# files; verify with `-- check`).
+   it automatically on staged C# files; verify with `-- check`). Then run
+   `npm run lint:csharp-member-order`; the `:fix` command safely permutes complete
+   member slices, but conditional/static-initialization barriers require manual review.
 2. If any `.llm/**` file changed: `npm run lint:llm` (regenerates nothing; use
    `npm run lint:llm:fix` to auto-fix index drift and version sync, then review the
    diff and re-stage).
