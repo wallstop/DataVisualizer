@@ -374,7 +374,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             float width = Mathf.Max(MinWindowWidth, window.position.width);
             float height = Mathf.Max(MinWindowHeight, window.position.height);
-            Rect monitorArea = MonitorUtility.GetPrimaryMonitorRect();
+            if (!MonitorUtility.TryGetPrimaryMonitorRect(out Rect monitorArea))
+            {
+                return;
+            }
 
             float centerX = (monitorArea.width - width) / 2f;
             float centerY = (monitorArea.height - height) / 2f;

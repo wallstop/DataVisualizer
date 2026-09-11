@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 #if UNITY_EDITOR
     using System;
     using System.Runtime.InteropServices;
+    using UnityEditor;
     using UnityEngine;
 
     // For IntPtr, Exception
@@ -11,42 +12,97 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
     public static class MonitorUtility
     {
-        public static Rect GetPrimaryMonitorRect()
+        public static bool TryGetPrimaryMonitorRect(out Rect rect)
         {
-            Rect rect = GetPrimaryMonitorRectOrZero();
-            if ((rect.width <= 0 || rect.height <= 0) && Display.displays.Length != 0)
+            return TryResolveMonitorRect(
+                GetPrimaryMonitorRectOrZero,
+                EditorGUIUtility.GetMainWindowPosition,
+                GetCurrentResolutionRect,
+                out rect
+            );
+        }
+
+        public static bool TryResolveMonitorRect(
+            Func<Rect> platformRectProvider,
+            Func<Rect> mainWindowRectProvider,
+            Func<Rect> currentResolutionRectProvider,
+            out Rect rect
+        )
+        {
+            if (TryGetUsableRect(platformRectProvider, out Rect platformRect))
             {
-                rect = new Rect(0, 0, rect.width, rect.height);
+                rect = platformRect;
+                return true;
             }
 
-            return rect;
+            if (TryGetUsableRect(mainWindowRectProvider, out Rect mainWindowRect))
+            {
+                rect = mainWindowRect;
+                return true;
+            }
+
+            if (TryGetUsableRect(currentResolutionRectProvider, out Rect resolutionRect))
+            {
+                rect = resolutionRect;
+                return true;
+            }
+
+            rect = default;
+            return false;
         }
 
         private static Rect GetPrimaryMonitorRectOrZero()
         {
-            try
-            {
 #if UNITY_EDITOR_WIN
-                // --- Windows Implementation (using P/Invoke) ---
-                return GetPrimaryMonitorRect_Windows_PInvoke();
+            // --- Windows Implementation (using P/Invoke) ---
+            return GetPrimaryMonitorRect_Windows_PInvoke();
 
 #elif UNITY_EDITOR_OSX
-                // --- macOS Implementation (using P/Invoke) ---
-                return GetPrimaryMonitorRect_Mac_PInvoke(); // Renamed for clarity
+            // --- macOS Implementation (using P/Invoke) ---
+            return GetPrimaryMonitorRect_Mac_PInvoke(); // Renamed for clarity
 #elif UNITY_EDITOR_LINUX
-                // --- Linux Implementation (Placeholder) ---
-                return Rect.zero;
+            // --- Linux Implementation (Placeholder) ---
+            return Rect.zero;
 #else
-                return Rect.zero; // Fallback for other platforms
+            return Rect.zero; // Fallback for other platforms
 #endif
-            }
-            catch (Exception ex)
+        }
+
+        private static Rect GetCurrentResolutionRect()
+        {
+            Resolution currentResolution = Screen.currentResolution;
+            return new Rect(0, 0, currentResolution.width, currentResolution.height);
+        }
+
+        private static bool IsUsable(Rect rect)
+        {
+            return 0 < rect.width
+                && 0 < rect.height
+                && !float.IsNaN(rect.x)
+                && !float.IsNaN(rect.y)
+                && !float.IsNaN(rect.width)
+                && !float.IsNaN(rect.height)
+                && !float.IsInfinity(rect.x)
+                && !float.IsInfinity(rect.y)
+                && !float.IsInfinity(rect.width)
+                && !float.IsInfinity(rect.height);
+        }
+
+        private static bool TryGetUsableRect(Func<Rect> rectProvider, out Rect rect)
+        {
+            try
             {
-                Debug.LogError(
-                    $"Error getting primary monitor rect via platform code: {ex.Message}\n{ex.StackTrace}"
-                );
-                return Rect.zero; // Return invalid rect on error to trigger fallback
+                Rect candidate = rectProvider();
+                if (IsUsable(candidate))
+                {
+                    rect = candidate;
+                    return true;
+                }
             }
+            catch (Exception) { }
+
+            rect = default;
+            return false;
         }
 
         // --- Windows P/Invoke Definitions and Helper ---
