@@ -99,7 +99,10 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     whitelists only `Editor`, `Runtime`, `docs`, and their `.meta` companions. Static
     analyzer binaries, Unity metadata/labels, notices, and `-analyzer` response-file
     arguments must not exist in this package repository; install development-only
-    analyzers in the host Unity project instead.
+    analyzers in the host Unity project instead. Install or verify the pinned
+    ErrorProne.NET set with
+    `scripts/install-host-errorprone-analyzers.ps1 -HostProject <path>` (add
+    `-VerifyOnly` for an offline integrity check).
 19. Write explicit ordered comparisons with `<` or `<=`, reversing operands instead
     of using `>` or `>=`. Relational patterns retain the operator required by C#
     syntax. Keep `!=` when expressing genuine inequality or null checks; do not wrap
