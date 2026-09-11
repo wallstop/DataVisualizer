@@ -367,25 +367,19 @@ namespace WallstopStudios.DataVisualizer.Editor
             window.minSize = new Vector2(MinWindowWidth, MinWindowHeight);
 
             bool initialSizeApplied = EditorPrefs.GetBool(PrefsInitialSizeAppliedKey, false);
-            if (initialSizeApplied)
+            if (!MonitorUtility.ShouldApplyInitialPlacement(initialSizeApplied, window.docked))
             {
                 return;
             }
 
             float width = Mathf.Max(MinWindowWidth, window.position.width);
             float height = Mathf.Max(MinWindowHeight, window.position.height);
-            if (!MonitorUtility.TryGetPrimaryMonitorRect(out Rect monitorArea))
+            if (!MonitorUtility.TryGetEditorPlacementRect(out Rect placementArea))
             {
                 return;
             }
 
-            float centerX = (monitorArea.width - width) / 2f;
-            float centerY = (monitorArea.height - height) / 2f;
-
-            float x = Mathf.Max(0, centerX);
-            float y = Mathf.Max(0, centerY);
-
-            window.position = new Rect(x, y, width, height);
+            window.position = MonitorUtility.CalculateCenteredRect(placementArea, width, height);
             EditorPrefs.SetBool(PrefsInitialSizeAppliedKey, true);
         }
 

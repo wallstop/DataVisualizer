@@ -2,32 +2,36 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 {
 #if UNITY_EDITOR
     using System;
-    using System.Runtime.InteropServices;
     using UnityEditor;
     using UnityEngine;
 
-    // For IntPtr, Exception
-
-    // For DllImport, Marshal, StructLayout etc.
-
     public static class MonitorUtility
     {
+        [Obsolete("Use TryGetEditorPlacementRect instead.")]
         public static bool TryGetPrimaryMonitorRect(out Rect rect)
         {
-#if UNITY_EDITOR_WIN
-            return TryResolveMonitorRect(
-                GetPrimaryMonitorRect_Windows_PInvoke,
-                EditorGUIUtility.GetMainWindowPosition,
-                GetCurrentResolutionRect,
-                out rect
-            );
-#else
+            return TryGetEditorPlacementRect(out rect);
+        }
+
+        public static bool TryGetEditorPlacementRect(out Rect rect)
+        {
             return TryResolveMonitorRect(
                 EditorGUIUtility.GetMainWindowPosition,
                 GetCurrentResolutionRect,
                 out rect
             );
-#endif
+        }
+
+        public static Rect CalculateCenteredRect(Rect placementArea, float width, float height)
+        {
+            float x = placementArea.x + (placementArea.width - width) / 2f;
+            float y = placementArea.y + (placementArea.height - height) / 2f;
+            return new Rect(x, y, width, height);
+        }
+
+        public static bool ShouldApplyInitialPlacement(bool initialSizeApplied, bool isDocked)
+        {
+            return !initialSizeApplied && !isDocked;
         }
 
         public static bool TryResolveMonitorRect(
@@ -45,35 +49,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             if (TryGetUsableRect(fallbackRectProvider, out Rect fallbackRect))
             {
                 rect = fallbackRect;
-                return true;
-            }
-
-            rect = default;
-            return false;
-        }
-
-        public static bool TryResolveMonitorRect(
-            Func<Rect> platformRectProvider,
-            Func<Rect> mainWindowRectProvider,
-            Func<Rect> currentResolutionRectProvider,
-            out Rect rect
-        )
-        {
-            if (TryGetUsableRect(platformRectProvider, out Rect platformRect))
-            {
-                rect = platformRect;
-                return true;
-            }
-
-            if (TryGetUsableRect(mainWindowRectProvider, out Rect mainWindowRect))
-            {
-                rect = mainWindowRect;
-                return true;
-            }
-
-            if (TryGetUsableRect(currentResolutionRectProvider, out Rect resolutionRect))
-            {
-                rect = resolutionRect;
                 return true;
             }
 
@@ -117,56 +92,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             rect = default;
             return false;
         }
-
-        // --- Windows P/Invoke Definitions and Helper ---
-#if UNITY_EDITOR_WIN
-
-        private const uint MONITOR_DEFAULTTOPRIMARY = 0x00000001;
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromPoint(NativePoint pt, uint dwFlags);
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        [return: MarshalAs(UnmanagedType.Bool)] // Important: Win32 BOOL is not C# bool directly
-        private static extern bool GetMonitorInfoW(IntPtr hMonitor, ref NativeMonitorInfo lpmi);
-
-        private static Rect GetPrimaryMonitorRect_Windows_PInvoke()
-        {
-            // Point (0,0) should be on the primary monitor in virtual screen coords
-            NativePoint zeroPoint = new() { x = 0, y = 0 };
-
-            // Get the handle to the primary monitor
-            IntPtr hMonitor = MonitorFromPoint(zeroPoint, MONITOR_DEFAULTTOPRIMARY);
-
-            if (hMonitor == IntPtr.Zero)
-            {
-                Debug.LogError(
-                    "PInvoke Error: Could not get primary monitor handle via MonitorFromPoint."
-                );
-                return Rect.zero;
-            }
-
-            NativeMonitorInfo monitorInfo = new();
-            monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMonitorInfo)); // Crucial: Set the size field
-
-            // Get monitor information
-            if (!GetMonitorInfoW(hMonitor, ref monitorInfo))
-            {
-                Debug.LogError("PInvoke Error: GetMonitorInfoW failed.");
-                return Rect.zero;
-            }
-
-            // Extract the monitor rectangle (full area, not just working area)
-            NativeRect monitorRectWin32 = monitorInfo.rcMonitor;
-
-            // Convert the Win32 rectangle (Left, Top, Right, Bottom) to a Unity Rect.
-            int width = monitorRectWin32.right - monitorRectWin32.left;
-            int height = monitorRectWin32.bottom - monitorRectWin32.top;
-
-            return new Rect(monitorRectWin32.left, monitorRectWin32.top, width, height);
-        }
-
-#endif // UNITY_EDITOR_WIN
     }
 #endif
 }
