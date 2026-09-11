@@ -16,11 +16,20 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public static bool TryGetEditorPlacementRect(out Rect rect)
         {
-            return TryResolveMonitorRect(
-                EditorGUIUtility.GetMainWindowPosition,
-                GetCurrentResolutionRect,
-                out rect
-            );
+            // EditorGUIUtility.GetMainWindowPosition and EditorWindow.position both use Unity
+            // Editor screen-space points: x increases right, y increases down, and coordinates
+            // may be negative on secondary displays. Keep this boundary entirely in Unity's
+            // coordinate space: Screen.currentResolution is expressed in display pixels and must
+            // not be used as an unconverted fallback.
+            return TryResolveEditorPlacementRect(EditorGUIUtility.GetMainWindowPosition, out rect);
+        }
+
+        public static bool TryResolveEditorPlacementRect(
+            Func<Rect> editorPointRectProvider,
+            out Rect rect
+        )
+        {
+            return TryGetUsableRect(editorPointRectProvider, out rect);
         }
 
         public static Rect CalculateCenteredRect(Rect placementArea, float width, float height)
@@ -144,6 +153,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             out Rect rect
         )
         {
+            // Retained as a general source-compatible resolver. Initial editor placement uses
+            // TryResolveEditorPlacementRect so it cannot cross coordinate spaces via a fallback.
             if (TryGetUsableRect(preferredRectProvider, out Rect preferredRect))
             {
                 rect = preferredRect;
@@ -158,12 +169,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
             rect = default;
             return false;
-        }
-
-        private static Rect GetCurrentResolutionRect()
-        {
-            Resolution currentResolution = Screen.currentResolution;
-            return new Rect(0, 0, currentResolution.width, currentResolution.height);
         }
 
         private static bool IsUsable(Rect rect)
