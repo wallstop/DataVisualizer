@@ -18,7 +18,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             string[] movedFromAssetPaths
         )
         {
-            AssetGuidTypeIndex.ApplyAssetChanges(
+            AssetGuidTypeIndex.Shared.ApplyAssetChanges(
                 importedAssets,
                 deletedAssets,
                 movedAssets,

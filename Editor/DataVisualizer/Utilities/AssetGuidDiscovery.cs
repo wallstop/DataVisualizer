@@ -12,7 +12,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             string[] discoveredGuids,
             IReadOnlyList<string> referencedGuids,
             string savedObjectGuid,
-            out string normalizedSavedObjectGuid
+            out string normalizedSavedObjectGuid,
+            AssetGuidTypeIndex typeIndex = null
         )
         {
             string[] candidates = discoveredGuids ?? Array.Empty<string>();
@@ -20,7 +21,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool candidateAdded = false;
             string normalizedSavedGuid = null;
 
-            string[] indexedGuids = AssetGuidTypeIndex.GetKnownGuids(type);
+            AssetGuidTypeIndex effectiveTypeIndex = typeIndex ?? AssetGuidTypeIndex.Shared;
+            string[] indexedGuids = effectiveTypeIndex.GetKnownGuids(type);
             if (0 < indexedGuids.Length)
             {
                 candidateLookup = new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);

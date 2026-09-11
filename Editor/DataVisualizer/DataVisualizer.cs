@@ -79,17 +79,21 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private enum DragType
         {
-            None = 0,
+            [Obsolete("Please use a valid value")]
+            Unknown = 0,
+            None = 1,
             Namespace = 2,
             Type = 3,
         }
 
         private enum FocusArea
         {
-            None = 0,
+            [Obsolete("Please use a valid value")]
+            Unknown = 0,
             TypeList = 1,
             AddTypePopover = 2,
             SearchResultsPopover = 3,
+            None = 4,
         }
 
         private enum LabelFilterSection
@@ -415,8 +419,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             minSize = new Vector2(MinWindowWidth, MinWindowHeight);
             _nextColorIndex = 0;
             Instance = this;
-            AssetGuidTypeIndex.IndexCompleted -= SignalRefresh;
-            AssetGuidTypeIndex.IndexCompleted += SignalRefresh;
+            AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
+            AssetGuidTypeIndex.Shared.IndexCompleted += SignalRefresh;
             _isSearchCachePopulated = false;
             _selectedObject = null;
             _selectedObjects.Clear();
@@ -472,10 +476,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void Cleanup()
         {
-            AssetGuidTypeIndex.IndexCompleted -= SignalRefresh;
-            if (!AssetGuidTypeIndex.IsComplete)
+            AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
+            if (!AssetGuidTypeIndex.Shared.IsComplete)
             {
-                AssetGuidTypeIndex.Cancel();
+                AssetGuidTypeIndex.Shared.Cancel();
             }
 
             if (Instance == this)
@@ -559,7 +563,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
             int resolvedReferenceCount = 0;
-            AssetGuidTypeIndex.EnsureStarted();
+            AssetGuidTypeIndex.Shared.EnsureStarted();
 
             // Collect all GUIDs first (fast, no asset loading)
             foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
@@ -7661,7 +7665,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
 
             // Get all GUIDs for this type
-            AssetGuidTypeIndex.EnsureStarted();
+            AssetGuidTypeIndex.Shared.EnsureStarted();
             string[] allGuids = AssetGuidDiscovery.MergeCandidates(
                 type,
                 AssetDatabase.FindAssets($"t:{type.Name}"),

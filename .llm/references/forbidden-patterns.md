@@ -22,3 +22,5 @@ Patterns that must not appear in this codebase, with the compliant alternative.
 | `foreach` over an `IReadOnlyList<T>` / `IList<T>` interface | counted `for`; use `foreach` for arrays/concrete value enumerators | avoid boxed/interface enumerator allocation in hot loops |
 | Bitwise Boolean aggregation or mutation inside `|=` / `&=` | named operation results combined afterward with `||` / `&&` | preserve evaluation while making side effects and intent auditable |
 | Direct lifecycle-state writes and scheduler changes across helpers | one transition owner and state-machine runner | prevent contradictory transitions and orphaned recurring work |
+| Implicit enum values or a valid zero-valued enum member | explicit ordinals plus an obsolete zero sentinel | Unity serializes enum ordinals; reordering implicit members silently changes data |
+| Static classes that own mutable service state, events, or lifecycle work | sealed instance service plus one explicit shared instance if needed | instances isolate tests and make ownership visible |

@@ -116,6 +116,14 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
 23. Give mutable lifecycle/state machines one transition owner. Helpers may gather or
     process data, but they must not scatter direct state writes or scheduler ownership
     across methods; route transitions through one named runner/transition method.
+24. Every enum member has an explicit numeric value. Reserve zero for an invalid
+    `Unknown`, `None`, or compatibility sentinel marked `[Obsolete("Please use a valid
+    value")]`; valid values must be nonzero. Preserve or explicitly migrate existing
+    serialized ordinals rather than renumbering them accidentally.
+25. Mutable services are instantiable sealed classes. Put state, events, and lifecycle
+    callbacks on the instance, and expose only one explicit static shared instance when
+    production needs global coordination. Static classes remain appropriate for pure
+    functions, extension methods, constants, and platform interop.
 
 ### Skills Discipline
 

@@ -38,22 +38,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
             AssetDatabase.SaveAssets();
 
-            AssetGuidTypeIndex.Rebuild();
-            bool pathSnapshotCompleted = AssetGuidTypeIndex.ProcessPendingSlice(
+            AssetGuidTypeIndex.Shared.Rebuild();
+            bool pathSnapshotCompleted = AssetGuidTypeIndex.Shared.ProcessPendingSlice(
                 double.PositiveInfinity
             );
-            bool classificationCompleted = AssetGuidTypeIndex.ProcessPendingSlice(
+            bool classificationCompleted = AssetGuidTypeIndex.Shared.ProcessPendingSlice(
                 double.PositiveInfinity
             );
             Assert.IsFalse(pathSnapshotCompleted);
             Assert.IsTrue(classificationCompleted);
-            Assert.IsTrue(AssetGuidTypeIndex.IsComplete);
+            Assert.IsTrue(AssetGuidTypeIndex.Shared.IsComplete);
         }
 
         [OneTimeTearDown]
         public void ClearProjectAssetTypeIndex()
         {
-            AssetGuidTypeIndex.Cancel();
+            AssetGuidTypeIndex.Shared.Cancel();
             AssetDatabase.DeleteAsset(_indexRootFolder);
             AssetDatabase.Refresh();
         }
@@ -80,10 +80,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void Should_KeepIndexedGuidsSeparate_When_ShortTypeNamesCollide()
         {
-            string[] firstGuids = AssetGuidTypeIndex.GetKnownGuids(
+            string[] firstGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(
                 typeof(CollisionA.OrderCollisionData)
             );
-            string[] secondGuids = AssetGuidTypeIndex.GetKnownGuids(
+            string[] secondGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(
                 typeof(CollisionB.OrderCollisionData)
             );
 
@@ -109,7 +109,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AssetDatabase.SaveAssets();
 
             Assert.IsTrue(
-                AssetGuidTypeIndex.ApplyAssetChanges(
+                AssetGuidTypeIndex.Shared.ApplyAssetChanges(
                     Array.Empty<string>(),
                     new[] { importedAssetPath },
                     Array.Empty<string>(),
@@ -118,14 +118,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
 
             Assert.IsTrue(
-                AssetGuidTypeIndex.ApplyAssetChanges(
+                AssetGuidTypeIndex.Shared.ApplyAssetChanges(
                     new[] { importedAssetPath },
                     Array.Empty<string>(),
                     new[] { movedAssetPath },
                     Array.Empty<string>()
                 )
             );
-            string[] indexedGuids = AssetGuidTypeIndex.GetKnownGuids(
+            string[] indexedGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(
                 typeof(EditorOnlyCreationData)
             );
             CollectionAssert.Contains(indexedGuids, importedAssetGuid);
@@ -133,9 +133,42 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             AssetDatabase.DeleteAsset(importedAssetPath);
             AssetDatabase.DeleteAsset(movedAssetPath);
-            indexedGuids = AssetGuidTypeIndex.GetKnownGuids(typeof(EditorOnlyCreationData));
+            indexedGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(typeof(EditorOnlyCreationData));
             CollectionAssert.DoesNotContain(indexedGuids, importedAssetGuid);
             CollectionAssert.DoesNotContain(indexedGuids, movedAssetGuid);
+        }
+
+        [Test]
+        public void Should_IsolateIndexState_When_UsingSeparateInstances()
+        {
+            AssetGuidTypeIndex isolatedIndex = new();
+
+            try
+            {
+                Assert.IsFalse(isolatedIndex.IsComplete);
+                CollectionAssert.IsEmpty(
+                    isolatedIndex.GetKnownGuids(typeof(EditorOnlyCreationData))
+                );
+
+                isolatedIndex.Rebuild();
+                Assert.IsFalse(isolatedIndex.ProcessPendingSlice(double.PositiveInfinity));
+                Assert.IsTrue(isolatedIndex.ProcessPendingSlice(double.PositiveInfinity));
+
+                string[] isolatedGuids = AssetGuidDiscovery.MergeCandidates(
+                    typeof(EditorOnlyCreationData),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    null,
+                    out _,
+                    isolatedIndex
+                );
+                CollectionAssert.Contains(isolatedGuids, _neverRegisteredGuid);
+                Assert.IsTrue(AssetGuidTypeIndex.Shared.IsComplete);
+            }
+            finally
+            {
+                isolatedIndex.Cancel();
+            }
         }
 
         [Test]

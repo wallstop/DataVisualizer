@@ -60,7 +60,9 @@ metadata:
   them cooperatively through `GetMainAssetTypeAtPath`, and refreshes the window after
   completion. Keep this index exact-type, load-free, shared across managed types, and
   maintained by the asset postprocessor rather than adding another fallback scan.
-- Keep index state changes and editor-update subscription ownership in its state-machine
+- `AssetGuidTypeIndex` is an instantiable sealed service; production coordinates through
+  its explicit `Shared` instance while tests may create isolated instances. Keep its
+  state changes and editor-update subscription ownership in the instance state-machine
   runner/transition method. AssetDatabase paths are project-relative and use forward
   slashes on every Unity editor platform; preserve that canonical form for comparisons.
 - Discovery is intentionally limited to exact main assets. Derived instances and
