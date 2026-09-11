@@ -38,6 +38,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string PrefsSplitterOuterKey = PrefsPrefix + "SplitterOuterFixedPaneWidth";
         private const string PrefsSplitterInnerKey = PrefsPrefix + "SplitterInnerFixedPaneWidth";
         private const string PrefsInitialSizeAppliedKey = PrefsPrefix + "InitialSizeApplied";
+        private const string PrefsPreferredWindowSizeKey = PrefsPrefix + "PreferredWindowSize";
+        private const string PrefsTemporaryWindowClampSizeKey =
+            PrefsPrefix + "TemporaryWindowClampSize";
 
         private const string SettingsDefaultPath = "Assets/Editor/DataVisualizerSettings.asset";
         private const string UserStateFileName = "DataVisualizerUserState.json";
@@ -348,6 +351,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         private readonly Dictionary<ScriptableObject, int> _selectedObjectOrderIndex = new();
 
         private Label _dataFolderPathDisplay;
+        private bool _hasObservedInitialWindowGeometry;
+        private bool _packagePlacementPending;
+        private Vector2 _pendingPackagePreferredSize;
+        private Vector2 _temporaryClampedWindowSize;
+        private IVisualElementScheduledItem _packagePlacementCompletionTask;
 #if ODIN_INSPECTOR
         private PropertyTree _odinPropertyTree;
         private IMGUIContainer _odinInspectorContainer;
@@ -364,7 +372,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             DataVisualizer window = GetWindow<DataVisualizer>("Data Visualizer");
             window.titleContent = new GUIContent("Data Visualizer");
-            window.minSize = new Vector2(MinWindowWidth, MinWindowHeight);
 
             bool initialSizeApplied = EditorPrefs.GetBool(PrefsInitialSizeAppliedKey, false);
             if (!MonitorUtility.ShouldApplyInitialPlacement(initialSizeApplied, window.docked))
@@ -372,14 +379,21 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            float width = Mathf.Max(MinWindowWidth, window.position.width);
-            float height = Mathf.Max(MinWindowHeight, window.position.height);
             if (!MonitorUtility.TryGetEditorPlacementRect(out Rect placementArea))
             {
                 return;
             }
 
-            window.position = MonitorUtility.CalculateCenteredRect(placementArea, width, height);
+            Vector2 preferredSize = window.ReadPreferredWindowSize();
+            Rect centeredRect = MonitorUtility.CalculateCenteredRect(
+                placementArea,
+                preferredSize.x,
+                preferredSize.y
+            );
+            window.WriteWindowSize(PrefsPreferredWindowSizeKey, preferredSize);
+            window.BeginPackageWindowPlacement(centeredRect.size, preferredSize);
+            window.position = centeredRect;
+            window.SchedulePackageWindowPlacementCompletion();
             EditorPrefs.SetBool(PrefsInitialSizeAppliedKey, true);
         }
 
@@ -1370,7 +1384,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnEnable()
         {
-            minSize = new Vector2(MinWindowWidth, MinWindowHeight);
+            _hasObservedInitialWindowGeometry = false;
+            _packagePlacementPending = false;
+            RestoreWindowMinimumSizeFromPersistedClamp();
             _nextColorIndex = 0;
             Instance = this;
             AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
@@ -1412,15 +1428,178 @@ namespace WallstopStudios.DataVisualizer.Editor
                 HandleGlobalKeyDown,
                 TrickleDown.TrickleDown
             );
+            rootVisualElement.RegisterCallback<GeometryChangedEvent>(HandleWindowGeometryChanged);
         }
 
         private void OnDisable()
         {
+            _packagePlacementCompletionTask?.Pause();
+            _packagePlacementCompletionTask = null;
+            if (_packagePlacementPending)
+            {
+                CompletePackageWindowPlacement();
+            }
+
             rootVisualElement.UnregisterCallback<KeyDownEvent>(
                 HandleGlobalKeyDown,
                 TrickleDown.TrickleDown
             );
+            rootVisualElement.UnregisterCallback<GeometryChangedEvent>(HandleWindowGeometryChanged);
             Cleanup();
+        }
+
+        private void RestoreWindowMinimumSizeFromPersistedClamp()
+        {
+            bool hasPersistedClamp = TryReadWindowSize(
+                PrefsTemporaryWindowClampSizeKey,
+                out Vector2 clampedSize
+            );
+            bool temporaryClampIsActive =
+                !docked
+                && hasPersistedClamp
+                && MonitorUtility.IsSameSize(position.size, clampedSize);
+            _temporaryClampedWindowSize = temporaryClampIsActive ? clampedSize : default;
+
+            ApplyWindowMinimumSize(temporaryClampIsActive);
+        }
+
+        private void ApplyWindowMinimumSize(bool temporaryClampIsActive)
+        {
+            minSize = MonitorUtility.CalculateWindowMinimumSize(
+                new Vector2(MinWindowWidth, MinWindowHeight),
+                _temporaryClampedWindowSize,
+                temporaryClampIsActive
+            );
+        }
+
+        private Vector2 ReadPreferredWindowSize()
+        {
+            bool hasSavedSize = TryReadWindowSize(
+                PrefsPreferredWindowSizeKey,
+                out Vector2 savedSize
+            );
+            return MonitorUtility.SelectPreferredSize(
+                savedSize,
+                hasSavedSize,
+                position.size,
+                new Vector2(MinWindowWidth, MinWindowHeight)
+            );
+        }
+
+        private void BeginPackageWindowPlacement(Vector2 requestedSize, Vector2 preferredSize)
+        {
+            _packagePlacementPending = true;
+            _pendingPackagePreferredSize = preferredSize;
+            _temporaryClampedWindowSize = requestedSize;
+            bool temporaryClampIsActive = !MonitorUtility.IsSameSize(requestedSize, preferredSize);
+
+            ApplyWindowMinimumSize(temporaryClampIsActive);
+        }
+
+        private void CompletePackageWindowPlacement()
+        {
+            if (!_packagePlacementPending)
+            {
+                return;
+            }
+
+            _packagePlacementCompletionTask = null;
+            _packagePlacementPending = false;
+            _hasObservedInitialWindowGeometry = true;
+            _temporaryClampedWindowSize = position.size;
+            bool temporaryClampIsActive = !MonitorUtility.IsSameSize(
+                _temporaryClampedWindowSize,
+                _pendingPackagePreferredSize
+            );
+            _pendingPackagePreferredSize = default;
+            if (temporaryClampIsActive)
+            {
+                WriteWindowSize(PrefsTemporaryWindowClampSizeKey, _temporaryClampedWindowSize);
+            }
+            else
+            {
+                ClearTemporaryWindowSizeClamp();
+            }
+
+            ApplyWindowMinimumSize(temporaryClampIsActive);
+        }
+
+        private void SchedulePackageWindowPlacementCompletion()
+        {
+            _packagePlacementCompletionTask?.Pause();
+            _packagePlacementCompletionTask = rootVisualElement.schedule.Execute(
+                CompletePackageWindowPlacement
+            );
+            _packagePlacementCompletionTask.ExecuteLater(1);
+        }
+
+        private void ClearTemporaryWindowSizeClamp()
+        {
+            _temporaryClampedWindowSize = default;
+            EditorPrefs.DeleteKey(PrefsTemporaryWindowClampSizeKey);
+        }
+
+        private void HandleWindowGeometryChanged(GeometryChangedEvent _)
+        {
+            if (_packagePlacementPending)
+            {
+                SchedulePackageWindowPlacementCompletion();
+                return;
+            }
+
+            if (
+                MonitorUtility.IsSameSize(position.size, _temporaryClampedWindowSize)
+                && EditorPrefs.HasKey(PrefsTemporaryWindowClampSizeKey)
+            )
+            {
+                _hasObservedInitialWindowGeometry = true;
+                ApplyWindowMinimumSize(true);
+                return;
+            }
+
+            bool shouldCapturePreferredSize = MonitorUtility.ShouldCapturePreferredSize(
+                _packagePlacementPending,
+                _hasObservedInitialWindowGeometry,
+                docked
+            );
+            _hasObservedInitialWindowGeometry = true;
+            if (shouldCapturePreferredSize)
+            {
+                Vector2 preferredSize = MonitorUtility.NormalizePreferredSize(
+                    position.size,
+                    new Vector2(MinWindowWidth, MinWindowHeight)
+                );
+                WriteWindowSize(PrefsPreferredWindowSizeKey, preferredSize);
+                ClearTemporaryWindowSizeClamp();
+                ApplyWindowMinimumSize(false);
+                return;
+            }
+
+            bool hasPersistedClamp = TryReadWindowSize(
+                PrefsTemporaryWindowClampSizeKey,
+                out Vector2 persistedClampedSize
+            );
+            bool persistedClampIsActive =
+                !docked
+                && hasPersistedClamp
+                && MonitorUtility.IsSameSize(position.size, persistedClampedSize);
+            _temporaryClampedWindowSize = persistedClampIsActive ? persistedClampedSize : default;
+            if (!persistedClampIsActive)
+            {
+                ClearTemporaryWindowSizeClamp();
+            }
+
+            ApplyWindowMinimumSize(persistedClampIsActive);
+        }
+
+        private bool TryReadWindowSize(string preferenceKey, out Vector2 size)
+        {
+            return MonitorUtility.TryParseSize(EditorPrefs.GetString(preferenceKey), out size);
+        }
+
+        private void WriteWindowSize(string preferenceKey, Vector2 size)
+        {
+            EditorPrefs.SetString(preferenceKey, MonitorUtility.SerializeSize(size));
         }
 
         private void OnDestroy()
