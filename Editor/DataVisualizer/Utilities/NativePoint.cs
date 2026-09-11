@@ -4,10 +4,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     using System.Runtime.InteropServices;
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct POINT
+    internal struct NativePoint
     {
-        public int X;
-        public int Y;
+        public int x;
+        public int y;
     }
 #endif
 }

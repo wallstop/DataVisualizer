@@ -131,6 +131,11 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     initialization dependencies. Run `npm run lint:csharp-member-order`; use its
     `:fix` variant for safe source-slice permutations, then resolve reported barriers
     manually.
+27. Name classes, structs, enums, records, and delegates in PascalCase; interfaces
+    use PascalCase with an `I` prefix. Do not carry all-caps native typedef spellings
+    into managed type names. Use a descriptive prefix such as `Native` when the
+    idiomatic name would collide with a Unity or framework type. `.editorconfig`
+    enforces these declarations as warnings.
 
 ### Skills Discipline
 

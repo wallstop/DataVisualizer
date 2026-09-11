@@ -4,11 +4,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     using System.Runtime.InteropServices;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    internal struct MONITORINFO
+    internal struct NativeMonitorInfo
     {
         public uint cbSize;
-        public RECT rcMonitor;
-        public RECT rcWork;
+        public NativeRect rcMonitor;
+        public NativeRect rcWork;
         public uint dwFlags;
     }
 #endif

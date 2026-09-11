@@ -4,12 +4,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     using System.Runtime.InteropServices;
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct RECT
+    internal struct NativeRect
     {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
+        public int left;
+        public int top;
+        public int right;
+        public int bottom;
     }
 #endif
 }

@@ -22,6 +22,9 @@ metadata:
 
 ## Working in the Main Window File
 
+- Name managed types in PascalCase even when wrapping all-caps native typedefs. Add
+  a descriptive prefix such as `Native` when the idiomatic name would shadow a Unity
+  or framework type, and keep the filename identical to the type name.
 - `rg` for the feature first (constants, method names); the file predates the split,
   so new subsystems should go into `Data/`, `Search/`, `UI/`, or `Utilities/` files
   instead of growing `DataVisualizer.cs` further.
