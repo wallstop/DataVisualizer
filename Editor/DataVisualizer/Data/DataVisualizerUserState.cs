@@ -2,7 +2,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using UnityEngine;
     using UnityEngine.Serialization;
 
@@ -68,26 +67,20 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
             lastSelectedNamespaceKey = settings.lastSelectedNamespaceKey;
             lastSelectedTypeFullName = settings.lastSelectedTypeFullName;
-            namespaceOrder = settings.namespaceOrder?.ToList() ?? new List<string>();
-            typeOrders =
-                settings.typeOrders?.Select(order => order.Clone()).ToList()
-                ?? new List<NamespaceTypeOrder>();
-            lastObjectSelections =
-                settings.lastObjectSelections?.Select(selection => selection.Clone()).ToList()
-                ?? new List<LastObjectSelectionEntry>();
-            namespaceCollapseStates =
-                settings.namespaceCollapseStates?.Select(selection => selection.Clone()).ToList()
-                ?? new List<NamespaceCollapseState>();
-            objectOrders =
-                settings.objectOrders?.Select(order => order.Clone()).ToList()
-                ?? new List<TypeObjectOrder>();
-            managedTypeNames = settings.managedTypeNames?.ToList() ?? new List<string>();
-            labelFilterConfigs =
-                settings.labelFilterConfigs?.Select(config => config.Clone()).ToList()
-                ?? new List<TypeLabelFilterConfig>();
-            processorStates =
-                settings.processorStates?.Select(state => state.Clone()).ToList()
-                ?? new List<ProcessorState>();
+            namespaceOrder = PersistedStateCopy.CloneStrings(settings.namespaceOrder);
+            typeOrders = PersistedStateCopy.CloneNamespaceTypeOrders(settings.typeOrders);
+            lastObjectSelections = PersistedStateCopy.CloneLastObjectSelections(
+                settings.lastObjectSelections
+            );
+            namespaceCollapseStates = PersistedStateCopy.CloneNamespaceCollapseStates(
+                settings.namespaceCollapseStates
+            );
+            objectOrders = PersistedStateCopy.CloneTypeObjectOrders(settings.objectOrders);
+            managedTypeNames = PersistedStateCopy.CloneStrings(settings.managedTypeNames);
+            labelFilterConfigs = PersistedStateCopy.CloneTypeLabelFilterConfigs(
+                settings.labelFilterConfigs
+            );
+            processorStates = PersistedStateCopy.CloneProcessorStates(settings.processorStates);
         }
 
         public List<string> GetOrCreateObjectOrderList(string typeFullName)

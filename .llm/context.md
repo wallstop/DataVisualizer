@@ -158,10 +158,11 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     readonly struct leases backed by reusable owner storage; leases are default-safe and
     idempotent, and `Dispose()` never throws. Retain `try/catch` where the purpose is
     exception isolation or translation rather than lifetime management.
-32. Keep the shipped `Runtime/` assembly free of `System.Linq`. Use direct collection
-    operations and streaming loops so player-facing helpers do not introduce avoidable
-    iterator/delegate allocations. Editor and test code may retain LINQ when clarity
-    outweighs measured cost.
+32. Keep the shipped `Runtime/` assembly and persisted editor-state models under
+    `Editor/DataVisualizer/Data/` free of `System.Linq`. Use direct collection operations
+    and streaming loops so player-facing helpers and state transfers do not introduce
+    avoidable iterator/delegate allocations. Other editor and test code may retain LINQ
+    when clarity outweighs measured cost.
 
 ### Skills Discipline
 

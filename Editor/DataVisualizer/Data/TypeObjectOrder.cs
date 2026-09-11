@@ -2,7 +2,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
 
     [Serializable]
     public sealed class TypeObjectOrder
@@ -17,7 +16,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             {
                 page = page,
                 TypeFullName = TypeFullName ?? string.Empty,
-                ObjectGuids = ObjectGuids?.ToList() ?? new List<string>(),
+                ObjectGuids = PersistedStateCopy.CloneStrings(ObjectGuids),
             };
         }
     }
