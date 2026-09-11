@@ -147,6 +147,11 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
 29. Use `//` for standalone single-line comments and tool control directives only.
     Write ordinary multi-line explanations as one indented `/* ... */` block. Keep
     `///` XML documentation line-oriented. The C# source lint enforces this rule.
+30. Prefer public Unity Editor geometry and display APIs before adding platform-native
+    bindings. If a native boundary remains necessary, verify its ABI with primary
+    platform documentation, represent pointer-sized native values with pointer-sized
+    managed types, and document every supported platform branch that was not executed
+    during validation.
 
 ### Skills Discipline
 
