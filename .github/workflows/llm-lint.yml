@@ -21,6 +21,7 @@ on:
       - "Generator~/**/*.cs"
       - "**/*.asmdef"
       - "**/*.ruleset"
+      - "**/*.rsp"
   pull_request:
     paths:
       - ".llm/**"
@@ -40,6 +41,7 @@ on:
       - "Generator~/**/*.cs"
       - "**/*.asmdef"
       - "**/*.ruleset"
+      - "**/*.rsp"
 
 concurrency:
   group: llm-lint-${{ github.ref }}
