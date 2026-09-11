@@ -3,7 +3,6 @@ namespace WallstopStudios.DataVisualizer.Extensions
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
-    using System.Linq;
 
     internal static class DictionaryExtensions
     {
@@ -222,7 +221,7 @@ namespace WallstopStudios.DataVisualizer.Extensions
             this IEnumerable<KeyValuePair<K, V>> prettyMuchADictionary
         )
         {
-            return prettyMuchADictionary.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            return ToDictionary(prettyMuchADictionary, comparer: null);
         }
 
         public static Dictionary<K, V> ToDictionary<K, V>(
@@ -230,14 +229,25 @@ namespace WallstopStudios.DataVisualizer.Extensions
             IEqualityComparer<K> comparer
         )
         {
-            return prettyMuchADictionary.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, comparer);
+            if (prettyMuchADictionary == null)
+            {
+                throw new ArgumentNullException(nameof(prettyMuchADictionary));
+            }
+
+            Dictionary<K, V> dictionary = new(comparer);
+            foreach (KeyValuePair<K, V> entry in prettyMuchADictionary)
+            {
+                dictionary.Add(entry.Key, entry.Value);
+            }
+
+            return dictionary;
         }
 
         public static Dictionary<K, V> ToDictionary<K, V>(
             this IEnumerable<(K, V)> prettyMuchADictionary
         )
         {
-            return prettyMuchADictionary.ToDictionary(kvp => kvp.Item1, kvp => kvp.Item2);
+            return ToDictionary(prettyMuchADictionary, comparer: null);
         }
 
         public static Dictionary<K, V> ToDictionary<K, V>(
@@ -245,7 +255,18 @@ namespace WallstopStudios.DataVisualizer.Extensions
             IEqualityComparer<K> comparer
         )
         {
-            return prettyMuchADictionary.ToDictionary(kvp => kvp.Item1, kvp => kvp.Item2, comparer);
+            if (prettyMuchADictionary == null)
+            {
+                throw new ArgumentNullException(nameof(prettyMuchADictionary));
+            }
+
+            Dictionary<K, V> dictionary = new(comparer);
+            foreach ((K key, V value) in prettyMuchADictionary)
+            {
+                dictionary.Add(key, value);
+            }
+
+            return dictionary;
         }
 
         public static bool ContentEquals<K, V>(
@@ -264,10 +285,20 @@ namespace WallstopStudios.DataVisualizer.Extensions
                 return false;
             }
 
-            return dictionary.Count == other.Count
-                && dictionary.All(kvp =>
-                    other.TryGetValue(kvp.Key, out V value) && kvp.Value.Equals(value)
-                );
+            if (dictionary.Count != other.Count)
+            {
+                return false;
+            }
+
+            foreach (KeyValuePair<K, V> entry in dictionary)
+            {
+                if (!other.TryGetValue(entry.Key, out V value) || !entry.Value.Equals(value))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         public static void Deconstruct<K, V>(this KeyValuePair<K, V> kvp, out K key, out V value)

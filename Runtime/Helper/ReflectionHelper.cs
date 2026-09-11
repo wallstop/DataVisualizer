@@ -3,7 +3,6 @@ namespace WallstopStudios.DataVisualizer.Helper
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Linq;
     using System.Reflection;
     using System.Reflection.Emit;
     using System.Runtime.CompilerServices;
@@ -59,25 +58,35 @@ namespace WallstopStudios.DataVisualizer.Helper
         public static Dictionary<string, PropertyInfo> LoadStaticPropertiesForType<T>()
         {
             Type type = typeof(T);
-            return type.GetProperties(BindingFlags.Static | BindingFlags.Public)
-                .Where(property => property.PropertyType == type)
-                .ToDictionary(
-                    property => property.Name,
-                    property => property,
-                    StringComparer.OrdinalIgnoreCase
-                );
+            Dictionary<string, PropertyInfo> properties = new(StringComparer.OrdinalIgnoreCase);
+            foreach (
+                PropertyInfo property in type.GetProperties(
+                    BindingFlags.Static | BindingFlags.Public
+                )
+            )
+            {
+                if (property.PropertyType == type)
+                {
+                    properties.Add(property.Name, property);
+                }
+            }
+
+            return properties;
         }
 
         public static Dictionary<string, FieldInfo> LoadStaticFieldsForType<T>()
         {
             Type type = typeof(T);
-            return type.GetFields(BindingFlags.Static | BindingFlags.Public)
-                .Where(field => field.FieldType == type)
-                .ToDictionary(
-                    field => field.Name,
-                    field => field,
-                    StringComparer.OrdinalIgnoreCase
-                );
+            Dictionary<string, FieldInfo> fields = new(StringComparer.OrdinalIgnoreCase);
+            foreach (FieldInfo field in type.GetFields(BindingFlags.Static | BindingFlags.Public))
+            {
+                if (field.FieldType == type)
+                {
+                    fields.Add(field.Name, field);
+                }
+            }
+
+            return fields;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

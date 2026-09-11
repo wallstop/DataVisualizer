@@ -1,8 +1,8 @@
 namespace WallstopStudios.DataVisualizer
 {
     using System;
+    using System.Collections;
     using System.Collections.Generic;
-    using System.Linq;
     using UnityEngine;
 
     public interface IDataProcessor
@@ -15,7 +15,31 @@ namespace WallstopStudios.DataVisualizer
 
         int WillEffect(Type type, IEnumerable<ScriptableObject> objects)
         {
-            return objects.Count();
+            if (objects == null)
+            {
+                throw new ArgumentNullException(nameof(objects));
+            }
+
+            if (objects is ICollection<ScriptableObject> genericCollection)
+            {
+                return genericCollection.Count;
+            }
+
+            if (objects is ICollection collection)
+            {
+                return collection.Count;
+            }
+
+            int count = 0;
+            checked
+            {
+                foreach (ScriptableObject _ in objects)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         void Process(Type type, IEnumerable<ScriptableObject> objects);

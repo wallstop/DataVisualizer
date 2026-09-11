@@ -2,7 +2,8 @@
 // Adapted from Ambiguous-Interactive/unity-helpers at edbfe9b245c2ca20c461c746566b9c46fc133457 (MIT).
 /**
  * C# source policy enforcement: member ordering (#672), nested-type placement (#575), method
- * naming (#47), and block formatting for multi-line comments (#57).
+ * naming (#47), block formatting for multi-line comments (#57), and the Runtime LINQ boundary
+ * (#61).
  *
  * The member ordering is the owner's, from #672. Every tier below is ordered public → protected →
  * internal → private, including const:
@@ -839,6 +840,21 @@ function multilineLineCommentViolations(text) {
   return violations;
 }
 
+/** `System.Linq` references in shipped Runtime code, excluding comments and literals. */
+function runtimeLinqViolations(text) {
+  const masked = maskNoise(text);
+  const violations = [];
+  const reference = /\bSystem\s*\.\s*Linq\b/g;
+  let match;
+  while ((match = reference.exec(masked)) !== null) {
+    violations.push({
+      line: lineOf(text, match.index),
+      kind: "runtime LINQ dependency"
+    });
+  }
+  return violations;
+}
+
 /** The member's declaring identifier, for the violation message. */
 function memberName(masked, member) {
   const prefix = declarationPrefix(masked, member.headerStart, member.end);
@@ -925,11 +941,14 @@ function directivePrefixEnd(text, start, end) {
  * conditional boundary, so members on opposite sides of an `#if` are never compared -- and the
  * nested types fall back to the targeted move that keeps every `#if` member in place.
  */
-function analyzeFile(text) {
+function analyzeFile(text, prohibitLinq = false) {
   const masked = maskNoise(text);
   const keys = regionKeys(text);
   const bodies = typeBodies(masked);
   const violations = multilineLineCommentViolations(text);
+  if (prohibitLinq) {
+    violations.push(...runtimeLinqViolations(text));
+  }
   const edits = [];
 
   for (const body of bodies) {
@@ -1236,6 +1255,10 @@ function sourceFiles(directory, found) {
   return found;
 }
 
+function isRuntimeSource(relative) {
+  return relative.split("/").includes("Runtime");
+}
+
 function main(argv) {
   const fix = argv.includes("--fix");
   const verbose = argv.includes("--verbose");
@@ -1263,7 +1286,8 @@ function main(argv) {
     // an absolute drive path, which path.join would incorrectly append beneath the checkout.
     const file = path.isAbsolute(relative) ? relative : path.join(REPO_ROOT, relative);
     let text = fs.readFileSync(file, "utf8");
-    let result = analyzeFile(text);
+    const prohibitLinq = isRuntimeSource(relative);
+    let result = analyzeFile(text, prohibitLinq);
 
     if (fix && 0 < result.edits.length) {
       // Nesting means an outer move can expose an inner one; re-analyze until the file settles.
@@ -1285,7 +1309,7 @@ function main(argv) {
           break;
         }
         text = updated;
-        result = analyzeFile(text);
+        result = analyzeFile(text, prohibitLinq);
         guard += 1;
       }
       if (text !== original) {
@@ -1296,6 +1320,12 @@ function main(argv) {
     }
 
     for (const violation of result.violations) {
+      if (violation.kind === "runtime LINQ dependency") {
+        remaining.push(
+          `${relative}:${violation.line}: shipped Runtime code must not depend on System.Linq (#61)`
+        );
+        continue;
+      }
       if (violation.kind === "multiline line comment") {
         remaining.push(
           `${relative}:${violation.line}: consecutive ordinary line comments must use one ` +
@@ -1344,6 +1374,7 @@ function main(argv) {
     console.error(
       `[csharp-member-order] ${remaining.length} C# source policy violation(s). ` +
         "Use block comments for multi-line prose; use underscore-free PascalCase method names; " +
+        "keep shipped Runtime code free of System.Linq; " +
         "reorder members into the #672 ordering " +
         "(const, events, delegates, static properties, " +
         "static fields, properties, fields, constructors, static methods, methods; each tier public → " +
@@ -1373,7 +1404,8 @@ module.exports = {
   accessorKind,
   classifyMember,
   memberRank,
-  multilineLineCommentViolations
+  multilineLineCommentViolations,
+  runtimeLinqViolations
 };
 
 if (require.main === module) {
