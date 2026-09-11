@@ -14,7 +14,7 @@ Patterns that must not appear in this codebase, with the compliant alternative.
 | Culture-sensitive sorting in generated files/scripts | ordinal comparer (`StringComparer.Ordinal`) | byte-identical output across OS/CI machines |
 | Editor-only API calls in `OnValidate` without `Application.isPlaying` guard | `#if UNITY_EDITOR` + play-mode check (see `BaseDataObject.TrySetAssetPath`) | build/player crashes |
 | Growing `DataVisualizer.cs` with new subsystems | new files under `Data/`, `Search/`, `UI/`, `Utilities/` | the main file is already ~9.3k lines |
-| Adding `.llm/`, `scripts/`, or pointer files to `package.json` `files` | keep the whitelist Editor/Runtime/Tests/docs only | tarball hygiene for the UPM registry |
+| Adding `Tests/`, `.llm/`, `scripts/`, or pointer files to `package.json` `files` | keep the whitelist Editor/Runtime/docs only | tarball hygiene for the UPM registry and consumer installs |
 | Committing without `.meta` files for new Unity-visible paths | let Unity generate them, then `git add` | missing metas churn guids per machine |
 | Editing `.llm/skills/index.md` by hand | `pwsh -NoProfile -File scripts/generate-skills-index.ps1` | file is generated; hand edits drift |
 | Markdown files under `.llm/` exceeding 300 lines | split into skills/code-samples/references | context minimalism (hard limit, enforced) |

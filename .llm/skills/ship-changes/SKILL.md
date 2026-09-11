@@ -32,7 +32,7 @@ Run the narrowest sufficient layer; escalate on failure:
    diff and re-stage).
 3. `pwsh -NoProfile -File scripts/tests/run-all.ps1` when `scripts/**` changed.
 4. `npm pack` when `package.json`, `files`, or shipped assets changed; confirm the
-   tarball contains only `Editor`, `Runtime`, `Tests`, `docs` payloads.
+   tarball contains only `Editor`, `Runtime`, and `docs` payloads.
 5. Unity EditMode tests; PlayMode tests when runtime lifecycle or persistence
    changed.
 
