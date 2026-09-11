@@ -155,6 +155,7 @@ dotnet tool restore
 dotnet tool run csharpier -- format Editor Runtime Tests
 dotnet tool run csharpier -- check Editor Runtime Tests
 npm run lint:csharp-member-order
+pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
 pwsh -NoProfile -File scripts/generate-skills-index.ps1
 pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput
 pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -VerboseOutput

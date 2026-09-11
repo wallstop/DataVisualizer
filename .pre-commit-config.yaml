@@ -27,6 +27,13 @@ repos:
         pass_filenames: false
         files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
         description: Enforces the repository member tiers, access ordering, and nested-type placement.
+      - id: lint-assembly-warnings
+        name: Enforce assembly warnings as errors
+        entry: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
+        language: system
+        pass_filenames: false
+        files: (\.asmdef|\.ruleset)$|^scripts/lint-assembly-warnings\.ps1$
+        description: Requires one strict warnings-as-errors ruleset beside every assembly definition.
       - id: lint-llm-instructions
         name: Lint the .llm agent harness
         entry: pwsh -NoProfile -File scripts/lint-llm-instructions.ps1

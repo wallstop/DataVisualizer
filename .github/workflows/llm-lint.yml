@@ -19,6 +19,8 @@ on:
       - "Runtime/**/*.cs"
       - "Tests/**/*.cs"
       - "Generator~/**/*.cs"
+      - "**/*.asmdef"
+      - "**/*.ruleset"
   pull_request:
     paths:
       - ".llm/**"
@@ -36,6 +38,8 @@ on:
       - "Runtime/**/*.cs"
       - "Tests/**/*.cs"
       - "Generator~/**/*.cs"
+      - "**/*.asmdef"
+      - "**/*.ruleset"
 
 concurrency:
   group: llm-lint-${{ github.ref }}
@@ -66,6 +70,9 @@ jobs:
 
       - name: Enforce C# member ordering
         run: node scripts/lint-csharp-member-order.js --verbose
+
+      - name: Enforce assembly warnings as errors
+        run: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
 
       - name: Run harness self-tests
         run: pwsh -NoProfile -File scripts/tests/run-all.ps1
