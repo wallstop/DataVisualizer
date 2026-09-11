@@ -164,6 +164,54 @@ Invoke-TestCase 'Fails_WhenIncludeAllDoesNotPromoteWarnings' {
     }
 }
 
+Invoke-TestCase 'Fails_WhenCompilerResponseFileLoadsPackageAnalyzer' {
+    $root = New-TempRoot
+    try {
+        Write-AssemblyFixture -Root $root -Directory 'Runtime'
+        Write-FixtureFile `
+            -Root $root `
+            -RelativePath 'Runtime/csc.rsp' `
+            -Content "-warn:4`n-analyzer:`"Runtime/Analyzer.dll`""
+
+        $output = & $lintScript -Root $root *>&1 | Out-String
+        Assert-ExitCode 1 'a package-local analyzer argument should fail'
+        Assert-True ($output -match 'must not load analyzers') "output should reject package-local analyzers, got: $output"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_WhenRepositoryContainsLabeledAnalyzer' {
+    $root = New-TempRoot
+    try {
+        Write-AssemblyFixture -Root $root -Directory 'Runtime'
+        Write-FixtureFile -Root $root -RelativePath 'Tools/Analyzer.dll.meta' -Content "labels:`n- RoslynAnalyzer"
+
+        $output = & $lintScript -Root $root *>&1 | Out-String
+        Assert-ExitCode 1 'a repository-local labeled analyzer should fail'
+        Assert-True ($output -match 'repository-local analyzer payload') "output should reject the analyzer payload, got: $output"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_WhenRepositoryContainsKnownAnalyzerPayload' {
+    $root = New-TempRoot
+    try {
+        Write-AssemblyFixture -Root $root -Directory 'Runtime'
+        Write-FixtureFile `
+            -Root $root `
+            -RelativePath 'Tools/ErrorProne.NET.NOTICE.md' `
+            -Content 'development analyzer notice'
+
+        $output = & $lintScript -Root $root *>&1 | Out-String
+        Assert-ExitCode 1 'a known repository-local analyzer payload should fail'
+        Assert-True ($output -match 'repository-local analyzer payload') "output should reject the known analyzer payload, got: $output"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
 Write-Host "== assembly warnings policy: $script:TestFailureCount failure(s) =="
 if ($script:TestFailureCount -gt 0) {
     exit 1

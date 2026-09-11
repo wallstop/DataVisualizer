@@ -66,6 +66,18 @@ try {
                 )
                 $errors++
             }
+
+            $analyzerArguments = @(
+                $responseArguments |
+                Where-Object { $_ -match '^(?:-|/)analyzer:' }
+            )
+            if (0 -lt $analyzerArguments.Count) {
+                Write-Host (
+                    "[assembly-warnings] ERROR: $responseFilePath must not load analyzers from " +
+                    'this package repository; configure development analyzers in the host Unity project'
+                )
+                $errors++
+            }
         }
 
         $rulesets = @(Get-ChildItem -LiteralPath $assemblyDefinition.DirectoryName -Filter '*.ruleset' -File)
@@ -109,6 +121,23 @@ try {
         }
     }
 
+    $repositoryAnalyzerPayloads = @(
+        Get-ChildItem -LiteralPath $repoRoot -Recurse -File |
+        Where-Object {
+            $_.Name -match '^ErrorProne(?:\.NET|\.Net)(?:\..*)?$' -or
+            $_.Name -in @('RuntimeContracts.dll', 'RuntimeContracts.dll.meta') -or
+            ($_.Name -like '*.dll.meta' -and (Get-Content -LiteralPath $_.FullName -Raw) -match '(?m)^- RoslynAnalyzer\r?$')
+        }
+    )
+    foreach ($analyzerPayload in $repositoryAnalyzerPayloads) {
+        $payloadPath = Format-DisplayPath -FullPath $analyzerPayload.FullName -BasePath $repoRoot
+        Write-Host (
+            "[assembly-warnings] ERROR: repository-local analyzer payload $payloadPath is forbidden; " +
+            'configure development analyzers in the host Unity project'
+        )
+        $errors++
+    }
+
     if (0 -lt $errors) {
         Write-Host "[assembly-warnings] FAILED: $errors assembly warning policy error(s)"
         exit 1
@@ -116,7 +145,7 @@ try {
 
     Write-Host (
         "[assembly-warnings] OK: all $($assemblyDefinitions.Count) assembly definition(s) " +
-        'use maximum compiler warnings and treat warnings as errors'
+        'use maximum compiler warnings and warnings as errors without repository-local analyzers'
     )
     exit 0
 } catch {

@@ -23,6 +23,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             throw new InvalidOperationException("Expected test provider failure.");
         }
 
+        private static void ExpectProviderException()
+        {
+            LogAssert.Expect(
+                LogType.Exception,
+                "InvalidOperationException: Expected test provider failure."
+            );
+        }
+
         private static Rect ThrowUnexpectedProviderCall()
         {
             throw new AssertionException("A lower-priority provider was called unexpectedly.");
@@ -498,6 +506,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldReturnFallbackRectWhenPreferredProviderFails()
         {
             Rect expected = new(0, 0, 2560, 1440);
+            ExpectProviderException();
 
             bool result = MonitorUtility.TryResolveMonitorRect(
                 ThrowProviderException,
@@ -512,6 +521,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldReturnFalseWhenBothProvidersFail()
         {
+            ExpectProviderException();
+
             bool result = MonitorUtility.TryResolveMonitorRect(
                 () => Rect.zero,
                 ThrowProviderException,
@@ -557,6 +568,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldReturnFallbackRectWhenPreferredProviderThrows()
         {
             Rect expected = new(40, 50, 1600, 900);
+            ExpectProviderException();
 
             bool result = MonitorUtility.TryResolveMonitorRect(
                 ThrowProviderException,

@@ -197,7 +197,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     return true;
                 }
             }
-            catch (Exception) { }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
 
             rect = default;
             return false;

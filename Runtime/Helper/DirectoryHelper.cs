@@ -104,8 +104,9 @@ namespace WallstopStudios.DataVisualizer.Helper
                         return directoryInfo.FullName;
                     }
                 }
-                catch
+                catch (Exception exception)
                 {
+                    Debug.LogException(exception);
                     return currentPath;
                 }
 
@@ -119,8 +120,9 @@ namespace WallstopStudios.DataVisualizer.Helper
 
                     currentPath = parentPath;
                 }
-                catch
+                catch (Exception exception)
                 {
+                    Debug.LogException(exception);
                     return currentPath;
                 }
             }
