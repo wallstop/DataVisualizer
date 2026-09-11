@@ -94,6 +94,25 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(actual, Is.EqualTo(new Rect(-1460, -10, 1000, 700)));
         }
 
+        [TestCase(1f, TestName = "100 percent display scale")]
+        [TestCase(1.5f, TestName = "150 percent display scale")]
+        [TestCase(2f, TestName = "200 percent display scale")]
+        public void ShouldPreservePreferredPointSizeAcrossDisplayScales(float displayScale)
+        {
+            const float physicalWidth = 3840f;
+            const float physicalHeight = 2160f;
+            float logicalWidth = physicalWidth / displayScale;
+            float logicalHeight = physicalHeight / displayScale;
+
+            Rect actual = MonitorUtility.CalculateCenteredRect(
+                new Rect(-logicalWidth, 0f, logicalWidth, logicalHeight),
+                860f,
+                480f
+            );
+
+            Assert.That(actual.size, Is.EqualTo(new Vector2(860f, 480f)));
+        }
+
         [TestCase(
             100f,
             50f,
@@ -485,6 +504,53 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             bool actual = MonitorUtility.ShouldApplyInitialPlacement(initialSizeApplied, isDocked);
 
             Assert.That(actual, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void ShouldReturnUnityEditorPointRectWhenUsable()
+        {
+            Rect expected = new(-1720f, 80f, 1600f, 900f);
+
+            bool result = MonitorUtility.TryResolveEditorPlacementRect(
+                () => expected,
+                out Rect actual
+            );
+
+            Assert.That(result, Is.True);
+            Assert.That(actual, Is.EqualTo(expected));
+        }
+
+        [TestCase(0f, 0f, 0f, 1080f, TestName = "Zero width")]
+        [TestCase(float.NaN, 0f, 1920f, 1080f, TestName = "NaN origin")]
+        [TestCase(0f, 0f, 1920f, float.PositiveInfinity, TestName = "Infinite height")]
+        public void ShouldRejectInvalidUnityEditorPointRect(
+            float x,
+            float y,
+            float width,
+            float height
+        )
+        {
+            bool result = MonitorUtility.TryResolveEditorPlacementRect(
+                () => new Rect(x, y, width, height),
+                out Rect actual
+            );
+
+            Assert.That(result, Is.False);
+            Assert.That(actual, Is.EqualTo(default(Rect)));
+        }
+
+        [Test]
+        public void ShouldRejectFailedUnityEditorPointProvider()
+        {
+            ExpectProviderException();
+
+            bool result = MonitorUtility.TryResolveEditorPlacementRect(
+                ThrowProviderException,
+                out Rect actual
+            );
+
+            Assert.That(result, Is.False);
+            Assert.That(actual, Is.EqualTo(default(Rect)));
         }
 
         [Test]
