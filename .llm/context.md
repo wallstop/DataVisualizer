@@ -96,7 +96,10 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
 17. Unity generates `.meta` files for every non-dot path; commit them alongside new
     files. Dot-folders (`.llm`, `.github`) never get `.meta` files.
 18. Keep tests and agent/dev files out of the npm tarball: `package.json` `files`
-    whitelists only `Editor`, `Runtime`, `docs`, and their `.meta` companions.
+    whitelists only `Editor`, `Runtime`, `docs`, and their `.meta` companions. Static
+    analyzer binaries, Unity metadata/labels, notices, and `-analyzer` response-file
+    arguments must not exist in this package repository; install development-only
+    analyzers in the host Unity project instead.
 19. Write explicit ordered comparisons with `<` or `<=`, reversing operands instead
     of using `>` or `>=`. Relational patterns retain the operator required by C#
     syntax. Keep `!=` when expressing genuine inequality or null checks; do not wrap

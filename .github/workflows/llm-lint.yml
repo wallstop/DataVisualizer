@@ -73,7 +73,7 @@ jobs:
       - name: Enforce C# member ordering
         run: node scripts/lint-csharp-member-order.js --verbose
 
-      - name: Enforce assembly warnings as errors
+      - name: Enforce assembly warning policy
         run: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
 
       - name: Run harness self-tests

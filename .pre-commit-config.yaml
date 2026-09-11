@@ -28,12 +28,12 @@ repos:
         files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
         description: Enforces the repository member tiers, access ordering, and nested-type placement.
       - id: lint-assembly-warnings
-        name: Enforce assembly warnings as errors
+        name: Enforce assembly warning policy
         entry: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
         language: system
         pass_filenames: false
-        files: (\.asmdef|\.ruleset|\.rsp)$|^scripts/lint-assembly-warnings\.ps1$
-        description: Requires maximum compiler warnings and one strict ruleset beside every assembly definition.
+        files: (\.asmdef|\.ruleset|\.rsp|\.dll\.meta)$|^scripts/lint-assembly-warnings\.ps1$
+        description: Requires maximum compiler warnings, strict rulesets, and no repository-local analyzer wiring.
       - id: lint-llm-instructions
         name: Lint the .llm agent harness
         entry: pwsh -NoProfile -File scripts/lint-llm-instructions.ps1

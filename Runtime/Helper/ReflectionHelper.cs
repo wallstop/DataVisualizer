@@ -8,6 +8,7 @@ namespace WallstopStudios.DataVisualizer.Helper
     using System.Reflection.Emit;
     using System.Runtime.CompilerServices;
     using Extensions;
+    using UnityEngine;
 
     internal delegate void FieldSetter<TInstance, in TValue>(ref TInstance instance, TValue value);
 
@@ -32,9 +33,9 @@ namespace WallstopStudios.DataVisualizer.Helper
                     return true;
                 }
             }
-            catch
+            catch (Exception exception)
             {
-                // Swallow
+                Debug.LogException(exception);
             }
             attribute = default;
             return false;

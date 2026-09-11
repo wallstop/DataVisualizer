@@ -988,9 +988,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                 }
             }
-            catch
+            catch (Exception exception)
             {
-                // Swallow
+                Debug.LogException(exception);
             }
 
             return null;
@@ -1412,7 +1412,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 catch (Exception ex)
                 {
                     Debug.LogError(
-                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex.Message}"
+                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex}"
                     );
                 }
             }
@@ -2295,7 +2295,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"Error running processor '{processor.Name}': {ex}");
+                        Debug.LogException(
+                            new InvalidOperationException(
+                                $"Error running processor '{processor.Name}'.",
+                                ex
+                            )
+                        );
                         EditorUtility.DisplayDialog(
                             "Processor Error",
                             $"An error occurred while running '{processor.Name}':\n{ex.Message}",
@@ -3708,7 +3713,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 catch (Exception ex)
                 {
                     Debug.LogWarning(
-                        $"Could not resolve current DataFolderPath '{currentRelativePath}': {ex.Message}. Starting selection in Assets."
+                        $"Could not resolve current DataFolderPath '{currentRelativePath}': {ex}. Starting selection in Assets."
                     );
                 }
             }
@@ -7667,7 +7672,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError($"Error creating standard inspector with InspectorElement: {e}");
+                    Debug.LogException(
+                        new InvalidOperationException(
+                            "Error creating the standard InspectorElement.",
+                            e
+                        )
+                    );
                     _inspectorContainer.Add(
                         new Label($"Standard Inspector Element Error: {e.Message}")
                     );
@@ -8249,6 +8259,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             catch (Exception e)
             {
+                Debug.LogException(e);
                 EditorUtility.DisplayDialog(
                     "Error Cloning Asset",
                     $"Failed to create cloned asset at '{uniquePath}': {e.Message}",
