@@ -14,8 +14,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static Rect ThrowUnexpectedProviderCall()
         {
-            Assert.Fail("A lower-priority provider was called unexpectedly.");
-            return Rect.zero;
+            throw new AssertionException("A lower-priority provider was called unexpectedly.");
         }
 
         [Test]

@@ -12,16 +12,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
     public static class MonitorUtility
     {
-        public static Rect GetPrimaryMonitorRect()
-        {
-            if (TryGetPrimaryMonitorRect(out Rect rect))
-            {
-                return rect;
-            }
-
-            return Rect.zero;
-        }
-
         public static bool TryGetPrimaryMonitorRect(out Rect rect)
         {
             return TryResolveMonitorRect(
