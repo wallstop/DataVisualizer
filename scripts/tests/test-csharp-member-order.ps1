@@ -90,6 +90,23 @@ public sealed class BadMethodName
     }
 }
 
+Invoke-TestCase 'Fails_OnUnderscoredGenericMethodName' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'BadGenericMethodName.cs' -Content @'
+public sealed class BadGenericMethodName
+{
+    public void Should_Run<T>() { }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'underscored generic method name should fail'
+        Assert-True ($result.Output -match 'Should_Run') "failure should identify the generic method: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
 Invoke-TestCase 'Fails_WhenNestedTypeIsInterspersed' {
     $root = New-TempRoot -Prefix 'member-order-'
     try {

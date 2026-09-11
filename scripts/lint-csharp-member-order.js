@@ -596,7 +596,22 @@ function callableNameBefore(masked, parenIndex) {
     cursor -= 1;
   }
   if (0 <= cursor && masked[cursor] === ">") {
-    return ">";
+    let depth = 1;
+    cursor -= 1;
+    while (0 <= cursor && 0 < depth) {
+      if (masked[cursor] === ">") {
+        depth += 1;
+      } else if (masked[cursor] === "<") {
+        depth -= 1;
+      }
+      cursor -= 1;
+    }
+    if (depth !== 0) {
+      return null;
+    }
+    while (0 <= cursor && /\s/.test(masked[cursor])) {
+      cursor -= 1;
+    }
   }
   let end = cursor + 1;
   while (0 <= cursor && /[A-Za-z0-9_]/.test(masked[cursor])) {
@@ -791,8 +806,11 @@ function memberName(masked, member) {
         continue;
       }
     }
-    if (0 <= paren && callableNameBefore(masked, paren) !== null) {
-      return /~?[A-Za-z_]\w*\s*$/.exec(prefix.prefix)?.[0]?.trim() ?? null;
+    if (0 <= paren) {
+      const callable = callableNameBefore(masked, paren);
+      if (callable !== null) {
+        return callable;
+      }
     }
     let scan = 0 <= paren ? skipBalanced(masked, paren) : member.headerStart;
     if (scan < 0) {
