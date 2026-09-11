@@ -33,6 +33,49 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(actual, Is.EqualTo(expected));
         }
 
+        [Test]
+        public void Should_ReturnPreferredRect_When_TwoProvidersAreUsable()
+        {
+            Rect expected = new(-1720, 80, 1600, 900);
+
+            bool result = MonitorUtility.TryResolveMonitorRect(
+                () => expected,
+                ThrowUnexpectedProviderCall,
+                out Rect actual
+            );
+
+            Assert.That(result, Is.True);
+            Assert.That(actual, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void Should_ReturnFallbackRect_When_PreferredProviderFails()
+        {
+            Rect expected = new(0, 0, 2560, 1440);
+
+            bool result = MonitorUtility.TryResolveMonitorRect(
+                ThrowProviderException,
+                () => expected,
+                out Rect actual
+            );
+
+            Assert.That(result, Is.True);
+            Assert.That(actual, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void Should_ReturnFalse_When_BothProvidersFail()
+        {
+            bool result = MonitorUtility.TryResolveMonitorRect(
+                () => Rect.zero,
+                ThrowProviderException,
+                out Rect actual
+            );
+
+            Assert.That(result, Is.False);
+            Assert.That(actual, Is.EqualTo(default(Rect)));
+        }
+
         [TestCase(0f, 0f, 0f, 1080f, TestName = "Zero width")]
         [TestCase(0f, 0f, -1f, 1080f, TestName = "Negative width")]
         [TestCase(0f, 0f, 1920f, 0f, TestName = "Zero height")]

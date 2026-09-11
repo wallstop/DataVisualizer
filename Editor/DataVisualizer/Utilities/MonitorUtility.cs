@@ -14,12 +14,42 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     {
         public static bool TryGetPrimaryMonitorRect(out Rect rect)
         {
+#if UNITY_EDITOR_WIN
             return TryResolveMonitorRect(
-                GetPrimaryMonitorRectOrZero,
+                GetPrimaryMonitorRect_Windows_PInvoke,
                 EditorGUIUtility.GetMainWindowPosition,
                 GetCurrentResolutionRect,
                 out rect
             );
+#else
+            return TryResolveMonitorRect(
+                EditorGUIUtility.GetMainWindowPosition,
+                GetCurrentResolutionRect,
+                out rect
+            );
+#endif
+        }
+
+        public static bool TryResolveMonitorRect(
+            Func<Rect> preferredRectProvider,
+            Func<Rect> fallbackRectProvider,
+            out Rect rect
+        )
+        {
+            if (TryGetUsableRect(preferredRectProvider, out Rect preferredRect))
+            {
+                rect = preferredRect;
+                return true;
+            }
+
+            if (TryGetUsableRect(fallbackRectProvider, out Rect fallbackRect))
+            {
+                rect = fallbackRect;
+                return true;
+            }
+
+            rect = default;
+            return false;
         }
 
         public static bool TryResolveMonitorRect(
@@ -49,23 +79,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
             rect = default;
             return false;
-        }
-
-        private static Rect GetPrimaryMonitorRectOrZero()
-        {
-#if UNITY_EDITOR_WIN
-            // --- Windows Implementation (using P/Invoke) ---
-            return GetPrimaryMonitorRect_Windows_PInvoke();
-
-#elif UNITY_EDITOR_OSX
-            // --- macOS Implementation (using P/Invoke) ---
-            return GetPrimaryMonitorRect_Mac_PInvoke(); // Renamed for clarity
-#elif UNITY_EDITOR_LINUX
-            // --- Linux Implementation (Placeholder) ---
-            return Rect.zero;
-#else
-            return Rect.zero; // Fallback for other platforms
-#endif
         }
 
         private static Rect GetCurrentResolutionRect()
@@ -154,101 +167,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         }
 
 #endif // UNITY_EDITOR_WIN
-
-        // --- macOS P/Invoke Definitions and Helper ---
-#if UNITY_EDITOR_OSX
-
-        // Define necessary Objective-C runtime functions via P/Invoke
-        [DllImport("/System/Library/Frameworks/AppKit.framework/AppKit")]
-        private static extern IntPtr objc_getClass(string className);
-
-        [DllImport("/System/Library/Frameworks/AppKit.framework/AppKit")]
-        private static extern IntPtr sel_registerName(string selectorName);
-
-        // Use IntPtr version for most messages, specialized versions for struct returns if needed
-        [DllImport(
-            "/System/Library/Frameworks/AppKit.framework/AppKit",
-            EntryPoint = "objc_msgSend"
-        )]
-        private static extern IntPtr objc_msgSend_IntPtr(IntPtr receiver, IntPtr selector);
-
-        [DllImport(
-            "/System/Library/Frameworks/AppKit.framework/AppKit",
-            EntryPoint = "objc_msgSend"
-        )]
-        private static extern IntPtr objc_msgSend_IntPtr_UInt(
-            IntPtr receiver,
-            IntPtr selector,
-            uint index
-        );
-
-        // Need specific signature for returning CGRect (a struct)
-        [DllImport(
-            "/System/Library/Frameworks/AppKit.framework/AppKit",
-            EntryPoint = "objc_msgSend_stret"
-        )]
-        private static extern void objc_msgSend_stret_CGRect(
-            out CGRect stret,
-            IntPtr receiver,
-            IntPtr selector
-        );
-
-        private static Rect GetPrimaryMonitorRect_Mac_PInvoke() // Renamed function
-        {
-            IntPtr NSScreenClass = objc_getClass("NSScreen");
-            if (NSScreenClass == IntPtr.Zero)
-            {
-                Debug.LogError("PInvoke Error: Failed to get NSScreen class.");
-                return Rect.zero;
-            }
-
-            IntPtr screensSelector = sel_registerName("screens");
-            if (screensSelector == IntPtr.Zero)
-            {
-                Debug.LogError("PInvoke Error: Failed to get 'screens' selector.");
-                return Rect.zero;
-            }
-
-            IntPtr screensArray = objc_msgSend_IntPtr(NSScreenClass, screensSelector);
-            if (screensArray == IntPtr.Zero)
-            {
-                Debug.LogError("PInvoke Error: Failed to get screens array.");
-                return Rect.zero;
-            }
-
-            IntPtr objectAtIndexSelector = sel_registerName("objectAtIndex:");
-            if (objectAtIndexSelector == IntPtr.Zero)
-            {
-                Debug.LogError("PInvoke Error: Failed to get 'objectAtIndex:' selector.");
-                return Rect.zero;
-            }
-            IntPtr primaryScreen = objc_msgSend_IntPtr_UInt(screensArray, objectAtIndexSelector, 0); // Index 0 is primary
-            if (primaryScreen == IntPtr.Zero)
-            {
-                Debug.LogError("PInvoke Error: Failed to get primary screen object from array.");
-                return Rect.zero;
-            }
-
-            IntPtr frameSelector = sel_registerName("frame");
-            if (frameSelector == IntPtr.Zero)
-            {
-                Debug.LogError("PInvoke Error: Failed to get 'frame' selector.");
-                return Rect.zero;
-            }
-
-            CGRect screenFrame;
-            objc_msgSend_stret_CGRect(out screenFrame, primaryScreen, frameSelector);
-
-            // Simplified mapping: Use dimensions, assume top-left origin is (0,0) for primary screen space.
-            // A more robust conversion might be needed if primary screen isn't at global (0,0)
-            // or if EditorWindow.position behaves unexpectedly on Mac regarding Y-coordinates.
-            // See previous answer's notes on coordinate system complexities.
-            Debug.Log(
-                $"macOS primary screen frame: O=({screenFrame.origin.x},{screenFrame.origin.y}) S=({screenFrame.size.width},{screenFrame.size.height})"
-            );
-            return new Rect(0, 0, (float)screenFrame.size.width, (float)screenFrame.size.height);
-        }
-#endif // UNITY_EDITOR_OSX
     }
 #endif
 }
