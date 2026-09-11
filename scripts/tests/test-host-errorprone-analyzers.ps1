@@ -122,7 +122,12 @@ Invoke-TestCase 'Installs_Verifies_AndRepeatsIdempotently' {
                 "$name should retain its pinned hash"
             $metadata = Get-Content -LiteralPath "$path.meta" -Raw
             Assert-True ($metadata -match '(?m)^- RoslynAnalyzer$') "$name metadata should apply RoslynAnalyzer"
-            Assert-True ($metadata -match '(?ms)^    Any:\s+enabled: 0$') "$name should be disabled as a normal plugin"
+            Assert-True `
+                ($metadata -match '(?ms)^  platformData:\s+  - first:\s+      : Any\s+    second:\s+      enabled: 0$') `
+                "$name should use Unity's list-shaped disabled-plugin metadata"
+            Assert-True `
+                ($metadata -notmatch '(?m)^    Any:$') `
+                "$name should not use dictionary-shaped platform metadata"
             $before[$name] = Get-TestHash $path
             $before["$name.meta"] = Get-TestHash "$path.meta"
         }
