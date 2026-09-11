@@ -14,7 +14,7 @@ metadata:
 2. Sync the harness: `npm run lint:llm:fix` updates the `**Version**:` line in
    `.llm/context.md` to match; rerun `npm run lint:llm` to confirm green.
 3. Verify the tarball: `npm pack` and inspect contents (must stay limited to
-   `Editor`, `Runtime`, `Tests`, `docs` payloads per the `files` whitelist).
+   `Editor`, `Runtime`, and `docs` payloads per the `files` whitelist).
 4. Commit with the historical subject format: `Bump version from X to Y`, including
    `package.json` and `.llm/context.md` in the same commit.
 5. Dispatch the manual publish workflow
