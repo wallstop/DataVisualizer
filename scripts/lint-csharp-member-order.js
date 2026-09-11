@@ -1166,7 +1166,9 @@ function main(argv) {
   let fixedSites = 0;
 
   for (const relative of scanned) {
-    const file = path.join(REPO_ROOT, relative);
+    // A self-test root can live on another Windows drive. path.relative then intentionally returns
+    // an absolute drive path, which path.join would incorrectly append beneath the checkout.
+    const file = path.isAbsolute(relative) ? relative : path.join(REPO_ROOT, relative);
     let text = fs.readFileSync(file, "utf8");
     let result = analyzeFile(text);
 
