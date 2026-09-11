@@ -183,6 +183,71 @@ public sealed class SupportedComments
     }
 }
 
+Invoke-TestCase 'Fails_OnRuntimeLinqImportsAndQualifiedCalls' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Runtime/UsesLinq.cs' -Content @'
+namespace Fixture
+{
+    using System.Linq;
+    using Query = global::System.Linq.Enumerable;
+    using static System.Linq.Enumerable;
+
+    public sealed class UsesLinq
+    {
+        public int Count(int[] values) { return System.Linq.Enumerable.Count(values); }
+    }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'Runtime LINQ dependencies should fail'
+        Assert-True ($result.Output -match '#61') "failure should identify the LINQ rule: $($result.Output)"
+        Assert-True ($result.Output -match 'Runtime/UsesLinq.cs:3') "failure should identify the first import: $($result.Output)"
+        Assert-True ($result.Output -match 'Runtime/UsesLinq.cs:4') "failure should identify the aliased import: $($result.Output)"
+        Assert-True ($result.Output -match 'Runtime/UsesLinq.cs:5') "failure should identify the static import: $($result.Output)"
+        Assert-True ($result.Output -match 'Runtime/UsesLinq.cs:9') "failure should identify the qualified call: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Passes_RuntimeLinqTextInCommentsAndStrings' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Runtime/NoLinqDependency.cs' -Content @'
+public sealed class NoLinqDependency
+{
+    public string Example { get; } = "System.Linq.Enumerable";
+
+    // System.Linq is named only as documentation.
+    public void Run() { }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 0) "comments and strings should not create LINQ violations: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Passes_EditorLinqDependency' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Editor/UsesLinq.cs' -Content @'
+namespace Fixture
+{
+    using System.Linq;
+
+    public sealed class UsesLinq { }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 0) "the Runtime-only rule should not reject Editor LINQ: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
 Invoke-TestCase 'Fails_WhenNestedTypeIsInterspersed' {
     $root = New-TempRoot -Prefix 'member-order-'
     try {
