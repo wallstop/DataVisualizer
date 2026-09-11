@@ -389,6 +389,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             bool hadInitialSizeApplied = EditorPrefs.HasKey(InitialSizeAppliedKey);
             bool initialSizeApplied = EditorPrefs.GetBool(InitialSizeAppliedKey);
+            bool hadTemporaryClampSize = EditorPrefs.HasKey(TemporaryWindowClampSizeKey);
+            string temporaryClampSize = EditorPrefs.GetString(TemporaryWindowClampSizeKey);
 
             using (TestCleanupScope cleanup = new())
             {
@@ -400,6 +402,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         InitialSizeAppliedKey,
                         hadInitialSizeApplied,
                         initialSizeApplied
+                    );
+                    RestoreStringPreference(
+                        TemporaryWindowClampSizeKey,
+                        hadTemporaryClampSize,
+                        temporaryClampSize
                     );
                 });
                 CloseDataVisualizerWindows();
