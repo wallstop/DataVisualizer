@@ -584,9 +584,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (settings == null)
             {
-                Debug.Log(
-                    $"No DataVisualizerSettings found, creating default at '{SettingsDefaultPath}'"
-                );
                 settings = CreateInstance<DataVisualizerSettings>();
                 settings._dataFolderPath = DataVisualizerSettings.DefaultDataFolderPath;
 
@@ -3764,7 +3761,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            Debug.Log($"Updating Data Folder from '{settings.DataFolderPath}' to '{relativePath}'");
             settings._dataFolderPath = relativePath;
             settings.MarkDirty();
             AssetDatabase.SaveAssets();
@@ -4122,7 +4118,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 AssetDatabase.SaveAssets();
                 renamable?.AfterRename(newName);
-                Debug.Log($"Asset renamed successfully to: {newName}");
                 CloseActivePopover();
                 if (_selectedObject == original && _assetNameTextField != null)
                 {
@@ -4261,8 +4256,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     SetLastSelectedObjectGuidForType(deletedTypeFullName, null);
                 }
-
-                Debug.Log($"Asset '{path}' deleted successfully.");
                 AssetDatabase.Refresh();
                 BuildObjectsView();
                 if (targetIndex < _selectedObjects.Count)
@@ -9301,13 +9294,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                     settings.HydrateFrom(userState);
                     settings.MarkDirty();
                     AssetDatabase.SaveAssets();
-                    Debug.Log("Migration to Settings Object complete.");
                 }
                 else
                 {
                     userState.HydrateFrom(settings);
                     MarkUserStateDirty();
-                    Debug.Log("Migration to User File complete.");
                 }
             }
             catch (Exception e)
