@@ -6,9 +6,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
 
     public sealed class SearchResultMatchInfo
     {
-        public bool isMatch;
-        public readonly List<MatchDetail> matchedFields = new();
-
         public bool MatchInPrimaryField
         {
             get
@@ -42,5 +39,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                     .Distinct(StringComparer.OrdinalIgnoreCase);
             }
         }
+
+        public bool isMatch;
+        public readonly List<MatchDetail> matchedFields = new();
     }
 }

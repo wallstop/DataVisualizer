@@ -12,7 +12,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             string[] discoveredGuids,
             IReadOnlyList<string> referencedGuids,
             string savedObjectGuid,
-            out string normalizedSavedObjectGuid
+            out string normalizedSavedObjectGuid,
+            AssetGuidTypeIndex typeIndex = null
         )
         {
             string[] candidates = discoveredGuids ?? Array.Empty<string>();
@@ -20,10 +21,30 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool candidateAdded = false;
             string normalizedSavedGuid = null;
 
-            if (referencedGuids != null && 0 < referencedGuids.Count)
+            AssetGuidTypeIndex effectiveTypeIndex = typeIndex ?? AssetGuidTypeIndex.Shared;
+            string[] indexedGuids = effectiveTypeIndex.GetKnownGuids(type);
+            if (0 < indexedGuids.Length)
             {
                 candidateLookup = new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
-                candidateAdded = 0 < AddResolvedGuids(type, referencedGuids, candidateLookup);
+                foreach (string indexedGuid in indexedGuids)
+                {
+                    if (candidateLookup.Add(indexedGuid))
+                    {
+                        candidateAdded = true;
+                    }
+                }
+            }
+
+            if (referencedGuids != null && 0 < referencedGuids.Count)
+            {
+                candidateLookup ??= new HashSet<string>(
+                    candidates,
+                    StringComparer.OrdinalIgnoreCase
+                );
+                if (0 < AddResolvedGuids(type, referencedGuids, candidateLookup))
+                {
+                    candidateAdded = true;
+                }
             }
 
             if (TryNormalizeGuidForType(type, savedObjectGuid, out string normalizedGuid))
@@ -33,7 +54,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     candidates,
                     StringComparer.OrdinalIgnoreCase
                 );
-                candidateAdded |= candidateLookup.Add(normalizedSavedGuid);
+                if (candidateLookup.Add(normalizedSavedGuid))
+                {
+                    candidateAdded = true;
+                }
             }
 
             if (!candidateAdded)

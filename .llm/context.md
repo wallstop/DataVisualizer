@@ -102,6 +102,40 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     syntax. Keep `!=` when expressing genuine inequality or null checks; do not wrap
     `==` in a negation merely to avoid it. Before reversing user-defined operators,
     verify the swapped operands and paired operator preserve behavior.
+20. Prefer one declared class, struct, interface, or enum per `.cs` file. Unity object
+    types must use a matching filename so Unity can associate the script reliably.
+    Keep any deliberately nonconforming regression fixture isolated and document why
+    it must model an external project's unsupported layout.
+21. Use `foreach` for arrays and concrete collections with value-type enumerators when
+    the loop does not need an index. For variables typed as `IReadOnlyList<T>` or
+    `IList<T>`, use a counted loop to avoid interface-enumerator allocation. Retain
+    `foreach` when the input is a stream or only exposes `IEnumerable<T>`.
+22. Never use bitwise `|`, `&`, `|=`, or `&=` to aggregate Boolean results. Evaluate
+    every side-effectful operation into its own named Boolean, then combine results
+    with `||` or `&&`. Bitwise operators remain correct for flags and numeric values.
+23. Give mutable lifecycle/state machines one transition owner. Helpers may gather or
+    process data, but they must not scatter direct state writes or scheduler ownership
+    across methods; route transitions through one named runner/transition method.
+24. Every enum member has an explicit numeric value. Reserve zero for an invalid
+    `Unknown`, `None`, or compatibility sentinel marked `[Obsolete("Please use a valid
+    value")]`; valid values must be nonzero. Preserve or explicitly migrate existing
+    serialized ordinals rather than renumbering them accidentally.
+25. Mutable services are instantiable sealed classes. Put state, events, and lifecycle
+    callbacks on the instance, and expose only one explicit static shared instance when
+    production needs global coordination. Static classes remain appropriate for pure
+    functions, extension methods, constants, and platform interop.
+26. Within each C# type, order members as: constants, events, delegates, static
+    properties, static fields, properties, fields, constructors, static methods,
+    methods, then nested types. Within every tier use public, protected, internal,
+    private. Do not reorder across conditional-compilation boundaries or static
+    initialization dependencies. Run `npm run lint:csharp-member-order`; use its
+    `:fix` variant for safe source-slice permutations, then resolve reported barriers
+    manually.
+27. Name classes, structs, enums, records, and delegates in PascalCase; interfaces
+    use PascalCase with an `I` prefix. Do not carry all-caps native typedef spellings
+    into managed type names. Use a descriptive prefix such as `Native` when the
+    idiomatic name would collide with a Unity or framework type. `.editorconfig`
+    enforces these declarations as warnings.
 
 ### Skills Discipline
 
@@ -118,6 +152,7 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
 dotnet tool restore
 dotnet tool run csharpier -- format Editor Runtime Tests
 dotnet tool run csharpier -- check Editor Runtime Tests
+npm run lint:csharp-member-order
 pwsh -NoProfile -File scripts/generate-skills-index.ps1
 pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput
 pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -VerboseOutput
@@ -129,10 +164,11 @@ unity -projectPath <path-to-host-project> -batchmode -quit -runTests -testPlatfo
 unity -projectPath <path-to-host-project> -batchmode -quit -runTests -testPlatform playmode
 ```
 
-Layers: the pre-commit framework hook runs the fast `.llm` checks on staged files;
+Layers: the pre-commit framework hook runs CSharpier, C# member-order, and the fast
+`.llm` checks on staged files;
 `npm run lint:llm` is the local gate; CI (`.github/workflows/llm-lint.yml`) runs
-everything on ubuntu and windows. CSharpier runs via the pre-commit config on staged
-`.cs` files.
+everything on ubuntu and windows. CSharpier and member ordering run via the
+pre-commit config on staged `.cs` files.
 
 ### Testing
 

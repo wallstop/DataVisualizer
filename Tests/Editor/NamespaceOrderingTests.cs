@@ -123,17 +123,3 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
     }
 }
-
-namespace WallstopStudios.DataVisualizer.Tests.Editor.TypeIdentityCollision.First.Data
-{
-    using UnityEngine;
-
-    public sealed class OrderCollisionData : ScriptableObject { }
-}
-
-namespace WallstopStudios.DataVisualizer.Tests.Editor.TypeIdentityCollision.Second.Data
-{
-    using UnityEngine;
-
-    public sealed class OrderCollisionData : ScriptableObject { }
-}

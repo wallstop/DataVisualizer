@@ -76,15 +76,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             );
         }
 
-        public NamespaceTypeOrder Clone()
-        {
-            return new NamespaceTypeOrder
-            {
-                namespaceKey = namespaceKey ?? string.Empty,
-                typeNames = typeNames?.ToList() ?? new List<string>(),
-            };
-        }
-
         private static int IndexOf(IReadOnlyList<string> values, string value)
         {
             if (values == null || string.IsNullOrWhiteSpace(value))
@@ -101,6 +92,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
 
             return -1;
+        }
+
+        public NamespaceTypeOrder Clone()
+        {
+            return new NamespaceTypeOrder
+            {
+                namespaceKey = namespaceKey ?? string.Empty,
+                typeNames = typeNames?.ToList() ?? new List<string>(),
+            };
         }
     }
 }

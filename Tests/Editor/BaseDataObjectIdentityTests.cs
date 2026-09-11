@@ -3,7 +3,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
-    using WallstopStudios.DataVisualizer;
 
     public sealed class BaseDataObjectIdentityTests
     {
@@ -48,14 +47,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     Object.DestroyImmediate(dataObject);
                 }
                 AssetDatabase.Refresh();
-            }
-        }
-
-        private sealed class TestDataObject : BaseDataObject
-        {
-            public void InvokeValidation()
-            {
-                OnValidate();
             }
         }
     }

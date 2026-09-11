@@ -52,44 +52,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         // --- Windows P/Invoke Definitions and Helper ---
 #if UNITY_EDITOR_WIN
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT
-        {
-            public int X;
-            public int Y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private struct MONITORINFO
-        {
-            public uint cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
-            public uint dwFlags;
-        }
-
         private const uint MONITOR_DEFAULTTOPRIMARY = 0x00000001;
 
         [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+        private static extern IntPtr MonitorFromPoint(NativePoint pt, uint dwFlags);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         [return: MarshalAs(UnmanagedType.Bool)] // Important: Win32 BOOL is not C# bool directly
-        private static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO lpmi);
+        private static extern bool GetMonitorInfoW(IntPtr hMonitor, ref NativeMonitorInfo lpmi);
 
         private static Rect GetPrimaryMonitorRect_Windows_PInvoke()
         {
             // Point (0,0) should be on the primary monitor in virtual screen coords
-            POINT zeroPoint = new() { X = 0, Y = 0 };
+            NativePoint zeroPoint = new() { x = 0, y = 0 };
 
             // Get the handle to the primary monitor
             IntPtr hMonitor = MonitorFromPoint(zeroPoint, MONITOR_DEFAULTTOPRIMARY);
@@ -102,8 +77,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 return Rect.zero;
             }
 
-            MONITORINFO monitorInfo = new();
-            monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO)); // Crucial: Set the size field
+            NativeMonitorInfo monitorInfo = new();
+            monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMonitorInfo)); // Crucial: Set the size field
 
             // Get monitor information
             if (!GetMonitorInfoW(hMonitor, ref monitorInfo))
@@ -113,13 +88,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             // Extract the monitor rectangle (full area, not just working area)
-            RECT monitorRectWin32 = monitorInfo.rcMonitor;
+            NativeRect monitorRectWin32 = monitorInfo.rcMonitor;
 
-            // Convert Win32 RECT (Left, Top, Right, Bottom) to Unity Rect (X, Y, Width, Height)
-            int width = monitorRectWin32.Right - monitorRectWin32.Left;
-            int height = monitorRectWin32.Bottom - monitorRectWin32.Top;
+            // Convert the Win32 rectangle (Left, Top, Right, Bottom) to a Unity Rect.
+            int width = monitorRectWin32.right - monitorRectWin32.left;
+            int height = monitorRectWin32.bottom - monitorRectWin32.top;
 
-            return new Rect(monitorRectWin32.Left, monitorRectWin32.Top, width, height);
+            return new Rect(monitorRectWin32.left, monitorRectWin32.top, width, height);
         }
 
 #endif // UNITY_EDITOR_WIN
@@ -161,28 +136,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             IntPtr receiver,
             IntPtr selector
         );
-
-        // Define the CGRect struct matching macOS's definition (usually contains CGPoint origin, CGSize size)
-        [StructLayout(LayoutKind.Sequential)]
-        private struct CGPoint
-        {
-            public double x;
-            public double y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct CGSize
-        {
-            public double width;
-            public double height;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct CGRect
-        {
-            public CGPoint origin;
-            public CGSize size;
-        }
 
         private static Rect GetPrimaryMonitorRect_Mac_PInvoke() // Renamed function
         {

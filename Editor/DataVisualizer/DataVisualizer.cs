@@ -73,33 +73,16 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const int AsyncLoadBatchSize = 100;
         private const int AsyncLoadPriorityBatchSize = 100;
 
+        // Uniform row height for the virtualized object ListView. Measured live: the .object-item
+        // box renders at ~40px; the slot is forced to this height and centers the box, so the extra
+        // 6px becomes a 3px gap above and below each row.
+        private const float ObjectRowFixedHeight = 46f;
+
+        internal static DataVisualizer Instance;
+
         // Debug logging for testing async loading
         // Set to true to see detailed loading performance logs in Unity Console
         private static readonly bool EnableAsyncLoadDebugLog = false;
-
-        private enum DragType
-        {
-            None = 0,
-            Namespace = 2,
-            Type = 3,
-        }
-
-        private enum FocusArea
-        {
-            None = 0,
-            TypeList = 1,
-            AddTypePopover = 2,
-            SearchResultsPopover = 3,
-        }
-
-        private enum LabelFilterSection
-        {
-            [Obsolete("Please use a valid value")]
-            None = 0,
-            Available = 1,
-            AND = 2,
-            OR = 3,
-        }
 
         private static readonly Color[] PredefinedLabelColors =
         {
@@ -113,9 +96,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             new Color(0.65f, 0.65f, 0.35f),
         };
 
-        internal static DataVisualizer Instance;
-
         private static readonly StringBuilder CachedStringBuilder = new();
+
+        // Action buttons stop pointer-down here so clicking one doesn't retarget the ListView's
+        // selection (which otherwise drops the current selection when using go-up/go-down/etc.) or
+        // start a row drag from a button.
+        private static readonly EventCallback<PointerDownEvent> StopRowChildPointerDown = evt =>
+            evt.StopPropagation();
 
         internal DataVisualizerUserState UserState
         {
@@ -174,6 +161,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         internal readonly Dictionary<string, List<Type>> _scriptableObjectTypes = new(
             StringComparer.Ordinal
         );
+        internal bool _isDragging;
 
         private readonly Dictionary<string, int> _namespaceOrder = new(StringComparer.Ordinal);
 
@@ -197,19 +185,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         // Virtualized list of the selected type's objects (replaces the manual ScrollView + paging).
         private ListView _objectListView;
 
-        // Uniform row height for the virtualized object ListView. Measured live: the .object-item
-        // box renders at ~40px; the slot is forced to this height and centers the box, so the extra
-        // 6px becomes a 3px gap above and below each row.
-        private const float ObjectRowFixedHeight = 46f;
-
         // Guards the ListView selection callback while selection is set programmatically.
         private bool _suppressListSelectionCallback;
-
-        // Action buttons stop pointer-down here so clicking one doesn't retarget the ListView's
-        // selection (which otherwise drops the current selection when using go-up/go-down/etc.) or
-        // start a row drag from a button.
-        private static readonly EventCallback<PointerDownEvent> StopRowChildPointerDown = evt =>
-            evt.StopPropagation();
 
         private TwoPaneSplitView _outerSplitView;
         private TwoPaneSplitView _innerSplitView;
@@ -317,7 +294,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _lastGhostParent;
         private VisualElement _draggedElement;
         private VisualElement _dragGhost;
-        internal bool _isDragging;
         private SerializedObject _currentInspectorScriptableObject;
 
         private string _userStateFilePath;
@@ -410,382 +386,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             EditorPrefs.SetBool(PrefsInitialSizeAppliedKey, true);
         }
 
-        private void OnEnable()
-        {
-            minSize = new Vector2(MinWindowWidth, MinWindowHeight);
-            _nextColorIndex = 0;
-            Instance = this;
-            _isSearchCachePopulated = false;
-            _selectedObject = null;
-            _selectedObjects.Clear();
-#if ODIN_INSPECTOR
-            _odinPropertyTree = null;
-#endif
-            _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
-
-            _allDataProcessors.Clear();
-            IEnumerable<Type> processorTypes = TypeCache
-                .GetTypesDerivedFrom<IDataProcessor>()
-                .Where(t => !t.IsAbstract && !t.IsInterface && !t.IsGenericTypeDefinition);
-            foreach (Type type in processorTypes)
-            {
-                try
-                {
-                    if (Activator.CreateInstance(type) is IDataProcessor instance)
-                    {
-                        _allDataProcessors.Add(instance);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError(
-                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex.Message}"
-                    );
-                }
-            }
-
-            _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
-
-            // Don't load types here - it blocks the UI from appearing
-            // LoadScriptableObjectTypes() is now deferred to CreateGUI
-            rootVisualElement.RegisterCallback<KeyDownEvent>(
-                HandleGlobalKeyDown,
-                TrickleDown.TrickleDown
-            );
-        }
-
-        private void OnDisable()
-        {
-            rootVisualElement.UnregisterCallback<KeyDownEvent>(
-                HandleGlobalKeyDown,
-                TrickleDown.TrickleDown
-            );
-            Cleanup();
-        }
-
-        private void OnDestroy()
-        {
-            Cleanup();
-        }
-
-        private void Cleanup()
-        {
-            if (Instance == this)
-            {
-                Instance = null;
-            }
-
-            // Cancel async loading
-            _asyncLoadTask?.Pause();
-            _asyncLoadTask = null;
-            _asyncLoadTargetType = null;
-            _pendingObjectGuids.Clear();
-            _pendingSearchCacheGuids.Clear();
-            _isLoadingObjectsAsync = false;
-            _isLoadingSearchCacheAsync = false;
-            UpdateLoadingIndicator(0, 0); // Hide loading indicator
-
-            _isLabelCachePopulated = false;
-            _selectedObject = null;
-            _scriptableObjectTypes.Clear();
-            _namespaceOrder.Clear();
-            _namespaceController.Clear();
-            _allManagedObjectsCache.Clear();
-            _currentSearchResultItems.Clear();
-            _currentTypePopoverItems.Clear();
-            _isSearchCachePopulated = false;
-            CloseActivePopover();
-            CancelDrag();
-            _saveWidthsTask?.Pause();
-            if (!Settings.persistStateInSettingsAsset && _userStateDirty)
-            {
-                SaveUserStateToFile();
-            }
-
-            _saveWidthsTask = null;
-            _currentInspectorScriptableObject?.Dispose();
-            _currentInspectorScriptableObject = null;
-            _dragGhost?.RemoveFromHierarchy();
-            _dragGhost = null;
-            _draggedElement = null;
-#if ODIN_INSPECTOR
-            _odinRepaintSchedule?.Pause();
-            _odinRepaintSchedule = null;
-            if (_odinPropertyTree != null)
-            {
-                _odinPropertyTree.OnPropertyValueChanged -= HandleOdinPropertyValueChanged;
-                _odinPropertyTree.Dispose();
-                _odinPropertyTree = null;
-            }
-
-            _odinInspectorContainer?.RemoveFromHierarchy();
-            _odinInspectorContainer?.Dispose();
-            _odinInspectorContainer = null;
-#endif
-        }
-
-        private void PopulateSearchCache()
-        {
-            // Start async loading instead
-            PopulateSearchCacheAsync();
-        }
-
-        private void PopulateSearchCacheAsync()
-        {
-            var cacheStartTime = System.Diagnostics.Stopwatch.StartNew();
-            _allManagedObjectsCache.Clear();
-            _pendingSearchCacheGuids.Clear();
-            _isLoadingSearchCacheAsync = true;
-            // The cache is being rebuilt; it is not searchable until the batches below finish.
-            _isSearchCachePopulated = false;
-            // Managed-type set for this run, computed once and reused across all batches.
-            _searchCacheManagedTypes = new(_scriptableObjectTypes.SelectMany(tuple => tuple.Value));
-            int generation = ++_searchCacheGeneration;
-
-            if (EnableAsyncLoadDebugLog)
-            {
-                Debug.Log(
-                    $"[DataVisualizer] PopulateSearchCacheAsync START at {System.DateTime.Now:HH:mm:ss.fff}"
-                );
-            }
-
-            HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
-            int resolvedReferenceCount = 0;
-
-            // Collect all GUIDs first (fast, no asset loading)
-            foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
-            {
-                string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
-                foreach (string guid in guids)
-                {
-                    uniqueGuids.Add(guid);
-                }
-
-                resolvedReferenceCount += AssetGuidDiscovery.AddResolvedGuids(
-                    type,
-                    GetObjectOrderForType(type),
-                    uniqueGuids
-                );
-                string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
-                if (
-                    !uniqueGuids.Contains(savedObjectGuid)
-                    && AssetGuidDiscovery.TryNormalizeGuidForType(
-                        type,
-                        savedObjectGuid,
-                        out string normalizedSavedObjectGuid
-                    )
-                )
-                {
-                    if (uniqueGuids.Add(normalizedSavedObjectGuid))
-                    {
-                        resolvedReferenceCount++;
-                    }
-                }
-            }
-
-            foreach (string guid in uniqueGuids)
-            {
-                _pendingSearchCacheGuids.Enqueue(guid);
-            }
-
-            // Do NOT mark the cache populated here — the assets aren't loaded until the batches
-            // below finish. Marking it ready after only collecting GUIDs made PerformSearch run
-            // against an empty/partial cache. It is marked populated on completion instead.
-            cacheStartTime.Stop();
-
-            if (EnableAsyncLoadDebugLog)
-            {
-                Debug.Log(
-                    $"[DataVisualizer] Search cache GUID collection: {_pendingSearchCacheGuids.Count} GUIDs collected ({resolvedReferenceCount} recovered from direct references) in {cacheStartTime.ElapsedMilliseconds}ms"
-                );
-            }
-
-            // Start loading batches
-            if (0 < _pendingSearchCacheGuids.Count)
-            {
-                ContinuePopulatingSearchCache(generation);
-            }
-            else
-            {
-                _isLoadingSearchCacheAsync = false;
-                _isSearchCachePopulated = true; // nothing to load; the (empty) cache is ready
-                RefreshActiveSearch(); // resolve any "Building search index…" popover immediately
-            }
-        }
-
-        private void ContinuePopulatingSearchCache(int generation)
-        {
-            if (generation != _searchCacheGeneration)
-            {
-                return; // superseded by a newer PopulateSearchCacheAsync run
-            }
-
-            if (!_isLoadingSearchCacheAsync || _pendingSearchCacheGuids.Count == 0)
-            {
-                _isLoadingSearchCacheAsync = false;
-                return;
-            }
-
-            int batchSize = Mathf.Min(AsyncLoadBatchSize, _pendingSearchCacheGuids.Count);
-            List<string> batch = DequeueBatch(_pendingSearchCacheGuids, batchSize);
-
-            // Load batch. GUIDs in _pendingSearchCacheGuids are already unique (deduped up front),
-            // so no per-batch de-duplication is needed here.
-            List<ScriptableObject> loadedObjects = new();
-
-            foreach (string guid in batch)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (string.IsNullOrWhiteSpace(path))
-                {
-                    continue;
-                }
-
-                ScriptableObject obj = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
-                if (obj != null)
-                {
-                    // Verify it's a managed type (O(1) against the set cached for this run). No cache
-                    // membership check needed: the cache was cleared and GUIDs are unique, so the
-                    // object can't already be present, and Contains() grows costlier as it fills.
-                    if (_searchCacheManagedTypes.Contains(obj.GetType()))
-                    {
-                        loadedObjects.Add(obj);
-                    }
-                }
-            }
-
-            // Append this batch. The cache is sorted once when loading completes (below); it isn't
-            // used for search until then, so per-item BinarySearch+Insert would just be wasted
-            // O(n^2) shifting work.
-            _allManagedObjectsCache.AddRange(loadedObjects);
-
-            // Continue with next batch
-            if (0 < _pendingSearchCacheGuids.Count)
-            {
-                rootVisualElement
-                    .schedule.Execute(() => ContinuePopulatingSearchCache(generation))
-                    .ExecuteLater(10);
-            }
-            else
-            {
-                _isLoadingSearchCacheAsync = false;
-                // Sort the fully-loaded cache once (search reads it sorted by name then type).
-                _allManagedObjectsCache.Sort(
-                    (a, b) =>
-                    {
-                        int nameComp = string.Compare(a.name, b.name, StringComparison.Ordinal);
-                        return nameComp != 0
-                            ? nameComp
-                            : string.Compare(
-                                a.GetType().FullName,
-                                b.GetType().FullName,
-                                StringComparison.Ordinal
-                            );
-                    }
-                );
-                _isSearchCachePopulated = true;
-                RefreshActiveSearch();
-            }
-        }
-
-        // Re-runs the active search once the search cache finishes loading, so results that were
-        // unavailable while it loaded in the background appear. Only acts while the search popover is
-        // open, so it never reopens a popover the user has dismissed.
-        private void RefreshActiveSearch()
-        {
-            if (_activePopover != _searchPopover || string.IsNullOrWhiteSpace(_lastSearchString))
-            {
-                return;
-            }
-
-            string current = _lastSearchString;
-            _lastSearchString = null; // bypass the no-op guard in PerformSearch
-            PerformSearch(current);
-        }
-
-        // Removes and returns up to batchSize items from the front of the queue. A Queue keeps this
-        // O(batchSize) instead of the O(n) element shift List.RemoveRange(0, batchSize) incurs each
-        // batch (which compounds to O(n^2) over a full drain on large projects).
-        private static List<string> DequeueBatch(Queue<string> queue, int batchSize)
-        {
-            List<string> batch = new(batchSize);
-            for (int i = 0; i < batchSize && 0 < queue.Count; i++)
-            {
-                batch.Add(queue.Dequeue());
-            }
-
-            return batch;
-        }
-
         public static void SignalRefresh()
         {
             DataVisualizer window = Instance;
             if (window != null)
             {
                 window.ScheduleRefresh();
-            }
-        }
-
-        private void ScheduleRefresh()
-        {
-            if (_needsRefresh)
-            {
-                return;
-            }
-
-            _needsRefresh = true;
-            rootVisualElement.schedule.Execute(RefreshAllViews).ExecuteLater(1);
-        }
-
-        private void SyncNamespaceAndTypeOrders()
-        {
-            List<string> namespaceOrder = _namespaceOrder
-                .OrderBy(kvp => kvp.Value)
-                .Select(kvp => kvp.Key)
-                .ToList();
-            List<NamespaceTypeOrder> typeOrder = _namespaceOrder
-                .OrderBy(kvp => kvp.Value)
-                .Select(kvp => new NamespaceTypeOrder
-                {
-                    namespaceKey = kvp.Key,
-                    typeNames = _scriptableObjectTypes[kvp.Key]
-                        .Select(type => type.FullName)
-                        .ToList(),
-                })
-                .ToList();
-            PersistSettings(
-                settings =>
-                {
-                    settings.namespaceOrder = namespaceOrder;
-                    settings.typeOrders = typeOrder;
-                    return true;
-                },
-                userState =>
-                {
-                    userState.namespaceOrder = namespaceOrder;
-                    userState.typeOrders = typeOrder;
-                    return true;
-                }
-            );
-        }
-
-        internal void PersistSettings(
-            Func<DataVisualizerSettings, bool> settingsApplier,
-            Func<DataVisualizerUserState, bool> userStateApplier
-        )
-        {
-            DataVisualizerSettings settings = Settings;
-            if (settings.persistStateInSettingsAsset)
-            {
-                if (settingsApplier(settings))
-                {
-                    settings.MarkDirty();
-                    AssetDatabase.SaveAssets();
-                }
-            }
-            else if (userStateApplier(UserState))
-            {
-                MarkUserStateDirty();
             }
         }
 
@@ -801,112 +407,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             AssetDatabase.SaveAssets();
             return true;
-        }
-
-        private void RefreshAllViews()
-        {
-            Type selectedType = _namespaceController.SelectedType;
-
-            string previousNamespaceKey =
-                selectedType != null
-                    ? NamespaceController.GetNamespaceKey(selectedType)
-                    : string.Empty;
-            string previousTypeFullName = selectedType?.FullName;
-            string previousObjectGuid = null;
-            if (_selectedObject != null)
-            {
-                string path = AssetDatabase.GetAssetPath(_selectedObject);
-                if (!string.IsNullOrWhiteSpace(path))
-                {
-                    previousObjectGuid = AssetDatabase.AssetPathToGUID(path);
-                }
-            }
-
-            LoadScriptableObjectTypes();
-
-            selectedType = ResolveSelectedTypeByFullName(
-                _scriptableObjectTypes,
-                _namespaceOrder,
-                previousNamespaceKey,
-                previousTypeFullName
-            );
-
-            // Load once. For an unchanged type the SelectType call near the end no-ops its own load,
-            // so reload here (a refresh must re-scan). For a changed type, let that single SelectType
-            // call do the load — doing both would load the same type twice.
-            bool selectionTypeChanged = _namespaceController.SelectedType != selectedType;
-            if (selectedType == null)
-            {
-                _selectedObjects.Clear();
-            }
-            else if (!selectionTypeChanged)
-            {
-                LoadObjectTypesAsync(selectedType);
-            }
-            else
-            {
-                // The refresh resolved a different type (e.g. the previous type was removed); the
-                // SelectType call below will load it. Clear the old type's objects now so the object
-                // column doesn't show the previous type's assets until that async load's view rebuild.
-                _selectedObjects.Clear();
-                _filteredObjects.Clear();
-                _selectedObjectOrderIndex.Clear();
-            }
-
-            ScriptableObject selectedObject = _selectedObject;
-            if (
-                selectedType != null
-                && !string.IsNullOrWhiteSpace(previousObjectGuid)
-                && 0 < _selectedObjects.Count
-            )
-            {
-                selectedObject = _selectedObjects.Find(obj =>
-                {
-                    if (obj == null)
-                    {
-                        return false;
-                    }
-
-                    string path = AssetDatabase.GetAssetPath(obj);
-
-                    return !string.IsNullOrWhiteSpace(path)
-                        && string.Equals(
-                            AssetDatabase.AssetPathToGUID(path),
-                            previousObjectGuid,
-                            StringComparison.OrdinalIgnoreCase
-                        );
-                });
-            }
-
-            PopulateSearchCache();
-            BuildNamespaceView();
-            BuildObjectsView();
-
-            VisualElement typeElementToSelect = FindTypeElement(selectedType);
-            if (typeElementToSelect != null)
-            {
-                VisualElement ancestorGroup = FindAncestorNamespaceGroup(typeElementToSelect);
-                if (ancestorGroup != null)
-                {
-                    ExpandNamespaceGroupIfNeeded(ancestorGroup, false);
-                }
-            }
-
-            // Only select eagerly if the previously-selected object is already loaded (found in the
-            // priority batch). Otherwise leave it to LoadObjectTypesAsync's generation-guarded
-            // deferred auto-select, which restores the real selection once its batch loads instead of
-            // persisting a fallback GUID over it.
-            if (selectedObject != null && _selectedObjects.Contains(selectedObject))
-            {
-                SelectObject(selectedObject);
-            }
-            _namespaceController.SelectType(this, selectedType);
-            _needsRefresh = false;
-        }
-
-        private VisualElement FindAncestorNamespaceGroup(VisualElement startingElement)
-        {
-            return FindAncestorNamespaceGroup(startingElement, _namespaceListContainer);
         }
 
         public static VisualElement FindAncestorNamespaceGroup(
@@ -1034,27 +534,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ?.FirstOrDefault();
         }
 
-        private void ExpandNamespaceGroupIfNeeded(VisualElement namespaceGroupItem, bool saveState)
+        // Removes and returns up to batchSize items from the front of the queue. A Queue keeps this
+        // O(batchSize) instead of the O(n) element shift List.RemoveRange(0, batchSize) incurs each
+        // batch (which compounds to O(n^2) over a full drain on large projects).
+        private static List<string> DequeueBatch(Queue<string> queue, int batchSize)
         {
-            if (namespaceGroupItem == null)
+            List<string> batch = new(batchSize);
+            for (int i = 0; i < batchSize && 0 < queue.Count; i++)
             {
-                return;
+                batch.Add(queue.Dequeue());
             }
 
-            Label indicator = namespaceGroupItem.Q<Label>(className: "namespace-indicator");
-            string nsKey = namespaceGroupItem.userData as string;
-            VisualElement typesContainer = namespaceGroupItem.Q<VisualElement>(
-                $"types-container-{nsKey}"
-            );
-
-            if (
-                indicator != null
-                && typesContainer != null
-                && typesContainer.style.display == DisplayStyle.None
-            )
-            {
-                ApplyNamespaceCollapsedState(indicator, typesContainer, false, saveState);
-            }
+            return batch;
         }
 
         private static DataVisualizerSettings LoadOrCreateSettings()
@@ -1114,299 +605,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             DirectoryHelper.EnsureDirectoryExists(settings.DataFolderPath.SanitizePath());
             return settings;
-        }
-
-        private void StartPeriodicWidthSave()
-        {
-            _saveWidthsTask?.Pause();
-            _saveWidthsTask = rootVisualElement
-                .schedule.Execute(CheckAndSaveSplitterWidths)
-                .Every(1000);
-        }
-
-        private void CheckAndSaveSplitterWidths()
-        {
-            if (
-                _outerSplitView == null
-                || _innerSplitView == null
-                || _namespaceColumnElement == null
-                || _objectColumnElement == null
-                || float.IsNaN(_namespaceColumnElement.resolvedStyle.width)
-                || float.IsNaN(_objectColumnElement.resolvedStyle.width)
-            )
-            {
-                return;
-            }
-
-            float currentOuterWidth = Mathf.Max(
-                _namespaceColumnElement.resolvedStyle.width,
-                MinNamespacePaneWidth
-            );
-            float currentInnerWidth = Mathf.Max(
-                _objectColumnElement.resolvedStyle.width,
-                MinObjectPaneWidth
-            );
-
-            if (!Mathf.Approximately(currentOuterWidth, _lastSavedOuterWidth))
-            {
-                EditorPrefs.SetFloat(PrefsSplitterOuterKey, currentOuterWidth);
-                _lastSavedOuterWidth = currentOuterWidth;
-            }
-
-            if (!Mathf.Approximately(currentInnerWidth, _lastSavedInnerWidth))
-            {
-                EditorPrefs.SetFloat(PrefsSplitterInnerKey, currentInnerWidth);
-                _lastSavedInnerWidth = currentInnerWidth;
-            }
-        }
-
-        private void RestorePreviousSelection()
-        {
-            if (_scriptableObjectTypes.Count == 0)
-            {
-                return;
-            }
-
-            Type selectedType = ResolveSelectedTypeByFullName(
-                _scriptableObjectTypes,
-                _namespaceOrder,
-                GetLastSelectedNamespaceKey(),
-                GetLastSelectedTypeFullName()
-            );
-
-            if (selectedType == null)
-            {
-                return;
-            }
-
-            // Build namespace view first so type selection is visible
-            BuildNamespaceView();
-
-            // Register the restored type via SelectType, which sets the selected type BEFORE loading.
-            // That way the load's synchronous saved/first-object selection doesn't re-enter SelectType
-            // (which would start a second load), the object list filters correctly for the restored
-            // type, and an empty type shows its empty view rather than a stale one. SelectType also
-            // loads the objects, restores the saved selection, and refreshes the dependent UI.
-            _namespaceController.SelectType(this, selectedType);
-
-            VisualElement typeElementToSelect = FindTypeElement(selectedType);
-            if (typeElementToSelect != null)
-            {
-                VisualElement ancestorGroup = FindAncestorNamespaceGroup(typeElementToSelect);
-                if (ancestorGroup != null)
-                {
-                    ExpandNamespaceGroupIfNeeded(ancestorGroup, false);
-                }
-            }
-        }
-
-        private VisualElement FindTypeElement(Type targetType)
-        {
-            if (targetType == null || _namespaceListContainer == null)
-            {
-                return null;
-            }
-
-            List<VisualElement> typeItems = _namespaceListContainer
-                .Query<VisualElement>(className: "type-item")
-                .ToList();
-
-            foreach (VisualElement item in typeItems)
-            {
-                if (item.userData is Type itemType && itemType == targetType)
-                {
-                    return item;
-                }
-            }
-
-            return null;
-        }
-
-        public void CreateGUI()
-        {
-            VisualElement root = rootVisualElement;
-            root.Clear();
-            LoadStyleSheetIfAvailable(root);
-
-            VisualElement headerRow = new()
-            {
-                name = "header-row",
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    justifyContent = Justify.FlexStart,
-                    paddingTop = 5,
-                    paddingBottom = 5,
-                    paddingLeft = 5,
-                    paddingRight = 5,
-                    borderBottomWidth = 1,
-                    borderBottomColor = Color.gray,
-                },
-            };
-            root.Add(headerRow);
-
-            _settingsButton = new Button(() => TogglePopover(_settingsPopover, _settingsButton))
-            {
-                text = "…",
-                name = "settings-button",
-                tooltip = "Open Settings",
-            };
-
-            _settingsButton.AddToClassList("settings-button");
-            _settingsButton.AddToClassList(StyleConstants.ClickableClass);
-            headerRow.Add(_settingsButton);
-
-            _searchField = new TextField { name = "global-search-field" };
-            _searchField.AddToClassList("global-search-field");
-            _searchField.SetPlaceholderText(SearchPlaceholder);
-            _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue));
-            _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
-                (_, context) =>
-                {
-                    if (
-                        !string.IsNullOrWhiteSpace(context._searchField.value)
-                        && 0 < context._searchPopover.childCount
-                        && context._activePopover != context._searchPopover
-                    )
-                    {
-                        context.OpenPopover(
-                            context._searchPopover,
-                            context._searchField,
-                            shouldFocus: false
-                        );
-                    }
-                },
-                this
-            );
-            _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
-            headerRow.Add(_searchField);
-
-            float initialOuterWidth = Mathf.Max(
-                EditorPrefs.GetFloat(PrefsSplitterOuterKey, DefaultOuterSplitWidth),
-                MinNamespacePaneWidth
-            );
-            float initialInnerWidth = Mathf.Max(
-                EditorPrefs.GetFloat(PrefsSplitterInnerKey, DefaultInnerSplitWidth),
-                MinObjectPaneWidth
-            );
-
-            _lastSavedOuterWidth = initialOuterWidth;
-            _lastSavedInnerWidth = initialInnerWidth;
-            _namespaceColumnElement = CreateNamespaceColumn();
-            CreateProcessorColumn();
-            _objectColumnElement = CreateObjectColumn();
-            VisualElement inspectorColumn = CreateInspectorColumn();
-
-            _innerSplitView = new TwoPaneSplitView(
-                0,
-                (int)initialInnerWidth,
-                TwoPaneSplitViewOrientation.Horizontal
-            )
-            {
-                name = "inner-split-view",
-                style = { flexGrow = 1 },
-            };
-
-            _innerSplitView.Add(_objectColumnElement);
-            _innerSplitView.Add(inspectorColumn);
-            _outerSplitView = new TwoPaneSplitView(
-                0,
-                (int)initialOuterWidth,
-                TwoPaneSplitViewOrientation.Horizontal
-            )
-            {
-                name = "outer-split-view",
-                style = { flexGrow = 1 },
-            };
-            _outerSplitView.Add(_namespaceColumnElement);
-            _outerSplitView.Add(_innerSplitView);
-            root.Add(_outerSplitView);
-
-            _settingsPopover = CreatePopoverBase("settings-popover");
-            BuildSettingsPopoverContent();
-            root.Add(_settingsPopover);
-
-            _createPopover = CreatePopoverBase("create-popover");
-            root.Add(_createPopover);
-            _renamePopover = CreatePopoverBase("rename-popover");
-            root.Add(_renamePopover);
-            _confirmDeletePopover = CreatePopoverBase("confirm-delete-popover");
-            root.Add(_confirmDeletePopover);
-            _confirmActionPopover = CreatePopoverBase("confirm-action-popover");
-            root.Add(_confirmActionPopover);
-            _searchPopover = new VisualElement { name = "search-popover" };
-            _searchPopover.AddToClassList("search-popover");
-            root.Add(_searchPopover);
-
-            _typeAddPopover = new VisualElement { name = "type-add-popover" };
-            _typeAddPopover.AddToClassList("type-add-popover");
-
-            _inspectorLabelSuggestionsPopover = CreatePopoverBase(
-                "inspector-label-suggestions-popover"
-            );
-            root.Add(_inspectorLabelSuggestionsPopover);
-            _inspectorLabelSuggestionsPopover.style.width = StyleKeyword.Auto;
-
-            _typeAddSearchField = new TextField { name = "type-add-search-field" };
-            _typeAddSearchField.AddToClassList("type-add-search-field");
-            _typeAddSearchField.SetPlaceholderText(SearchPlaceholder);
-            _typeAddSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue));
-            _typeAddSearchField.RegisterCallback<KeyDownEvent>(HandleTypePopoverKeyDown);
-            _typeAddPopover.Add(_typeAddSearchField);
-
-            ScrollView typePopoverScrollView = new(ScrollViewMode.Vertical);
-            typePopoverScrollView.AddToClassList("type-add-popover-scrollview");
-            _typeAddPopover.Add(typePopoverScrollView);
-
-            _typePopoverListContainer = new VisualElement { name = "type-add-list-content" };
-            _typePopoverListContainer.AddToClassList("type-add-list-container");
-            typePopoverScrollView.Add(_typePopoverListContainer);
-
-            root.Add(_typeAddPopover);
-
-            _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
-            root.Add(_confirmNamespaceAddPopover);
-
-            // CreateGUI is now complete - window structure is ready
-            // Defer ALL content building to next frame so window appears instantly
-            rootVisualElement
-                .schedule.Execute(() =>
-                {
-                    if (EnableAsyncLoadDebugLog)
-                    {
-                        Debug.Log(
-                            $"[DataVisualizer] CreateGUI - Loading types and building views at {System.DateTime.Now:HH:mm:ss.fff}"
-                        );
-                    }
-
-                    // Load types (fast now without CreateInstance)
-                    LoadScriptableObjectTypes();
-
-                    // Build all views - window is already visible at this point
-                    BuildNamespaceView();
-                    BuildProcessorColumnView();
-                    BuildObjectsView();
-                    BuildInspectorView();
-
-                    // Schedule the async initialization after views are built
-                    rootVisualElement
-                        .schedule.Execute(() =>
-                        {
-                            if (EnableAsyncLoadDebugLog)
-                            {
-                                Debug.Log(
-                                    $"[DataVisualizer] CreateGUI - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
-                                );
-                            }
-                            // Start async search cache population in background (low priority)
-                            PopulateSearchCacheAsync();
-                            // Restore selection with priority async loading
-                            RestorePreviousSelection();
-                            StartPeriodicWidthSave();
-                        })
-                        .ExecuteLater(10);
-                })
-                .ExecuteLater(1); // Execute on next frame so window renders first
         }
 
         private static void LoadStyleSheetIfAvailable(VisualElement root)
@@ -1692,112 +890,309 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void CreateProcessorColumn()
+        private static string EscapeRichText(string input)
         {
-            _processorAreaElement = new VisualElement { name = "processor-column" };
-            _processorAreaElement.AddToClassList("processor-column");
+            return string.IsNullOrWhiteSpace(input)
+                ? ""
+                : input.Replace("<", "&lt;").Replace(">", "&gt;");
+        }
 
-            _processorHeader = new VisualElement { name = "processor-column-header" };
-            _processorHeader.AddToClassList("processor-column-header");
-            _processorHeaderLabel = new Label("Processors")
+        private static MatchDetail SearchStringProperties(
+            object obj,
+            string searchTerm,
+            int currentDepth,
+            int maxDepth,
+            HashSet<object> visited
+        )
+        {
+            if (obj == null || maxDepth < currentDepth)
             {
-                style = { unityFontStyleAndWeight = FontStyle.Bold },
-            };
-            _processorToggleCollapseButton = new Label();
-            _processorToggleCollapseButton.AddToClassList("collapse-toggle");
-            _processorToggleCollapseButton.AddToClassList(StyleConstants.ClickableClass);
-            _processorToggleCollapseButton.RegisterCallback<PointerDownEvent>(evt =>
-            {
-                if (evt.button != 0)
-                {
-                    return;
-                }
-
-                ToggleProcessorContentCollapse();
-            });
-
-            _processorHeader.Add(_processorToggleCollapseButton);
-            _processorHeader.Add(_processorHeaderLabel);
-            _processorAreaElement.Add(_processorHeader);
-
-            ProcessorState state = CurrentProcessorState;
-
-            _processorArea = new VisualElement { style = { flexDirection = FlexDirection.Column } };
-            _processorArea.AddToClassList("processor-area");
-            _processorLogicToggle = new HorizontalToggle()
-            {
-                name = "processor-logic-toggle",
-                LeftText = "ALL",
-                RightText = "FILTERED",
-            };
-            _processorLogicToggle.AddToClassList("processor");
-            _processorLogicToggle.OnLeftSelected += () =>
-            {
-                _processorLogicToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
-                _processorLogicToggle.LeftLabel.EnableInClassList(
-                    StyleConstants.ClickableClass,
-                    false
-                );
-                _processorLogicToggle.RightLabel.EnableInClassList(
-                    StyleConstants.ClickableClass,
-                    true
-                );
-                state = CurrentProcessorState;
-                if (state != null && state.logic != ProcessorLogic.All)
-                {
-                    state.logic = ProcessorLogic.All;
-                    SaveProcessorState(state);
-                }
-            };
-            _processorLogicToggle.OnRightSelected += () =>
-            {
-                _processorLogicToggle.Indicator.style.backgroundColor = new Color(
-                    1f,
-                    0.5f,
-                    0.3137254902f
-                );
-                _processorLogicToggle.LeftLabel.EnableInClassList(
-                    StyleConstants.ClickableClass,
-                    true
-                );
-                _processorLogicToggle.RightLabel.EnableInClassList(
-                    StyleConstants.ClickableClass,
-                    false
-                );
-                state = CurrentProcessorState;
-                if (state != null && state.logic != ProcessorLogic.Filtered)
-                {
-                    state.logic = ProcessorLogic.Filtered;
-                    SaveProcessorState(state);
-                }
-            };
-
-            switch (state?.logic ?? ProcessorLogic.Filtered)
-            {
-                case ProcessorLogic.All:
-                {
-                    _processorLogicToggle.SelectLeft(force: true);
-                    break;
-                }
-                case ProcessorLogic.Filtered:
-                {
-                    _processorLogicToggle.SelectRight(force: true);
-                    break;
-                }
+                return null;
             }
 
-            _processorArea.Add(_processorLogicToggle);
+            Type objType = obj.GetType();
 
-            ScrollView scrollView = new(ScrollViewMode.Vertical)
+            if (
+                objType.IsPrimitive
+                || objType == typeof(Vector2)
+                || objType == typeof(Vector3)
+                || objType == typeof(Vector4)
+                || objType == typeof(Quaternion)
+                || objType == typeof(Color)
+                || objType == typeof(Rect)
+                || objType == typeof(Bounds)
+            )
             {
-                name = "processor-list-scrollview",
+                return null;
+            }
+
+            if (!objType.IsValueType && !visited.Add(obj))
+            {
+                return null;
+            }
+
+            try
+            {
+                FieldInfo[] fields = objType.GetFields(
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic
+                );
+                foreach (FieldInfo field in fields)
+                {
+                    object fieldValue = field.GetValue(obj);
+                    if (fieldValue == null)
+                    {
+                        continue;
+                    }
+
+                    if (field.FieldType == typeof(string))
+                    {
+                        string stringValue = fieldValue as string;
+                        if (
+                            !string.IsNullOrWhiteSpace(stringValue)
+                            && stringValue.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        )
+                        {
+                            return new MatchDetail(searchTerm)
+                            {
+                                fieldName = field.Name,
+                                matchedValue = stringValue,
+                            };
+                        }
+                    }
+                    else if (
+                        (
+                            field.FieldType.IsClass
+                            || field.FieldType is { IsValueType: true, IsPrimitive: false }
+                        ) && !typeof(Object).IsAssignableFrom(field.FieldType)
+                    )
+                    {
+                        MatchDetail nestedMatch = SearchStringProperties(
+                            fieldValue,
+                            searchTerm,
+                            currentDepth + 1,
+                            maxDepth,
+                            visited
+                        );
+                        if (nestedMatch != null)
+                        {
+                            return nestedMatch;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Swallow
+            }
+
+            return null;
+        }
+
+        public void CreateGUI()
+        {
+            VisualElement root = rootVisualElement;
+            root.Clear();
+            LoadStyleSheetIfAvailable(root);
+
+            VisualElement headerRow = new()
+            {
+                name = "header-row",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    justifyContent = Justify.FlexStart,
+                    paddingTop = 5,
+                    paddingBottom = 5,
+                    paddingLeft = 5,
+                    paddingRight = 5,
+                    borderBottomWidth = 1,
+                    borderBottomColor = Color.gray,
+                },
             };
-            scrollView.AddToClassList("processor-list-scrollview");
-            _processorListContainer = new VisualElement { name = "processor-list-container" };
-            _processorListContainer.AddToClassList("processor-list-container");
-            scrollView.Add(_processorListContainer);
-            _processorArea.Add(scrollView);
-            _processorAreaElement.Add(_processorArea);
+            root.Add(headerRow);
+
+            _settingsButton = new Button(() => TogglePopover(_settingsPopover, _settingsButton))
+            {
+                text = "…",
+                name = "settings-button",
+                tooltip = "Open Settings",
+            };
+
+            _settingsButton.AddToClassList("settings-button");
+            _settingsButton.AddToClassList(StyleConstants.ClickableClass);
+            headerRow.Add(_settingsButton);
+
+            _searchField = new TextField { name = "global-search-field" };
+            _searchField.AddToClassList("global-search-field");
+            _searchField.SetPlaceholderText(SearchPlaceholder);
+            _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue));
+            _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
+                (_, context) =>
+                {
+                    if (
+                        !string.IsNullOrWhiteSpace(context._searchField.value)
+                        && 0 < context._searchPopover.childCount
+                        && context._activePopover != context._searchPopover
+                    )
+                    {
+                        context.OpenPopover(
+                            context._searchPopover,
+                            context._searchField,
+                            shouldFocus: false
+                        );
+                    }
+                },
+                this
+            );
+            _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
+            headerRow.Add(_searchField);
+
+            float initialOuterWidth = Mathf.Max(
+                EditorPrefs.GetFloat(PrefsSplitterOuterKey, DefaultOuterSplitWidth),
+                MinNamespacePaneWidth
+            );
+            float initialInnerWidth = Mathf.Max(
+                EditorPrefs.GetFloat(PrefsSplitterInnerKey, DefaultInnerSplitWidth),
+                MinObjectPaneWidth
+            );
+
+            _lastSavedOuterWidth = initialOuterWidth;
+            _lastSavedInnerWidth = initialInnerWidth;
+            _namespaceColumnElement = CreateNamespaceColumn();
+            CreateProcessorColumn();
+            _objectColumnElement = CreateObjectColumn();
+            VisualElement inspectorColumn = CreateInspectorColumn();
+
+            _innerSplitView = new TwoPaneSplitView(
+                0,
+                (int)initialInnerWidth,
+                TwoPaneSplitViewOrientation.Horizontal
+            )
+            {
+                name = "inner-split-view",
+                style = { flexGrow = 1 },
+            };
+
+            _innerSplitView.Add(_objectColumnElement);
+            _innerSplitView.Add(inspectorColumn);
+            _outerSplitView = new TwoPaneSplitView(
+                0,
+                (int)initialOuterWidth,
+                TwoPaneSplitViewOrientation.Horizontal
+            )
+            {
+                name = "outer-split-view",
+                style = { flexGrow = 1 },
+            };
+            _outerSplitView.Add(_namespaceColumnElement);
+            _outerSplitView.Add(_innerSplitView);
+            root.Add(_outerSplitView);
+
+            _settingsPopover = CreatePopoverBase("settings-popover");
+            BuildSettingsPopoverContent();
+            root.Add(_settingsPopover);
+
+            _createPopover = CreatePopoverBase("create-popover");
+            root.Add(_createPopover);
+            _renamePopover = CreatePopoverBase("rename-popover");
+            root.Add(_renamePopover);
+            _confirmDeletePopover = CreatePopoverBase("confirm-delete-popover");
+            root.Add(_confirmDeletePopover);
+            _confirmActionPopover = CreatePopoverBase("confirm-action-popover");
+            root.Add(_confirmActionPopover);
+            _searchPopover = new VisualElement { name = "search-popover" };
+            _searchPopover.AddToClassList("search-popover");
+            root.Add(_searchPopover);
+
+            _typeAddPopover = new VisualElement { name = "type-add-popover" };
+            _typeAddPopover.AddToClassList("type-add-popover");
+
+            _inspectorLabelSuggestionsPopover = CreatePopoverBase(
+                "inspector-label-suggestions-popover"
+            );
+            root.Add(_inspectorLabelSuggestionsPopover);
+            _inspectorLabelSuggestionsPopover.style.width = StyleKeyword.Auto;
+
+            _typeAddSearchField = new TextField { name = "type-add-search-field" };
+            _typeAddSearchField.AddToClassList("type-add-search-field");
+            _typeAddSearchField.SetPlaceholderText(SearchPlaceholder);
+            _typeAddSearchField.RegisterValueChangedCallback(evt => BuildTypeAddList(evt.newValue));
+            _typeAddSearchField.RegisterCallback<KeyDownEvent>(HandleTypePopoverKeyDown);
+            _typeAddPopover.Add(_typeAddSearchField);
+
+            ScrollView typePopoverScrollView = new(ScrollViewMode.Vertical);
+            typePopoverScrollView.AddToClassList("type-add-popover-scrollview");
+            _typeAddPopover.Add(typePopoverScrollView);
+
+            _typePopoverListContainer = new VisualElement { name = "type-add-list-content" };
+            _typePopoverListContainer.AddToClassList("type-add-list-container");
+            typePopoverScrollView.Add(_typePopoverListContainer);
+
+            root.Add(_typeAddPopover);
+
+            _confirmNamespaceAddPopover = CreatePopoverBase("confirm-namespace-add-popover");
+            root.Add(_confirmNamespaceAddPopover);
+
+            // CreateGUI is now complete - window structure is ready
+            // Defer ALL content building to next frame so window appears instantly
+            rootVisualElement
+                .schedule.Execute(() =>
+                {
+                    if (EnableAsyncLoadDebugLog)
+                    {
+                        Debug.Log(
+                            $"[DataVisualizer] CreateGUI - Loading types and building views at {System.DateTime.Now:HH:mm:ss.fff}"
+                        );
+                    }
+
+                    // Load types (fast now without CreateInstance)
+                    LoadScriptableObjectTypes();
+
+                    // Build all views - window is already visible at this point
+                    BuildNamespaceView();
+                    BuildProcessorColumnView();
+                    BuildObjectsView();
+                    BuildInspectorView();
+
+                    // Schedule the async initialization after views are built
+                    rootVisualElement
+                        .schedule.Execute(() =>
+                        {
+                            if (EnableAsyncLoadDebugLog)
+                            {
+                                Debug.Log(
+                                    $"[DataVisualizer] CreateGUI - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
+                                );
+                            }
+                            // Start async search cache population in background (low priority)
+                            PopulateSearchCacheAsync();
+                            // Restore selection with priority async loading
+                            RestorePreviousSelection();
+                            StartPeriodicWidthSave();
+                        })
+                        .ExecuteLater(10);
+                })
+                .ExecuteLater(1); // Execute on next frame so window renders first
+        }
+
+        internal void PersistSettings(
+            Func<DataVisualizerSettings, bool> settingsApplier,
+            Func<DataVisualizerUserState, bool> userStateApplier
+        )
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                if (settingsApplier(settings))
+                {
+                    settings.MarkDirty();
+                    AssetDatabase.SaveAssets();
+                }
+            }
+            else if (userStateApplier(UserState))
+            {
+                MarkUserStateDirty();
+            }
         }
 
         internal void BuildProcessorColumnView()
@@ -1907,6 +1302,748 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _processorListContainer.Add(processorButton);
                 }
             }
+        }
+
+        internal void BuildAndOpenConfirmationPopover(
+            string message,
+            string confirmText,
+            Action onConfirm,
+            VisualElement triggerElement
+        )
+        {
+            if (_confirmActionPopover == null || onConfirm == null)
+            {
+                return;
+            }
+
+            VisualElement dragHandle = _confirmActionPopover.Q(className: "popover-drag-handle");
+            VisualElement contentWrapper = _confirmActionPopover.Q(
+                name: $"{_confirmActionPopover.name}-content-wrapper"
+            );
+            if (dragHandle == null || contentWrapper == null)
+            {
+                return;
+            }
+
+            dragHandle.AddToClassList("delete-button");
+            dragHandle.Clear();
+            contentWrapper.Clear();
+
+            dragHandle.Add(
+                new Label("Remove") { style = { unityFontStyleAndWeight = FontStyle.Bold } }
+            );
+
+            Button closeButton = new(CloseActivePopover) { text = "X" };
+            closeButton.AddToClassList("popover-close-button");
+            closeButton.AddToClassList(StyleConstants.ClickableClass);
+            dragHandle.Add(closeButton);
+
+            Label messageLabel = new(message)
+            {
+                style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
+            };
+            contentWrapper.Add(messageLabel);
+
+            VisualElement buttonContainer = new();
+            buttonContainer.AddToClassList("popover-button-container");
+            contentWrapper.Add(buttonContainer);
+
+            Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
+            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
+            cancelButton.AddToClassList(StyleConstants.ClickableClass);
+            buttonContainer.Add(cancelButton);
+
+            Button confirmButton = new(Confirm) { text = confirmText, userData = (Action)Confirm };
+            confirmButton.AddToClassList(StyleConstants.PopoverPrimaryActionClass);
+            confirmButton.AddToClassList(StyleConstants.PopoverButtonClass);
+            confirmButton.AddToClassList("popover-delete-button");
+            confirmButton.AddToClassList(StyleConstants.ClickableClass);
+            buttonContainer.Add(confirmButton);
+
+            OpenPopover(_confirmActionPopover, triggerElement);
+            return;
+
+            void Confirm()
+            {
+                onConfirm();
+                CloseActivePopover();
+            }
+        }
+
+        private void OnEnable()
+        {
+            minSize = new Vector2(MinWindowWidth, MinWindowHeight);
+            _nextColorIndex = 0;
+            Instance = this;
+            AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
+            AssetGuidTypeIndex.Shared.IndexCompleted += SignalRefresh;
+            _isSearchCachePopulated = false;
+            _selectedObject = null;
+            _selectedObjects.Clear();
+#if ODIN_INSPECTOR
+            _odinPropertyTree = null;
+#endif
+            _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
+
+            _allDataProcessors.Clear();
+            IEnumerable<Type> processorTypes = TypeCache
+                .GetTypesDerivedFrom<IDataProcessor>()
+                .Where(t => !t.IsAbstract && !t.IsInterface && !t.IsGenericTypeDefinition);
+            foreach (Type type in processorTypes)
+            {
+                try
+                {
+                    if (Activator.CreateInstance(type) is IDataProcessor instance)
+                    {
+                        _allDataProcessors.Add(instance);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError(
+                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex.Message}"
+                    );
+                }
+            }
+
+            _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
+
+            // Don't load types here - it blocks the UI from appearing
+            // LoadScriptableObjectTypes() is now deferred to CreateGUI
+            rootVisualElement.RegisterCallback<KeyDownEvent>(
+                HandleGlobalKeyDown,
+                TrickleDown.TrickleDown
+            );
+        }
+
+        private void OnDisable()
+        {
+            rootVisualElement.UnregisterCallback<KeyDownEvent>(
+                HandleGlobalKeyDown,
+                TrickleDown.TrickleDown
+            );
+            Cleanup();
+        }
+
+        private void OnDestroy()
+        {
+            Cleanup();
+        }
+
+        private void Cleanup()
+        {
+            AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
+            if (!AssetGuidTypeIndex.Shared.IsComplete)
+            {
+                AssetGuidTypeIndex.Shared.Cancel();
+            }
+
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+
+            // Cancel async loading
+            _asyncLoadTask?.Pause();
+            _asyncLoadTask = null;
+            _asyncLoadTargetType = null;
+            _pendingObjectGuids.Clear();
+            _pendingSearchCacheGuids.Clear();
+            _isLoadingObjectsAsync = false;
+            _isLoadingSearchCacheAsync = false;
+            UpdateLoadingIndicator(0, 0); // Hide loading indicator
+
+            _isLabelCachePopulated = false;
+            _selectedObject = null;
+            _scriptableObjectTypes.Clear();
+            _namespaceOrder.Clear();
+            _namespaceController.Clear();
+            _allManagedObjectsCache.Clear();
+            _currentSearchResultItems.Clear();
+            _currentTypePopoverItems.Clear();
+            _isSearchCachePopulated = false;
+            CloseActivePopover();
+            CancelDrag();
+            _saveWidthsTask?.Pause();
+            if (!Settings.persistStateInSettingsAsset && _userStateDirty)
+            {
+                SaveUserStateToFile();
+            }
+
+            _saveWidthsTask = null;
+            _currentInspectorScriptableObject?.Dispose();
+            _currentInspectorScriptableObject = null;
+            _dragGhost?.RemoveFromHierarchy();
+            _dragGhost = null;
+            _draggedElement = null;
+#if ODIN_INSPECTOR
+            _odinRepaintSchedule?.Pause();
+            _odinRepaintSchedule = null;
+            if (_odinPropertyTree != null)
+            {
+                _odinPropertyTree.OnPropertyValueChanged -= HandleOdinPropertyValueChanged;
+                _odinPropertyTree.Dispose();
+                _odinPropertyTree = null;
+            }
+
+            _odinInspectorContainer?.RemoveFromHierarchy();
+            _odinInspectorContainer?.Dispose();
+            _odinInspectorContainer = null;
+#endif
+        }
+
+        private void PopulateSearchCache()
+        {
+            // Start async loading instead
+            PopulateSearchCacheAsync();
+        }
+
+        private void PopulateSearchCacheAsync()
+        {
+            var cacheStartTime = System.Diagnostics.Stopwatch.StartNew();
+            _allManagedObjectsCache.Clear();
+            _pendingSearchCacheGuids.Clear();
+            _isLoadingSearchCacheAsync = true;
+            // The cache is being rebuilt; it is not searchable until the batches below finish.
+            _isSearchCachePopulated = false;
+            // Managed-type set for this run, computed once and reused across all batches.
+            _searchCacheManagedTypes = new(_scriptableObjectTypes.SelectMany(tuple => tuple.Value));
+            int generation = ++_searchCacheGeneration;
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] PopulateSearchCacheAsync START at {System.DateTime.Now:HH:mm:ss.fff}"
+                );
+            }
+
+            HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
+            int resolvedReferenceCount = 0;
+            AssetGuidTypeIndex.Shared.EnsureStarted();
+
+            // Collect all GUIDs first (fast, no asset loading)
+            foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
+            {
+                string[] typeFilterGuids = AssetDatabase.FindAssets($"t:{type.Name}");
+                string[] guids = AssetGuidDiscovery.MergeCandidates(
+                    type,
+                    typeFilterGuids,
+                    GetObjectOrderForType(type),
+                    GetLastSelectedObjectGuidForType(type.FullName),
+                    out _
+                );
+                foreach (string guid in guids)
+                {
+                    uniqueGuids.Add(guid);
+                }
+                resolvedReferenceCount += guids.Length - typeFilterGuids.Length;
+            }
+
+            foreach (string guid in uniqueGuids)
+            {
+                _pendingSearchCacheGuids.Enqueue(guid);
+            }
+
+            // Do NOT mark the cache populated here — the assets aren't loaded until the batches
+            // below finish. Marking it ready after only collecting GUIDs made PerformSearch run
+            // against an empty/partial cache. It is marked populated on completion instead.
+            cacheStartTime.Stop();
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] Search cache GUID collection: {_pendingSearchCacheGuids.Count} GUIDs collected ({resolvedReferenceCount} recovered from direct references) in {cacheStartTime.ElapsedMilliseconds}ms"
+                );
+            }
+
+            // Start loading batches
+            if (0 < _pendingSearchCacheGuids.Count)
+            {
+                ContinuePopulatingSearchCache(generation);
+            }
+            else
+            {
+                _isLoadingSearchCacheAsync = false;
+                _isSearchCachePopulated = true; // nothing to load; the (empty) cache is ready
+                RefreshActiveSearch(); // resolve any "Building search index…" popover immediately
+            }
+        }
+
+        private void ContinuePopulatingSearchCache(int generation)
+        {
+            if (generation != _searchCacheGeneration)
+            {
+                return; // superseded by a newer PopulateSearchCacheAsync run
+            }
+
+            if (!_isLoadingSearchCacheAsync || _pendingSearchCacheGuids.Count == 0)
+            {
+                _isLoadingSearchCacheAsync = false;
+                return;
+            }
+
+            int batchSize = Mathf.Min(AsyncLoadBatchSize, _pendingSearchCacheGuids.Count);
+            List<string> batch = DequeueBatch(_pendingSearchCacheGuids, batchSize);
+
+            // Load batch. GUIDs in _pendingSearchCacheGuids are already unique (deduped up front),
+            // so no per-batch de-duplication is needed here.
+            List<ScriptableObject> loadedObjects = new();
+
+            foreach (string guid in batch)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                ScriptableObject obj = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+                if (obj != null)
+                {
+                    // Verify it's a managed type (O(1) against the set cached for this run). No cache
+                    // membership check needed: the cache was cleared and GUIDs are unique, so the
+                    // object can't already be present, and Contains() grows costlier as it fills.
+                    if (_searchCacheManagedTypes.Contains(obj.GetType()))
+                    {
+                        loadedObjects.Add(obj);
+                    }
+                }
+            }
+
+            // Append this batch. The cache is sorted once when loading completes (below); it isn't
+            // used for search until then, so per-item BinarySearch+Insert would just be wasted
+            // O(n^2) shifting work.
+            _allManagedObjectsCache.AddRange(loadedObjects);
+
+            // Continue with next batch
+            if (0 < _pendingSearchCacheGuids.Count)
+            {
+                rootVisualElement
+                    .schedule.Execute(() => ContinuePopulatingSearchCache(generation))
+                    .ExecuteLater(10);
+            }
+            else
+            {
+                _isLoadingSearchCacheAsync = false;
+                // Sort the fully-loaded cache once (search reads it sorted by name then type).
+                _allManagedObjectsCache.Sort(
+                    (a, b) =>
+                    {
+                        int nameComp = string.Compare(a.name, b.name, StringComparison.Ordinal);
+                        return nameComp != 0
+                            ? nameComp
+                            : string.Compare(
+                                a.GetType().FullName,
+                                b.GetType().FullName,
+                                StringComparison.Ordinal
+                            );
+                    }
+                );
+                _isSearchCachePopulated = true;
+                RefreshActiveSearch();
+            }
+        }
+
+        // Re-runs the active search once the search cache finishes loading, so results that were
+        // unavailable while it loaded in the background appear. Only acts while the search popover is
+        // open, so it never reopens a popover the user has dismissed.
+        private void RefreshActiveSearch()
+        {
+            if (_activePopover != _searchPopover || string.IsNullOrWhiteSpace(_lastSearchString))
+            {
+                return;
+            }
+
+            string current = _lastSearchString;
+            _lastSearchString = null; // bypass the no-op guard in PerformSearch
+            PerformSearch(current);
+        }
+
+        private void ScheduleRefresh()
+        {
+            if (_needsRefresh)
+            {
+                return;
+            }
+
+            _needsRefresh = true;
+            rootVisualElement.schedule.Execute(RefreshAllViews).ExecuteLater(1);
+        }
+
+        private void SyncNamespaceAndTypeOrders()
+        {
+            List<string> namespaceOrder = _namespaceOrder
+                .OrderBy(kvp => kvp.Value)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            List<NamespaceTypeOrder> typeOrder = _namespaceOrder
+                .OrderBy(kvp => kvp.Value)
+                .Select(kvp => new NamespaceTypeOrder
+                {
+                    namespaceKey = kvp.Key,
+                    typeNames = _scriptableObjectTypes[kvp.Key]
+                        .Select(type => type.FullName)
+                        .ToList(),
+                })
+                .ToList();
+            PersistSettings(
+                settings =>
+                {
+                    settings.namespaceOrder = namespaceOrder;
+                    settings.typeOrders = typeOrder;
+                    return true;
+                },
+                userState =>
+                {
+                    userState.namespaceOrder = namespaceOrder;
+                    userState.typeOrders = typeOrder;
+                    return true;
+                }
+            );
+        }
+
+        private void RefreshAllViews()
+        {
+            Type selectedType = _namespaceController.SelectedType;
+
+            string previousNamespaceKey =
+                selectedType != null
+                    ? NamespaceController.GetNamespaceKey(selectedType)
+                    : string.Empty;
+            string previousTypeFullName = selectedType?.FullName;
+            string previousObjectGuid = null;
+            if (_selectedObject != null)
+            {
+                string path = AssetDatabase.GetAssetPath(_selectedObject);
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    previousObjectGuid = AssetDatabase.AssetPathToGUID(path);
+                }
+            }
+
+            LoadScriptableObjectTypes();
+
+            selectedType = ResolveSelectedTypeByFullName(
+                _scriptableObjectTypes,
+                _namespaceOrder,
+                previousNamespaceKey,
+                previousTypeFullName
+            );
+
+            // Load once. For an unchanged type the SelectType call near the end no-ops its own load,
+            // so reload here (a refresh must re-scan). For a changed type, let that single SelectType
+            // call do the load — doing both would load the same type twice.
+            bool selectionTypeChanged = _namespaceController.SelectedType != selectedType;
+            if (selectedType == null)
+            {
+                _selectedObjects.Clear();
+            }
+            else if (!selectionTypeChanged)
+            {
+                LoadObjectTypesAsync(selectedType);
+            }
+            else
+            {
+                // The refresh resolved a different type (e.g. the previous type was removed); the
+                // SelectType call below will load it. Clear the old type's objects now so the object
+                // column doesn't show the previous type's assets until that async load's view rebuild.
+                _selectedObjects.Clear();
+                _filteredObjects.Clear();
+                _selectedObjectOrderIndex.Clear();
+            }
+
+            ScriptableObject selectedObject = _selectedObject;
+            if (
+                selectedType != null
+                && !string.IsNullOrWhiteSpace(previousObjectGuid)
+                && 0 < _selectedObjects.Count
+            )
+            {
+                selectedObject = _selectedObjects.Find(obj =>
+                {
+                    if (obj == null)
+                    {
+                        return false;
+                    }
+
+                    string path = AssetDatabase.GetAssetPath(obj);
+
+                    return !string.IsNullOrWhiteSpace(path)
+                        && string.Equals(
+                            AssetDatabase.AssetPathToGUID(path),
+                            previousObjectGuid,
+                            StringComparison.OrdinalIgnoreCase
+                        );
+                });
+            }
+
+            PopulateSearchCache();
+            BuildNamespaceView();
+            BuildObjectsView();
+
+            VisualElement typeElementToSelect = FindTypeElement(selectedType);
+            if (typeElementToSelect != null)
+            {
+                VisualElement ancestorGroup = FindAncestorNamespaceGroup(typeElementToSelect);
+                if (ancestorGroup != null)
+                {
+                    ExpandNamespaceGroupIfNeeded(ancestorGroup, false);
+                }
+            }
+
+            // Only select eagerly if the previously-selected object is already loaded (found in the
+            // priority batch). Otherwise leave it to LoadObjectTypesAsync's generation-guarded
+            // deferred auto-select, which restores the real selection once its batch loads instead of
+            // persisting a fallback GUID over it.
+            if (selectedObject != null && _selectedObjects.Contains(selectedObject))
+            {
+                SelectObject(selectedObject);
+            }
+            _namespaceController.SelectType(this, selectedType);
+            _needsRefresh = false;
+        }
+
+        private VisualElement FindAncestorNamespaceGroup(VisualElement startingElement)
+        {
+            return FindAncestorNamespaceGroup(startingElement, _namespaceListContainer);
+        }
+
+        private void ExpandNamespaceGroupIfNeeded(VisualElement namespaceGroupItem, bool saveState)
+        {
+            if (namespaceGroupItem == null)
+            {
+                return;
+            }
+
+            Label indicator = namespaceGroupItem.Q<Label>(className: "namespace-indicator");
+            string nsKey = namespaceGroupItem.userData as string;
+            VisualElement typesContainer = namespaceGroupItem.Q<VisualElement>(
+                $"types-container-{nsKey}"
+            );
+
+            if (
+                indicator != null
+                && typesContainer != null
+                && typesContainer.style.display == DisplayStyle.None
+            )
+            {
+                ApplyNamespaceCollapsedState(indicator, typesContainer, false, saveState);
+            }
+        }
+
+        private void StartPeriodicWidthSave()
+        {
+            _saveWidthsTask?.Pause();
+            _saveWidthsTask = rootVisualElement
+                .schedule.Execute(CheckAndSaveSplitterWidths)
+                .Every(1000);
+        }
+
+        private void CheckAndSaveSplitterWidths()
+        {
+            if (
+                _outerSplitView == null
+                || _innerSplitView == null
+                || _namespaceColumnElement == null
+                || _objectColumnElement == null
+                || float.IsNaN(_namespaceColumnElement.resolvedStyle.width)
+                || float.IsNaN(_objectColumnElement.resolvedStyle.width)
+            )
+            {
+                return;
+            }
+
+            float currentOuterWidth = Mathf.Max(
+                _namespaceColumnElement.resolvedStyle.width,
+                MinNamespacePaneWidth
+            );
+            float currentInnerWidth = Mathf.Max(
+                _objectColumnElement.resolvedStyle.width,
+                MinObjectPaneWidth
+            );
+
+            if (!Mathf.Approximately(currentOuterWidth, _lastSavedOuterWidth))
+            {
+                EditorPrefs.SetFloat(PrefsSplitterOuterKey, currentOuterWidth);
+                _lastSavedOuterWidth = currentOuterWidth;
+            }
+
+            if (!Mathf.Approximately(currentInnerWidth, _lastSavedInnerWidth))
+            {
+                EditorPrefs.SetFloat(PrefsSplitterInnerKey, currentInnerWidth);
+                _lastSavedInnerWidth = currentInnerWidth;
+            }
+        }
+
+        private void RestorePreviousSelection()
+        {
+            if (_scriptableObjectTypes.Count == 0)
+            {
+                return;
+            }
+
+            Type selectedType = ResolveSelectedTypeByFullName(
+                _scriptableObjectTypes,
+                _namespaceOrder,
+                GetLastSelectedNamespaceKey(),
+                GetLastSelectedTypeFullName()
+            );
+
+            if (selectedType == null)
+            {
+                return;
+            }
+
+            // Build namespace view first so type selection is visible
+            BuildNamespaceView();
+
+            // Register the restored type via SelectType, which sets the selected type BEFORE loading.
+            // That way the load's synchronous saved/first-object selection doesn't re-enter SelectType
+            // (which would start a second load), the object list filters correctly for the restored
+            // type, and an empty type shows its empty view rather than a stale one. SelectType also
+            // loads the objects, restores the saved selection, and refreshes the dependent UI.
+            _namespaceController.SelectType(this, selectedType);
+
+            VisualElement typeElementToSelect = FindTypeElement(selectedType);
+            if (typeElementToSelect != null)
+            {
+                VisualElement ancestorGroup = FindAncestorNamespaceGroup(typeElementToSelect);
+                if (ancestorGroup != null)
+                {
+                    ExpandNamespaceGroupIfNeeded(ancestorGroup, false);
+                }
+            }
+        }
+
+        private VisualElement FindTypeElement(Type targetType)
+        {
+            if (targetType == null || _namespaceListContainer == null)
+            {
+                return null;
+            }
+
+            List<VisualElement> typeItems = _namespaceListContainer
+                .Query<VisualElement>(className: "type-item")
+                .ToList();
+
+            foreach (VisualElement item in typeItems)
+            {
+                if (item.userData is Type itemType && itemType == targetType)
+                {
+                    return item;
+                }
+            }
+
+            return null;
+        }
+
+        private void CreateProcessorColumn()
+        {
+            _processorAreaElement = new VisualElement { name = "processor-column" };
+            _processorAreaElement.AddToClassList("processor-column");
+
+            _processorHeader = new VisualElement { name = "processor-column-header" };
+            _processorHeader.AddToClassList("processor-column-header");
+            _processorHeaderLabel = new Label("Processors")
+            {
+                style = { unityFontStyleAndWeight = FontStyle.Bold },
+            };
+            _processorToggleCollapseButton = new Label();
+            _processorToggleCollapseButton.AddToClassList("collapse-toggle");
+            _processorToggleCollapseButton.AddToClassList(StyleConstants.ClickableClass);
+            _processorToggleCollapseButton.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                ToggleProcessorContentCollapse();
+            });
+
+            _processorHeader.Add(_processorToggleCollapseButton);
+            _processorHeader.Add(_processorHeaderLabel);
+            _processorAreaElement.Add(_processorHeader);
+
+            ProcessorState state = CurrentProcessorState;
+
+            _processorArea = new VisualElement { style = { flexDirection = FlexDirection.Column } };
+            _processorArea.AddToClassList("processor-area");
+            _processorLogicToggle = new HorizontalToggle()
+            {
+                name = "processor-logic-toggle",
+                LeftText = "ALL",
+                RightText = "FILTERED",
+            };
+            _processorLogicToggle.AddToClassList("processor");
+            _processorLogicToggle.OnLeftSelected += () =>
+            {
+                _processorLogicToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
+                _processorLogicToggle.LeftLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    false
+                );
+                _processorLogicToggle.RightLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    true
+                );
+                state = CurrentProcessorState;
+                if (state != null && state.logic != ProcessorLogic.All)
+                {
+                    state.logic = ProcessorLogic.All;
+                    SaveProcessorState(state);
+                }
+            };
+            _processorLogicToggle.OnRightSelected += () =>
+            {
+                _processorLogicToggle.Indicator.style.backgroundColor = new Color(
+                    1f,
+                    0.5f,
+                    0.3137254902f
+                );
+                _processorLogicToggle.LeftLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    true
+                );
+                _processorLogicToggle.RightLabel.EnableInClassList(
+                    StyleConstants.ClickableClass,
+                    false
+                );
+                state = CurrentProcessorState;
+                if (state != null && state.logic != ProcessorLogic.Filtered)
+                {
+                    state.logic = ProcessorLogic.Filtered;
+                    SaveProcessorState(state);
+                }
+            };
+
+            switch (state?.logic ?? ProcessorLogic.Filtered)
+            {
+                case ProcessorLogic.All:
+                {
+                    _processorLogicToggle.SelectLeft(force: true);
+                    break;
+                }
+                case ProcessorLogic.Filtered:
+                {
+                    _processorLogicToggle.SelectRight(force: true);
+                    break;
+                }
+            }
+
+            _processorArea.Add(_processorLogicToggle);
+
+            ScrollView scrollView = new(ScrollViewMode.Vertical)
+            {
+                name = "processor-list-scrollview",
+            };
+            scrollView.AddToClassList("processor-list-scrollview");
+            _processorListContainer = new VisualElement { name = "processor-list-container" };
+            _processorListContainer.AddToClassList("processor-list-container");
+            scrollView.Add(_processorListContainer);
+            _processorArea.Add(scrollView);
+            _processorAreaElement.Add(_processorArea);
         }
 
         private void ToggleProcessorContentCollapse()
@@ -2595,104 +2732,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private static string EscapeRichText(string input)
-        {
-            return string.IsNullOrWhiteSpace(input)
-                ? ""
-                : input.Replace("<", "&lt;").Replace(">", "&gt;");
-        }
-
-        private static MatchDetail SearchStringProperties(
-            object obj,
-            string searchTerm,
-            int currentDepth,
-            int maxDepth,
-            HashSet<object> visited
-        )
-        {
-            if (obj == null || maxDepth < currentDepth)
-            {
-                return null;
-            }
-
-            Type objType = obj.GetType();
-
-            if (
-                objType.IsPrimitive
-                || objType == typeof(Vector2)
-                || objType == typeof(Vector3)
-                || objType == typeof(Vector4)
-                || objType == typeof(Quaternion)
-                || objType == typeof(Color)
-                || objType == typeof(Rect)
-                || objType == typeof(Bounds)
-            )
-            {
-                return null;
-            }
-
-            if (!objType.IsValueType && !visited.Add(obj))
-            {
-                return null;
-            }
-
-            try
-            {
-                FieldInfo[] fields = objType.GetFields(
-                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic
-                );
-                foreach (FieldInfo field in fields)
-                {
-                    object fieldValue = field.GetValue(obj);
-                    if (fieldValue == null)
-                    {
-                        continue;
-                    }
-
-                    if (field.FieldType == typeof(string))
-                    {
-                        string stringValue = fieldValue as string;
-                        if (
-                            !string.IsNullOrWhiteSpace(stringValue)
-                            && stringValue.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
-                        )
-                        {
-                            return new MatchDetail(searchTerm)
-                            {
-                                fieldName = field.Name,
-                                matchedValue = stringValue,
-                            };
-                        }
-                    }
-                    else if (
-                        (
-                            field.FieldType.IsClass
-                            || field.FieldType is { IsValueType: true, IsPrimitive: false }
-                        ) && !typeof(Object).IsAssignableFrom(field.FieldType)
-                    )
-                    {
-                        MatchDetail nestedMatch = SearchStringProperties(
-                            fieldValue,
-                            searchTerm,
-                            currentDepth + 1,
-                            maxDepth,
-                            visited
-                        );
-                        if (nestedMatch != null)
-                        {
-                            return nestedMatch;
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // Swallow
-            }
-
-            return null;
-        }
-
         private void NavigateToObject(ScriptableObject targetObject)
         {
             if (targetObject == null)
@@ -2874,73 +2913,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 popover.UnregisterCallback<PointerMoveEvent>(OnPopoverPointerMove);
                 popover.UnregisterCallback<PointerUpEvent>(OnPopoverPointerUp);
                 popover.UnregisterCallback<PointerCaptureOutEvent>(OnPopoverPointerCaptureOut);
-            }
-        }
-
-        internal void BuildAndOpenConfirmationPopover(
-            string message,
-            string confirmText,
-            Action onConfirm,
-            VisualElement triggerElement
-        )
-        {
-            if (_confirmActionPopover == null || onConfirm == null)
-            {
-                return;
-            }
-
-            VisualElement dragHandle = _confirmActionPopover.Q(className: "popover-drag-handle");
-            VisualElement contentWrapper = _confirmActionPopover.Q(
-                name: $"{_confirmActionPopover.name}-content-wrapper"
-            );
-            if (dragHandle == null || contentWrapper == null)
-            {
-                return;
-            }
-
-            dragHandle.AddToClassList("delete-button");
-            dragHandle.Clear();
-            contentWrapper.Clear();
-
-            dragHandle.Add(
-                new Label("Remove") { style = { unityFontStyleAndWeight = FontStyle.Bold } }
-            );
-
-            Button closeButton = new(CloseActivePopover) { text = "X" };
-            closeButton.AddToClassList("popover-close-button");
-            closeButton.AddToClassList(StyleConstants.ClickableClass);
-            dragHandle.Add(closeButton);
-
-            Label messageLabel = new(message)
-            {
-                style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
-            };
-            contentWrapper.Add(messageLabel);
-
-            VisualElement buttonContainer = new();
-            buttonContainer.AddToClassList("popover-button-container");
-            contentWrapper.Add(buttonContainer);
-
-            Button cancelButton = new(CloseActivePopover) { text = "Cancel" };
-            cancelButton.AddToClassList(StyleConstants.PopoverButtonClass);
-            cancelButton.AddToClassList(StyleConstants.PopoverCancelButtonClass);
-            cancelButton.AddToClassList(StyleConstants.ClickableClass);
-            buttonContainer.Add(cancelButton);
-
-            Button confirmButton = new(Confirm) { text = confirmText, userData = (Action)Confirm };
-            confirmButton.AddToClassList(StyleConstants.PopoverPrimaryActionClass);
-            confirmButton.AddToClassList(StyleConstants.PopoverButtonClass);
-            confirmButton.AddToClassList("popover-delete-button");
-            confirmButton.AddToClassList(StyleConstants.ClickableClass);
-            buttonContainer.Add(confirmButton);
-
-            OpenPopover(_confirmActionPopover, triggerElement);
-            return;
-
-            void Confirm()
-            {
-                onConfirm();
-                CloseActivePopover();
             }
         }
 
@@ -5371,6 +5343,773 @@ namespace WallstopStudios.DataVisualizer.Editor
         }
 #endif
 
+        private static Color GenerateColorForText(string text)
+        {
+            float hue = Mathf.Abs(text.GetHashCode() % 256) / 255f;
+            return Color.HSVToRGB(hue, 0.65f, 0.90f);
+        }
+
+        private static bool IsColorDark(Color c)
+        {
+            return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b < 0.5f; // Luminance check
+        }
+
+        private static void UpdateObjectTitleRepresentation(
+            ScriptableObject dataObject,
+            VisualElement element
+        )
+        {
+            if (dataObject == null || element == null)
+            {
+                return;
+            }
+
+            Label titleLabel = element.Q<Label>(className: "object-item__label");
+            if (titleLabel == null)
+            {
+                Debug.LogError("Could not find title label within object item element.");
+                return;
+            }
+
+            string currentTitle;
+            if (dataObject is IDisplayable displayable)
+            {
+                currentTitle = displayable.Title;
+            }
+            else
+            {
+                currentTitle = dataObject.name;
+            }
+
+            if (titleLabel.text != currentTitle)
+            {
+                titleLabel.text = currentTitle;
+            }
+        }
+
+        private static bool IsLoadableType(Type type)
+        {
+            // Fast type validation without expensive CreateInstance calls
+            // This allows namespace/type list to appear immediately
+            return type != typeof(ScriptableObject)
+                && !type.IsAbstract
+                && !type.IsGenericType
+                && !type.IsInterface
+                && !type.IsNestedPrivate
+                && !IsSubclassOf(type, typeof(Editor))
+                && !IsSubclassOf(type, typeof(EditorWindow))
+                && !IsSubclassOf(type, typeof(ScriptableSingleton<>))
+                && type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
+                && type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true;
+
+            // Note: We removed CreateInstance validation because:
+            // 1. It was slow (1-2 seconds for large projects)
+            // 2. It caused "Reset() called with object" errors for some ScriptableObjects
+            // 3. The real validation happens when loading actual assets anyway
+            // 4. Types that can't be instantiated simply won't have any assets to load
+        }
+
+        private static bool IsSubclassOf(Type typeToCheck, Type baseClass)
+        {
+            if (typeToCheck == null)
+            {
+                return false;
+            }
+
+            Type currentType = typeToCheck;
+
+            while (currentType != null && currentType != typeof(object))
+            {
+                Type typeToCheckAgainst = currentType.IsGenericType
+                    ? currentType.GetGenericTypeDefinition()
+                    : currentType;
+                if (typeToCheckAgainst == baseClass)
+                {
+                    return true;
+                }
+                currentType = currentType.BaseType;
+            }
+            return false;
+        }
+
+        private static int CompareUsingCustomOrder(
+            string keyA,
+            string keyB,
+            List<string> customOrder
+        )
+        {
+            int indexA = customOrder.IndexOf(keyA);
+            int indexB = customOrder.IndexOf(keyB);
+
+            switch (indexA)
+            {
+                case >= 0 when 0 <= indexB:
+                    return indexA.CompareTo(indexB);
+                case >= 0:
+                    return -1;
+            }
+
+            return 0 <= indexB ? 1 : string.Compare(keyA, keyB, StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal void UpdateLabelAreaAndFilter()
+        {
+            ClearLabelFilterUI();
+            if (_namespaceController.SelectedType == null)
+            {
+                if (_filterStatusLabel != null)
+                {
+                    _filterStatusLabel.text = "";
+                }
+
+                if (_labelFilterSelectionRoot is { parent: not null })
+                {
+                    _labelFilterSelectionRoot.parent.style.display = DisplayStyle.None;
+                }
+
+                if (_labelCollapseRow != null)
+                {
+                    _labelCollapseRow.style.display = DisplayStyle.None;
+                }
+
+                ApplyLabelFilter();
+                return;
+            }
+
+            _currentUniqueLabelsForType.Clear();
+            HashSet<string> labelSet = new(StringComparer.OrdinalIgnoreCase);
+            foreach (ScriptableObject obj in _selectedObjects)
+            {
+                if (obj == null)
+                {
+                    continue;
+                }
+
+                string[] labels = AssetDatabase.GetLabels(obj);
+                foreach (string label in labels)
+                {
+                    labelSet.Add(label);
+                }
+            }
+
+            foreach (string label in labelSet)
+            {
+                _currentUniqueLabelsForType.Add(label);
+            }
+            _currentUniqueLabelsForType.Sort();
+
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                return;
+            }
+
+            bool configChanged = false;
+            int removedAnd = config.andLabels.RemoveAll(label =>
+                !_currentUniqueLabelsForType.Contains(label)
+            );
+            int removedOr = config.orLabels.RemoveAll(label =>
+                !_currentUniqueLabelsForType.Contains(label)
+            );
+
+            if (0 < removedAnd || 0 < removedOr)
+            {
+                configChanged = true;
+            }
+
+            if (configChanged)
+            {
+                SaveLabelFilterConfig(config);
+            }
+
+            PopulateLabelPillContainers();
+            ApplyLabelFilter();
+            ToggleLabelsCollapsed(CurrentTypeLabelFilterConfig?.isCollapsed == true);
+            ToggleLabelsAdvancedCollapsed(
+                CurrentTypeLabelFilterConfig?.isAdvancedCollapsed == true
+            );
+        }
+
+        internal void BuildObjectsView()
+        {
+            _selectedObjects.RemoveAll(obj => obj == null);
+            if (_objectListView == null)
+            {
+                return;
+            }
+
+            Type selectedType = _namespaceController.SelectedType;
+
+            // Nothing loaded yet (or still loading): show the empty/loading overlay, hide the list.
+            if (selectedType != null && _selectedObjects.Count == 0)
+            {
+                _filteredObjects.Clear();
+                _objectListView.RefreshItems();
+                _objectListView.style.display = DisplayStyle.None;
+                _emptyObjectLabel.text =
+                    _isLoadingObjectsAsync && _asyncLoadTargetType == selectedType
+                        ? "Loading objects..."
+                        : $"No objects of type '{selectedType.Name}' found.\nUse the '+' button above to create one.";
+                _emptyObjectLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            ApplyLabelFilter(buildObjectsView: false);
+
+            if (_filteredObjects.Count == 0)
+            {
+                _objectListView.RefreshItems();
+                _objectListView.style.display = DisplayStyle.None;
+                _emptyObjectLabel.text =
+                    0 < _selectedObjects.Count
+                        ? $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' match the current label filter."
+                        : $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' found.";
+                _emptyObjectLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            _emptyObjectLabel.style.display = DisplayStyle.None;
+            _objectListView.style.display = DisplayStyle.Flex;
+
+            // Drag-reorder is only safe (maps 1:1 to the saved order) when no label filter is hiding
+            // items, i.e. the filtered list matches the full list.
+            _objectListView.reorderable = _filteredObjects.Count == _selectedObjects.Count;
+
+            _objectListView.RefreshItems();
+
+            // Re-resolve the selection by identity (indices shift as async batches load).
+            int selectedIndex =
+                _selectedObject != null ? _filteredObjects.IndexOf(_selectedObject) : -1;
+            _suppressListSelectionCallback = true;
+            _objectListView.SetSelectionWithoutNotify(
+                0 <= selectedIndex ? new[] { selectedIndex } : Array.Empty<int>()
+            );
+            _suppressListSelectionCallback = false;
+        }
+
+        internal ScriptableObject DetermineObjectToAutoSelect(Type selectedType)
+        {
+            if (selectedType == null || _selectedObjects.Count == 0)
+            {
+                return null;
+            }
+
+            ScriptableObject objectToSelect = null;
+            string savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.FullName);
+            if (!string.IsNullOrWhiteSpace(savedObjectGuid))
+            {
+                objectToSelect = _selectedObjects.Find(obj =>
+                {
+                    if (obj == null)
+                    {
+                        return false;
+                    }
+
+                    string path = AssetDatabase.GetAssetPath(obj);
+                    return !string.IsNullOrWhiteSpace(path)
+                        && string.Equals(
+                            AssetDatabase.AssetPathToGUID(path),
+                            savedObjectGuid,
+                            // Case-insensitive to match the priority guard in LoadObjectTypesAsync, so
+                            // a saved GUID that loaded is never skipped here over casing.
+                            StringComparison.OrdinalIgnoreCase
+                        );
+                });
+            }
+
+            if (objectToSelect == null)
+            {
+                objectToSelect = _selectedObjects[0];
+            }
+
+            return objectToSelect;
+        }
+
+        internal void LoadObjectTypesAsync(Type type, bool priorityLoad = false)
+        {
+            if (type == null)
+            {
+                return;
+            }
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] LoadObjectTypesAsync START - Type: {type.Name}, Priority: {priorityLoad} at {System.DateTime.Now:HH:mm:ss.fff}"
+                );
+            }
+
+            // Cancel any existing async load for a different type
+            // Cancel any in-flight load when starting a fresh one — even for the SAME type (e.g. a
+            // refresh) — otherwise the old scheduled pump and its _pendingObjectGuids interleave with
+            // the new load and corrupt ordering/selection.
+            if (_isLoadingObjectsAsync && !priorityLoad)
+            {
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] Cancelling previous async load for {_asyncLoadTargetType?.Name}"
+                    );
+                }
+                _asyncLoadTask?.Pause();
+                _pendingObjectGuids.Clear();
+                UpdateLoadingIndicator(0, 0); // Hide indicator for cancelled load
+            }
+
+            // A new generation for this fresh load so any stale scheduled callback no-ops (see field).
+            if (!priorityLoad)
+            {
+                _asyncLoadGeneration++;
+            }
+            int loadGeneration = _asyncLoadGeneration;
+
+            _asyncLoadTargetType = type;
+            _isLoadingObjectsAsync = true;
+
+            // Clear existing if this is a new selection (not a continuation)
+            if (!priorityLoad)
+            {
+                _selectedObjects.Clear();
+                _selectedObjectOrderIndex.Clear();
+                _filteredObjects.Clear();
+            }
+
+            List<string> customGuidOrder = GetObjectOrderForType(type);
+
+            // Get the last selected object's GUID so we can prioritize loading it
+            string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
+
+            // Get all GUIDs for this type
+            AssetGuidTypeIndex.Shared.EnsureStarted();
+            string[] allGuids = AssetGuidDiscovery.MergeCandidates(
+                type,
+                AssetDatabase.FindAssets($"t:{type.Name}"),
+                customGuidOrder,
+                savedObjectGuid,
+                out string normalizedSavedObjectGuid
+            );
+            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && normalizedSavedObjectGuid == null)
+            {
+                SetLastSelectedObjectGuidForType(type.FullName, null);
+            }
+            savedObjectGuid = normalizedSavedObjectGuid;
+            _asyncLoadTotalCount = allGuids.Length;
+            _asyncLoadSkippedCount = 0;
+
+            // No assets of this type: skip the async loader entirely so it doesn't flash the
+            // "Loading objects..." overlay before immediately completing. Clear any stale
+            // selection/indicator and show the empty view now.
+            if (allGuids.Length == 0)
+            {
+                _isLoadingObjectsAsync = false;
+                _asyncLoadTargetType = null;
+                _pendingObjectGuids.Clear();
+                UpdateLoadingIndicator(0, 0);
+                SelectObject(null);
+                BuildObjectsView();
+                return;
+            }
+
+            // Establish the canonical display order for this load: custom-ordered assets first (in
+            // their saved sequence), then everything else by asset path. LoadObjectBatch positions
+            // assets by this map so drag/move ordering is preserved across async batches.
+            _asyncDisplayOrderByGuid.Clear();
+            {
+                HashSet<string> allGuidLookup = new(allGuids, StringComparer.Ordinal);
+                int displayIndex = 0;
+                foreach (string guid in customGuidOrder)
+                {
+                    if (allGuidLookup.Contains(guid) && !_asyncDisplayOrderByGuid.ContainsKey(guid))
+                    {
+                        _asyncDisplayOrderByGuid[guid] = displayIndex++;
+                    }
+                }
+                foreach (
+                    string guid in allGuids
+                        .Where(candidate => !_asyncDisplayOrderByGuid.ContainsKey(candidate))
+                        .OrderBy(
+                            candidate => AssetDatabase.GUIDToAssetPath(candidate),
+                            StringComparer.OrdinalIgnoreCase
+                        )
+                )
+                {
+                    _asyncDisplayOrderByGuid[guid] = displayIndex++;
+                }
+            }
+
+            // Prioritize: saved object, custom order, then remaining
+            List<string> priorityGuids = new();
+            List<string> remainingGuids = new();
+
+            // Create a set for fast lookup
+            HashSet<string> customGuidSet = new(customGuidOrder, StringComparer.Ordinal);
+
+            // Add saved object to priority if it exists and isn't already in custom order
+            if (
+                !string.IsNullOrWhiteSpace(savedObjectGuid)
+                && !customGuidSet.Contains(savedObjectGuid)
+            )
+            {
+                priorityGuids.Add(savedObjectGuid);
+            }
+
+            foreach (string guid in allGuids)
+            {
+                if (customGuidSet.Contains(guid))
+                {
+                    priorityGuids.Add(guid);
+                }
+                else if (guid != savedObjectGuid) // Don't add saved object twice
+                {
+                    remainingGuids.Add(guid);
+                }
+            }
+
+            // Ensure custom order is respected, with saved object ALWAYS at the front
+            List<string> orderedPriorityGuids = new();
+
+            // Saved object ALWAYS comes first (critical for restoring selection)
+            // Even if it's in custom order, we need it loaded immediately
+            // O(1) membership for the ordering below instead of repeated O(n) List.Contains scans.
+            HashSet<string> priorityGuidSet = new(priorityGuids, StringComparer.Ordinal);
+
+            if (
+                !string.IsNullOrWhiteSpace(savedObjectGuid)
+                && priorityGuidSet.Contains(savedObjectGuid)
+            )
+            {
+                orderedPriorityGuids.Add(savedObjectGuid);
+            }
+
+            // Then custom order (excluding saved object to avoid duplicates)
+            orderedPriorityGuids.AddRange(
+                customGuidOrder.Where(guid =>
+                    priorityGuidSet.Contains(guid) && guid != savedObjectGuid
+                )
+            );
+
+            // Then any remaining priority items
+            orderedPriorityGuids.AddRange(
+                priorityGuids.Except(orderedPriorityGuids, StringComparer.Ordinal)
+            );
+
+            // Load priority batch first (custom ordered items)
+            int priorityBatchSize = Mathf.Min(
+                AsyncLoadPriorityBatchSize,
+                orderedPriorityGuids.Count
+            );
+            List<string> priorityBatch = orderedPriorityGuids.GetRange(0, priorityBatchSize);
+
+            if (EnableAsyncLoadDebugLog)
+            {
+                string savedObjInfo = "";
+                if (!string.IsNullOrWhiteSpace(savedObjectGuid))
+                {
+                    bool savedInBatch = priorityBatch.Contains(savedObjectGuid);
+                    savedObjInfo = savedInBatch
+                        ? $" (saved object {savedObjectGuid} is in priority batch)"
+                        : $" (WARNING: saved object {savedObjectGuid} NOT in priority batch!)";
+                }
+                Debug.Log(
+                    $"[DataVisualizer] Loading priority batch: {priorityBatchSize} objects{savedObjInfo} (Total: {allGuids.Length}, Remaining: {allGuids.Length - priorityBatchSize})"
+                );
+            }
+
+            // LoadObjectBatch updates the indicator with the real loaded count, so there's no
+            // pre-load UpdateLoadingIndicator here (it briefly showed progress before anything loaded).
+            LoadObjectBatch(type, priorityBatch, true);
+
+            // Queue remaining priority items
+            for (int i = priorityBatchSize; i < orderedPriorityGuids.Count; i++)
+            {
+                _pendingObjectGuids.Enqueue(orderedPriorityGuids[i]);
+            }
+
+            // Order the remaining GUIDs by the canonical display order already computed above rather
+            // than re-deriving asset paths and sorting again (that duplicate work is noticeable on
+            // large projects). _asyncDisplayOrderByGuid was built path-sorted, so order is preserved.
+            List<string> remainingSorted = remainingGuids
+                .OrderBy(guid =>
+                    _asyncDisplayOrderByGuid.TryGetValue(guid, out int order) ? order : int.MaxValue
+                )
+                .ToList();
+
+            // Load first batch of remaining items if we have space
+            if (priorityBatchSize < AsyncLoadPriorityBatchSize)
+            {
+                int remainingInPriorityBatch = AsyncLoadPriorityBatchSize - priorityBatchSize;
+                int firstRemainingBatch = Mathf.Min(
+                    remainingInPriorityBatch,
+                    remainingSorted.Count
+                );
+                List<string> firstRemainingBatchGuids = remainingSorted.GetRange(
+                    0,
+                    firstRemainingBatch
+                );
+                LoadObjectBatch(type, firstRemainingBatchGuids, true);
+
+                for (int i = firstRemainingBatch; i < remainingSorted.Count; i++)
+                {
+                    _pendingObjectGuids.Enqueue(remainingSorted[i]);
+                }
+            }
+            else
+            {
+                foreach (string guid in remainingSorted)
+                {
+                    _pendingObjectGuids.Enqueue(guid);
+                }
+            }
+
+            // Now that the priority batch AND the first remainder batch are loaded, select the
+            // saved/first object synchronously (still in this frame, so a type switch goes straight
+            // from the old inspector to the new one with no stale UI or "loading"/"select an object"
+            // flash). Running it here rather than right after the (possibly empty) priority batch means
+            // a fresh type with no saved selection and no custom order still auto-selects its first
+            // real asset instead of showing a populated list with a blank inspector. Remaining objects
+            // keep streaming in asynchronously below.
+            if (!priorityLoad)
+            {
+                BuildObjectsView();
+                UpdateCreateObjectButtonStyle();
+                UpdateLabelAreaAndFilter();
+
+                ScriptableObject objectToSelect = DetermineObjectToAutoSelect(type);
+
+                if (EnableAsyncLoadDebugLog)
+                {
+                    if (objectToSelect != null)
+                    {
+                        string objPath = AssetDatabase.GetAssetPath(objectToSelect);
+                        string objGuid = AssetDatabase.AssetPathToGUID(objPath);
+                        Debug.Log(
+                            $"[DataVisualizer] Selecting saved object: {objectToSelect.name} (GUID: {objGuid})"
+                        );
+                    }
+                    else
+                    {
+                        Debug.LogWarning(
+                            $"[DataVisualizer] No saved object found, _selectedObjects.Count = {_selectedObjects.Count}"
+                        );
+                    }
+                }
+
+                if (objectToSelect != null)
+                {
+                    SelectObjectAndNavigate(objectToSelect);
+                }
+                else if (0 < _selectedObjects.Count)
+                {
+                    SelectObjectAndNavigate(_selectedObjects[0]);
+                }
+                else
+                {
+                    // The type has no assets — clear the stale selection and inspector instead of
+                    // leaving the previously selected object showing.
+                    SelectObject(null);
+                }
+            }
+
+            // Continue loading remaining batches
+            if (0 < _pendingObjectGuids.Count)
+            {
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] Queued {_pendingObjectGuids.Count} objects for background loading"
+                    );
+                }
+                ContinueLoadingObjects(type, loadGeneration);
+            }
+            else
+            {
+                _isLoadingObjectsAsync = false;
+                if (EnableAsyncLoadDebugLog)
+                {
+                    Debug.Log(
+                        $"[DataVisualizer] LoadObjectTypesAsync COMPLETE - All {allGuids.Length} objects loaded immediately"
+                    );
+                }
+                UpdateLoadingIndicator(allGuids.Length, allGuids.Length);
+                BuildObjectsView();
+            }
+        }
+
+        internal void SelectObjectAndNavigate(ScriptableObject dataObject)
+        {
+            if (dataObject == null)
+            {
+                SelectObject(null);
+                return;
+            }
+
+            // SelectObject drives the ListView selection + ScrollToItem by index; no manual paging.
+            SelectObject(dataObject);
+
+            // Re-scroll once async layout settles (the item may not have had geometry yet).
+            if (_objectListView != null && _filteredObjects.Contains(dataObject))
+            {
+                rootVisualElement
+                    .schedule.Execute(() =>
+                    {
+                        int i = _filteredObjects.IndexOf(dataObject);
+                        if (0 <= i && _objectListView != null)
+                        {
+                            _objectListView.ScrollToItem(i);
+                        }
+                    })
+                    .ExecuteLater(10);
+            }
+        }
+
+        internal void SelectObject(ScriptableObject dataObject)
+        {
+            if (_selectedObject == dataObject)
+            {
+                return;
+            }
+
+            _selectedObject = dataObject;
+
+            // Drive the ListView's visual selection + scroll by index (it owns the --selected style).
+            if (_objectListView != null)
+            {
+                int index = dataObject != null ? _filteredObjects.IndexOf(dataObject) : -1;
+                _suppressListSelectionCallback = true;
+                if (0 <= index)
+                {
+                    _objectListView.SetSelectionWithoutNotify(new[] { index });
+                    _objectListView.ScrollToItem(index);
+                }
+                else
+                {
+                    _objectListView.SetSelectionWithoutNotify(Array.Empty<int>());
+                }
+                _suppressListSelectionCallback = false;
+
+                // Repaint rows so the custom .object-item.selected box style tracks the new selection.
+                // bindItem is the only place that class is applied and the ListView's own --selected
+                // fill is intentionally transparent, so a plain click needs an explicit refresh.
+                // RefreshItems rebinds visible rows only, so it is cheap.
+                _objectListView.RefreshItems();
+            }
+
+            if (_selectedObject != null && Settings.selectActiveObject)
+            {
+                Selection.activeObject = _selectedObject;
+            }
+
+            try
+            {
+                if (_selectedObject != null)
+                {
+                    string typeName = _selectedObject.GetType().FullName;
+                    string assetPath = AssetDatabase.GetAssetPath(_selectedObject);
+                    string objectGuid = null;
+                    if (!string.IsNullOrWhiteSpace(assetPath))
+                    {
+                        objectGuid = AssetDatabase.AssetPathToGUID(assetPath);
+                    }
+
+                    SetLastSelectedObjectGuidForType(typeName, objectGuid);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Error saving selection state. {e}");
+            }
+
+            _currentInspectorScriptableObject?.Dispose();
+            _currentInspectorScriptableObject =
+                dataObject != null ? new SerializedObject(dataObject) : null;
+
+            if (dataObject != null)
+            {
+                _namespaceController.SelectType(this, dataObject.GetType());
+                rootVisualElement
+                    .schedule.Execute(() =>
+                    {
+                        if (_selectedObject == dataObject)
+                        {
+                            _namespaceController.SelectType(this, dataObject.GetType());
+                        }
+                    })
+                    .ExecuteLater(1);
+            }
+            // Backup trigger, we have some delay issues
+            BuildInspectorView();
+        }
+
+        internal void UpdateCreateObjectButtonStyle()
+        {
+            if (_createObjectButton != null)
+            {
+                _createObjectButton.style.display =
+                    _namespaceController.SelectedType != null
+                        ? DisplayStyle.Flex
+                        : DisplayStyle.None;
+            }
+        }
+
+        internal void OnNamespacePointerDown(PointerDownEvent evt)
+        {
+            if (
+                evt.currentTarget
+                is not VisualElement { userData: string namespaceKey } targetElement
+            )
+            {
+                return;
+            }
+
+            if (evt.button == 0)
+            {
+                _draggedElement = targetElement;
+                _draggedData = namespaceKey;
+                _activeDragType = DragType.Namespace;
+                targetElement.CapturePointer(evt.pointerId);
+                targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
+                targetElement.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
+                targetElement.RegisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
+                evt.StopPropagation();
+            }
+        }
+
+        internal void OnTypePointerDown(VisualElement namespaceHeader, PointerDownEvent evt)
+        {
+            // TODO IMPLEMENT NEW HANDLER
+            if (evt.currentTarget is not VisualElement { userData: Type type } targetElement)
+            {
+                return;
+            }
+
+            if (evt.button == 0)
+            {
+                _lastActiveFocusArea = FocusArea.TypeList;
+                _draggedElement = targetElement;
+                _draggedData = type;
+                _activeDragType = DragType.Type;
+                _isDragging = false;
+                targetElement.CapturePointer(evt.pointerId);
+                targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
+                targetElement.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
+                targetElement.RegisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
+                evt.StopPropagation();
+            }
+        }
+
+        internal void SetLastSelectedObjectGuidForType(string typeFullName, string objectGuid)
+        {
+            if (string.IsNullOrWhiteSpace(typeFullName))
+            {
+                return;
+            }
+
+            PersistSettings(
+                settings => settings.SetLastObjectForType(typeFullName, objectGuid),
+                userState => userState.SetLastObjectForType(typeFullName, objectGuid)
+            );
+        }
+
         private void ListenForPropertyChange(InspectorElement inspectorElement)
         {
             if (_currentInspectorScriptableObject == null)
@@ -5515,84 +6254,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 container.RemoveFromClassList("drop-target-hover");
                 evt.StopPropagation();
             });
-        }
-
-        internal void UpdateLabelAreaAndFilter()
-        {
-            ClearLabelFilterUI();
-            if (_namespaceController.SelectedType == null)
-            {
-                if (_filterStatusLabel != null)
-                {
-                    _filterStatusLabel.text = "";
-                }
-
-                if (_labelFilterSelectionRoot is { parent: not null })
-                {
-                    _labelFilterSelectionRoot.parent.style.display = DisplayStyle.None;
-                }
-
-                if (_labelCollapseRow != null)
-                {
-                    _labelCollapseRow.style.display = DisplayStyle.None;
-                }
-
-                ApplyLabelFilter();
-                return;
-            }
-
-            _currentUniqueLabelsForType.Clear();
-            HashSet<string> labelSet = new(StringComparer.OrdinalIgnoreCase);
-            foreach (ScriptableObject obj in _selectedObjects)
-            {
-                if (obj == null)
-                {
-                    continue;
-                }
-
-                string[] labels = AssetDatabase.GetLabels(obj);
-                foreach (string label in labels)
-                {
-                    labelSet.Add(label);
-                }
-            }
-
-            foreach (string label in labelSet)
-            {
-                _currentUniqueLabelsForType.Add(label);
-            }
-            _currentUniqueLabelsForType.Sort();
-
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (config == null)
-            {
-                return;
-            }
-
-            bool configChanged = false;
-            int removedAnd = config.andLabels.RemoveAll(label =>
-                !_currentUniqueLabelsForType.Contains(label)
-            );
-            int removedOr = config.orLabels.RemoveAll(label =>
-                !_currentUniqueLabelsForType.Contains(label)
-            );
-
-            if (0 < removedAnd || 0 < removedOr)
-            {
-                configChanged = true;
-            }
-
-            if (configChanged)
-            {
-                SaveLabelFilterConfig(config);
-            }
-
-            PopulateLabelPillContainers();
-            ApplyLabelFilter();
-            ToggleLabelsCollapsed(CurrentTypeLabelFilterConfig?.isCollapsed == true);
-            ToggleLabelsAdvancedCollapsed(
-                CurrentTypeLabelFilterConfig?.isAdvancedCollapsed == true
-            );
         }
 
         private void ClearLabelFilterUI()
@@ -6111,17 +6772,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             return color;
         }
 
-        private static Color GenerateColorForText(string text)
-        {
-            float hue = Mathf.Abs(text.GetHashCode() % 256) / 255f;
-            return Color.HSVToRGB(hue, 0.65f, 0.90f);
-        }
-
-        private static bool IsColorDark(Color c)
-        {
-            return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b < 0.5f; // Luminance check
-        }
-
         private void BuildConfirmNamespaceAddPopoverContent(
             string namespaceKey,
             List<Type> typesToAdd
@@ -6245,63 +6895,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void BuildNamespaceView()
         {
             _namespaceController.Build(this, ref _namespaceListContainer);
-        }
-
-        internal void BuildObjectsView()
-        {
-            _selectedObjects.RemoveAll(obj => obj == null);
-            if (_objectListView == null)
-            {
-                return;
-            }
-
-            Type selectedType = _namespaceController.SelectedType;
-
-            // Nothing loaded yet (or still loading): show the empty/loading overlay, hide the list.
-            if (selectedType != null && _selectedObjects.Count == 0)
-            {
-                _filteredObjects.Clear();
-                _objectListView.RefreshItems();
-                _objectListView.style.display = DisplayStyle.None;
-                _emptyObjectLabel.text =
-                    _isLoadingObjectsAsync && _asyncLoadTargetType == selectedType
-                        ? "Loading objects..."
-                        : $"No objects of type '{selectedType.Name}' found.\nUse the '+' button above to create one.";
-                _emptyObjectLabel.style.display = DisplayStyle.Flex;
-                return;
-            }
-
-            ApplyLabelFilter(buildObjectsView: false);
-
-            if (_filteredObjects.Count == 0)
-            {
-                _objectListView.RefreshItems();
-                _objectListView.style.display = DisplayStyle.None;
-                _emptyObjectLabel.text =
-                    0 < _selectedObjects.Count
-                        ? $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' match the current label filter."
-                        : $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' found.";
-                _emptyObjectLabel.style.display = DisplayStyle.Flex;
-                return;
-            }
-
-            _emptyObjectLabel.style.display = DisplayStyle.None;
-            _objectListView.style.display = DisplayStyle.Flex;
-
-            // Drag-reorder is only safe (maps 1:1 to the saved order) when no label filter is hiding
-            // items, i.e. the filtered list matches the full list.
-            _objectListView.reorderable = _filteredObjects.Count == _selectedObjects.Count;
-
-            _objectListView.RefreshItems();
-
-            // Re-resolve the selection by identity (indices shift as async batches load).
-            int selectedIndex =
-                _selectedObject != null ? _filteredObjects.IndexOf(_selectedObject) : -1;
-            _suppressListSelectionCallback = true;
-            _objectListView.SetSelectionWithoutNotify(
-                0 <= selectedIndex ? new[] { selectedIndex } : Array.Empty<int>()
-            );
-            _suppressListSelectionCallback = false;
         }
 
         // Builds the reusable skeleton of an object row (no per-object data) for the ListView's
@@ -7495,44 +8088,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        internal ScriptableObject DetermineObjectToAutoSelect(Type selectedType)
-        {
-            if (selectedType == null || _selectedObjects.Count == 0)
-            {
-                return null;
-            }
-
-            ScriptableObject objectToSelect = null;
-            string savedObjectGuid = GetLastSelectedObjectGuidForType(selectedType.FullName);
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid))
-            {
-                objectToSelect = _selectedObjects.Find(obj =>
-                {
-                    if (obj == null)
-                    {
-                        return false;
-                    }
-
-                    string path = AssetDatabase.GetAssetPath(obj);
-                    return !string.IsNullOrWhiteSpace(path)
-                        && string.Equals(
-                            AssetDatabase.AssetPathToGUID(path),
-                            savedObjectGuid,
-                            // Case-insensitive to match the priority guard in LoadObjectTypesAsync, so
-                            // a saved GUID that loaded is never skipped here over casing.
-                            StringComparison.OrdinalIgnoreCase
-                        );
-                });
-            }
-
-            if (objectToSelect == null)
-            {
-                objectToSelect = _selectedObjects[0];
-            }
-
-            return objectToSelect;
-        }
-
         private void ApplyNamespaceCollapsedState(
             Label indicator,
             VisualElement typesContainer,
@@ -7574,348 +8129,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 // Re-binds the row (BindObjectRow refreshes the title) without a full rebuild.
                 _objectListView.RefreshItem(index);
-            }
-        }
-
-        private static void UpdateObjectTitleRepresentation(
-            ScriptableObject dataObject,
-            VisualElement element
-        )
-        {
-            if (dataObject == null || element == null)
-            {
-                return;
-            }
-
-            Label titleLabel = element.Q<Label>(className: "object-item__label");
-            if (titleLabel == null)
-            {
-                Debug.LogError("Could not find title label within object item element.");
-                return;
-            }
-
-            string currentTitle;
-            if (dataObject is IDisplayable displayable)
-            {
-                currentTitle = displayable.Title;
-            }
-            else
-            {
-                currentTitle = dataObject.name;
-            }
-
-            if (titleLabel.text != currentTitle)
-            {
-                titleLabel.text = currentTitle;
-            }
-        }
-
-        internal void LoadObjectTypesAsync(Type type, bool priorityLoad = false)
-        {
-            if (type == null)
-            {
-                return;
-            }
-
-            if (EnableAsyncLoadDebugLog)
-            {
-                Debug.Log(
-                    $"[DataVisualizer] LoadObjectTypesAsync START - Type: {type.Name}, Priority: {priorityLoad} at {System.DateTime.Now:HH:mm:ss.fff}"
-                );
-            }
-
-            // Cancel any existing async load for a different type
-            // Cancel any in-flight load when starting a fresh one — even for the SAME type (e.g. a
-            // refresh) — otherwise the old scheduled pump and its _pendingObjectGuids interleave with
-            // the new load and corrupt ordering/selection.
-            if (_isLoadingObjectsAsync && !priorityLoad)
-            {
-                if (EnableAsyncLoadDebugLog)
-                {
-                    Debug.Log(
-                        $"[DataVisualizer] Cancelling previous async load for {_asyncLoadTargetType?.Name}"
-                    );
-                }
-                _asyncLoadTask?.Pause();
-                _pendingObjectGuids.Clear();
-                UpdateLoadingIndicator(0, 0); // Hide indicator for cancelled load
-            }
-
-            // A new generation for this fresh load so any stale scheduled callback no-ops (see field).
-            if (!priorityLoad)
-            {
-                _asyncLoadGeneration++;
-            }
-            int loadGeneration = _asyncLoadGeneration;
-
-            _asyncLoadTargetType = type;
-            _isLoadingObjectsAsync = true;
-
-            // Clear existing if this is a new selection (not a continuation)
-            if (!priorityLoad)
-            {
-                _selectedObjects.Clear();
-                _selectedObjectOrderIndex.Clear();
-                _filteredObjects.Clear();
-            }
-
-            List<string> customGuidOrder = GetObjectOrderForType(type);
-
-            // Get the last selected object's GUID so we can prioritize loading it
-            string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
-
-            // Get all GUIDs for this type
-            string[] allGuids = AssetGuidDiscovery.MergeCandidates(
-                type,
-                AssetDatabase.FindAssets($"t:{type.Name}"),
-                customGuidOrder,
-                savedObjectGuid,
-                out string normalizedSavedObjectGuid
-            );
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && normalizedSavedObjectGuid == null)
-            {
-                SetLastSelectedObjectGuidForType(type.FullName, null);
-            }
-            savedObjectGuid = normalizedSavedObjectGuid;
-            _asyncLoadTotalCount = allGuids.Length;
-            _asyncLoadSkippedCount = 0;
-
-            // No assets of this type: skip the async loader entirely so it doesn't flash the
-            // "Loading objects..." overlay before immediately completing. Clear any stale
-            // selection/indicator and show the empty view now.
-            if (allGuids.Length == 0)
-            {
-                _isLoadingObjectsAsync = false;
-                _asyncLoadTargetType = null;
-                _pendingObjectGuids.Clear();
-                UpdateLoadingIndicator(0, 0);
-                SelectObject(null);
-                BuildObjectsView();
-                return;
-            }
-
-            // Establish the canonical display order for this load: custom-ordered assets first (in
-            // their saved sequence), then everything else by asset path. LoadObjectBatch positions
-            // assets by this map so drag/move ordering is preserved across async batches.
-            _asyncDisplayOrderByGuid.Clear();
-            {
-                HashSet<string> allGuidLookup = new(allGuids, StringComparer.Ordinal);
-                int displayIndex = 0;
-                foreach (string guid in customGuidOrder)
-                {
-                    if (allGuidLookup.Contains(guid) && !_asyncDisplayOrderByGuid.ContainsKey(guid))
-                    {
-                        _asyncDisplayOrderByGuid[guid] = displayIndex++;
-                    }
-                }
-                foreach (
-                    string guid in allGuids
-                        .Where(candidate => !_asyncDisplayOrderByGuid.ContainsKey(candidate))
-                        .OrderBy(
-                            candidate => AssetDatabase.GUIDToAssetPath(candidate),
-                            StringComparer.OrdinalIgnoreCase
-                        )
-                )
-                {
-                    _asyncDisplayOrderByGuid[guid] = displayIndex++;
-                }
-            }
-
-            // Prioritize: saved object, custom order, then remaining
-            List<string> priorityGuids = new();
-            List<string> remainingGuids = new();
-
-            // Create a set for fast lookup
-            HashSet<string> customGuidSet = new(customGuidOrder, StringComparer.Ordinal);
-
-            // Add saved object to priority if it exists and isn't already in custom order
-            if (
-                !string.IsNullOrWhiteSpace(savedObjectGuid)
-                && !customGuidSet.Contains(savedObjectGuid)
-            )
-            {
-                priorityGuids.Add(savedObjectGuid);
-            }
-
-            foreach (string guid in allGuids)
-            {
-                if (customGuidSet.Contains(guid))
-                {
-                    priorityGuids.Add(guid);
-                }
-                else if (guid != savedObjectGuid) // Don't add saved object twice
-                {
-                    remainingGuids.Add(guid);
-                }
-            }
-
-            // Ensure custom order is respected, with saved object ALWAYS at the front
-            List<string> orderedPriorityGuids = new();
-
-            // Saved object ALWAYS comes first (critical for restoring selection)
-            // Even if it's in custom order, we need it loaded immediately
-            // O(1) membership for the ordering below instead of repeated O(n) List.Contains scans.
-            HashSet<string> priorityGuidSet = new(priorityGuids, StringComparer.Ordinal);
-
-            if (
-                !string.IsNullOrWhiteSpace(savedObjectGuid)
-                && priorityGuidSet.Contains(savedObjectGuid)
-            )
-            {
-                orderedPriorityGuids.Add(savedObjectGuid);
-            }
-
-            // Then custom order (excluding saved object to avoid duplicates)
-            orderedPriorityGuids.AddRange(
-                customGuidOrder.Where(guid =>
-                    priorityGuidSet.Contains(guid) && guid != savedObjectGuid
-                )
-            );
-
-            // Then any remaining priority items
-            orderedPriorityGuids.AddRange(
-                priorityGuids.Except(orderedPriorityGuids, StringComparer.Ordinal)
-            );
-
-            // Load priority batch first (custom ordered items)
-            int priorityBatchSize = Mathf.Min(
-                AsyncLoadPriorityBatchSize,
-                orderedPriorityGuids.Count
-            );
-            List<string> priorityBatch = orderedPriorityGuids.GetRange(0, priorityBatchSize);
-
-            if (EnableAsyncLoadDebugLog)
-            {
-                string savedObjInfo = "";
-                if (!string.IsNullOrWhiteSpace(savedObjectGuid))
-                {
-                    bool savedInBatch = priorityBatch.Contains(savedObjectGuid);
-                    savedObjInfo = savedInBatch
-                        ? $" (saved object {savedObjectGuid} is in priority batch)"
-                        : $" (WARNING: saved object {savedObjectGuid} NOT in priority batch!)";
-                }
-                Debug.Log(
-                    $"[DataVisualizer] Loading priority batch: {priorityBatchSize} objects{savedObjInfo} (Total: {allGuids.Length}, Remaining: {allGuids.Length - priorityBatchSize})"
-                );
-            }
-
-            // LoadObjectBatch updates the indicator with the real loaded count, so there's no
-            // pre-load UpdateLoadingIndicator here (it briefly showed progress before anything loaded).
-            LoadObjectBatch(type, priorityBatch, true);
-
-            // Queue remaining priority items
-            for (int i = priorityBatchSize; i < orderedPriorityGuids.Count; i++)
-            {
-                _pendingObjectGuids.Enqueue(orderedPriorityGuids[i]);
-            }
-
-            // Order the remaining GUIDs by the canonical display order already computed above rather
-            // than re-deriving asset paths and sorting again (that duplicate work is noticeable on
-            // large projects). _asyncDisplayOrderByGuid was built path-sorted, so order is preserved.
-            List<string> remainingSorted = remainingGuids
-                .OrderBy(guid =>
-                    _asyncDisplayOrderByGuid.TryGetValue(guid, out int order) ? order : int.MaxValue
-                )
-                .ToList();
-
-            // Load first batch of remaining items if we have space
-            if (priorityBatchSize < AsyncLoadPriorityBatchSize)
-            {
-                int remainingInPriorityBatch = AsyncLoadPriorityBatchSize - priorityBatchSize;
-                int firstRemainingBatch = Mathf.Min(
-                    remainingInPriorityBatch,
-                    remainingSorted.Count
-                );
-                List<string> firstRemainingBatchGuids = remainingSorted.GetRange(
-                    0,
-                    firstRemainingBatch
-                );
-                LoadObjectBatch(type, firstRemainingBatchGuids, true);
-
-                for (int i = firstRemainingBatch; i < remainingSorted.Count; i++)
-                {
-                    _pendingObjectGuids.Enqueue(remainingSorted[i]);
-                }
-            }
-            else
-            {
-                foreach (string guid in remainingSorted)
-                {
-                    _pendingObjectGuids.Enqueue(guid);
-                }
-            }
-
-            // Now that the priority batch AND the first remainder batch are loaded, select the
-            // saved/first object synchronously (still in this frame, so a type switch goes straight
-            // from the old inspector to the new one with no stale UI or "loading"/"select an object"
-            // flash). Running it here rather than right after the (possibly empty) priority batch means
-            // a fresh type with no saved selection and no custom order still auto-selects its first
-            // real asset instead of showing a populated list with a blank inspector. Remaining objects
-            // keep streaming in asynchronously below.
-            if (!priorityLoad)
-            {
-                BuildObjectsView();
-                UpdateCreateObjectButtonStyle();
-                UpdateLabelAreaAndFilter();
-
-                ScriptableObject objectToSelect = DetermineObjectToAutoSelect(type);
-
-                if (EnableAsyncLoadDebugLog)
-                {
-                    if (objectToSelect != null)
-                    {
-                        string objPath = AssetDatabase.GetAssetPath(objectToSelect);
-                        string objGuid = AssetDatabase.AssetPathToGUID(objPath);
-                        Debug.Log(
-                            $"[DataVisualizer] Selecting saved object: {objectToSelect.name} (GUID: {objGuid})"
-                        );
-                    }
-                    else
-                    {
-                        Debug.LogWarning(
-                            $"[DataVisualizer] No saved object found, _selectedObjects.Count = {_selectedObjects.Count}"
-                        );
-                    }
-                }
-
-                if (objectToSelect != null)
-                {
-                    SelectObjectAndNavigate(objectToSelect);
-                }
-                else if (0 < _selectedObjects.Count)
-                {
-                    SelectObjectAndNavigate(_selectedObjects[0]);
-                }
-                else
-                {
-                    // The type has no assets — clear the stale selection and inspector instead of
-                    // leaving the previously selected object showing.
-                    SelectObject(null);
-                }
-            }
-
-            // Continue loading remaining batches
-            if (0 < _pendingObjectGuids.Count)
-            {
-                if (EnableAsyncLoadDebugLog)
-                {
-                    Debug.Log(
-                        $"[DataVisualizer] Queued {_pendingObjectGuids.Count} objects for background loading"
-                    );
-                }
-                ContinueLoadingObjects(type, loadGeneration);
-            }
-            else
-            {
-                _isLoadingObjectsAsync = false;
-                if (EnableAsyncLoadDebugLog)
-                {
-                    Debug.Log(
-                        $"[DataVisualizer] LoadObjectTypesAsync COMPLETE - All {allGuids.Length} objects loaded immediately"
-                    );
-                }
-                UpdateLoadingIndicator(allGuids.Length, allGuids.Length);
-                BuildObjectsView();
             }
         }
 
@@ -8164,78 +8377,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .ToList();
         }
 
-        private static bool IsLoadableType(Type type)
-        {
-            // Fast type validation without expensive CreateInstance calls
-            // This allows namespace/type list to appear immediately
-            return type != typeof(ScriptableObject)
-                && !type.IsAbstract
-                && !type.IsGenericType
-                && !type.IsInterface
-                && !type.IsNestedPrivate
-                && !IsSubclassOf(type, typeof(Editor))
-                && !IsSubclassOf(type, typeof(EditorWindow))
-                && !IsSubclassOf(type, typeof(ScriptableSingleton<>))
-                && type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
-                && type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true;
-
-            // Note: We removed CreateInstance validation because:
-            // 1. It was slow (1-2 seconds for large projects)
-            // 2. It caused "Reset() called with object" errors for some ScriptableObjects
-            // 3. The real validation happens when loading actual assets anyway
-            // 4. Types that can't be instantiated simply won't have any assets to load
-        }
-
-        private static bool IsSubclassOf(Type typeToCheck, Type baseClass)
-        {
-            if (typeToCheck == null)
-            {
-                return false;
-            }
-
-            Type currentType = typeToCheck;
-
-            while (currentType != null && currentType != typeof(object))
-            {
-                Type typeToCheckAgainst = currentType.IsGenericType
-                    ? currentType.GetGenericTypeDefinition()
-                    : currentType;
-                if (typeToCheckAgainst == baseClass)
-                {
-                    return true;
-                }
-                currentType = currentType.BaseType;
-            }
-            return false;
-        }
-
-        internal void SelectObjectAndNavigate(ScriptableObject dataObject)
-        {
-            if (dataObject == null)
-            {
-                SelectObject(null);
-                return;
-            }
-
-            // SelectObject drives the ListView selection + ScrollToItem by index; no manual paging.
-            SelectObject(dataObject);
-
-            // Re-scroll once async layout settles (the item may not have had geometry yet).
-            if (_objectListView != null && _filteredObjects.Contains(dataObject))
-            {
-                rootVisualElement
-                    .schedule.Execute(() =>
-                    {
-                        int i = _filteredObjects.IndexOf(dataObject);
-                        if (0 <= i && _objectListView != null)
-                        {
-                            _objectListView.ScrollToItem(i);
-                        }
-                    })
-                    .ExecuteLater(10);
-            }
-        }
-
         private void OnObjectListSelectionChanged(IEnumerable<object> selection)
         {
             if (_suppressListSelectionCallback)
@@ -8292,95 +8433,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 rootVisualElement
                     .schedule.Execute(() => _objectListView.ScrollToItem(scrollIndex))
                     .ExecuteLater(1);
-            }
-        }
-
-        internal void SelectObject(ScriptableObject dataObject)
-        {
-            if (_selectedObject == dataObject)
-            {
-                return;
-            }
-
-            _selectedObject = dataObject;
-
-            // Drive the ListView's visual selection + scroll by index (it owns the --selected style).
-            if (_objectListView != null)
-            {
-                int index = dataObject != null ? _filteredObjects.IndexOf(dataObject) : -1;
-                _suppressListSelectionCallback = true;
-                if (0 <= index)
-                {
-                    _objectListView.SetSelectionWithoutNotify(new[] { index });
-                    _objectListView.ScrollToItem(index);
-                }
-                else
-                {
-                    _objectListView.SetSelectionWithoutNotify(Array.Empty<int>());
-                }
-                _suppressListSelectionCallback = false;
-
-                // Repaint rows so the custom .object-item.selected box style tracks the new selection.
-                // bindItem is the only place that class is applied and the ListView's own --selected
-                // fill is intentionally transparent, so a plain click needs an explicit refresh.
-                // RefreshItems rebinds visible rows only, so it is cheap.
-                _objectListView.RefreshItems();
-            }
-
-            if (_selectedObject != null && Settings.selectActiveObject)
-            {
-                Selection.activeObject = _selectedObject;
-            }
-
-            try
-            {
-                if (_selectedObject != null)
-                {
-                    string typeName = _selectedObject.GetType().FullName;
-                    string assetPath = AssetDatabase.GetAssetPath(_selectedObject);
-                    string objectGuid = null;
-                    if (!string.IsNullOrWhiteSpace(assetPath))
-                    {
-                        objectGuid = AssetDatabase.AssetPathToGUID(assetPath);
-                    }
-
-                    SetLastSelectedObjectGuidForType(typeName, objectGuid);
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Error saving selection state. {e}");
-            }
-
-            _currentInspectorScriptableObject?.Dispose();
-            _currentInspectorScriptableObject =
-                dataObject != null ? new SerializedObject(dataObject) : null;
-
-            if (dataObject != null)
-            {
-                _namespaceController.SelectType(this, dataObject.GetType());
-                rootVisualElement
-                    .schedule.Execute(() =>
-                    {
-                        if (_selectedObject == dataObject)
-                        {
-                            _namespaceController.SelectType(this, dataObject.GetType());
-                        }
-                    })
-                    .ExecuteLater(1);
-            }
-            // Backup trigger, we have some delay issues
-            BuildInspectorView();
-        }
-
-        internal void UpdateCreateObjectButtonStyle()
-        {
-            if (_createObjectButton != null)
-            {
-                _createObjectButton.style.display =
-                    _namespaceController.SelectedType != null
-                        ? DisplayStyle.Flex
-                        : DisplayStyle.None;
             }
         }
 
@@ -8574,52 +8626,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .Select(kvp => kvp.Key)
                 .ToList();
             SetNamespaceOrder(newNamespaceOrder);
-        }
-
-        internal void OnNamespacePointerDown(PointerDownEvent evt)
-        {
-            if (
-                evt.currentTarget
-                is not VisualElement { userData: string namespaceKey } targetElement
-            )
-            {
-                return;
-            }
-
-            if (evt.button == 0)
-            {
-                _draggedElement = targetElement;
-                _draggedData = namespaceKey;
-                _activeDragType = DragType.Namespace;
-                targetElement.CapturePointer(evt.pointerId);
-                targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
-                targetElement.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
-                targetElement.RegisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
-                evt.StopPropagation();
-            }
-        }
-
-        internal void OnTypePointerDown(VisualElement namespaceHeader, PointerDownEvent evt)
-        {
-            // TODO IMPLEMENT NEW HANDLER
-            if (evt.currentTarget is not VisualElement { userData: Type type } targetElement)
-            {
-                return;
-            }
-
-            if (evt.button == 0)
-            {
-                _lastActiveFocusArea = FocusArea.TypeList;
-                _draggedElement = targetElement;
-                _draggedData = type;
-                _activeDragType = DragType.Type;
-                _isDragging = false;
-                targetElement.CapturePointer(evt.pointerId);
-                targetElement.RegisterCallback<PointerMoveEvent>(OnCapturedPointerMove);
-                targetElement.RegisterCallback<PointerUpEvent>(OnCapturedPointerUp);
-                targetElement.RegisterCallback<PointerCaptureOutEvent>(OnPointerCaptureOut);
-                evt.StopPropagation();
-            }
         }
 
         private void PerformTypeDrop()
@@ -9223,19 +9229,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 : UserState.GetLastObjectForType(typeFullName);
         }
 
-        internal void SetLastSelectedObjectGuidForType(string typeFullName, string objectGuid)
-        {
-            if (string.IsNullOrWhiteSpace(typeFullName))
-            {
-                return;
-            }
-
-            PersistSettings(
-                settings => settings.SetLastObjectForType(typeFullName, objectGuid),
-                userState => userState.SetLastObjectForType(typeFullName, objectGuid)
-            );
-        }
-
         private List<string> GetNamespaceOrder()
         {
             DataVisualizerSettings settings = Settings;
@@ -9354,26 +9347,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 settings => settings.SetNamespaceCollapsed(namespaceKey, isCollapsed),
                 userState => userState.SetNamespaceCollapsed(namespaceKey, isCollapsed)
             );
-        }
-
-        private static int CompareUsingCustomOrder(
-            string keyA,
-            string keyB,
-            List<string> customOrder
-        )
-        {
-            int indexA = customOrder.IndexOf(keyA);
-            int indexB = customOrder.IndexOf(keyB);
-
-            switch (indexA)
-            {
-                case >= 0 when 0 <= indexB:
-                    return indexA.CompareTo(indexB);
-                case >= 0:
-                    return -1;
-            }
-
-            return 0 <= indexB ? 1 : string.Compare(keyA, keyB, StringComparison.OrdinalIgnoreCase);
         }
     }
 #endif

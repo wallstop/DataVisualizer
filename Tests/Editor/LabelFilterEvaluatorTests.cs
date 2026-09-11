@@ -21,20 +21,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 orLabels = new List<string>(or),
             };
 
-        [Test]
-        public void Should_IncludeEverything_When_NoLabelsConfigured()
-        {
-            TypeLabelFilterConfig config = Config(LabelCombinationType.And, None, None);
-            Assert.IsTrue(LabelFilterEvaluator.Matches(new[] { "anything" }, config));
-            Assert.IsTrue(LabelFilterEvaluator.Matches(None, config));
-        }
-
-        [Test]
-        public void Should_IncludeEverything_When_ConfigIsNull()
-        {
-            Assert.IsTrue(LabelFilterEvaluator.Matches(new[] { "x" }, null));
-        }
-
         private static TestCaseData Case(
             string name,
             LabelCombinationType type,
@@ -189,6 +175,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 false
             );
 #pragma warning restore CS0618
+        }
+
+        [Test]
+        public void Should_IncludeEverything_When_NoLabelsConfigured()
+        {
+            TypeLabelFilterConfig config = Config(LabelCombinationType.And, None, None);
+            Assert.IsTrue(LabelFilterEvaluator.Matches(new[] { "anything" }, config));
+            Assert.IsTrue(LabelFilterEvaluator.Matches(None, config));
+        }
+
+        [Test]
+        public void Should_IncludeEverything_When_ConfigIsNull()
+        {
+            Assert.IsTrue(LabelFilterEvaluator.Matches(new[] { "x" }, null));
         }
 
         [TestCaseSource(nameof(Cases))]

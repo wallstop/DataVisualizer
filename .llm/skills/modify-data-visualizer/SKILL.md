@@ -22,6 +22,9 @@ metadata:
 
 ## Working in the Main Window File
 
+- Name managed types in PascalCase even when wrapping all-caps native typedefs. Add
+  a descriptive prefix such as `Native` when the idiomatic name would shadow a Unity
+  or framework type, and keep the filename identical to the type name.
 - `rg` for the feature first (constants, method names); the file predates the split,
   so new subsystems should go into `Data/`, `Search/`, `UI/`, or `Utilities/` files
   instead of growing `DataVisualizer.cs` further.
@@ -53,8 +56,18 @@ metadata:
   move boundaries, remove them on delete, then validate and merge those direct GUIDs
   with the single type query.
 - Validate direct GUIDs with `GetMainAssetTypeAtPath` and exact type equality. Do not
-  instantiate arbitrary user types to probe script metadata or broaden the fallback
-  into a project-wide asset scan.
+  instantiate arbitrary user types to probe script metadata or broaden a per-type
+  refresh into a synchronous project-wide asset scan.
+- Never-registered assets missed by Unity's type filters come from the shared lazy
+  `AssetGuidTypeIndex`. It snapshots project `.asset` paths after first use, classifies
+  them cooperatively through `GetMainAssetTypeAtPath`, and refreshes the window after
+  completion. Keep this index exact-type, load-free, shared across managed types, and
+  maintained by the asset postprocessor rather than adding another fallback scan.
+- `AssetGuidTypeIndex` is an instantiable sealed service; production coordinates through
+  its explicit `Shared` instance while tests may create isolated instances. Keep its
+  state changes and editor-update subscription ownership in the instance state-machine
+  runner/transition method. AssetDatabase paths are project-relative and use forward
+  slashes on every Unity editor platform; preserve that canonical form for comparisons.
 - Discovery is intentionally limited to exact main assets. Derived instances and
   subassets do not satisfy a selected base/main type; keep this boundary covered by
   tests instead of broadening equality to assignability.

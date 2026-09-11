@@ -9,6 +9,11 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
     // pair is intentionally omitted.
     public sealed class HorizontalToggle : VisualElement
     {
+        private const float AnimationDurationMs = 150f;
+
+        public event Action OnLeftSelected;
+        public event Action OnRightSelected;
+
         public static readonly string ussClassName = "horizontal-toggle";
         public static readonly string containerUssClassName = ussClassName + "__container";
         public static readonly string labelContainerUssClassName =
@@ -18,21 +23,6 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
         public static readonly string indicatorUssClassName = ussClassName + "__indicator";
         public static readonly string indicatorSelectedUssClassName =
             indicatorUssClassName + "--selected";
-
-        private Label _leftLabel;
-        private Label _rightLabel;
-        private VisualElement _indicator;
-        private VisualElement _labelContainer;
-        private VisualElement _container;
-
-        private bool _isLeftSelected = true;
-        private bool _isAnimating = false;
-        private const float AnimationDurationMs = 150f;
-
-        public event Action OnLeftSelected;
-        public event Action OnRightSelected;
-
-        private string _leftText = "Left";
         public string LeftText
         {
             get => _leftText;
@@ -50,8 +40,6 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
 
         public Label LeftLabel => _leftLabel;
         public Label RightLabel => _rightLabel;
-
-        private string _rightText = "Right";
         public string RightText
         {
             get => _rightText;
@@ -64,8 +52,6 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 }
             }
         }
-
-        private Color _selectedBackgroundColor = new(0.1f, 0.5f, 0.8f);
         public Color SelectedBackgroundColor
         {
             get => _selectedBackgroundColor;
@@ -75,8 +61,6 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 UpdateColors();
             }
         }
-
-        private Color _unselectedBackgroundColor = new(0.2f, 0.2f, 0.2f);
         public Color UnselectedBackgroundColor
         {
             get => _unselectedBackgroundColor;
@@ -86,8 +70,6 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 UpdateColors();
             }
         }
-
-        private Color _selectedTextColor = Color.white;
         public Color SelectedTextColor
         {
             get => _selectedTextColor;
@@ -97,8 +79,6 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 UpdateColors();
             }
         }
-
-        private Color _unselectedTextColor = new(0.7f, 0.7f, 0.7f);
         public Color UnselectedTextColor
         {
             get => _unselectedTextColor;
@@ -108,8 +88,6 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 UpdateColors();
             }
         }
-
-        private Color _indicatorColor = new(0.15f, 0.65f, 0.95f);
         public Color IndicatorColor
         {
             get => _indicatorColor;
@@ -125,59 +103,33 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
 
         public bool IsLeftSelected => _isLeftSelected;
 
+        private Label _leftLabel;
+        private Label _rightLabel;
+        private VisualElement _indicator;
+        private VisualElement _labelContainer;
+        private VisualElement _container;
+
+        private bool _isLeftSelected = true;
+        private bool _isAnimating = false;
+
+        private string _leftText = "Left";
+
+        private string _rightText = "Right";
+
+        private Color _selectedBackgroundColor = new(0.1f, 0.5f, 0.8f);
+
+        private Color _unselectedBackgroundColor = new(0.2f, 0.2f, 0.2f);
+
+        private Color _selectedTextColor = Color.white;
+
+        private Color _unselectedTextColor = new(0.7f, 0.7f, 0.7f);
+
+        private Color _indicatorColor = new(0.15f, 0.65f, 0.95f);
+
         public HorizontalToggle()
         {
             AddToClassList(ussClassName);
             Initialize();
-        }
-
-        private void Initialize()
-        {
-            _container = new VisualElement();
-            _container.AddToClassList(containerUssClassName);
-            Add(_container);
-
-            _indicator = new VisualElement();
-            _indicator.AddToClassList(indicatorUssClassName);
-            _container.Add(_indicator);
-
-            _labelContainer = new VisualElement();
-            _labelContainer.AddToClassList(labelContainerUssClassName);
-            _container.Add(_labelContainer);
-
-            _leftLabel = new Label(LeftText);
-            _leftLabel.AddToClassList(leftLabelUssClassName);
-            _labelContainer.Add(_leftLabel);
-
-            _rightLabel = new Label(RightText);
-            _rightLabel.AddToClassList(rightLabelUssClassName);
-            _labelContainer.Add(_rightLabel);
-
-            RegisterCallback<GeometryChangedEvent>(OnGeometryChange);
-
-            _leftLabel.RegisterCallback<ClickEvent, HorizontalToggle>(
-                (_, context) => context.SelectLeft(),
-                this
-            );
-            _rightLabel.RegisterCallback<ClickEvent, HorizontalToggle>(
-                (_, context) => context.SelectRight(),
-                this
-            );
-
-            UpdateColors();
-            UpdateIndicatorPosition(false);
-        }
-
-        private void OnGeometryChange(GeometryChangedEvent evt)
-        {
-            UpdateIndicatorPosition(false);
-            UnregisterCallback<GeometryChangedEvent>(OnGeometryChange);
-            RegisterCallback<GeometryChangedEvent>(OnGeometryChangeReapply);
-        }
-
-        private void OnGeometryChangeReapply(GeometryChangedEvent evt)
-        {
-            UpdateIndicatorPosition(false);
         }
 
         public void SelectLeft(bool animate = true, bool notify = true, bool force = false)
@@ -229,6 +181,55 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             {
                 OnRightSelected?.Invoke();
             }
+        }
+
+        private void Initialize()
+        {
+            _container = new VisualElement();
+            _container.AddToClassList(containerUssClassName);
+            Add(_container);
+
+            _indicator = new VisualElement();
+            _indicator.AddToClassList(indicatorUssClassName);
+            _container.Add(_indicator);
+
+            _labelContainer = new VisualElement();
+            _labelContainer.AddToClassList(labelContainerUssClassName);
+            _container.Add(_labelContainer);
+
+            _leftLabel = new Label(LeftText);
+            _leftLabel.AddToClassList(leftLabelUssClassName);
+            _labelContainer.Add(_leftLabel);
+
+            _rightLabel = new Label(RightText);
+            _rightLabel.AddToClassList(rightLabelUssClassName);
+            _labelContainer.Add(_rightLabel);
+
+            RegisterCallback<GeometryChangedEvent>(OnGeometryChange);
+
+            _leftLabel.RegisterCallback<ClickEvent, HorizontalToggle>(
+                (_, context) => context.SelectLeft(),
+                this
+            );
+            _rightLabel.RegisterCallback<ClickEvent, HorizontalToggle>(
+                (_, context) => context.SelectRight(),
+                this
+            );
+
+            UpdateColors();
+            UpdateIndicatorPosition(false);
+        }
+
+        private void OnGeometryChange(GeometryChangedEvent evt)
+        {
+            UpdateIndicatorPosition(false);
+            UnregisterCallback<GeometryChangedEvent>(OnGeometryChange);
+            RegisterCallback<GeometryChangedEvent>(OnGeometryChangeReapply);
+        }
+
+        private void OnGeometryChangeReapply(GeometryChangedEvent evt)
+        {
+            UpdateIndicatorPosition(false);
         }
 
         private void UpdateColors()

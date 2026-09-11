@@ -114,8 +114,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
-            foreach (string guid in guids)
+            for (int index = 0; index < guids.Count; index++)
             {
+                string guid = guids[index];
                 if (!string.IsNullOrWhiteSpace(guid) && seen.Add(guid))
                 {
                     result.Add(guid);

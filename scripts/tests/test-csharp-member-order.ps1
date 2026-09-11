@@ -1,0 +1,120 @@
+Set-StrictMode -Version 2.0
+
+$script:TestFailureCount = 0
+. (Join-Path $PSScriptRoot 'TestHelpers.ps1')
+
+$lintScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'lint-csharp-member-order.js'
+Write-Host '== C# member-order self-tests =='
+
+function Invoke-MemberOrderLint {
+    param([string]$Root, [string[]]$LintArguments = @())
+
+    $hadPrevious = Test-Path Env:CSHARP_MEMBER_ORDER_ROOTS
+    $previous = $env:CSHARP_MEMBER_ORDER_ROOTS
+    try {
+        $env:CSHARP_MEMBER_ORDER_ROOTS = $Root
+        $output = & node $lintScript @LintArguments 2>&1 | Out-String
+        return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+    } finally {
+        if ($hadPrevious) {
+            $env:CSHARP_MEMBER_ORDER_ROOTS = $previous
+        } else {
+            Remove-Item Env:CSHARP_MEMBER_ORDER_ROOTS -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+$orderedFixture = @'
+using System;
+public sealed class Ordered
+{
+    public const int Limit = 1;
+    public event Action Changed;
+    public delegate void Callback();
+    public static int SharedValue { get; set; }
+    public static int SharedField;
+    public int Value { get; set; }
+    public int Field;
+    public Ordered() { }
+    public static void Reset() { }
+    public void Run() { }
+    private sealed class Nested { }
+}
+'@
+
+Invoke-TestCase 'Passes_CanonicalOrder' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Ordered.cs' -Content $orderedFixture
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 0) "ordered fixture should pass: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_OnTierAndAccessInversions' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Bad.cs' -Content @'
+public sealed class Bad
+{
+    private int _field;
+    public int Value { get; set; }
+    public int PublicField;
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'misordered fixture should fail'
+        Assert-True ($result.Output -match '#672') "failure should identify the ordering rule: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_WhenNestedTypeIsInterspersed' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Nested.cs' -Content @'
+public sealed class NestedFixture
+{
+    public void First() { }
+    private sealed class Nested { }
+    public void Second() { }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'interspersed nested type should fail'
+        Assert-True ($result.Output -match 'nested class') "failure should identify the nested type: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'FixesTierOrderByExactPermutation' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Fixable.cs' -Content @'
+public sealed class Fixable
+{
+    private int _field;
+    public int Value { get; set; }
+    public void Run() { string marker = "body-preserved"; }
+}
+'@
+        $fixed = Invoke-MemberOrderLint -Root $root -LintArguments @('--fix')
+        Assert-True ($fixed.ExitCode -eq 0) "fixable fixture should be repaired: $($fixed.Output)"
+        $verified = Invoke-MemberOrderLint -Root $root
+        Assert-True ($verified.ExitCode -eq 0) "repaired fixture should pass: $($verified.Output)"
+        $content = Get-Content -LiteralPath (Get-FixturePath $root 'Fixable.cs') -Raw
+        Assert-True ($content.IndexOf('Value') -lt $content.IndexOf('_field')) 'property should precede field'
+        Assert-True ($content -match 'body-preserved') 'fix must preserve member bodies'
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+if ($script:TestFailureCount -gt 0) {
+    exit 1
+}
+exit 0

@@ -20,6 +20,13 @@ repos:
         types:
           - c#
         description: CSharpier is an opinionated C# formatter inspired by Prettier.
+      - id: lint-csharp-member-order
+        name: Enforce C# member ordering
+        entry: node scripts/lint-csharp-member-order.js
+        language: system
+        pass_filenames: false
+        files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
+        description: Enforces the repository member tiers, access ordering, and nested-type placement.
       - id: lint-llm-instructions
         name: Lint the .llm agent harness
         entry: pwsh -NoProfile -File scripts/lint-llm-instructions.ps1
