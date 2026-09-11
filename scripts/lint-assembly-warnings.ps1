@@ -33,6 +33,41 @@ try {
     $errors = 0
     foreach ($assemblyDefinition in $assemblyDefinitions) {
         $displayPath = Format-DisplayPath -FullPath $assemblyDefinition.FullName -BasePath $repoRoot
+        $responseFiles = @(
+            Get-ChildItem -LiteralPath $assemblyDefinition.DirectoryName -Filter '*.rsp' -File
+        )
+        $responseFile = @($responseFiles | Where-Object { $_.Name -ceq 'csc.rsp' })
+        if ($responseFiles.Count -ne 1 -or $responseFile.Count -ne 1) {
+            Write-Host (
+                "[assembly-warnings] ERROR: $displayPath has $($responseFiles.Count) compiler " +
+                'response files in its directory; expected exactly one named csc.rsp'
+            )
+            $errors++
+        } else {
+            $responseFilePath = Format-DisplayPath `
+                -FullPath $responseFile[0].FullName `
+                -BasePath $repoRoot
+            $responseArguments = @(
+                Get-Content -LiteralPath $responseFile[0].FullName |
+                ForEach-Object { $_.Trim() } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            )
+            $warningLevelArguments = @(
+                $responseArguments |
+                Where-Object { $_ -match '^(?:-|/)(?:warn|w)(?::|$)' }
+            )
+            if (
+                $warningLevelArguments.Count -ne 1 -or
+                $warningLevelArguments[0] -notmatch '^(?:-|/)(?:warn|w):4$'
+            ) {
+                Write-Host (
+                    "[assembly-warnings] ERROR: $responseFilePath must contain exactly one " +
+                    'maximum warning-level argument (-warn:4)'
+                )
+                $errors++
+            }
+        }
+
         $rulesets = @(Get-ChildItem -LiteralPath $assemblyDefinition.DirectoryName -Filter '*.ruleset' -File)
         if ($rulesets.Count -ne 1) {
             Write-Host (
@@ -81,7 +116,7 @@ try {
 
     Write-Host (
         "[assembly-warnings] OK: all $($assemblyDefinitions.Count) assembly definition(s) " +
-        'treat warnings as errors'
+        'use maximum compiler warnings and treat warnings as errors'
     )
     exit 0
 } catch {

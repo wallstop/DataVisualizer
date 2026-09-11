@@ -11,6 +11,7 @@ $warningsAsErrorsRuleset = @'
   <IncludeAll Action="Error" />
 </RuleSet>
 '@
+$maximumWarningsResponseFile = '-warn:4'
 
 function Write-AssemblyFixture {
     param(
@@ -21,6 +22,7 @@ function Write-AssemblyFixture {
 
     Write-FixtureFile -Root $Root -RelativePath "$Directory/Fixture.asmdef" -Content $assemblyDefinition
     Write-FixtureFile -Root $Root -RelativePath "$Directory/WarningsAsErrors.ruleset" -Content $Ruleset
+    Write-FixtureFile -Root $Root -RelativePath "$Directory/csc.rsp" -Content $maximumWarningsResponseFile
 }
 
 Write-Host '== assembly warnings policy self-tests =='
@@ -53,6 +55,65 @@ Invoke-TestCase 'Fails_WhenAssemblyHasNoRuleset' {
         $output = & $lintScript -Root $root *>&1 | Out-String
         Assert-ExitCode 1 'an assembly without a ruleset should fail'
         Assert-True ($output -match 'Runtime/Fixture\.asmdef') "output should name the assembly, got: $output"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_WhenAssemblyHasNoCompilerResponseFile' {
+    $root = New-TempRoot
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Runtime/Fixture.asmdef' -Content $assemblyDefinition
+        Write-FixtureFile `
+            -Root $root `
+            -RelativePath 'Runtime/WarningsAsErrors.ruleset' `
+            -Content $warningsAsErrorsRuleset
+
+        $output = & $lintScript -Root $root *>&1 | Out-String
+        Assert-ExitCode 1 'an assembly without csc.rsp should fail'
+        Assert-True ($output -match 'expected exactly one named csc\.rsp') "output should require csc.rsp, got: $output"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_WhenAssemblyHasAmbiguousCompilerResponseFiles' {
+    $root = New-TempRoot
+    try {
+        Write-AssemblyFixture -Root $root -Directory 'Runtime'
+        Write-FixtureFile -Root $root -RelativePath 'Runtime/mcs.rsp' -Content '-warn:4'
+
+        $output = & $lintScript -Root $root *>&1 | Out-String
+        Assert-ExitCode 1 'an assembly with ambiguous response files should fail'
+        Assert-True ($output -match '2 compiler response files') "output should report the ambiguity, got: $output"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_WhenCompilerWarningLevelIsLowerThanMaximum' {
+    $root = New-TempRoot
+    try {
+        Write-AssemblyFixture -Root $root -Directory 'Runtime'
+        Write-FixtureFile -Root $root -RelativePath 'Runtime/csc.rsp' -Content '-warn:3'
+
+        $output = & $lintScript -Root $root *>&1 | Out-String
+        Assert-ExitCode 1 'a lower compiler warning level should fail'
+        Assert-True ($output -match 'maximum warning-level argument') "output should require maximum warnings, got: $output"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_WhenCompilerWarningLevelIsMalformed' {
+    $root = New-TempRoot
+    try {
+        Write-AssemblyFixture -Root $root -Directory 'Runtime'
+        Write-FixtureFile -Root $root -RelativePath 'Runtime/csc.rsp' -Content '-warn:all'
+
+        $output = & $lintScript -Root $root *>&1 | Out-String
+        Assert-ExitCode 1 'a malformed compiler warning level should fail'
+        Assert-True ($output -match 'maximum warning-level argument') "output should require -warn:4, got: $output"
     } finally {
         Remove-TempRoot $root
     }
