@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RuleSet Name="Warnings as errors" Description="Treat every compiler and analyzer warning as an error." ToolsVersion="10.0">
+  <IncludeAll Action="Error" />
+</RuleSet>

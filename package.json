@@ -39,6 +39,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint:llm": "pwsh -NoProfile -File scripts/lint-llm-instructions.ps1",
     "lint:llm:fix": "pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -Fix",
+    "lint:assembly-warnings": "pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1",
     "lint:csharp-member-order": "node scripts/lint-csharp-member-order.js",
     "lint:csharp-member-order:fix": "node scripts/lint-csharp-member-order.js --fix",
     "lint:llm:full": "pwsh -NoProfile -File scripts/generate-skills-index.ps1 && pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput && pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -VerboseOutput && node scripts/lint-csharp-member-order.js --verbose && pwsh -NoProfile -File scripts/tests/run-all.ps1",
