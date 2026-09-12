@@ -2932,7 +2932,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (
                     !string.IsNullOrWhiteSpace(guid)
-                    && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(guid, term, StringComparison.OrdinalIgnoreCase)
                 )
                 {
                     detailsForThisTerm.Add(
@@ -4199,7 +4199,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             if (
-                newName.Equals(
+                string.Equals(
+                    newName,
                     Path.GetFileNameWithoutExtension(originalPath),
                     StringComparison.OrdinalIgnoreCase
                 )
@@ -8387,7 +8388,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (
                 Array.Exists(
                     currentLabels,
-                    label => label.Equals(newLabelText, StringComparison.Ordinal)
+                    label => string.Equals(label, newLabelText, StringComparison.Ordinal)
                 )
             )
             {
@@ -8428,7 +8429,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             int removedCount = 0;
             foreach (string label in currentLabels)
             {
-                if (label.Equals(labelToRemove, StringComparison.Ordinal))
+                if (string.Equals(label, labelToRemove, StringComparison.Ordinal))
                 {
                     removedCount++;
                 }
@@ -8443,7 +8444,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             int writeIndex = 0;
             foreach (string label in currentLabels)
             {
-                if (!label.Equals(labelToRemove, StringComparison.Ordinal))
+                if (!string.Equals(label, labelToRemove, StringComparison.Ordinal))
                 {
                     updatedLabels[writeIndex] = label;
                     writeIndex++;

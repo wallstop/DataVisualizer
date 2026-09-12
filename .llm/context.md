@@ -180,7 +180,9 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     use `OrdinalIgnoreCase` when casing is intentionally ignored. Reserve
     culture-sensitive comparisons for user-authored prose. Bare `Sort()`,
     `string.Compare(a, b)`, `StartsWith(prefix)`, and `OrderBy(key)` on identifiers
-    sort or match with the current culture and reorder across machines.
+    sort or match with the current culture and reorder across machines. Prefer static
+    `string.Equals(a, b, StringComparison)` over instance `a.Equals(...)` so a null
+    operand compares as a value instead of throwing.
 
 ### Skills Discipline
 

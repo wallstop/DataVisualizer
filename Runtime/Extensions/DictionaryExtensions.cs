@@ -292,7 +292,10 @@ namespace WallstopStudios.DataVisualizer.Extensions
 
             foreach (KeyValuePair<K, V> entry in dictionary)
             {
-                if (!other.TryGetValue(entry.Key, out V value) || !entry.Value.Equals(value))
+                if (
+                    !other.TryGetValue(entry.Key, out V value)
+                    || !EqualityComparer<V>.Default.Equals(entry.Value, value)
+                )
                 {
                     return false;
                 }
