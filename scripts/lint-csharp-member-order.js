@@ -1298,7 +1298,7 @@ function main(argv) {
     // an absolute drive path, which path.join would incorrectly append beneath the checkout.
     const file = path.isAbsolute(relative) ? relative : path.join(REPO_ROOT, relative);
     let text = fs.readFileSync(file, "utf8");
-const prohibitLinq =
+    const prohibitLinq =
       isRuntimeSource(relative) ||
       isPersistedStateSource(relative) ||
       isSearchModelSource(relative) ||
@@ -1338,7 +1338,7 @@ const prohibitLinq =
     for (const violation of result.violations) {
       if (violation.kind === "prohibited LINQ dependency") {
         remaining.push(
-`${relative}:${violation.line}: Runtime, persisted editor-state, search-model, and ` +
+          `${relative}:${violation.line}: Runtime, persisted editor-state, search-model, and ` +
             `asset postprocessing code must not depend on System.Linq (#61)`
         );
         continue;
