@@ -160,12 +160,14 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     exception isolation or translation rather than lifetime management.
 32. Keep the shipped `Runtime/` assembly, persisted editor-state models under
     `Editor/DataVisualizer/Data/`, global-search models under
-    `Editor/DataVisualizer/Search/`, and asset postprocessing under
-    `Editor/DataVisualizer/Unity/` free of `System.Linq`. Use direct collection
-    operations and streaming loops so player-facing helpers, state transfers,
-    per-result search aggregation, and per-import asset-change handling do not
-    introduce avoidable iterator/delegate allocations. Other editor and test code
-    may retain LINQ when clarity outweighs measured cost.
+    `Editor/DataVisualizer/Search/`, asset postprocessing under
+    `Editor/DataVisualizer/Unity/`, and the namespace/type catalog controller
+    `Editor/DataVisualizer/NamespaceController.cs` free of `System.Linq`. Use direct
+    collection operations and streaming loops so player-facing helpers, state
+    transfers, per-result search aggregation, per-import asset-change handling, and
+    namespace/type catalog construction do not introduce avoidable iterator/delegate
+    allocations. Other editor and test code may retain LINQ when clarity outweighs
+    measured cost.
 33. Before caching or pooling a temporary collection, first try eliminating the
     scratch state. Introduce pooling only after measured repeated reuse, with a defined
     lifetime, invalidation owner, retention bound, and overlapping-call safety. Do not
