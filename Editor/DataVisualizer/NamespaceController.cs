@@ -3,7 +3,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using Data;
     using Helper;
     using Styles;
@@ -84,18 +83,36 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return new List<string>();
             }
 
-            HashSet<string> removedTypeNames = typeNamesToRemove
-                ?.Where(typeName => !string.IsNullOrWhiteSpace(typeName))
-                .ToHashSet(StringComparer.Ordinal);
-            if (removedTypeNames == null || removedTypeNames.Count == 0)
+            HashSet<string> removedTypeNames = new(StringComparer.Ordinal);
+            if (typeNamesToRemove != null)
             {
-                return managedTypeNames.ToList();
+                foreach (string removedTypeName in typeNamesToRemove)
+                {
+                    if (!string.IsNullOrWhiteSpace(removedTypeName))
+                    {
+                        removedTypeNames.Add(removedTypeName);
+                    }
+                }
             }
 
-            return managedTypeNames
-                .Where(typeName => !removedTypeNames.Contains(typeName))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+            if (removedTypeNames.Count == 0)
+            {
+                return new List<string>(managedTypeNames);
+            }
+
+            List<string> remainingTypeNames = new();
+            HashSet<string> emittedTypeNames = new(StringComparer.Ordinal);
+            foreach (string typeName in managedTypeNames)
+            {
+                if (removedTypeNames.Contains(typeName) || !emittedTypeNames.Add(typeName))
+                {
+                    continue;
+                }
+
+                remainingTypeNames.Add(typeName);
+            }
+
+            return remainingTypeNames;
         }
 
         internal static bool IsTypeRemovable(Type type)
@@ -122,7 +139,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 return attribute.Namespace;
             }
-            return type.Namespace?.Split('.').LastOrDefault() ?? emptyNamespace;
+
+            string namespaceName = type.Namespace;
+            if (namespaceName == null)
+            {
+                return emptyNamespace;
+            }
+
+            int lastSeparatorIndex = namespaceName.LastIndexOf('.');
+            return lastSeparatorIndex < 0
+                ? namespaceName
+                : namespaceName.Substring(lastSeparatorIndex + 1);
         }
 
         internal static string GetTypeDisplayName(Type type)
@@ -424,6 +451,63 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
+        private static HashSet<Type> CollectManagedTypes(
+            Dictionary<string, List<Type>> managedTypes
+        )
+        {
+            HashSet<Type> managedTypeSet = new();
+            foreach (List<Type> types in managedTypes.Values)
+            {
+                foreach (Type type in types)
+                {
+                    managedTypeSet.Add(type);
+                }
+            }
+            return managedTypeSet;
+        }
+
+        /*
+            Stable ordering parity with the removed `OrderBy` chain: entries with a persisted
+            order key sort by that key ascending, and equal-key entries keep dictionary
+            enumeration order. The insertion sort is what provides that stability.
+        */
+        private static KeyValuePair<string, List<Type>>[] OrderedNamespaceEntries(
+            Dictionary<string, List<Type>> managedTypes,
+            Dictionary<string, int> namespaceOrder
+        )
+        {
+            KeyValuePair<string, List<Type>>[] entries = new KeyValuePair<string, List<Type>>[
+                managedTypes.Count
+            ];
+            int[] orderKeys = new int[entries.Length];
+            int defaultOrder = namespaceOrder.Count;
+            int index = 0;
+            foreach (KeyValuePair<string, List<Type>> entry in managedTypes)
+            {
+                entries[index] = entry;
+                orderKeys[index] = namespaceOrder.GetValueOrDefault(entry.Key, defaultOrder);
+                index += 1;
+            }
+
+            for (int outer = 1; outer < entries.Length; outer++)
+            {
+                int currentOrder = orderKeys[outer];
+                KeyValuePair<string, List<Type>> currentEntry = entries[outer];
+                int inner = outer - 1;
+                while (0 <= inner && currentOrder < orderKeys[inner])
+                {
+                    orderKeys[inner + 1] = orderKeys[inner];
+                    entries[inner + 1] = entries[inner];
+                    inner -= 1;
+                }
+
+                orderKeys[inner + 1] = currentOrder;
+                entries[inner + 1] = currentEntry;
+            }
+
+            return entries;
+        }
+
         public void Clear()
         {
             _selectedType = null;
@@ -509,7 +593,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public void Build(DataVisualizer dataVisualizer, ref VisualElement namespaceListContainer)
         {
-            HashSet<Type> currentTypes = _managedTypes.SelectMany(x => x.Value).ToHashSet();
+            HashSet<Type> currentTypes = CollectManagedTypes(_managedTypes);
             if (currentTypes.SetEquals(_namespaceCache.Keys))
             {
                 return;
@@ -524,14 +608,22 @@ namespace WallstopStudios.DataVisualizer.Editor
             namespaceListContainer.Clear();
             VisualElement namespaceContainer = namespaceListContainer;
             _namespaceCache.Clear();
-            KeyValuePair<string, List<Type>>[] orderedEntries = _managedTypes
-                .OrderBy(kvp => _namespaceOrder.GetValueOrDefault(kvp.Key, _namespaceOrder.Count))
-                .ToArray();
+            KeyValuePair<string, List<Type>>[] orderedEntries = OrderedNamespaceEntries(
+                _managedTypes,
+                _namespaceOrder
+            );
             for (int index = 0; index < orderedEntries.Length; index++)
             {
                 (string key, List<Type> types) = orderedEntries[index];
                 string namespaceKey = key;
-                List<Type> nonCoreManagedTypes = types.Where(IsTypeRemovable).ToList();
+                List<Type> nonCoreManagedTypes = new();
+                foreach (Type type in types)
+                {
+                    if (IsTypeRemovable(type))
+                    {
+                        nonCoreManagedTypes.Add(type);
+                    }
+                }
                 int removableTypeCount = nonCoreManagedTypes.Count;
                 bool showNamespaceRemoveButton = 1 < removableTypeCount;
 
@@ -844,17 +936,30 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal List<string> GetManagedTypeNames(string namespaceKey)
         {
-            return _managedTypes
-                .GetValueOrDefault(namespaceKey, new List<Type>())
-                .Select(type => type.FullName)
-                .ToList();
+            List<string> typeNames = new();
+            if (!_managedTypes.TryGetValue(namespaceKey, out List<Type> types))
+            {
+                return typeNames;
+            }
+
+            foreach (Type type in types)
+            {
+                typeNames.Add(type.FullName);
+            }
+            return typeNames;
         }
 
         internal List<string> GetAllManagedTypeNames()
         {
-            return _managedTypes
-                .Values.SelectMany(types => types.Select(type => type.FullName))
-                .ToList();
+            List<string> typeNames = new();
+            foreach (List<Type> types in _managedTypes.Values)
+            {
+                foreach (Type type in types)
+                {
+                    typeNames.Add(type.FullName);
+                }
+            }
+            return typeNames;
         }
 
         private bool InternalDeselectAndGetCurrentIndex(
@@ -941,8 +1046,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             else
             {
+                string[] typeDisplayNames = new string[typesToRemove.Count];
+                for (int index = 0; index < typesToRemove.Count; index++)
+                {
+                    typeDisplayNames[index] = typesToRemove[index].Name;
+                }
                 Debug.LogWarning(
-                    $"No change detected for namespace '{namespaceKey}' removal (tried to remove [{string.Join(",", typesToRemove.Select(type => type.Name))}])"
+                    $"No change detected for namespace '{namespaceKey}' removal (tried to remove [{string.Join(",", typeDisplayNames)}])"
                 );
             }
         }
