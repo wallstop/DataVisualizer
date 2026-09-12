@@ -8,7 +8,6 @@ namespace WallstopStudios.DataVisualizer.Editor
     using System.Collections.Generic;
     using System.ComponentModel;
     using System.IO;
-    using System.Linq;
     using System.Reflection;
     using System.Text;
     using System.Text.RegularExpressions;
@@ -1088,6 +1087,35 @@ namespace WallstopStudios.DataVisualizer.Editor
                     $"Failed to find Data Visualizer font (package root: '{packageRoot}')."
                 );
             }
+        }
+
+        private static Button FindPopoverPrimaryAction(VisualElement popover)
+        {
+            if (popover == null)
+            {
+                return null;
+            }
+
+            int childCount = popover.childCount;
+            for (int i = 0; i < childCount; ++i)
+            {
+                VisualElement child = popover.ElementAt(i);
+                if (
+                    child is Button button
+                    && button.ClassListContains(StyleConstants.PopoverPrimaryActionClass)
+                )
+                {
+                    return button;
+                }
+
+                Button nestedButton = FindPopoverPrimaryAction(child);
+                if (nestedButton != null)
+                {
+                    return nestedButton;
+                }
+            }
+
+            return null;
         }
 
         private static MatchDetail SearchStringProperties(
@@ -3596,15 +3624,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                         if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
                         {
-                            Button primaryButton = activePopover
-                                .IterateChildrenRecursively()
-                                .Where(child =>
-                                    child.ClassListContains(
-                                        StyleConstants.PopoverPrimaryActionClass
-                                    )
-                                )
-                                .OfType<Button>()
-                                .FirstOrDefault();
+                            Button primaryButton = FindPopoverPrimaryAction(activePopover);
 
                             if (primaryButton?.userData is Action action)
                             {
@@ -3692,13 +3712,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter:
                 {
-                    Button primaryButton = activePopover
-                        .IterateChildrenRecursively()
-                        .Where(child =>
-                            child.ClassListContains(StyleConstants.PopoverPrimaryActionClass)
-                        )
-                        .OfType<Button>()
-                        .FirstOrDefault();
+                    Button primaryButton = FindPopoverPrimaryAction(activePopover);
 
                     if (primaryButton?.userData is Action action)
                     {
@@ -4259,10 +4273,23 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 List<string> objectGuids = GetObjectOrderForType(type);
                 string instanceGuid = AssetDatabase.AssetPathToGUID(assetPath);
-                if (
-                    !objectGuids.Contains(instanceGuid, StringComparer.OrdinalIgnoreCase)
-                    && AssetGuidOrder.PlaceLast(objectGuids, instanceGuid)
-                )
+                bool orderContainsInstance = false;
+                foreach (string existingGuid in objectGuids)
+                {
+                    if (
+                        string.Equals(
+                            existingGuid,
+                            instanceGuid,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
+                    {
+                        orderContainsInstance = true;
+                        break;
+                    }
+                }
+
+                if (!orderContainsInstance && AssetGuidOrder.PlaceLast(objectGuids, instanceGuid))
                 {
                     SetObjectOrderForType(type.FullName, objectGuids);
                 }
