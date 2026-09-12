@@ -1731,7 +1731,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             // The cache is being rebuilt; it is not searchable until the batches below finish.
             _isSearchCachePopulated = false;
             // Managed-type set for this run, computed once and reused across all batches.
-            _searchCacheManagedTypes = new(_scriptableObjectTypes.SelectMany(tuple => tuple.Value));
+            _searchCacheManagedTypes = CollectManagedTypesForSearchCache();
             int generation = ++_searchCacheGeneration;
 
             if (EnableAsyncLoadDebugLog)
@@ -1746,21 +1746,24 @@ namespace WallstopStudios.DataVisualizer.Editor
             AssetGuidTypeIndex.Shared.EnsureStarted();
 
             // Collect all GUIDs first (fast, no asset loading)
-            foreach (Type type in _scriptableObjectTypes.SelectMany(tuple => tuple.Value))
+            foreach (List<Type> types in _scriptableObjectTypes.Values)
             {
-                string[] typeFilterGuids = AssetDatabase.FindAssets($"t:{type.Name}");
-                string[] guids = AssetGuidDiscovery.MergeCandidates(
-                    type,
-                    typeFilterGuids,
-                    GetObjectOrderForType(type),
-                    GetLastSelectedObjectGuidForType(type.FullName),
-                    out _
-                );
-                foreach (string guid in guids)
+                foreach (Type type in types)
                 {
-                    uniqueGuids.Add(guid);
+                    string[] typeFilterGuids = AssetDatabase.FindAssets($"t:{type.Name}");
+                    string[] guids = AssetGuidDiscovery.MergeCandidates(
+                        type,
+                        typeFilterGuids,
+                        GetObjectOrderForType(type),
+                        GetLastSelectedObjectGuidForType(type.FullName),
+                        out _
+                    );
+                    foreach (string guid in guids)
+                    {
+                        uniqueGuids.Add(guid);
+                    }
+                    resolvedReferenceCount += guids.Length - typeFilterGuids.Length;
                 }
-                resolvedReferenceCount += guids.Length - typeFilterGuids.Length;
             }
 
             foreach (string guid in uniqueGuids)
@@ -1793,6 +1796,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _isSearchCachePopulated = true; // nothing to load; the (empty) cache is ready
                 RefreshActiveSearch(); // resolve any "Building search index…" popover immediately
             }
+        }
+
+        private HashSet<Type> CollectManagedTypesForSearchCache()
+        {
+            HashSet<Type> managedTypes = new();
+            foreach (List<Type> types in _scriptableObjectTypes.Values)
+            {
+                foreach (Type type in types)
+                {
+                    managedTypes.Add(type);
+                }
+            }
+
+            return managedTypes;
         }
 
         private void ContinuePopulatingSearchCache(int generation)
@@ -6034,16 +6051,53 @@ namespace WallstopStudios.DataVisualizer.Editor
                         _asyncDisplayOrderByGuid[guid] = displayIndex++;
                     }
                 }
-                foreach (
-                    string guid in allGuids
-                        .Where(candidate => !_asyncDisplayOrderByGuid.ContainsKey(candidate))
-                        .OrderBy(
-                            candidate => AssetDatabase.GUIDToAssetPath(candidate),
-                            StringComparer.OrdinalIgnoreCase
-                        )
-                )
+
+                /*
+                    Order the unassigned GUIDs by asset path, then fall back to the discovery order
+                    from MergeCandidates. OrderBy is stable and Array.Sort is not, so the original
+                    index tiebreaker reproduces the previous tie behavior exactly (e.g. several
+                    GUIDs that no longer resolve to a path all report the empty string).
+                */
+                int unassignedCount = 0;
+                for (int i = 0; i < allGuids.Length; ++i)
                 {
-                    _asyncDisplayOrderByGuid[guid] = displayIndex++;
+                    if (!_asyncDisplayOrderByGuid.ContainsKey(allGuids[i]))
+                    {
+                        ++unassignedCount;
+                    }
+                }
+
+                (string guid, string path, int index)[] unassigned = new (string, string, int)[
+                    unassignedCount
+                ];
+                int unassignedCursor = 0;
+                for (int i = 0; i < allGuids.Length; ++i)
+                {
+                    string guid = allGuids[i];
+                    if (_asyncDisplayOrderByGuid.ContainsKey(guid))
+                    {
+                        continue;
+                    }
+
+                    unassigned[unassignedCursor++] = (guid, AssetDatabase.GUIDToAssetPath(guid), i);
+                }
+
+                Array.Sort(
+                    unassigned,
+                    (lhs, rhs) =>
+                    {
+                        int pathComparison = StringComparer.OrdinalIgnoreCase.Compare(
+                            lhs.path,
+                            rhs.path
+                        );
+                        return pathComparison != 0
+                            ? pathComparison
+                            : lhs.index.CompareTo(rhs.index);
+                    }
+                );
+                for (int i = 0; i < unassignedCount; ++i)
+                {
+                    _asyncDisplayOrderByGuid[unassigned[i].guid] = displayIndex++;
                 }
             }
 
@@ -6094,16 +6148,27 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             // Then custom order (excluding saved object to avoid duplicates)
-            orderedPriorityGuids.AddRange(
-                customGuidOrder.Where(guid =>
-                    priorityGuidSet.Contains(guid) && guid != savedObjectGuid
-                )
-            );
+            foreach (string guid in customGuidOrder)
+            {
+                if (priorityGuidSet.Contains(guid) && guid != savedObjectGuid)
+                {
+                    orderedPriorityGuids.Add(guid);
+                }
+            }
 
-            // Then any remaining priority items
-            orderedPriorityGuids.AddRange(
-                priorityGuids.Except(orderedPriorityGuids, StringComparer.Ordinal)
-            );
+            /*
+                Then any remaining priority items. Except(...) yields each first-sequence element
+                missing from the accumulator exactly once, so the seen-set below reproduces that
+                dedupe-and-filter behavior directly.
+            */
+            HashSet<string> addedPriorityGuids = new(orderedPriorityGuids, StringComparer.Ordinal);
+            foreach (string guid in priorityGuids)
+            {
+                if (addedPriorityGuids.Add(guid))
+                {
+                    orderedPriorityGuids.Add(guid);
+                }
+            }
 
             // Load priority batch first (custom ordered items)
             int priorityBatchSize = Mathf.Min(
@@ -6143,12 +6208,35 @@ namespace WallstopStudios.DataVisualizer.Editor
                 Order the remaining GUIDs by the canonical display order already computed above rather
                 than re-deriving asset paths and sorting again (that duplicate work is noticeable on
                 large projects). _asyncDisplayOrderByGuid was built path-sorted, so order is preserved.
+                The original position tiebreaker keeps the sort deterministic if an order entry is
+                ever missing (int.MaxValue fallback), matching stable OrderBy behavior.
             */
-            List<string> remainingSorted = remainingGuids
-                .OrderBy(guid =>
-                    _asyncDisplayOrderByGuid.TryGetValue(guid, out int order) ? order : int.MaxValue
-                )
-                .ToList();
+            (string guid, int order, int index)[] pendingRemaining = new (string, int, int)[
+                remainingGuids.Count
+            ];
+            for (int i = 0; i < remainingGuids.Count; ++i)
+            {
+                string guid = remainingGuids[i];
+                int order = _asyncDisplayOrderByGuid.TryGetValue(guid, out int knownOrder)
+                    ? knownOrder
+                    : int.MaxValue;
+                pendingRemaining[i] = (guid, order, i);
+            }
+
+            Array.Sort(
+                pendingRemaining,
+                (lhs, rhs) =>
+                {
+                    int orderComparison = lhs.order.CompareTo(rhs.order);
+                    return orderComparison != 0 ? orderComparison : lhs.index.CompareTo(rhs.index);
+                }
+            );
+
+            List<string> remainingSorted = new(pendingRemaining.Length);
+            for (int i = 0; i < pendingRemaining.Length; ++i)
+            {
+                remainingSorted.Add(pendingRemaining[i].guid);
+            }
 
             // Load first batch of remaining items if we have space
             if (priorityBatchSize < AsyncLoadPriorityBatchSize)
@@ -8651,39 +8739,40 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void LoadScriptableObjectTypes()
         {
-            HashSet<string> managedTypeFullNames;
-            DataVisualizerSettings settings = Settings;
-            if (settings.persistStateInSettingsAsset)
-            {
-                managedTypeFullNames =
-                    settings
-                        .typeOrders?.SelectMany(order => order.typeNames)
-                        .ToHashSet(StringComparer.Ordinal)
-                    ?? new HashSet<string>(StringComparer.Ordinal);
-            }
-            else
-            {
-                managedTypeFullNames =
-                    UserState
-                        .typeOrders?.SelectMany(order => order.typeNames)
-                        .ToHashSet(StringComparer.Ordinal)
-                    ?? new HashSet<string>(StringComparer.Ordinal);
-            }
+            HashSet<string> managedTypeFullNames = CollectManagedTypeFullNames();
 
             List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
 
-            List<Type> typesToDisplay = allObjectTypes
-                .Where(type =>
+            List<Type> typesToDisplay = new(allObjectTypes.Count);
+            foreach (Type type in allObjectTypes)
+            {
+                if (
                     managedTypeFullNames.Contains(type.FullName)
                     || !NamespaceController.IsTypeRemovable(type)
                 )
-                .ToList();
+                {
+                    typesToDisplay.Add(type);
+                }
+            }
 
-            IEnumerable<(string key, List<Type> types)> groups = typesToDisplay
-                .GroupBy(NamespaceController.GetNamespaceKey)
-                .Select(g => (key: g.Key, types: g.ToList()));
+            /*
+                Group by namespace key in first-occurrence order, matching the previous GroupBy
+                behavior where each group's position follows its first member.
+            */
+            List<(string key, List<Type> types)> orderedTypes = new(typesToDisplay.Count);
+            Dictionary<string, List<Type>> groupsByKey = new(StringComparer.Ordinal);
+            foreach (Type type in typesToDisplay)
+            {
+                string key = NamespaceController.GetNamespaceKey(type);
+                if (!groupsByKey.TryGetValue(key, out List<Type> group))
+                {
+                    group = new List<Type>();
+                    groupsByKey[key] = group;
+                    orderedTypes.Add((key, group));
+                }
 
-            List<(string key, List<Type> types)> orderedTypes = groups.ToList();
+                group.Add(type);
+            }
 
             List<string> customNamespaceOrder = GetNamespaceOrder();
             orderedTypes.Sort(
@@ -8713,12 +8802,53 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private HashSet<string> CollectManagedTypeFullNames()
+        {
+            DataVisualizerSettings settings = Settings;
+            List<NamespaceTypeOrder> typeOrders = settings.persistStateInSettingsAsset
+                ? settings.typeOrders
+                : UserState.typeOrders;
+
+            HashSet<string> managedTypeFullNames = new(StringComparer.Ordinal);
+            if (typeOrders == null)
+            {
+                return managedTypeFullNames;
+            }
+
+            foreach (NamespaceTypeOrder order in typeOrders)
+            {
+                if (order.typeNames == null)
+                {
+                    continue;
+                }
+
+                foreach (string typeName in order.typeNames)
+                {
+                    managedTypeFullNames.Add(typeName);
+                }
+            }
+
+            return managedTypeFullNames;
+        }
+
         private List<Type> LoadRelevantScriptableObjectTypes()
         {
-            return _relevantScriptableObjectTypes ??= TypeCache
-                .GetTypesDerivedFrom<ScriptableObject>()
-                .Where(IsLoadableType)
-                .ToList();
+            if (_relevantScriptableObjectTypes != null)
+            {
+                return _relevantScriptableObjectTypes;
+            }
+
+            List<Type> types = new();
+            foreach (Type type in TypeCache.GetTypesDerivedFrom<ScriptableObject>())
+            {
+                if (IsLoadableType(type))
+                {
+                    types.Add(type);
+                }
+            }
+
+            _relevantScriptableObjectTypes = types;
+            return types;
         }
 
         private void OnObjectListSelectionChanged(IEnumerable<object> selection)
