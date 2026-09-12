@@ -605,6 +605,73 @@ namespace WallstopStudios.DataVisualizer.Editor
             return batch;
         }
 
+        /*
+            Orders dictionary keys by their persisted order value, pairing each entry with its
+            snapshot index so ties keep dictionary enumeration order exactly like stable OrderBy.
+            The async display map holds one entry per asset, so this stays O(n log n) instead of
+            relying on an O(n^2) insertion sort.
+        */
+        private static List<string> OrderKeysByValueStable(Dictionary<string, int> source)
+        {
+            if (source == null || source.Count == 0)
+            {
+                return new List<string>();
+            }
+
+            (string key, int value, int index)[] entries = new (string, int, int)[source.Count];
+            int cursor = 0;
+            foreach (KeyValuePair<string, int> entry in source)
+            {
+                entries[cursor] = (entry.Key, entry.Value, cursor);
+                cursor++;
+            }
+
+            Array.Sort(
+                entries,
+                (lhs, rhs) =>
+                {
+                    int valueComparison = lhs.value.CompareTo(rhs.value);
+                    return valueComparison != 0 ? valueComparison : lhs.index.CompareTo(rhs.index);
+                }
+            );
+
+            List<string> orderedKeys = new(entries.Length);
+            for (int i = 0; i < entries.Length; i++)
+            {
+                orderedKeys.Add(entries[i].key);
+            }
+
+            return orderedKeys;
+        }
+
+        /*
+            Replaces List<string>.SequenceEqual with a counted ordinal comparison. Null lists are
+            equal only to each other; a null list never equals a non-null one, so callers using the
+            result to skip redundant persistence writes keep their previous no-op behavior.
+        */
+        private static bool OrderedStringListsEqual(List<string> lhs, List<string> rhs)
+        {
+            if (lhs == null || rhs == null)
+            {
+                return lhs == null && rhs == null;
+            }
+
+            if (lhs.Count != rhs.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < lhs.Count; i++)
+            {
+                if (!string.Equals(lhs[i], rhs[i], StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         private static DataVisualizerSettings LoadOrCreateSettings()
         {
             DataVisualizerSettings settings = null;
@@ -1923,20 +1990,23 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void SyncNamespaceAndTypeOrders()
         {
-            List<string> namespaceOrder = _namespaceOrder
-                .OrderBy(kvp => kvp.Value)
-                .Select(kvp => kvp.Key)
-                .ToList();
-            List<NamespaceTypeOrder> typeOrder = _namespaceOrder
-                .OrderBy(kvp => kvp.Value)
-                .Select(kvp => new NamespaceTypeOrder
+            List<string> namespaceOrder = OrderKeysByValueStable(_namespaceOrder);
+            List<NamespaceTypeOrder> typeOrder = new(namespaceOrder.Count);
+            for (int i = 0; i < namespaceOrder.Count; i++)
+            {
+                string namespaceKey = namespaceOrder[i];
+                List<Type> types = _scriptableObjectTypes[namespaceKey];
+                List<string> typeNames = new(types.Count);
+                for (int j = 0; j < types.Count; j++)
                 {
-                    namespaceKey = kvp.Key,
-                    typeNames = _scriptableObjectTypes[kvp.Key]
-                        .Select(type => type.FullName)
-                        .ToList(),
-                })
-                .ToList();
+                    typeNames.Add(types[j].FullName);
+                }
+
+                typeOrder.Add(
+                    new NamespaceTypeOrder { namespaceKey = namespaceKey, typeNames = typeNames }
+                );
+            }
+
             PersistSettings(
                 settings =>
                 {
@@ -9066,9 +9136,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
+            /*
+                _namespaceOrder is mutated inside these loops, so each pass enumerates a snapshot.
+                The List constructor copies through the dictionary's Count/CopyTo path without an
+                iterator, and one copy covers both branches because only one branch runs.
+            */
+            List<KeyValuePair<string, int>> namespaceOrderSnapshot = new(_namespaceOrder);
             if (oldDataIndex < targetIndex)
             {
-                foreach (KeyValuePair<string, int> entry in _namespaceOrder.ToArray())
+                foreach (KeyValuePair<string, int> entry in namespaceOrderSnapshot)
                 {
                     if (oldDataIndex < entry.Value && entry.Value <= targetIndex)
                     {
@@ -9078,7 +9154,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             else if (targetIndex < oldDataIndex)
             {
-                foreach (KeyValuePair<string, int> entry in _namespaceOrder.ToArray())
+                foreach (KeyValuePair<string, int> entry in namespaceOrderSnapshot)
                 {
                     if (targetIndex <= entry.Value && entry.Value < oldDataIndex)
                     {
@@ -9097,11 +9173,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void UpdateAndSaveNamespaceOrder()
         {
-            List<string> newNamespaceOrder = _namespaceOrder
-                .OrderBy(kvp => kvp.Value)
-                .Select(kvp => kvp.Key)
-                .ToList();
-            SetNamespaceOrder(newNamespaceOrder);
+            SetNamespaceOrder(OrderKeysByValueStable(_namespaceOrder));
         }
 
         private void PerformTypeDrop()
@@ -9159,7 +9231,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void UpdateAndSaveTypeOrder(string namespaceKey, List<Type> orderedTypes)
         {
-            List<string> newTypeNameOrder = orderedTypes.Select(t => t.FullName).ToList();
+            List<string> newTypeNameOrder = new(orderedTypes.Count);
+            for (int i = 0; i < orderedTypes.Count; i++)
+            {
+                newTypeNameOrder.Add(orderedTypes[i].FullName);
+            }
+
             SetTypeOrderForNamespace(namespaceKey, newTypeNameOrder);
         }
 
@@ -9509,10 +9586,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private List<string> GetAsyncDisplayOrder()
         {
-            return _asyncDisplayOrderByGuid
-                .OrderBy(entry => entry.Value)
-                .Select(entry => entry.Key)
-                .ToList();
+            return OrderKeysByValueStable(_asyncDisplayOrderByGuid);
         }
 
         private void ApplyAsyncDisplayOrder(IReadOnlyList<string> orderedGuids)
@@ -9638,14 +9712,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 TypeObjectOrder entry = settings.objectOrders?.Find(o =>
                     string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
                 );
-                return entry?.ObjectGuids?.ToList() ?? new List<string>();
+                return entry?.ObjectGuids != null
+                    ? new List<string>(entry.ObjectGuids)
+                    : new List<string>();
             }
             else
             {
                 TypeObjectOrder entry = UserState.objectOrders?.Find(o =>
                     string.Equals(o.TypeFullName, type.FullName, StringComparison.Ordinal)
                 );
-                return entry?.ObjectGuids?.ToList() ?? new List<string>();
+                return entry?.ObjectGuids != null
+                    ? new List<string>(entry.ObjectGuids)
+                    : new List<string>();
             }
         }
 
@@ -9660,7 +9738,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 settings =>
                 {
                     List<string> entryList = settings.GetOrCreateObjectOrderList(typeFullName);
-                    if (entryList.SequenceEqual(objectGuids))
+                    if (OrderedStringListsEqual(entryList, objectGuids))
                     {
                         return false;
                     }
@@ -9672,7 +9750,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 userState =>
                 {
                     List<string> entryList = userState.GetOrCreateObjectOrderList(typeFullName);
-                    if (entryList.SequenceEqual(objectGuids))
+                    if (OrderedStringListsEqual(entryList, objectGuids))
                     {
                         return false;
                     }
@@ -9710,10 +9788,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             DataVisualizerSettings settings = Settings;
             if (settings.persistStateInSettingsAsset)
             {
-                return settings.namespaceOrder?.ToList() ?? new List<string>();
+                return settings.namespaceOrder != null
+                    ? new List<string>(settings.namespaceOrder)
+                    : new List<string>();
             }
 
-            return UserState.namespaceOrder?.ToList() ?? new List<string>();
+            return UserState.namespaceOrder != null
+                ? new List<string>(UserState.namespaceOrder)
+                : new List<string>();
         }
 
         private void SetNamespaceOrder(List<string> value)
@@ -9726,10 +9808,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             PersistSettings(
                 settings =>
                 {
-                    if (
-                        settings.namespaceOrder != null
-                        && settings.namespaceOrder.SequenceEqual(value)
-                    )
+                    if (OrderedStringListsEqual(settings.namespaceOrder, value))
                     {
                         return false;
                     }
@@ -9739,10 +9818,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
                 userState =>
                 {
-                    if (
-                        userState.namespaceOrder != null
-                        && userState.namespaceOrder.SequenceEqual(value)
-                    )
+                    if (OrderedStringListsEqual(userState.namespaceOrder, value))
                     {
                         return false;
                     }
@@ -9766,14 +9842,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 NamespaceTypeOrder entry = settings.typeOrders?.Find(o =>
                     string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
-                return entry?.typeNames?.ToList() ?? new List<string>();
+                return entry?.typeNames != null
+                    ? new List<string>(entry.typeNames)
+                    : new List<string>();
             }
             else
             {
                 NamespaceTypeOrder entry = UserState.typeOrders?.Find(o =>
                     string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
                 );
-                return entry?.typeNames?.ToList() ?? new List<string>();
+                return entry?.typeNames != null
+                    ? new List<string>(entry.typeNames)
+                    : new List<string>();
             }
         }
 
@@ -9788,7 +9868,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 settings =>
                 {
                     List<string> entryList = settings.GetOrCreateTypeOrderList(namespaceKey);
-                    if (entryList.SequenceEqual(typeNames))
+                    if (OrderedStringListsEqual(entryList, typeNames))
                     {
                         return false;
                     }
@@ -9800,7 +9880,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 userState =>
                 {
                     List<string> entryList = userState.GetOrCreateTypeOrderList(namespaceKey);
-                    if (entryList.SequenceEqual(typeNames))
+                    if (OrderedStringListsEqual(entryList, typeNames))
                     {
                         return false;
                     }
