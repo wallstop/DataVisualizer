@@ -107,8 +107,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             new Color(0.65f, 0.65f, 0.35f),
         };
 
-        private static readonly StringBuilder CachedStringBuilder = new();
-
         private static readonly char[] WhitespaceSeparators = { ' ' };
 
         private static readonly ReusableDisposalScope<(
@@ -1015,13 +1013,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     $"Failed to find Data Visualizer font (package root: '{packageRoot}')."
                 );
             }
-        }
-
-        private static string EscapeRichText(string input)
-        {
-            return string.IsNullOrWhiteSpace(input)
-                ? ""
-                : input.Replace("<", "&lt;").Replace(">", "&gt;");
         }
 
         private static MatchDetail SearchStringProperties(
@@ -2587,8 +2578,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void PerformTypeSearch(string searchText)
         {
-            HashSet<VisualElement> typeElements =
-                _namespaceController._namespaceCache.Values.ToHashSet();
+            HashSet<VisualElement> typeElements = new();
             using (
                 ReusableDisposalLease<(
                     DataVisualizer window,
@@ -2603,6 +2593,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     foreach (VisualElement typeItem in _namespaceController._namespaceCache.Values)
                     {
+                        typeElements.Add(typeItem);
                         typeItem.style.display = DisplayStyle.Flex;
                     }
                     return;
@@ -2802,21 +2793,55 @@ namespace WallstopStudios.DataVisualizer.Editor
                         VisualElement contextContainer = new() { style = { marginTop = 2 } };
                         resultItem.Add(contextContainer);
 
-                        IEnumerable<IGrouping<string, MatchDetail>> reflectedDetails = resultInfo
-                            .matchedFields.Where(mf =>
-                                mf.fieldName != MatchSource.ObjectName
-                                && mf.fieldName != MatchSource.TypeName
-                                && mf.fieldName != MatchSource.Guid
-                            )
-                            .GroupBy(mf => mf.fieldName)
-                            .Take(2);
-
-                        foreach (IGrouping<string, MatchDetail> fieldGroup in reflectedDetails)
+                        /*
+                            Collect up to two distinct reflected field names in first-occurrence
+                            order, pairing each with the first matched value for that field. The
+                            previous Where/GroupBy/Take chain preserved the same order with more
+                            per-row allocations.
+                        */
+                        string[] contextFieldNames = new string[2];
+                        string[] contextFieldValues = new string[2];
+                        int contextFieldCount = 0;
+                        foreach (MatchDetail matchedField in resultInfo.matchedFields)
                         {
-                            string fieldName = fieldGroup.Key;
-                            string fieldValue = fieldGroup.First().matchedValue;
+                            string fieldName = matchedField.fieldName;
+                            if (
+                                fieldName == MatchSource.ObjectName
+                                || fieldName == MatchSource.TypeName
+                                || fieldName == MatchSource.Guid
+                            )
+                            {
+                                continue;
+                            }
+
+                            bool alreadyCollected = false;
+                            for (int i = 0; i < contextFieldCount; i++)
+                            {
+                                if (contextFieldNames[i] == fieldName)
+                                {
+                                    alreadyCollected = true;
+                                    break;
+                                }
+                            }
+
+                            if (alreadyCollected)
+                            {
+                                continue;
+                            }
+
+                            contextFieldNames[contextFieldCount] = fieldName;
+                            contextFieldValues[contextFieldCount] = matchedField.matchedValue;
+                            contextFieldCount++;
+                            if (2 <= contextFieldCount)
+                            {
+                                break;
+                            }
+                        }
+
+                        for (int i = 0; i < contextFieldCount; i++)
+                        {
                             Label contextLabel = CreateHighlightedLabel(
-                                $"{fieldName}: {fieldValue}",
+                                $"{contextFieldNames[i]}: {contextFieldValues[i]}",
                                 termsMatchingThisObject,
                                 "search-result-context-label",
                                 bindToContextHovers: true,
@@ -2957,48 +2982,32 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (
                 string.IsNullOrWhiteSpace(fullText)
                 || termsToHighlight == null
-                || !termsToHighlight.Any()
+                || termsToHighlight.Count == 0
             )
             {
                 label.text = fullText;
                 return label;
             }
 
-            List<Tuple<int, int>> matches = termsToHighlight
-                .Where(term => !string.IsNullOrWhiteSpace(term))
-                .SelectMany(term =>
-                {
-                    List<Tuple<int, int>> indices = new();
-                    int start = 0;
-                    while (
-                        0
-                        <= (
-                            start = fullText.IndexOf(
-                                term,
-                                start,
-                                StringComparison.OrdinalIgnoreCase
-                            )
-                        )
-                    )
-                    {
-                        indices.Add(Tuple.Create(start, term.Length));
-                        start += term.Length;
-                    }
+            List<(int Start, int Length)> matches = new();
+            SearchHighlightUtility.CollectMatches(fullText, termsToHighlight, matches);
 
-                    return indices;
-                })
-                .Where(t => t != null)
-                .OrderBy(t => t.Item1)
-                .ToList();
-
-            label.text = GenerateContents(false);
+            label.text = SearchHighlightUtility.BuildHighlightedRichText(fullText, matches, true);
             label.RegisterCallback<MouseOverEvent>(_ =>
             {
-                label.text = GenerateContents(true);
+                label.text = SearchHighlightUtility.BuildHighlightedRichText(
+                    fullText,
+                    matches,
+                    false
+                );
             });
             label.RegisterCallback<MouseOutEvent>(_ =>
             {
-                label.text = GenerateContents(false);
+                label.text = SearchHighlightUtility.BuildHighlightedRichText(
+                    fullText,
+                    matches,
+                    true
+                );
             });
             if (bindToContextHovers)
             {
@@ -3006,57 +3015,24 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     context.RegisterCallback<MouseOverEvent>(_ =>
                     {
-                        label.text = GenerateContents(true);
+                        label.text = SearchHighlightUtility.BuildHighlightedRichText(
+                            fullText,
+                            matches,
+                            false
+                        );
                     });
                     context.RegisterCallback<MouseOutEvent>(_ =>
                     {
-                        label.text = GenerateContents(false);
+                        label.text = SearchHighlightUtility.BuildHighlightedRichText(
+                            fullText,
+                            matches,
+                            true
+                        );
                     });
                 }
             }
 
             return label;
-
-            string GenerateContents(bool hovering)
-            {
-                CachedStringBuilder.Clear();
-                int currentIndex = 0;
-                bool colorify = !hovering;
-                foreach ((int startIndex, int length) in matches)
-                {
-                    if (startIndex < currentIndex)
-                    {
-                        continue;
-                    }
-
-                    CachedStringBuilder.Append(
-                        EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
-                    );
-                    if (colorify)
-                    {
-                        CachedStringBuilder.Append("<color=yellow>");
-                    }
-
-                    CachedStringBuilder.Append("<b>");
-                    CachedStringBuilder.Append(
-                        EscapeRichText(fullText.Substring(startIndex, length))
-                    );
-                    CachedStringBuilder.Append("</b>");
-                    if (colorify)
-                    {
-                        CachedStringBuilder.Append("</color>");
-                    }
-
-                    currentIndex = startIndex + length;
-                }
-
-                if (currentIndex < fullText.Length)
-                {
-                    CachedStringBuilder.Append(EscapeRichText(fullText.Substring(currentIndex)));
-                }
-
-                return CachedStringBuilder.ToString();
-            }
         }
 
         private void NavigateToObject(ScriptableObject targetObject)
@@ -5716,20 +5692,40 @@ namespace WallstopStudios.DataVisualizer.Editor
             (DataVisualizer window, HashSet<VisualElement> typeElements) state
         )
         {
-            int hiddenNamespaces = 0;
+            HashSet<VisualElement> namespaceParents = new();
             foreach (
-                VisualElement parent in state
-                    .window._namespaceController._namespaceCache.Values.Select(value =>
-                        value.parent?.parent
-                    )
-                    .Where(parent => parent != null)
-                    .Distinct()
+                VisualElement typeElement in state
+                    .window
+                    ._namespaceController
+                    ._namespaceCache
+                    .Values
             )
             {
-                bool allInvisible = parent
-                    .IterateChildrenRecursively()
-                    .Where(state.typeElements.Contains)
-                    .All(child => child.style.display == DisplayStyle.None);
+                VisualElement namespaceParent = typeElement.parent?.parent;
+                if (namespaceParent != null)
+                {
+                    namespaceParents.Add(namespaceParent);
+                }
+            }
+
+            int hiddenNamespaces = 0;
+            foreach (VisualElement parent in namespaceParents)
+            {
+                bool allInvisible = true;
+                foreach (VisualElement child in parent.IterateChildrenRecursively())
+                {
+                    if (!state.typeElements.Contains(child))
+                    {
+                        continue;
+                    }
+
+                    if (child.style.display != DisplayStyle.None)
+                    {
+                        allInvisible = false;
+                        break;
+                    }
+                }
+
                 parent.style.display = allInvisible ? DisplayStyle.None : DisplayStyle.Flex;
                 if (allInvisible)
                 {

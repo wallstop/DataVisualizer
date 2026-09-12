@@ -1,0 +1,125 @@
+namespace WallstopStudios.DataVisualizer.Editor.Search
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Text;
+
+    /*
+        Collects case-insensitive term matches inside a string and renders them as rich
+        text for search-result labels. Kept LINQ-free because the search path builds
+        highlight data for every visible result row on each keystroke; value-tuple
+        matches avoid the per-match Tuple and enumerator allocations of the previous
+        SelectMany/OrderBy pipeline.
+    */
+    public static class SearchHighlightUtility
+    {
+        private static readonly StringBuilder CachedStringBuilder = new();
+
+        public static void CollectMatches(
+            string fullText,
+            IReadOnlyList<string> terms,
+            List<(int Start, int Length)> matches
+        )
+        {
+            if (string.IsNullOrEmpty(fullText) || terms == null || 0 == terms.Count)
+            {
+                return;
+            }
+
+            for (int termIndex = 0; termIndex < terms.Count; termIndex++)
+            {
+                string term = terms[termIndex];
+                if (string.IsNullOrWhiteSpace(term))
+                {
+                    continue;
+                }
+
+                int start = 0;
+                while (
+                    0 <= (start = fullText.IndexOf(term, start, StringComparison.OrdinalIgnoreCase))
+                )
+                {
+                    matches.Add((start, term.Length));
+                    start += term.Length;
+                }
+            }
+
+            /*
+                Stable insertion sort by start index. A stable order keeps terms that match
+                at the same index in input order, so the first span wins when overlapping
+                matches are skipped during rendering.
+            */
+            for (int i = 1; i < matches.Count; i++)
+            {
+                (int Start, int Length) current = matches[i];
+                int j = i - 1;
+                while (0 <= j && current.Start < matches[j].Start)
+                {
+                    matches[j + 1] = matches[j];
+                    j--;
+                }
+
+                matches[j + 1] = current;
+            }
+        }
+
+        public static string BuildHighlightedRichText(
+            string fullText,
+            IReadOnlyList<(int Start, int Length)> matches,
+            bool colorify
+        )
+        {
+            if (string.IsNullOrWhiteSpace(fullText))
+            {
+                return string.Empty;
+            }
+
+            CachedStringBuilder.Clear();
+            int currentIndex = 0;
+            if (matches != null)
+            {
+                foreach ((int startIndex, int length) in matches)
+                {
+                    if (startIndex < currentIndex)
+                    {
+                        continue;
+                    }
+
+                    CachedStringBuilder.Append(
+                        EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
+                    );
+                    if (colorify)
+                    {
+                        CachedStringBuilder.Append("<color=yellow>");
+                    }
+
+                    CachedStringBuilder.Append("<b>");
+                    CachedStringBuilder.Append(
+                        EscapeRichText(fullText.Substring(startIndex, length))
+                    );
+                    CachedStringBuilder.Append("</b>");
+                    if (colorify)
+                    {
+                        CachedStringBuilder.Append("</color>");
+                    }
+
+                    currentIndex = startIndex + length;
+                }
+            }
+
+            if (currentIndex < fullText.Length)
+            {
+                CachedStringBuilder.Append(EscapeRichText(fullText.Substring(currentIndex)));
+            }
+
+            return CachedStringBuilder.ToString();
+        }
+
+        private static string EscapeRichText(string input)
+        {
+            return string.IsNullOrWhiteSpace(input)
+                ? ""
+                : input.Replace("<", "&lt;").Replace(">", "&gt;");
+        }
+    }
+}
