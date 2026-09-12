@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo(assemblyName: "WallstopStudios.DataVisualizer.Editor")]
+[assembly: InternalsVisibleTo(assemblyName: "WallstopStudios.DataVisualizer.Tests.Editor")]
 
 namespace WallstopStudios.DataVisualizer
 {

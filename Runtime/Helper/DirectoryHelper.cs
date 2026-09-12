@@ -168,28 +168,25 @@ namespace WallstopStudios.DataVisualizer.Helper
                 return string.Empty;
             }
 
-            if (absolutePath.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase))
+            /*
+                Windows drive roots keep a trailing separator after GetDirectoryName; trim it so
+                the boundary check below uses one uniform indexing model.
+            */
+            if (projectRoot[projectRoot.Length - 1] == '/')
             {
-                // +1 to remove the leading slash only if projectRoot doesn't end with one
-                int startIndex = projectRoot.EndsWith("/", StringComparison.OrdinalIgnoreCase)
-                    ? projectRoot.Length
-                    : projectRoot.Length + 1;
-                return startIndex < absolutePath.Length ? absolutePath[startIndex..] : string.Empty;
-            }
-            if (absolutePath.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                int startIndex = projectRoot.EndsWith("/", StringComparison.OrdinalIgnoreCase)
-                    ? projectRoot.Length
-                    : projectRoot.Length + 1;
-                if (startIndex < absolutePath.Length)
-                {
-                    return "Assets/" + absolutePath[startIndex..];
-                }
-
-                return "Assets";
+                projectRoot = projectRoot[..^1];
             }
 
-            return string.Empty;
+            if (
+                !absolutePath.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase)
+                || absolutePath.Length <= projectRoot.Length
+                || absolutePath[projectRoot.Length] != '/'
+            )
+            {
+                return string.Empty;
+            }
+
+            return absolutePath[(projectRoot.Length + 1)..];
         }
     }
 }
