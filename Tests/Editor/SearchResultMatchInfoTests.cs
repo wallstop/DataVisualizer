@@ -80,7 +80,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void ShouldClearReusableStateWhenEnumerationStopsEarly()
+        public void ShouldRestartFromFirstTermWhenEarlierEnumerationStopsEarly()
         {
             SearchResultMatchInfo matchInfo = new();
             matchInfo.matchedFields.Add(new MatchDetail("first", "second"));
