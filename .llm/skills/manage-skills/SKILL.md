@@ -42,6 +42,9 @@ Keep bodies lean (aim under 120 lines, hard limit 300 for every `.md` under `.ll
 - End with a `## Related Skills` section using relative links
   (`./other-skill/SKILL.md`).
 - No duplication across skills: link instead of restating.
+- Skills that direct user-facing copy (PR titles and bodies, commit messages, code
+  comments, handoffs) must require Simplified Technical English: short, plain
+  sentences, no filler. Link to `.llm/context.md` instead of restating the rule.
 
 ## Creating a Skill
 
