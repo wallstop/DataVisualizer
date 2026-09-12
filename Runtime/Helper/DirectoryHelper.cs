@@ -18,7 +18,7 @@ namespace WallstopStudios.DataVisualizer.Helper
             }
 
 #if UNITY_EDITOR
-            if (!relativeDirectoryPath.StartsWith("Assets/"))
+            if (!relativeDirectoryPath.StartsWith("Assets/", StringComparison.Ordinal))
             {
                 if (relativeDirectoryPath.Equals("Assets", StringComparison.OrdinalIgnoreCase))
                 {

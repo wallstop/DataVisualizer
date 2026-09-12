@@ -4638,10 +4638,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 List<string> namespaceKeys = new(addableTypesByNamespace.Keys);
                 /*
-                    OrderBy(grouping => grouping.Key) used the default string comparer,
-                    which compares with the current culture. Keep that ordering.
+                    The former OrderBy(grouping => grouping.Key) sorted with the current
+                    culture; namespace keys are Ordinal identifiers everywhere else
+                    (NamespaceTypeOrder, persisted order), so sort Ordinal for one
+                    locale-independent order.
                 */
-                namespaceKeys.Sort(string.Compare);
+                namespaceKeys.Sort(StringComparer.Ordinal);
 
                 bool foundMatches = false;
                 foreach (string namespaceKey in namespaceKeys)
@@ -5799,7 +5801,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _currentUniqueLabelsForType.Clear();
-            HashSet<string> labelSet = new(StringComparer.OrdinalIgnoreCase);
+            /*
+                Labels are Ordinal identifiers everywhere else (LabelFilterEvaluator matching,
+                add/remove duplicate checks, suggestion exclusion), so dedup and sort Ordinal.
+                Insensitive dedup here once merged "urgent"/"Urgent" into one pill whose filter
+                click could never match both casings.
+            */
+            HashSet<string> labelSet = new(StringComparer.Ordinal);
             foreach (ScriptableObject obj in _selectedObjects)
             {
                 if (obj == null)
@@ -5818,7 +5826,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _currentUniqueLabelsForType.Add(label);
             }
-            _currentUniqueLabelsForType.Sort();
+            _currentUniqueLabelsForType.Sort(StringComparer.Ordinal);
 
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
             if (config == null)
@@ -6754,7 +6762,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             List<string> sortedLabels = new(labels);
-            sortedLabels.Sort();
+            sortedLabels.Sort(StringComparer.Ordinal);
             foreach (string labelText in sortedLabels)
             {
                 container.Add(CreateLabelPill(labelText, section));
@@ -8087,7 +8095,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _projectUniqueLabelsCache.Add(label);
             }
-            _projectUniqueLabelsCache.Sort();
+            _projectUniqueLabelsCache.Sort(StringComparer.Ordinal);
             _isLabelCachePopulated = true;
         }
 
@@ -8312,7 +8320,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _inspectorCurrentLabelsContainer.Clear();
 
             string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
-            Array.Sort(currentLabels);
+            Array.Sort(currentLabels, StringComparer.Ordinal);
 
             if (currentLabels.Length == 0)
             {

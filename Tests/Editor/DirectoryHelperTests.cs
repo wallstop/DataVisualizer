@@ -1,13 +1,18 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
+    using System;
     using System.Collections.Generic;
     using System.IO;
     using NUnit.Framework;
+    using UnityEditor;
     using UnityEngine;
+    using UnityEngine.TestTools;
     using WallstopStudios.DataVisualizer.Helper;
 
     public sealed class DirectoryHelperTests
     {
+        private const string TempRootFolder = "Assets/DataVisualizerDirectoryHelperTests";
+
         private static string ProjectRoot()
         {
             string projectRoot = Path.GetDirectoryName(Application.dataPath).Replace('\\', '/');
@@ -101,6 +106,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
         }
 
+        private static IEnumerable<TestCaseData> OutsideAssetsCases()
+        {
+            yield return new TestCaseData("NotAssets/Folder").SetName("Outside_assets_fails");
+            yield return new TestCaseData("AssetsBackup/Folder").SetName("Sibling_prefix_fails");
+            yield return new TestCaseData("assets/Folder").SetName("Lowercase_assets_fails");
+        }
+
         [Test]
         [TestCaseSource(nameof(Cases))]
         public void ShouldReturnExpectedPathWhenConvertingAbsolutePath(
@@ -111,6 +123,68 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string relativePath = DirectoryHelper.AbsoluteToUnityRelativePath(absolutePath);
 
             Assert.AreEqual(expectedRelativePath, relativePath);
+        }
+
+        [Test]
+        [TestCaseSource(nameof(OutsideAssetsCases))]
+        public void ShouldRejectFolderCreationWhenPathIsOutsideAssets(string relativeDirectoryPath)
+        {
+            LogAssert.Expect(
+                LogType.Error,
+                $"Attempted to create directory outside of Assets: '{relativeDirectoryPath}'"
+            );
+
+            ArgumentException thrown = Assert.Throws<ArgumentException>(() =>
+                DirectoryHelper.EnsureDirectoryExists(relativeDirectoryPath)
+            );
+
+            Assert.AreEqual(nameof(relativeDirectoryPath), thrown.ParamName);
+        }
+
+        [Test]
+        public void ShouldCreateMissingNestedFoldersWhenPathIsInsideAssets()
+        {
+            string nestedFolder = TempRootFolder + "/Parents/Leaf";
+            using (TestCleanupScope cleanup = new())
+            {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(TempRootFolder);
+                    AssetDatabase.Refresh();
+                });
+
+                DirectoryHelper.EnsureDirectoryExists(nestedFolder);
+
+                Assert.IsTrue(AssetDatabase.IsValidFolder(TempRootFolder));
+                Assert.IsTrue(AssetDatabase.IsValidFolder(TempRootFolder + "/Parents"));
+                Assert.IsTrue(AssetDatabase.IsValidFolder(nestedFolder));
+            }
+        }
+
+        [Test]
+        public void ShouldKeepExistingFolderWhenPathIsInsideAssets()
+        {
+            string existingFolder = TempRootFolder + "/Existing";
+            using (TestCleanupScope cleanup = new())
+            {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(TempRootFolder);
+                    AssetDatabase.Refresh();
+                });
+
+                DirectoryHelper.EnsureDirectoryExists(existingFolder);
+                DirectoryHelper.EnsureDirectoryExists(existingFolder);
+
+                Assert.IsTrue(AssetDatabase.IsValidFolder(existingFolder));
+            }
+        }
+
+        [Test]
+        public void ShouldAcceptAssetsRootWithoutCreatingFolders()
+        {
+            Assert.DoesNotThrow(() => DirectoryHelper.EnsureDirectoryExists("Assets"));
+            Assert.DoesNotThrow(() => DirectoryHelper.EnsureDirectoryExists("assets"));
         }
     }
 }
