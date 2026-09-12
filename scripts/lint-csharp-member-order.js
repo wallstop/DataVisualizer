@@ -1267,6 +1267,10 @@ function isSearchModelSource(relative) {
   return /(^|\/)Editor\/DataVisualizer\/Search\//.test(relative);
 }
 
+function isAssetPostprocessingSource(relative) {
+  return /(^|\/)Editor\/DataVisualizer\/Unity\//.test(relative);
+}
+
 function main(argv) {
   const fix = argv.includes("--fix");
   const verbose = argv.includes("--verbose");
@@ -1297,7 +1301,8 @@ function main(argv) {
     const prohibitLinq =
       isRuntimeSource(relative) ||
       isPersistedStateSource(relative) ||
-      isSearchModelSource(relative);
+      isSearchModelSource(relative) ||
+      isAssetPostprocessingSource(relative);
     let result = analyzeFile(text, prohibitLinq);
 
     if (fix && 0 < result.edits.length) {
@@ -1333,8 +1338,8 @@ function main(argv) {
     for (const violation of result.violations) {
       if (violation.kind === "prohibited LINQ dependency") {
         remaining.push(
-          `${relative}:${violation.line}: Runtime, persisted editor-state, and search-model code ` +
-            `must not depend on System.Linq (#61)`
+          `${relative}:${violation.line}: Runtime, persisted editor-state, search-model, and ` +
+            `asset postprocessing code must not depend on System.Linq (#61)`
         );
         continue;
       }
@@ -1386,7 +1391,7 @@ function main(argv) {
     console.error(
       `[csharp-member-order] ${remaining.length} C# source policy violation(s). ` +
         "Use block comments for multi-line prose; use underscore-free PascalCase method names; " +
-        "keep Runtime, persisted editor-state, and search-model code free of System.Linq; " +
+        "keep Runtime, persisted editor-state, search-model, and asset postprocessing code free of System.Linq; " +
         "reorder members into the #672 ordering " +
         "(const, events, delegates, static properties, " +
         "static fields, properties, fields, constructors, static methods, methods; each tier public → " +
