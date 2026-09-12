@@ -6684,14 +6684,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
             if (config == null)
             {
-                return _currentUniqueLabelsForType.ToList();
+                return new List<string>(_currentUniqueLabelsForType);
             }
 
-            return _currentUniqueLabelsForType
-                .Where(label =>
-                    !(config.andLabels.Contains(label) && config.orLabels.Contains(label))
-                )
-                .ToList();
+            List<string> availableLabels = new(_currentUniqueLabelsForType.Count);
+            foreach (string label in _currentUniqueLabelsForType)
+            {
+                if (config.andLabels.Contains(label) && config.orLabels.Contains(label))
+                {
+                    continue;
+                }
+
+                availableLabels.Add(label);
+            }
+
+            return availableLabels;
         }
 
         private void PopulateLabelPillContainers()
@@ -6746,7 +6753,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            foreach (string labelText in labels.OrderBy(label => label))
+            List<string> sortedLabels = new(labels);
+            sortedLabels.Sort();
+            foreach (string labelText in sortedLabels)
             {
                 container.Add(CreateLabelPill(labelText, section));
             }
@@ -8112,17 +8121,25 @@ namespace WallstopStudios.DataVisualizer.Editor
                 StringComparer.Ordinal
             );
 
-            string[] suggestions = _projectUniqueLabelsCache
-                .Where(label =>
+            List<string> suggestions = new(10);
+            foreach (string label in _projectUniqueLabelsCache)
+            {
+                if (
                     (
                         string.IsNullOrWhiteSpace(currentInput)
                         || label.Contains(currentInput, StringComparison.OrdinalIgnoreCase)
                     ) && !currentAssetLabelsSet.Contains(label)
                 )
-                .Take(10)
-                .ToArray();
+                {
+                    suggestions.Add(label);
+                    if (10 <= suggestions.Count)
+                    {
+                        break;
+                    }
+                }
+            }
 
-            if (0 < suggestions.Length)
+            if (0 < suggestions.Count)
             {
                 foreach (string suggestionText in suggestions)
                 {
@@ -8371,8 +8388,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            List<string> updatedLabels = currentLabels.ToList();
-            updatedLabels.Add(newLabelText);
+            List<string> updatedLabels = new(currentLabels) { newLabelText };
 
             try
             {
@@ -8401,27 +8417,45 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
-            string[] updatedLabels = currentLabels
-                .Where(label => !label.Equals(labelToRemove, StringComparison.Ordinal))
-                .ToArray();
-
-            if (updatedLabels.Length != currentLabels.Length)
+            int removedCount = 0;
+            foreach (string label in currentLabels)
             {
-                try
+                if (label.Equals(labelToRemove, StringComparison.Ordinal))
                 {
-                    AssetDatabase.SetLabels(_selectedObject, updatedLabels);
-                    EditorUtility.SetDirty(_selectedObject);
-                    AssetDatabase.SaveAssets();
-                    PopulateProjectUniqueLabelsCache(force: true);
-                    PopulateInspectorLabelsUI();
-                    UpdateLabelAreaAndFilter();
+                    removedCount++;
                 }
-                catch (Exception ex)
+            }
+
+            if (removedCount == 0)
+            {
+                return;
+            }
+
+            string[] updatedLabels = new string[currentLabels.Length - removedCount];
+            int writeIndex = 0;
+            foreach (string label in currentLabels)
+            {
+                if (!label.Equals(labelToRemove, StringComparison.Ordinal))
                 {
-                    Debug.LogError(
-                        $"Error removing label '{labelToRemove}' from asset '{_selectedObject.name}': {ex}"
-                    );
+                    updatedLabels[writeIndex] = label;
+                    writeIndex++;
                 }
+            }
+
+            try
+            {
+                AssetDatabase.SetLabels(_selectedObject, updatedLabels);
+                EditorUtility.SetDirty(_selectedObject);
+                AssetDatabase.SaveAssets();
+                PopulateProjectUniqueLabelsCache(force: true);
+                PopulateInspectorLabelsUI();
+                UpdateLabelAreaAndFilter();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(
+                    $"Error removing label '{labelToRemove}' from asset '{_selectedObject.name}': {ex}"
+                );
             }
         }
 
