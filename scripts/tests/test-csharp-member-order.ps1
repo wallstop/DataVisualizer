@@ -250,6 +250,26 @@ namespace Fixture
     }
 }
 
+Invoke-TestCase 'Fails_OnSearchModelLinqDependency' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Editor/DataVisualizer/Search/UsesLinq.cs' -Content @'
+namespace Fixture
+{
+    using System.Linq;
+
+    public sealed class UsesLinq { }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'search model LINQ dependencies should fail'
+        Assert-True ($result.Output -match '#61') "failure should identify the LINQ rule: $($result.Output)"
+        Assert-True ($result.Output -match 'Editor/DataVisualizer/Search/UsesLinq.cs:3') "failure should identify the import: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
 Invoke-TestCase 'Passes_OtherEditorLinqDependency' {
     $root = New-TempRoot -Prefix 'member-order-'
     try {

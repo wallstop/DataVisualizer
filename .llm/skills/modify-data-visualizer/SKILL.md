@@ -99,6 +99,15 @@ metadata:
   extend the evaluator, not the UI, when adding filter semantics.
 - Search results are aggregated into `SearchResultMatchInfo` with per-source
   `MatchSource`/`MatchDetail` entries; cap visible results (`MaxSearchResults`).
+- Search-result objects are per-candidate and normally rendered once. Matched-term
+  aggregation is bounded by the user's query tokens, so find first occurrences with a
+  direct scan instead of attaching caches or introducing a pooled scratch set. Keep
+  lazy enumerations independent and cover interleaved and early-disposal behavior.
+- Classify other temporary sets by cardinality, call frequency, comparer, lifetime,
+  concurrency, and retained capacity before optimizing them. Keep unbounded GUID/type
+  membership sets local to their operation unless profiling proves repeated allocation
+  is material. If pooling is proven, define reset and retention semantics first and
+  generalize only when at least two call sites share those semantics.
 
 ## Styling
 

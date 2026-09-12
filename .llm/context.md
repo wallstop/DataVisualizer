@@ -158,11 +158,20 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     readonly struct leases backed by reusable owner storage; leases are default-safe and
     idempotent, and `Dispose()` never throws. Retain `try/catch` where the purpose is
     exception isolation or translation rather than lifetime management.
-32. Keep the shipped `Runtime/` assembly and persisted editor-state models under
-    `Editor/DataVisualizer/Data/` free of `System.Linq`. Use direct collection operations
-    and streaming loops so player-facing helpers and state transfers do not introduce
-    avoidable iterator/delegate allocations. Other editor and test code may retain LINQ
-    when clarity outweighs measured cost.
+32. Keep the shipped `Runtime/` assembly, persisted editor-state models under
+    `Editor/DataVisualizer/Data/`, and global-search models under
+    `Editor/DataVisualizer/Search/` free of `System.Linq`. Use direct collection
+    operations and streaming loops so player-facing helpers, state transfers, and
+    per-result search aggregation do not introduce avoidable iterator/delegate
+    allocations. Other editor and test code may retain LINQ when clarity outweighs
+    measured cost.
+33. Before caching or pooling a temporary collection, first try eliminating the
+    scratch state. Introduce pooling only after measured repeated reuse, with a defined
+    lifetime, invalidation owner, retention bound, and overlapping-call safety. Do not
+    create a type-specific pool speculatively; generalize only when multiple proven
+    call sites share the same comparer, reset, and retention semantics. Prefer direct
+    scans for genuinely bounded small inputs and per-operation sets for unbounded
+    membership work.
 
 ### Skills Discipline
 
