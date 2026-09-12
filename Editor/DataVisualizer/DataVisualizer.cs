@@ -63,6 +63,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string LabelSuggestionItemClass = "label-suggestion-item";
 
         private const string SearchPlaceholder = "Search...";
+        private const string SelectDataFolderDialogTitle =
+            "Select Data Object Type Load Folder (Must be inside Assets)";
+        private const string SelectScriptFolderDialogTitle =
+            "Select Script Load Folder (Must be inside Assets)";
 
         private const int MaxSearchResults = 25;
         private const float DefaultOuterSplitWidth = 350f;
@@ -104,6 +108,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         };
 
         private static readonly StringBuilder CachedStringBuilder = new();
+
+        private static readonly char[] WhitespaceSeparators = { ' ' };
 
         private static readonly ReusableDisposalScope<(
             DataVisualizer window,
@@ -4509,84 +4515,23 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _addTypesFromDataFolderButton = new Button(() =>
             {
-                string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
-                    title: "Select Data Object Type Load Folder (Must be inside Assets)",
-                    folder: "Assets",
-                    defaultName: ""
+                if (
+                    !AssetsFolderUtility.TrySelectAssetsFolder(
+                        SelectDataFolderDialogTitle,
+                        out string relativePath
+                    )
+                )
+                {
+                    return;
+                }
+
+                List<Type> scriptableObjectTypes = CollectAddableTypesFromFolder(
+                    $"t:{nameof(ScriptableObject)}",
+                    relativePath,
+                    ResolveScriptableObjectType
                 );
 
-                if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
-                {
-                    return;
-                }
-
-                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
-                string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
-
-                if (
-                    !selectedAbsolutePath.StartsWith(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                    EditorUtility.DisplayDialog(
-                        "Invalid Folder",
-                        "The selected folder must be inside the project's 'Assets' directory.",
-                        "OK"
-                    );
-                    return;
-                }
-
-                string relativePath;
-                if (
-                    selectedAbsolutePath.Equals(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    relativePath = "Assets";
-                }
-                else
-                {
-                    relativePath =
-                        "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-                    relativePath = relativePath.Replace("//", "/");
-                }
-
-                HashSet<Type> currentlyManagedTypes = _scriptableObjectTypes
-                    .SelectMany(x => x.Value)
-                    .ToHashSet();
-                List<Type> scriptableObjectTypes = AssetDatabase
-                    .FindAssets($"t:{nameof(ScriptableObject)}", new[] { relativePath })
-                    .Select(AssetDatabase.GUIDToAssetPath)
-                    .Select(AssetDatabase.LoadAssetAtPath<ScriptableObject>)
-                    .Where(so => so != null)
-                    .Select(so => so.GetType())
-                    .Where(IsLoadableType)
-                    .Where(type => !currentlyManagedTypes.Contains(type))
-                    .Distinct()
-                    .ToList();
-                scriptableObjectTypes.Sort(NamespaceTypeOrder.CompareTypesByFullName);
-
-                bool stateChanged = false;
-                foreach (Type typeToAdd in scriptableObjectTypes)
-                {
-                    string namespaceKey = NamespaceController.GetNamespaceKey(typeToAdd);
-                    if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
-                    {
-                        types = new List<Type>();
-                        _scriptableObjectTypes[namespaceKey] = types;
-                        _namespaceOrder[namespaceKey] = _namespaceOrder.Count;
-                    }
-
-                    types.Add(typeToAdd);
-                    stateChanged = true;
-                }
-
-                if (stateChanged)
+                if (AddManagedTypes(scriptableObjectTypes))
                 {
                     SyncNamespaceChanges();
                 }
@@ -4601,84 +4546,23 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _addTypesFromScriptFolderButton = new Button(() =>
             {
-                string selectedAbsolutePath = EditorUtility.OpenFolderPanel(
-                    title: "Select Script Load Folder (Must be inside Assets)",
-                    folder: "Assets",
-                    defaultName: ""
+                if (
+                    !AssetsFolderUtility.TrySelectAssetsFolder(
+                        SelectScriptFolderDialogTitle,
+                        out string relativePath
+                    )
+                )
+                {
+                    return;
+                }
+
+                List<Type> scriptableObjectTypes = CollectAddableTypesFromFolder(
+                    "t:Monoscript",
+                    relativePath,
+                    ResolveMonoScriptType
                 );
 
-                if (string.IsNullOrWhiteSpace(selectedAbsolutePath))
-                {
-                    return;
-                }
-
-                selectedAbsolutePath = Path.GetFullPath(selectedAbsolutePath).SanitizePath();
-                string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
-
-                if (
-                    !selectedAbsolutePath.StartsWith(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    Debug.LogError("Selected folder must be inside the project's Assets folder.");
-                    EditorUtility.DisplayDialog(
-                        "Invalid Folder",
-                        "The selected folder must be inside the project's 'Assets' directory.",
-                        "OK"
-                    );
-                    return;
-                }
-
-                string relativePath;
-                if (
-                    selectedAbsolutePath.Equals(
-                        projectAssetsPath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    relativePath = "Assets";
-                }
-                else
-                {
-                    relativePath =
-                        "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-                    relativePath = relativePath.Replace("//", "/");
-                }
-
-                HashSet<Type> currentlyManagedTypes = _scriptableObjectTypes
-                    .SelectMany(x => x.Value)
-                    .ToHashSet();
-                List<Type> scriptableObjectTypes = AssetDatabase
-                    .FindAssets("t:Monoscript", new[] { relativePath })
-                    .Select(AssetDatabase.GUIDToAssetPath)
-                    .Select(AssetDatabase.LoadAssetAtPath<MonoScript>)
-                    .Where(script => script != null)
-                    .Select(script => script.GetClass())
-                    .Where(IsLoadableType)
-                    .Where(type => !currentlyManagedTypes.Contains(type))
-                    .Distinct()
-                    .ToList();
-                scriptableObjectTypes.Sort(NamespaceTypeOrder.CompareTypesByFullName);
-
-                bool stateChanged = false;
-                foreach (Type typeToAdd in scriptableObjectTypes)
-                {
-                    string namespaceKey = NamespaceController.GetNamespaceKey(typeToAdd);
-                    if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
-                    {
-                        types = new List<Type>();
-                        _scriptableObjectTypes[namespaceKey] = types;
-                        _namespaceOrder[namespaceKey] = _namespaceOrder.Count;
-                    }
-
-                    types.Add(typeToAdd);
-                    stateChanged = true;
-                }
-
-                if (stateChanged)
+                if (AddManagedTypes(scriptableObjectTypes))
                 {
                     SyncNamespaceChanges();
                 }
@@ -4720,7 +4604,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 filter = null;
             }
 
-            if (_lastTypeAddSearchTerm == filter && _currentTypePopoverItems.Any())
+            if (_lastTypeAddSearchTerm == filter && _currentTypePopoverItems.Count != 0)
             {
                 return;
             }
@@ -4740,48 +4624,75 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 _typePopoverListContainer.Clear();
 
-                List<string> searchTerms = string.IsNullOrWhiteSpace(filter)
-                    ? new List<string>()
-                    : filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                List<string> searchTerms = new();
+                if (!string.IsNullOrWhiteSpace(filter))
+                {
+                    searchTerms.AddRange(
+                        filter.Split(WhitespaceSeparators, StringSplitOptions.RemoveEmptyEntries)
+                    );
+                }
+
                 bool isFiltering = 0 < searchTerms.Count;
 
-                HashSet<string> managedTypeFullNames = _namespaceController
-                    .GetAllManagedTypeNames()
-                    .ToHashSet(StringComparer.Ordinal);
+                HashSet<string> managedTypeFullNames = new(StringComparer.Ordinal);
+                foreach (string managedTypeName in _namespaceController.GetAllManagedTypeNames())
+                {
+                    managedTypeFullNames.Add(managedTypeName);
+                }
 
-                IOrderedEnumerable<IGrouping<string, Type>> groupedTypes =
-                    LoadRelevantScriptableObjectTypes()
-                        .Except(_scriptableObjectTypes.Values.SelectMany(x => x))
-                        .GroupBy(NamespaceController.GetNamespaceKey)
-                        .OrderBy(grouping => grouping.Key);
+                HashSet<Type> managedTypes = CollectManagedTypes();
+                Dictionary<string, List<Type>> addableTypesByNamespace = new();
+                HashSet<Type> discoveredTypes = new();
+                foreach (Type type in LoadRelevantScriptableObjectTypes())
+                {
+                    if (managedTypes.Contains(type) || !discoveredTypes.Add(type))
+                    {
+                        continue;
+                    }
+
+                    string namespaceKey = NamespaceController.GetNamespaceKey(type);
+                    if (
+                        !addableTypesByNamespace.TryGetValue(
+                            namespaceKey,
+                            out List<Type> groupTypes
+                        )
+                    )
+                    {
+                        groupTypes = new List<Type>();
+                        addableTypesByNamespace[namespaceKey] = groupTypes;
+                    }
+
+                    groupTypes.Add(type);
+                }
+
+                List<string> namespaceKeys = new(addableTypesByNamespace.Keys);
+                /*
+                    OrderBy(grouping => grouping.Key) used the default string comparer,
+                    which compares with the current culture. Keep that ordering.
+                */
+                namespaceKeys.Sort(string.Compare);
 
                 bool foundMatches = false;
-                foreach (IGrouping<string, Type> group in groupedTypes)
+                foreach (string namespaceKey in namespaceKeys)
                 {
-                    string namespaceKey = group.Key;
-                    List<Type> orderedGroupTypes = group.ToList();
+                    List<Type> orderedGroupTypes = addableTypesByNamespace[namespaceKey];
                     orderedGroupTypes.Sort(NamespaceTypeOrder.CompareTypesByNameThenFullName);
-                    List<Type> addableTypes = new();
+                    List<Type> addableTypes = new(orderedGroupTypes.Count);
                     List<VisualElement> typesToShowInGroup = new();
 
                     bool namespaceMatchesAll =
-                        isFiltering
-                        && searchTerms.All(term =>
-                            namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
-                        );
+                        isFiltering && AllTermsContained(searchTerms, namespaceKey);
+
+                    bool MatchesSearchTerms(string typeName)
+                    {
+                        return !isFiltering
+                            || namespaceMatchesAll
+                            || MatchesAnyTerm(searchTerms, typeName, namespaceKey);
+                    }
 
                     foreach (Type type in orderedGroupTypes)
                     {
-                        string typeName = type.Name;
-                        bool typeMatchesSearch =
-                            !isFiltering
-                            || namespaceMatchesAll
-                            || searchTerms.All(term =>
-                                typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                                || namespaceKey.Contains(term, StringComparison.OrdinalIgnoreCase)
-                            );
-
-                        if (!typeMatchesSearch)
+                        if (!MatchesSearchTerms(type.Name))
                         {
                             continue;
                         }
@@ -4795,9 +4706,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                         VisualElement namespaceGroupContainer = new()
                         {
-                            name = $"ns-group-container-{group.Key}",
+                            name = $"ns-group-container-{namespaceKey}",
                         };
-                        VisualElement header = new() { name = $"ns-header-{group.Key}" };
+                        VisualElement header = new() { name = $"ns-header-{namespaceKey}" };
                         header.AddToClassList(PopoverNamespaceHeaderClassName);
 
                         bool startCollapsed = !isFiltering;
@@ -4806,25 +4717,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                             header.AddToClassList(StyleConstants.ExpandedClass);
                         }
 
-                        foreach (Type type in orderedGroupTypes)
+                        foreach (Type type in addableTypes)
                         {
-                            string typeName = type.Name;
-                            bool typeMatchesSearch =
-                                !isFiltering
-                                || namespaceMatchesAll
-                                || searchTerms.All(term =>
-                                    typeName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                                    || namespaceKey.Contains(
-                                        term,
-                                        StringComparison.OrdinalIgnoreCase
-                                    )
-                                );
-
-                            if (!typeMatchesSearch)
-                            {
-                                continue;
-                            }
-
                             bool isManaged = managedTypeFullNames.Contains(type.FullName);
                             Label typeLabel = CreateHighlightedLabel(
                                 $"{type.Name}",
@@ -4863,13 +4757,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                                 : StyleConstants.ArrowExpanded
                         )
                         {
-                            name = $"ns-indicator-{group.Key}",
+                            name = $"ns-indicator-{namespaceKey}",
                         };
                         indicator.AddToClassList(PopoverNamespaceIndicatorClassName);
                         indicator.AddToClassList(StyleConstants.ClickableClass);
 
                         Label namespaceLabel = CreateHighlightedLabel(
-                            group.Key,
+                            namespaceKey,
                             searchTerms,
                             PopoverListNamespaceClassName
                         );
@@ -4877,7 +4771,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                         Dictionary<string, object> clickContext = new()
                         {
-                            ["NamespaceKey"] = group.Key,
+                            ["NamespaceKey"] = namespaceKey,
                             ["AddableTypes"] = addableTypes,
                             ["ExpandNamespace"] = (Action<PointerDownEvent>)ExpandNamespace,
                         };
@@ -4928,7 +4822,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                         VisualElement typesSubContainer = new()
                         {
-                            name = $"types-subcontainer-{group.Key}",
+                            name = $"types-subcontainer-{namespaceKey}",
                             style =
                             {
                                 marginLeft = 15,
@@ -4956,7 +4850,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                                 className: PopoverNamespaceIndicatorClassName
                             );
                             VisualElement currentTypesContainer = header.parent.Q<VisualElement>(
-                                $"types-subcontainer-{group.Key}"
+                                $"types-subcontainer-{namespaceKey}"
                             );
                             if (currentIndicator != null && currentTypesContainer != null)
                             {
@@ -5003,6 +4897,35 @@ namespace WallstopStudios.DataVisualizer.Editor
                 else
                 {
                     _typeAddPopover.style.maxHeight = StyleKeyword.Null;
+                }
+
+                static bool AllTermsContained(List<string> terms, string value)
+                {
+                    foreach (string term in terms)
+                    {
+                        if (!value.Contains(term, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+
+                static bool MatchesAnyTerm(List<string> terms, string primary, string secondary)
+                {
+                    foreach (string term in terms)
+                    {
+                        if (
+                            !primary.Contains(term, StringComparison.OrdinalIgnoreCase)
+                            && !secondary.Contains(term, StringComparison.OrdinalIgnoreCase)
+                        )
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
                 }
             }
         }
@@ -5715,6 +5638,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                 Fast type validation without expensive CreateInstance calls
                 This allows namespace/type list to appear immediately
             */
+            if (type == null)
+            {
+                /*
+                    MonoScript.GetClass() returns null for scripts without a MonoBehaviour
+                    class. Treat those as not loadable instead of throwing.
+                */
+                return false;
+            }
+
             return type != typeof(ScriptableObject)
                 && !type.IsAbstract
                 && !type.IsGenericType
@@ -5733,6 +5665,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 3. The real validation happens when loading actual assets anyway
                 4. Types that can't be instantiated simply won't have any assets to load
             */
+        }
+
+        private static Type ResolveScriptableObjectType(string assetPath)
+        {
+            ScriptableObject asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(assetPath);
+            return asset != null ? asset.GetType() : null;
+        }
+
+        private static Type ResolveMonoScriptType(string assetPath)
+        {
+            MonoScript script = AssetDatabase.LoadAssetAtPath<MonoScript>(assetPath);
+            return script != null ? script.GetClass() : null;
         }
 
         private static bool IsSubclassOf(Type typeToCheck, Type baseClass)
@@ -7326,28 +7270,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             void Confirm()
             {
-                bool stateChanged = false;
-                HashSet<Type> currentManagedList = _scriptableObjectTypes
-                    .SelectMany(x => x.Value)
-                    .ToHashSet();
-                foreach (Type typeToAdd in typesToAdd)
-                {
-                    if (!currentManagedList.Add(typeToAdd))
-                    {
-                        continue;
-                    }
-
-                    string typeNamespace = NamespaceController.GetNamespaceKey(typeToAdd);
-                    if (!_scriptableObjectTypes.TryGetValue(typeNamespace, out List<Type> types))
-                    {
-                        types = new List<Type>();
-                        _scriptableObjectTypes[typeNamespace] = types;
-                        _namespaceOrder[typeNamespace] = _namespaceOrder.Count;
-                    }
-
-                    types.Add(typeToAdd);
-                    stateChanged = true;
-                }
+                bool stateChanged = AddManagedTypes(typesToAdd);
 
                 CloseActivePopover();
 
@@ -7356,6 +7279,87 @@ namespace WallstopStudios.DataVisualizer.Editor
                     SyncNamespaceChanges();
                 }
             }
+        }
+
+        private HashSet<Type> CollectManagedTypes()
+        {
+            HashSet<Type> managedTypes = new();
+            foreach (List<Type> types in _scriptableObjectTypes.Values)
+            {
+                foreach (Type type in types)
+                {
+                    managedTypes.Add(type);
+                }
+            }
+
+            return managedTypes;
+        }
+
+        private List<Type> CollectAddableTypesFromFolder(
+            string searchFilter,
+            string relativePath,
+            Func<string, Type> resolveAssetType
+        )
+        {
+            string[] assetGuids = AssetDatabase.FindAssets(searchFilter, new[] { relativePath });
+            HashSet<Type> currentlyManagedTypes = CollectManagedTypes();
+            List<Type> types = new(assetGuids.Length);
+            HashSet<Type> seenTypes = new();
+            foreach (string assetGuid in assetGuids)
+            {
+                Type type = resolveAssetType(AssetDatabase.GUIDToAssetPath(assetGuid));
+                if (
+                    !IsLoadableType(type)
+                    || currentlyManagedTypes.Contains(type)
+                    || !seenTypes.Add(type)
+                )
+                {
+                    continue;
+                }
+
+                types.Add(type);
+            }
+
+            types.Sort(NamespaceTypeOrder.CompareTypesByFullName);
+            return types;
+        }
+
+        private bool AddManagedTypes(List<Type> typesToAdd)
+        {
+            bool stateChanged = false;
+            foreach (Type typeToAdd in typesToAdd)
+            {
+                if (TryAddManagedType(typeToAdd))
+                {
+                    stateChanged = true;
+                }
+            }
+
+            return stateChanged;
+        }
+
+        private bool TryAddManagedType(Type typeToAdd)
+        {
+            if (typeToAdd == null)
+            {
+                return false;
+            }
+
+            string namespaceKey = NamespaceController.GetNamespaceKey(typeToAdd);
+            if (!_scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
+            {
+                types = new List<Type>();
+                _scriptableObjectTypes[namespaceKey] = types;
+                _namespaceOrder[namespaceKey] = _namespaceOrder.Count;
+            }
+
+            if (types.Contains(typeToAdd))
+            {
+                return false;
+            }
+
+            types.Add(typeToAdd);
+            return true;
         }
 
         private void SyncNamespaceChanges()
