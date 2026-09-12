@@ -7,7 +7,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.TestTools;
-    using WallstopStudios.DataVisualizer.Helper;
+    using WallstopStudios.DataVisualizer.Editor.Utilities;
 
     public sealed class DirectoryHelperTests
     {

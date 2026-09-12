@@ -5,7 +5,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     using System.IO;
     using UnityEditor;
     using UnityEngine;
-    using WallstopStudios.DataVisualizer.Helper;
 
     public static class AssetsFolderUtility
     {

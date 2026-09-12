@@ -25,7 +25,6 @@ namespace WallstopStudios.DataVisualizer.Editor
     using UnityEngine;
     using UnityEngine.UIElements;
     using Utilities;
-    using Helper;
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
 

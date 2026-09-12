@@ -1,4 +1,4 @@
-namespace WallstopStudios.DataVisualizer.Helper
+namespace WallstopStudios.DataVisualizer.Editor.Utilities
 {
     using System;
     using System.Reflection;

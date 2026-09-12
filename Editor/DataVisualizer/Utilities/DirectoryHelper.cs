@@ -1,14 +1,16 @@
-namespace WallstopStudios.DataVisualizer.Helper
+namespace WallstopStudios.DataVisualizer.Editor.Utilities
 {
     using System;
     using System.IO;
     using System.Runtime.CompilerServices;
-    using UnityEngine;
-#if UNITY_EDITOR
     using UnityEditor;
-#endif
+    using UnityEngine;
 
-    internal static class DirectoryHelper
+    /*
+        Public because the package's editor test assembly cannot see internals of the editor
+        assembly (InternalsVisibleTo is not honored for that pair in Unity's compilation).
+    */
+    public static class DirectoryHelper
     {
         public static void EnsureDirectoryExists(string relativeDirectoryPath)
         {
@@ -17,7 +19,6 @@ namespace WallstopStudios.DataVisualizer.Helper
                 return;
             }
 
-#if UNITY_EDITOR
             if (!relativeDirectoryPath.StartsWith("Assets/", StringComparison.Ordinal))
             {
                 if (
@@ -71,7 +72,6 @@ namespace WallstopStudios.DataVisualizer.Helper
             {
                 AssetDatabase.CreateFolder(parentPath, currentFolderName);
             }
-#endif
         }
 
         public static string GetCallerScriptDirectory([CallerFilePath] string sourceFilePath = "")

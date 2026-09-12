@@ -4,10 +4,10 @@ namespace WallstopStudios.DataVisualizer.Editor
     using System;
     using System.Collections.Generic;
     using Data;
-    using Helper;
     using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
+    using Utilities;
 
     public sealed class NamespaceController
     {
