@@ -3887,9 +3887,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
 
             if (
-                !selectedAbsolutePath.StartsWith(
+                !AssetsFolderUtility.TryGetAssetsRelativePath(
+                    selectedAbsolutePath,
                     projectAssetsPath,
-                    StringComparison.OrdinalIgnoreCase
+                    out string relativePath
                 )
             )
             {
@@ -3900,17 +3901,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     "OK"
                 );
                 return;
-            }
-
-            string relativePath;
-            if (selectedAbsolutePath.Equals(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
-            {
-                relativePath = "Assets";
-            }
-            else
-            {
-                relativePath = "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-                relativePath = relativePath.Replace("//", "/");
             }
 
             DataVisualizerSettings settings = Settings;
@@ -7699,9 +7689,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             string projectAssetsPath = Path.GetFullPath(Application.dataPath).SanitizePath();
 
             if (
-                !selectedAbsolutePath.StartsWith(
+                !AssetsFolderUtility.TryGetAssetsRelativePath(
+                    selectedAbsolutePath,
                     projectAssetsPath,
-                    StringComparison.OrdinalIgnoreCase
+                    out string relativePath
                 )
             )
             {
@@ -7712,17 +7703,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                     "OK"
                 );
                 return;
-            }
-
-            string relativePath;
-            if (selectedAbsolutePath.Equals(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
-            {
-                relativePath = "Assets";
-            }
-            else
-            {
-                relativePath = "Assets" + selectedAbsolutePath.Substring(projectAssetsPath.Length);
-                relativePath = relativePath.Replace("//", "/");
             }
 
             string targetPath = $"{relativePath}/{dataObject.name}.asset";

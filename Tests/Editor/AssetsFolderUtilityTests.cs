@@ -31,6 +31,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             yield return Case("Outside_assets_fails", "/elsewhere/Assets", null);
 
+            yield return Case("Sibling_prefix_fails", "/project/AssetsBackup", null);
+
+            yield return Case(
+                "Case_insensitive_sibling_prefix_fails",
+                "/project/ASSETSBackup",
+                null
+            );
+
+            yield return Case("Nested_sibling_prefix_fails", "/project/AssetsBackup/Fonts", null);
+
             yield return Case(
                 "Case_insensitive_prefix_matches",
                 "/project/assets/Game",
