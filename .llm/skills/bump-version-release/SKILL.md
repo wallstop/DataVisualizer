@@ -16,7 +16,8 @@ metadata:
 3. Verify the tarball: `npm pack` and inspect contents (must stay limited to
    `Editor`, `Runtime`, and `docs` payloads per the `files` whitelist).
 4. Commit with the historical subject format: `Bump version from X to Y`, including
-   `package.json` and `.llm/context.md` in the same commit.
+   `package.json` and `.llm/context.md` in the same commit. Keep the message in
+   Simplified Technical English (see `.llm/context.md`).
 5. Dispatch the manual publish workflow
    (`.github/workflows/npm-publish.yml`) via `workflow_dispatch`; use `dry_run: true`
    first to check the resolved version/dist-tag.

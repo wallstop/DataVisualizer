@@ -47,7 +47,8 @@ metadata:
 4. Register display metadata through attributes (`CustomDataVisualizationAttribute`)
    rather than window-side name lookups.
 5. Use indented block comments for multi-line explanations; keep `//` for standalone
-   one-line notes or tool directives and `///` for XML documentation.
+   one-line notes or tool directives and `///` for XML documentation. Write comments
+   in Simplified Technical English: short, plain sentences, no filler.
 
 ## Testing Requirements
 

@@ -35,6 +35,7 @@ metadata:
   `SelectionPersistenceTests`-style EditMode test.
 - Use indented block comments for explanations spanning multiple lines; reserve `//`
   for one-line notes and tool directives, and retain `///` for XML documentation.
+  Write comments in Simplified Technical English: short, plain sentences, no filler.
 
 ## Persistence Safety
 

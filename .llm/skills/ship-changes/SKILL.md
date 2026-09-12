@@ -38,8 +38,10 @@ Run the narrowest sufficient layer; escalate on failure:
 
 ## Commits
 
-- Short imperative subject with the subsystem up front, matching history style:
-  "Fix settings persistence dirty state", "Bump version from 0.0.36 to 0.0.37".
+- Write commit messages in Simplified Technical English (see `.llm/context.md`):
+  short imperative subject with the subsystem up front, plain body, no filler.
+  Match history style: "Fix settings persistence dirty state", "Bump version from
+  0.0.36 to 0.0.37".
 - Reference related issue IDs in the body.
 - Never commit generated `.llm/skills/index.md` without its source skills, and never
   commit a stale index.
