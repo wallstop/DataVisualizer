@@ -99,6 +99,11 @@ metadata:
   extend the evaluator, not the UI, when adding filter semantics.
 - Search results are aggregated into `SearchResultMatchInfo` with per-source
   `MatchSource`/`MatchDetail` entries; cap visible results (`MaxSearchResults`).
+- Search-result objects are per-candidate and normally rendered once, so do not attach
+  collection caches to each result without measured repeated reuse and explicit
+  invalidation. Reuse unbounded uniqueness scratch through copy-safe leases that clear
+  state on release and give overlapping lazy enumerators separate collections. Cover
+  interleaved enumeration whenever changing that ownership.
 
 ## Styling
 

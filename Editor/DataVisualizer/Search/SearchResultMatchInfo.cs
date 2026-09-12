@@ -2,6 +2,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
 {
     using System;
     using System.Collections.Generic;
+    using WallstopStudios.DataVisualizer.Editor.Utilities;
 
     public sealed class SearchResultMatchInfo
     {
@@ -33,7 +34,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         {
             get
             {
-                HashSet<string> seenTerms = new(StringComparer.OrdinalIgnoreCase);
+                using ReusableDisposalLease<HashSet<string>> cleanup =
+                    MatchedTermSetPool.Shared.Acquire(out HashSet<string> seenTerms);
                 foreach (MatchDetail matchDetail in matchedFields)
                 {
                     foreach (string matchedTerm in matchDetail.matchedTerms)

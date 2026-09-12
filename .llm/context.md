@@ -165,6 +165,10 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     per-result search aggregation do not introduce avoidable iterator/delegate
     allocations. Other editor and test code may retain LINQ when clarity outweighs
     measured cost.
+33. Before caching or pooling a temporary collection, verify measured repeated reuse,
+    define its lifetime and invalidation owner, and preserve overlapping-call safety.
+    Prefer direct scans for genuinely bounded small inputs; retain per-operation sets
+    where input size is unbounded and membership complexity matters.
 
 ### Skills Discipline
 
