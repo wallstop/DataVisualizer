@@ -1,7 +1,7 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System.Collections;
-    using System.Linq;
+    using System.Collections.Generic;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
@@ -55,17 +55,35 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 return styleSheet;
             }
 
-            return AssetDatabase
-                .FindAssets("DataVisualizerStyles t:StyleSheet")
-                .Select(AssetDatabase.GUIDToAssetPath)
-                .Where(path =>
-                    path.EndsWith(
+            return FindStyleSheet();
+        }
+
+        private static StyleSheet FindStyleSheet()
+        {
+            string[] styleSheetGuids = AssetDatabase.FindAssets(
+                "DataVisualizerStyles t:StyleSheet"
+            );
+            for (int index = 0; index < styleSheetGuids.Length; index++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(styleSheetGuids[index]);
+                if (
+                    !path.EndsWith(
                         "/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss",
                         System.StringComparison.Ordinal
                     )
                 )
-                .Select(AssetDatabase.LoadAssetAtPath<StyleSheet>)
-                .FirstOrDefault(sheet => sheet != null);
+                {
+                    continue;
+                }
+
+                StyleSheet candidate = AssetDatabase.LoadAssetAtPath<StyleSheet>(path);
+                if (candidate != null)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
         }
 
         private static IEnumerator WaitForResolvedHeights(params VisualElement[] elements)
@@ -75,27 +93,39 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 yield return null;
 
-                bool allReady = elements.All(element =>
-                    element?.panel != null && IsPositiveFinite(element.resolvedStyle.height)
-                );
+                bool allReady = true;
+                for (int index = 0; index < elements.Length; index++)
+                {
+                    VisualElement element = elements[index];
+                    if (element?.panel == null || !IsPositiveFinite(element.resolvedStyle.height))
+                    {
+                        allReady = false;
+                        break;
+                    }
+                }
+
                 if (!allReady)
                 {
                     previousHeights = null;
                     continue;
                 }
 
-                float[] currentHeights = elements
-                    .Select(element => element.resolvedStyle.height)
-                    .ToArray();
-                if (
-                    previousHeights != null
-                    && currentHeights
-                        .Zip(
-                            previousHeights,
-                            (current, previous) => Mathf.Abs(current - previous) <= LayoutTolerance
-                        )
-                        .All(stable => stable)
-                )
+                float[] currentHeights = new float[elements.Length];
+                for (int index = 0; index < elements.Length; index++)
+                {
+                    currentHeights[index] = elements[index].resolvedStyle.height;
+                }
+
+                bool allStable = previousHeights != null;
+                for (int index = 0; allStable && index < currentHeights.Length; index++)
+                {
+                    if (Mathf.Abs(currentHeights[index] - previousHeights[index]) > LayoutTolerance)
+                    {
+                        allStable = false;
+                    }
+                }
+
+                if (allStable)
                 {
                     yield break;
                 }
@@ -103,14 +133,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 previousHeights = currentHeights;
             }
 
-            string heightSummary = string.Join(
-                ", ",
-                elements.Select(element =>
+            List<string> heightDescriptions = new(elements.Length);
+            for (int index = 0; index < elements.Length; index++)
+            {
+                VisualElement element = elements[index];
+                heightDescriptions.Add(
                     element == null
                         ? "<null>"
                         : $"{element.name}:{element.resolvedStyle.height} panel={element.panel != null}"
-                )
-            );
+                );
+            }
+            string heightSummary = string.Join(", ", heightDescriptions);
             Assert.Fail($"Timed out waiting for stable positive layout heights: {heightSummary}");
         }
 
@@ -128,15 +161,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(window.Close);
-                TextField[] fields = SearchFieldClassNames
-                    .Select(className =>
-                    {
-                        TextField field = new() { name = className };
-                        field.AddToClassList(className);
-                        window.rootVisualElement.Add(field);
-                        return field;
-                    })
-                    .ToArray();
+                TextField[] fields = new TextField[SearchFieldClassNames.Length];
+                for (int index = 0; index < SearchFieldClassNames.Length; index++)
+                {
+                    string className = SearchFieldClassNames[index];
+                    TextField field = new() { name = className };
+                    field.AddToClassList(className);
+                    window.rootVisualElement.Add(field);
+                    fields[index] = field;
+                }
 
                 yield return WaitForResolvedHeights(fields);
 

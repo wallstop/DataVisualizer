@@ -2,7 +2,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using NUnit.Framework;
     using UnityEngine;
     using WallstopStudios.DataVisualizer.Editor;
@@ -71,6 +70,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
         }
 
+        private static List<string> ToFullNames(IReadOnlyList<Type> types)
+        {
+            List<string> fullNames = new(types.Count);
+            for (int index = 0; index < types.Count; index++)
+            {
+                fullNames.Add(types[index].FullName);
+            }
+
+            return fullNames;
+        }
+
         [Test]
         public void ShouldOrderTypesByFullNameWhenShortTypeNamesCollide()
         {
@@ -84,10 +94,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     NamespaceTypeOrder.CompareTypesByFullNameOrder(lhs, rhs, persistedFullNameOrder)
             );
 
-            CollectionAssert.AreEqual(
-                persistedFullNameOrder,
-                types.Select(type => type.FullName).ToList()
-            );
+            CollectionAssert.AreEqual(persistedFullNameOrder, ToFullNames(types));
             Assert.AreEqual(firstType.Name, secondType.Name);
         }
 
@@ -103,13 +110,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     NamespaceTypeOrder.CompareTypesByFullNameOrder(lhs, rhs, Array.Empty<string>())
             );
 
-            CollectionAssert.AreEqual(
-                new[] { firstType.FullName, secondType.FullName }.OrderBy(
-                    typeFullName => typeFullName,
-                    StringComparer.Ordinal
-                ),
-                types.Select(type => type.FullName).ToList()
-            );
+            List<string> expectedFullNames = new() { firstType.FullName, secondType.FullName };
+            expectedFullNames.Sort(StringComparer.Ordinal);
+            CollectionAssert.AreEqual(expectedFullNames, ToFullNames(types));
         }
 
         [Test]
@@ -121,13 +124,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             types.Sort(NamespaceTypeOrder.CompareTypesByFullName);
 
-            CollectionAssert.AreEqual(
-                new[] { firstType.FullName, secondType.FullName }.OrderBy(
-                    typeFullName => typeFullName,
-                    StringComparer.Ordinal
-                ),
-                types.Select(type => type.FullName).ToList()
-            );
+            List<string> expectedFullNames = new() { firstType.FullName, secondType.FullName };
+            expectedFullNames.Sort(StringComparer.Ordinal);
+            CollectionAssert.AreEqual(expectedFullNames, ToFullNames(types));
         }
 
         [Test]
@@ -139,13 +138,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             types.Sort(NamespaceTypeOrder.CompareTypesByNameThenFullName);
 
-            CollectionAssert.AreEqual(
-                new[] { firstType.FullName, secondType.FullName }.OrderBy(
-                    typeFullName => typeFullName,
-                    StringComparer.Ordinal
-                ),
-                types.Select(type => type.FullName).ToList()
-            );
+            List<string> expectedFullNames = new() { firstType.FullName, secondType.FullName };
+            expectedFullNames.Sort(StringComparer.Ordinal);
+            CollectionAssert.AreEqual(expectedFullNames, ToFullNames(types));
             Assert.AreEqual(firstType.Name, secondType.Name);
         }
 

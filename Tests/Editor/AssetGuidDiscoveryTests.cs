@@ -3,7 +3,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System;
     using System.Collections.Generic;
     using System.IO;
-    using System.Linq;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
@@ -230,12 +229,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 CollectionAssert.DoesNotContain(typeFilterGuids, assetGuid);
                 CollectionAssert.Contains(discoveredGuids, assetGuid);
-                Assert.AreEqual(
-                    1,
-                    discoveredGuids.Count(guid =>
-                        string.Equals(guid, assetGuid, StringComparison.OrdinalIgnoreCase)
+                int matchingGuidCount = 0;
+                for (int index = 0; index < discoveredGuids.Length; index++)
+                {
+                    if (
+                        string.Equals(
+                            discoveredGuids[index],
+                            assetGuid,
+                            StringComparison.OrdinalIgnoreCase
+                        )
                     )
-                );
+                    {
+                        matchingGuidCount++;
+                    }
+                }
+
+                Assert.AreEqual(1, matchingGuidCount);
                 Assert.AreEqual(
                     typeof(EditorOnlyCreationData),
                     AssetDatabase.GetMainAssetTypeAtPath(AssetDatabase.GUIDToAssetPath(assetGuid))

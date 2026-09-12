@@ -1,7 +1,7 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
-    using System.Linq;
+    using System.Collections.Generic;
     using System.Reflection;
     using NUnit.Framework;
 
@@ -17,18 +17,28 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldReserveObsoleteZeroValueWhenEnumIsDeclaredInPackage()
         {
-            Type[] enumTypes = PackageAssemblies
-                .SelectMany(assembly => assembly.GetTypes())
-                .Where(type =>
-                    type.IsEnum
-                    && type.Namespace?.StartsWith(
-                        "WallstopStudios.DataVisualizer",
-                        StringComparison.Ordinal
-                    ) == true
-                )
-                .Distinct()
-                .OrderBy(type => type.FullName, StringComparer.Ordinal)
-                .ToArray();
+            HashSet<Type> distinctEnumTypes = new();
+            foreach (Assembly assembly in PackageAssemblies)
+            {
+                foreach (Type type in assembly.GetTypes())
+                {
+                    if (
+                        type.IsEnum
+                        && type.Namespace?.StartsWith(
+                            "WallstopStudios.DataVisualizer",
+                            StringComparison.Ordinal
+                        ) == true
+                    )
+                    {
+                        distinctEnumTypes.Add(type);
+                    }
+                }
+            }
+
+            List<Type> enumTypes = new(distinctEnumTypes);
+            enumTypes.Sort(
+                (lhs, rhs) => StringComparer.Ordinal.Compare(lhs.FullName, rhs.FullName)
+            );
 
             Assert.IsNotEmpty(enumTypes);
             foreach (Type enumType in enumTypes)
