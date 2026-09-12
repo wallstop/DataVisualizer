@@ -1611,9 +1611,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                     Distinguish a static misconfiguration (no public parameterless constructor) from
                     a live construction failure, matching the ReflectionHelper GetConstructor
                     precedent. A missing constructor is skipped with a targeted warning instead of
-                    an exception log at every editor start.
+                    an exception log at every editor start. Structs always expose the implicit
+                    parameterless constructor (GetConstructor reports it as null), so the check
+                    only applies to reference types.
                 */
-                if (processorType.GetConstructor(Type.EmptyTypes) is null)
+                if (
+                    !processorType.IsValueType
+                    && processorType.GetConstructor(Type.EmptyTypes) is null
+                )
                 {
                     Debug.LogWarning(
                         $"Skipping IDataProcessor '{processorType.FullName}' because it does not expose a public parameterless constructor."
