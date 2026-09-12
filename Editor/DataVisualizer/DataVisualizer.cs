@@ -2797,10 +2797,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                             Collect up to two distinct reflected field names in first-occurrence
                             order, pairing each with the first matched value for that field. The
                             previous Where/GroupBy/Take chain preserved the same order with more
-                            per-row allocations.
+                            per-row allocations. Slots stay on the stack because the scan stops
+                            at two entries, so a new field only deduplicates against the first
+                            collected name.
                         */
-                        string[] contextFieldNames = new string[2];
-                        string[] contextFieldValues = new string[2];
+                        string firstFieldName = null;
+                        string firstFieldValue = null;
+                        string secondFieldName = null;
+                        string secondFieldValue = null;
                         int contextFieldCount = 0;
                         foreach (MatchDetail matchedField in resultInfo.matchedFields)
                         {
@@ -2814,23 +2818,22 @@ namespace WallstopStudios.DataVisualizer.Editor
                                 continue;
                             }
 
-                            bool alreadyCollected = false;
-                            for (int i = 0; i < contextFieldCount; i++)
-                            {
-                                if (contextFieldNames[i] == fieldName)
-                                {
-                                    alreadyCollected = true;
-                                    break;
-                                }
-                            }
-
-                            if (alreadyCollected)
+                            if (0 < contextFieldCount && fieldName == firstFieldName)
                             {
                                 continue;
                             }
 
-                            contextFieldNames[contextFieldCount] = fieldName;
-                            contextFieldValues[contextFieldCount] = matchedField.matchedValue;
+                            if (0 == contextFieldCount)
+                            {
+                                firstFieldName = fieldName;
+                                firstFieldValue = matchedField.matchedValue;
+                            }
+                            else
+                            {
+                                secondFieldName = fieldName;
+                                secondFieldValue = matchedField.matchedValue;
+                            }
+
                             contextFieldCount++;
                             if (2 <= contextFieldCount)
                             {
@@ -2840,8 +2843,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                         for (int i = 0; i < contextFieldCount; i++)
                         {
+                            string fieldName = 0 == i ? firstFieldName : secondFieldName;
+                            string fieldValue = 0 == i ? firstFieldValue : secondFieldValue;
                             Label contextLabel = CreateHighlightedLabel(
-                                $"{contextFieldNames[i]}: {contextFieldValues[i]}",
+                                $"{fieldName}: {fieldValue}",
                                 termsMatchingThisObject,
                                 "search-result-context-label",
                                 bindToContextHovers: true,

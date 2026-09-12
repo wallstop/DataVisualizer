@@ -85,18 +85,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                         continue;
                     }
 
-                    CachedStringBuilder.Append(
-                        EscapeRichText(fullText.Substring(currentIndex, startIndex - currentIndex))
-                    );
+                    AppendEscaped(fullText, currentIndex, startIndex - currentIndex);
                     if (colorify)
                     {
                         CachedStringBuilder.Append("<color=yellow>");
                     }
 
                     CachedStringBuilder.Append("<b>");
-                    CachedStringBuilder.Append(
-                        EscapeRichText(fullText.Substring(startIndex, length))
-                    );
+                    AppendEscaped(fullText, startIndex, length);
                     CachedStringBuilder.Append("</b>");
                     if (colorify)
                     {
@@ -109,17 +105,52 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
 
             if (currentIndex < fullText.Length)
             {
-                CachedStringBuilder.Append(EscapeRichText(fullText.Substring(currentIndex)));
+                AppendEscaped(fullText, currentIndex, fullText.Length - currentIndex);
             }
 
             return CachedStringBuilder.ToString();
         }
 
-        private static string EscapeRichText(string input)
+        /*
+            Appends fullText[start, start + length) with < and > escaped, writing straight
+            into the shared builder so segments never allocate substrings or intermediate
+            strings. Whitespace-only segments append nothing, matching the previous
+            EscapeRichText behavior (see issue #78 for the pinned whitespace-gap drop).
+        */
+        private static void AppendEscaped(string fullText, int start, int length)
         {
-            return string.IsNullOrWhiteSpace(input)
-                ? ""
-                : input.Replace("<", "&lt;").Replace(">", "&gt;");
+            int end = start + length;
+            bool hasContent = false;
+            for (int i = start; i < end; i++)
+            {
+                if (!char.IsWhiteSpace(fullText[i]))
+                {
+                    hasContent = true;
+                    break;
+                }
+            }
+
+            if (!hasContent)
+            {
+                return;
+            }
+
+            for (int i = start; i < end; i++)
+            {
+                char current = fullText[i];
+                if (current == '<')
+                {
+                    CachedStringBuilder.Append("&lt;");
+                }
+                else if (current == '>')
+                {
+                    CachedStringBuilder.Append("&gt;");
+                }
+                else
+                {
+                    CachedStringBuilder.Append(current);
+                }
+            }
         }
     }
 }
