@@ -66,7 +66,9 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             _toggleButtonElement = new VisualElement();
             _toggleButtonElement.AddToClassList(ButtonClassName);
             _toggleButtonElement.RegisterCallback<ClickEvent>(OnClick);
-            _toggleButtonElement.RegisterCallback<PointerDownEvent>(evt => evt.StopPropagation());
+            _toggleButtonElement.RegisterCallback<PointerDownEvent>(static evt =>
+                evt.StopPropagation()
+            );
             Add(_toggleButtonElement);
             _toggleButtonElement.AddToClassList(StyleConstants.ClickableClass);
 

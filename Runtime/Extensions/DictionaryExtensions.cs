@@ -83,8 +83,8 @@ namespace WallstopStudios.DataVisualizer.Extensions
             {
                 return concurrentDictionary.AddOrUpdate(
                     key,
-                    _ => new V(),
-                    (_, existing) => existing
+                    static _ => new V(),
+                    static (_, existing) => existing
                 );
             }
 
@@ -127,7 +127,7 @@ namespace WallstopStudios.DataVisualizer.Extensions
                 return concurrentDictionary.AddOrUpdate(
                     key,
                     creator,
-                    (_, existingValue) => existingValue
+                    static (_, existingValue) => existingValue
                 );
             }
 

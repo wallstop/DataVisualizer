@@ -94,7 +94,7 @@ namespace WallstopStudios.DataVisualizer.Helper
         {
             return ArrayCreators
                 // ReSharper disable once ConvertClosureToMethodGroup
-                .GetOrAdd(type, elementType => GetArrayCreator(elementType))
+                .GetOrAdd(type, static elementType => GetArrayCreator(elementType))
                 .Invoke(length);
         }
 
@@ -103,7 +103,7 @@ namespace WallstopStudios.DataVisualizer.Helper
         {
             return ListWithCapacityCreators
                 // ReSharper disable once ConvertClosureToMethodGroup
-                .GetOrAdd(elementType, type => GetListWithCapacityCreator(type))
+                .GetOrAdd(elementType, static type => GetListWithCapacityCreator(type))
                 .Invoke(length);
         }
 
@@ -111,7 +111,7 @@ namespace WallstopStudios.DataVisualizer.Helper
         public static IList CreateList(Type elementType)
         {
             // ReSharper disable once ConvertClosureToMethodGroup
-            return ListCreators.GetOrAdd(elementType, type => GetListCreator(type)).Invoke();
+            return ListCreators.GetOrAdd(elementType, static type => GetListCreator(type)).Invoke();
         }
 
         public static Func<object, object> GetFieldGetter(FieldInfo field)
