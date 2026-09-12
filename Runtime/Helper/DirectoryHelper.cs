@@ -18,9 +18,15 @@ namespace WallstopStudios.DataVisualizer.Helper
             }
 
 #if UNITY_EDITOR
-            if (!relativeDirectoryPath.StartsWith("Assets/"))
+            if (!relativeDirectoryPath.StartsWith("Assets/", StringComparison.Ordinal))
             {
-                if (relativeDirectoryPath.Equals("Assets", StringComparison.OrdinalIgnoreCase))
+                if (
+                    string.Equals(
+                        relativeDirectoryPath,
+                        "Assets",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
                 {
                     return;
                 }
@@ -42,7 +48,7 @@ namespace WallstopStudios.DataVisualizer.Helper
             string parentPath = Path.GetDirectoryName(relativeDirectoryPath).SanitizePath();
             if (
                 string.IsNullOrWhiteSpace(parentPath)
-                || parentPath.Equals("Assets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(parentPath, "Assets", StringComparison.OrdinalIgnoreCase)
             )
             {
                 string folderNameToCreate = Path.GetFileName(relativeDirectoryPath);

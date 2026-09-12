@@ -24,7 +24,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 return false;
             }
 
-            if (selectedAbsolutePath.Equals(projectAssetsPath, StringComparison.OrdinalIgnoreCase))
+            if (
+                string.Equals(
+                    selectedAbsolutePath,
+                    projectAssetsPath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             {
                 relativePath = "Assets";
                 return true;

@@ -175,6 +175,14 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     call sites share the same comparer, reset, and retention semantics. Prefer direct
     scans for genuinely bounded small inputs and per-operation sets for unbounded
     membership work.
+34. Compare and sort package-owned identifiers (asset labels, namespace keys, type
+    names, paths, GUIDs) with `StringComparison.Ordinal` or `StringComparer.Ordinal`;
+    use `OrdinalIgnoreCase` when casing is intentionally ignored. Reserve
+    culture-sensitive comparisons for user-authored prose. Bare `Sort()`,
+    `string.Compare(a, b)`, `StartsWith(prefix)`, and `OrderBy(key)` on identifiers
+    sort or match with the current culture and reorder across machines. Prefer static
+    `string.Equals(a, b, StringComparison)` over instance `a.Equals(...)` so a null
+    operand compares as a value instead of throwing.
 
 ### Skills Discipline
 

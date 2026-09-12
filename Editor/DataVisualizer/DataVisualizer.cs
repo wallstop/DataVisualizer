@@ -2932,7 +2932,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (
                     !string.IsNullOrWhiteSpace(guid)
-                    && guid.Equals(term, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(guid, term, StringComparison.OrdinalIgnoreCase)
                 )
                 {
                     detailsForThisTerm.Add(
@@ -4199,7 +4199,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             if (
-                newName.Equals(
+                string.Equals(
+                    newName,
                     Path.GetFileNameWithoutExtension(originalPath),
                     StringComparison.OrdinalIgnoreCase
                 )
@@ -4638,10 +4639,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 List<string> namespaceKeys = new(addableTypesByNamespace.Keys);
                 /*
-                    OrderBy(grouping => grouping.Key) used the default string comparer,
-                    which compares with the current culture. Keep that ordering.
+                    The former OrderBy(grouping => grouping.Key) sorted with the current
+                    culture; namespace keys are Ordinal identifiers everywhere else
+                    (NamespaceTypeOrder, persisted order), so sort Ordinal for one
+                    locale-independent order.
                 */
-                namespaceKeys.Sort(string.Compare);
+                namespaceKeys.Sort(StringComparer.Ordinal);
 
                 bool foundMatches = false;
                 foreach (string namespaceKey in namespaceKeys)
@@ -5799,7 +5802,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _currentUniqueLabelsForType.Clear();
-            HashSet<string> labelSet = new(StringComparer.OrdinalIgnoreCase);
+            /*
+                Labels are Ordinal identifiers everywhere else (LabelFilterEvaluator matching,
+                add/remove duplicate checks, suggestion exclusion), so dedup and sort Ordinal.
+                Insensitive dedup here once merged "urgent"/"Urgent" into one pill whose filter
+                click could never match both casings.
+            */
+            HashSet<string> labelSet = new(StringComparer.Ordinal);
             foreach (ScriptableObject obj in _selectedObjects)
             {
                 if (obj == null)
@@ -5818,7 +5827,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _currentUniqueLabelsForType.Add(label);
             }
-            _currentUniqueLabelsForType.Sort();
+            _currentUniqueLabelsForType.Sort(StringComparer.Ordinal);
 
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
             if (config == null)
@@ -6684,14 +6693,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
             if (config == null)
             {
-                return _currentUniqueLabelsForType.ToList();
+                return new List<string>(_currentUniqueLabelsForType);
             }
 
-            return _currentUniqueLabelsForType
-                .Where(label =>
-                    !(config.andLabels.Contains(label) && config.orLabels.Contains(label))
-                )
-                .ToList();
+            List<string> availableLabels = new(_currentUniqueLabelsForType.Count);
+            foreach (string label in _currentUniqueLabelsForType)
+            {
+                if (config.andLabels.Contains(label) && config.orLabels.Contains(label))
+                {
+                    continue;
+                }
+
+                availableLabels.Add(label);
+            }
+
+            return availableLabels;
         }
 
         private void PopulateLabelPillContainers()
@@ -6746,7 +6762,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            foreach (string labelText in labels.OrderBy(label => label))
+            List<string> sortedLabels = new(labels);
+            sortedLabels.Sort(StringComparer.Ordinal);
+            foreach (string labelText in sortedLabels)
             {
                 container.Add(CreateLabelPill(labelText, section));
             }
@@ -8078,7 +8096,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _projectUniqueLabelsCache.Add(label);
             }
-            _projectUniqueLabelsCache.Sort();
+            _projectUniqueLabelsCache.Sort(StringComparer.Ordinal);
             _isLabelCachePopulated = true;
         }
 
@@ -8112,17 +8130,25 @@ namespace WallstopStudios.DataVisualizer.Editor
                 StringComparer.Ordinal
             );
 
-            string[] suggestions = _projectUniqueLabelsCache
-                .Where(label =>
+            List<string> suggestions = new(10);
+            foreach (string label in _projectUniqueLabelsCache)
+            {
+                if (
                     (
                         string.IsNullOrWhiteSpace(currentInput)
                         || label.Contains(currentInput, StringComparison.OrdinalIgnoreCase)
                     ) && !currentAssetLabelsSet.Contains(label)
                 )
-                .Take(10)
-                .ToArray();
+                {
+                    suggestions.Add(label);
+                    if (10 <= suggestions.Count)
+                    {
+                        break;
+                    }
+                }
+            }
 
-            if (0 < suggestions.Length)
+            if (0 < suggestions.Count)
             {
                 foreach (string suggestionText in suggestions)
                 {
@@ -8295,7 +8321,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _inspectorCurrentLabelsContainer.Clear();
 
             string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
-            Array.Sort(currentLabels);
+            Array.Sort(currentLabels, StringComparer.Ordinal);
 
             if (currentLabels.Length == 0)
             {
@@ -8362,7 +8388,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (
                 Array.Exists(
                     currentLabels,
-                    label => label.Equals(newLabelText, StringComparison.Ordinal)
+                    label => string.Equals(label, newLabelText, StringComparison.Ordinal)
                 )
             )
             {
@@ -8371,8 +8397,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            List<string> updatedLabels = currentLabels.ToList();
-            updatedLabels.Add(newLabelText);
+            List<string> updatedLabels = new(currentLabels) { newLabelText };
 
             try
             {
@@ -8401,27 +8426,45 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             string[] currentLabels = AssetDatabase.GetLabels(_selectedObject);
-            string[] updatedLabels = currentLabels
-                .Where(label => !label.Equals(labelToRemove, StringComparison.Ordinal))
-                .ToArray();
-
-            if (updatedLabels.Length != currentLabels.Length)
+            int removedCount = 0;
+            foreach (string label in currentLabels)
             {
-                try
+                if (string.Equals(label, labelToRemove, StringComparison.Ordinal))
                 {
-                    AssetDatabase.SetLabels(_selectedObject, updatedLabels);
-                    EditorUtility.SetDirty(_selectedObject);
-                    AssetDatabase.SaveAssets();
-                    PopulateProjectUniqueLabelsCache(force: true);
-                    PopulateInspectorLabelsUI();
-                    UpdateLabelAreaAndFilter();
+                    removedCount++;
                 }
-                catch (Exception ex)
+            }
+
+            if (removedCount == 0)
+            {
+                return;
+            }
+
+            string[] updatedLabels = new string[currentLabels.Length - removedCount];
+            int writeIndex = 0;
+            foreach (string label in currentLabels)
+            {
+                if (!string.Equals(label, labelToRemove, StringComparison.Ordinal))
                 {
-                    Debug.LogError(
-                        $"Error removing label '{labelToRemove}' from asset '{_selectedObject.name}': {ex}"
-                    );
+                    updatedLabels[writeIndex] = label;
+                    writeIndex++;
                 }
+            }
+
+            try
+            {
+                AssetDatabase.SetLabels(_selectedObject, updatedLabels);
+                EditorUtility.SetDirty(_selectedObject);
+                AssetDatabase.SaveAssets();
+                PopulateProjectUniqueLabelsCache(force: true);
+                PopulateInspectorLabelsUI();
+                UpdateLabelAreaAndFilter();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(
+                    $"Error removing label '{labelToRemove}' from asset '{_selectedObject.name}': {ex}"
+                );
             }
         }
 
