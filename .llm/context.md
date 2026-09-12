@@ -222,6 +222,10 @@ pre-commit config on staged `.cs` files.
 
 ### Commit & Pull Requests
 
+- Write all agent-to-user copy (PR titles and bodies, commit messages, code
+  comments, handoffs) in Simplified Technical English: short, plain, active
+  sentences, no filler. Say how; add why/what for PR descriptions. A few
+  sentences is the maximum.
 - Short imperative subjects with the subsystem up front (for example
   "Fix settings persistence dirty state"); reference related issue IDs in the body.
 - PRs must include: behavior summary, reproduction/validation steps, screenshots or

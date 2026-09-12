@@ -47,8 +47,10 @@ Run the narrowest sufficient layer; escalate on failure:
 ## Pull Requests
 
 Include: behavior summary, reproduction/validation steps, screenshots or GIFs for UI
-tweaks, and a risk callout plus rollback plan. Confirm CSharpier, `npm pack`, and both
-Unity test suites before handoff.
+tweaks, and a risk callout plus rollback plan. Write every item in Simplified
+Technical English (see `.llm/context.md`): short, plain sentences, no filler; a few
+sentences each, max. Confirm CSharpier, `npm pack`, and both Unity test suites before
+handoff.
 
 Never explicitly request a review from a person, team, bot, or automation. Do not
 mention a reviewer in a comment, call a reviewer-request API, or otherwise trigger a
