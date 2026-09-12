@@ -35,6 +35,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     projectAssetsPath,
                     StringComparison.OrdinalIgnoreCase
                 )
+                || selectedAbsolutePath.Length <= projectAssetsPath.Length
+                || selectedAbsolutePath[projectAssetsPath.Length] != '/'
             )
             {
                 relativePath = null;
