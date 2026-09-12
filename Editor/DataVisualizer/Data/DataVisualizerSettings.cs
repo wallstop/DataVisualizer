@@ -2,7 +2,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 {
     using System;
     using System.Collections.Generic;
-    using Helper;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.Serialization;
