@@ -1598,12 +1598,26 @@ namespace WallstopStudios.DataVisualizer.Editor
             _allDataProcessors.Clear();
             foreach (Type processorType in TypeCache.GetTypesDerivedFrom<IDataProcessor>())
             {
-                if (
-                    processorType.IsAbstract
-                    || processorType.IsInterface
-                    || processorType.IsGenericTypeDefinition
-                )
+                /*
+                    IsAbstract already covers interfaces (they report the Abstract flag), and open
+                    generic definitions cannot be constructed without type arguments.
+                */
+                if (processorType.IsAbstract || processorType.IsGenericTypeDefinition)
                 {
+                    continue;
+                }
+
+                /*
+                    Distinguish a static misconfiguration (no public parameterless constructor) from
+                    a live construction failure, matching the ReflectionHelper GetConstructor
+                    precedent. A missing constructor is skipped with a targeted warning instead of
+                    an exception log at every editor start.
+                */
+                if (processorType.GetConstructor(Type.EmptyTypes) is null)
+                {
+                    Debug.LogWarning(
+                        $"Skipping IDataProcessor '{processorType.FullName}' because it does not expose a public parameterless constructor."
+                    );
                     continue;
                 }
 
