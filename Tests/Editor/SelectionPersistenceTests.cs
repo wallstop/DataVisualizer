@@ -102,6 +102,157 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldResolveFirstTypeOfSavedNamespaceWhenSavedNamespaceIsValid()
+        {
+            Type firstType = typeof(CollisionA.OrderCollisionData);
+            Type secondType = typeof(CollisionB.OrderCollisionData);
+            Dictionary<string, List<Type>> typesByNamespace = new()
+            {
+                ["First"] = new List<Type> { firstType },
+                ["Second"] = new List<Type> { secondType },
+            };
+            Dictionary<string, int> namespaceOrder = new() { ["First"] = 0, ["Second"] = 1 };
+
+            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(
+                typesByNamespace,
+                namespaceOrder,
+                "Second",
+                string.Empty
+            );
+
+            Assert.AreSame(secondType, resolvedType);
+        }
+
+        [Test]
+        public void ShouldResolveFirstOrderedNamespaceTypeWhenSavedNamespaceIsStale()
+        {
+            Type firstType = typeof(CollisionA.OrderCollisionData);
+            Type secondType = typeof(CollisionB.OrderCollisionData);
+            Dictionary<string, List<Type>> typesByNamespace = new()
+            {
+                ["Alpha"] = new List<Type> { firstType },
+                ["Beta"] = new List<Type> { secondType },
+            };
+            Dictionary<string, int> namespaceOrder = new() { ["Alpha"] = 1, ["Beta"] = 0 };
+
+            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(
+                typesByNamespace,
+                namespaceOrder,
+                "Missing",
+                string.Empty
+            );
+
+            Assert.AreSame(secondType, resolvedType);
+        }
+
+        [Test]
+        public void ShouldUseOrdinalNamespaceKeyTieBreakerWhenOrderedFallbackCollides()
+        {
+            Type firstType = typeof(CollisionA.OrderCollisionData);
+            Type secondType = typeof(CollisionB.OrderCollisionData);
+            Dictionary<string, List<Type>> typesByNamespace = new()
+            {
+                ["Beta"] = new List<Type> { secondType },
+                ["Alpha"] = new List<Type> { firstType },
+            };
+            Dictionary<string, int> namespaceOrder = new() { ["Beta"] = 0, ["Alpha"] = 0 };
+
+            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(
+                typesByNamespace,
+                namespaceOrder,
+                string.Empty,
+                string.Empty
+            );
+
+            Assert.AreSame(firstType, resolvedType);
+        }
+
+        [Test]
+        public void ShouldResolveFirstOrdinalNamespaceTypeWhenNoOrderExists()
+        {
+            Type firstType = typeof(CollisionA.OrderCollisionData);
+            Type secondType = typeof(CollisionB.OrderCollisionData);
+            Dictionary<string, List<Type>> typesByNamespace = new()
+            {
+                ["Beta"] = new List<Type> { secondType },
+                ["Alpha"] = new List<Type> { firstType },
+            };
+
+            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(
+                typesByNamespace,
+                namespaceOrder: null,
+                savedNamespaceKey: string.Empty,
+                savedTypeFullName: string.Empty
+            );
+
+            Assert.AreSame(firstType, resolvedType);
+        }
+
+        [Test]
+        public void ShouldSkipNullTypeListsWhenResolvingSavedTypeByFullName()
+        {
+            Type secondType = typeof(CollisionB.OrderCollisionData);
+            Dictionary<string, List<Type>> typesByNamespace = new()
+            {
+                ["First"] = null,
+                ["Second"] = new List<Type> { secondType },
+            };
+            Dictionary<string, int> namespaceOrder = new() { ["First"] = 0, ["Second"] = 1 };
+
+            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(
+                typesByNamespace,
+                namespaceOrder,
+                string.Empty,
+                secondType.FullName
+            );
+
+            Assert.AreSame(secondType, resolvedType);
+        }
+
+        [Test]
+        public void ShouldSkipEmptyTypeListsWhenResolvingOrderedFallbacks()
+        {
+            Type firstType = typeof(CollisionA.OrderCollisionData);
+            Type secondType = typeof(CollisionB.OrderCollisionData);
+            Dictionary<string, List<Type>> typesByNamespace = new()
+            {
+                ["Alpha"] = new List<Type>(),
+                ["Beta"] = new List<Type> { secondType },
+                ["Gamma"] = new List<Type> { firstType },
+            };
+            Dictionary<string, int> namespaceOrder = new()
+            {
+                ["Alpha"] = 0,
+                ["Beta"] = 1,
+                ["Gamma"] = 2,
+            };
+
+            Type orderedFallback = DataVisualizer.ResolveSelectedTypeByFullName(
+                typesByNamespace,
+                namespaceOrder,
+                "Alpha",
+                string.Empty
+            );
+            Assert.AreSame(
+                secondType,
+                orderedFallback,
+                "the saved namespace's empty list must fall through to the next ordered namespace"
+            );
+
+            Type ordinalFallback = DataVisualizer.ResolveSelectedTypeByFullName(
+                typesByNamespace,
+                namespaceOrder: null,
+                savedNamespaceKey: "Alpha",
+                savedTypeFullName: string.Empty
+            );
+            Assert.AreSame(
+                secondType,
+                ordinalFallback,
+                "the first ordinal namespace's empty list must fall through to the next ordinal namespace"
+            );
+        }
+
+        [Test]
         public void ShouldRemoveStoredObjectSelectionWhenGuidIsCleared()
         {
             DataVisualizerUserState userState = new();

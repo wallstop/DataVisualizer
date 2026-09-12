@@ -538,13 +538,21 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (!string.IsNullOrWhiteSpace(savedTypeFullName))
             {
-                Type savedType = NamespaceTypeOrder.FindTypeByFullName(
-                    typesByNamespace.Values.SelectMany(types => types ?? Enumerable.Empty<Type>()),
-                    savedTypeFullName
-                );
-                if (savedType != null)
+                foreach (List<Type> namespaceTypes in typesByNamespace.Values)
                 {
-                    return savedType;
+                    if (namespaceTypes == null)
+                    {
+                        continue;
+                    }
+
+                    Type savedType = NamespaceTypeOrder.FindTypeByFullName(
+                        namespaceTypes,
+                        savedTypeFullName
+                    );
+                    if (savedType != null)
+                    {
+                        return savedType;
+                    }
                 }
             }
 
@@ -571,10 +579,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             foreach (
-                string namespaceKey in (namespaceOrder ?? new Dictionary<string, int>())
-                    .OrderBy(entry => entry.Value)
-                    .ThenBy(entry => entry.Key, StringComparer.Ordinal)
-                    .Select(entry => entry.Key)
+                string namespaceKey in OrderNamespaceKeysByOrderThenOrdinalName(namespaceOrder)
             )
             {
                 if (
@@ -586,11 +591,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            return typesByNamespace
-                .OrderBy(entry => entry.Key, StringComparer.Ordinal)
-                .Select(entry => entry.Value)
-                .FirstOrDefault(types => types is { Count: > 0 })
-                ?.FirstOrDefault();
+            return FindFirstTypeByOrdinalNamespaceKey(typesByNamespace);
         }
 
         /*
@@ -676,27 +677,101 @@ namespace WallstopStudios.DataVisualizer.Editor
             return true;
         }
 
+        /*
+            Orders namespace keys by persisted order value, breaking ties with an Ordinal key
+            comparison. List.Sort is unstable, so the tie-break belongs in the comparison itself;
+            dictionary keys are unique, making (value, Ordinal key) a total order.
+        */
+        private static List<string> OrderNamespaceKeysByOrderThenOrdinalName(
+            IReadOnlyDictionary<string, int> namespaceOrder
+        )
+        {
+            List<KeyValuePair<string, int>> entries = new(namespaceOrder?.Count ?? 0);
+            if (namespaceOrder != null)
+            {
+                foreach (KeyValuePair<string, int> entry in namespaceOrder)
+                {
+                    entries.Add(entry);
+                }
+            }
+
+            entries.Sort(
+                (lhs, rhs) =>
+                {
+                    int valueComparison = lhs.Value.CompareTo(rhs.Value);
+                    return valueComparison != 0
+                        ? valueComparison
+                        : string.CompareOrdinal(lhs.Key, rhs.Key);
+                }
+            );
+
+            List<string> orderedKeys = new(entries.Count);
+            foreach (KeyValuePair<string, int> entry in entries)
+            {
+                orderedKeys.Add(entry.Key);
+            }
+
+            return orderedKeys;
+        }
+
+        /*
+            Returns the first type of the first non-empty namespace type list in Ordinal
+            namespace-key order, the last fallback of ResolveSelectedTypeByFullName.
+        */
+        private static Type FindFirstTypeByOrdinalNamespaceKey(
+            IReadOnlyDictionary<string, List<Type>> typesByNamespace
+        )
+        {
+            List<KeyValuePair<string, List<Type>>> entries = new(typesByNamespace.Count);
+            foreach (KeyValuePair<string, List<Type>> entry in typesByNamespace)
+            {
+                entries.Add(entry);
+            }
+
+            entries.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Key, rhs.Key));
+            foreach (KeyValuePair<string, List<Type>> entry in entries)
+            {
+                List<Type> namespaceTypes = entry.Value;
+                if (namespaceTypes is { Count: > 0 })
+                {
+                    return namespaceTypes[0];
+                }
+            }
+
+            return null;
+        }
+
         private static DataVisualizerSettings LoadOrCreateSettings()
         {
             DataVisualizerSettings settings = null;
 
-            DataVisualizerSettings[] foundSettings = AssetDatabase
-                .FindAssets($"t:{nameof(DataVisualizerSettings)}")
-                .Select(AssetDatabase.GUIDToAssetPath)
-                .Select(AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>)
-                .Where(s => s != null)
-                .ToArray();
-
-            if (0 < foundSettings.Length)
+            string[] settingsGuids = AssetDatabase.FindAssets(
+                $"t:{nameof(DataVisualizerSettings)}"
+            );
+            int foundSettingsCount = 0;
+            foreach (string settingsGuid in settingsGuids)
             {
-                if (1 < foundSettings.Length)
-                {
-                    Debug.LogWarning(
-                        $"Multiple DataVisualizerSettings assets found ({foundSettings.Length}). Using the first one."
+                DataVisualizerSettings candidate =
+                    AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(
+                        AssetDatabase.GUIDToAssetPath(settingsGuid)
                     );
+                if (candidate == null)
+                {
+                    continue;
                 }
 
-                settings = foundSettings[0];
+                ++foundSettingsCount;
+                if (settings == null)
+                {
+                    settings = candidate;
+                }
+            }
+
+            if (1 < foundSettingsCount)
+            {
+                Debug.LogWarning(
+                    $"Multiple DataVisualizerSettings assets found ({foundSettingsCount}). Using the first one."
+                );
             }
 
             if (settings == null)
@@ -1327,11 +1402,23 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (_namespaceController.SelectedType != null)
             {
-                _compatibleDataProcessors.AddRange(
-                    _allDataProcessors.Where(p =>
-                        p.Accepts != null && p.Accepts.Contains(_namespaceController.SelectedType)
-                    )
-                );
+                Type selectedType = _namespaceController.SelectedType;
+                foreach (IDataProcessor processor in _allDataProcessors)
+                {
+                    if (processor.Accepts == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (Type acceptedType in processor.Accepts)
+                    {
+                        if (EqualityComparer<Type>.Default.Equals(acceptedType, selectedType))
+                        {
+                            _compatibleDataProcessors.Add(processor);
+                            break;
+                        }
+                    }
+                }
             }
 
             if (_compatibleDataProcessors.Count == 0)
@@ -1509,14 +1596,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             _userStateFilePath = Path.Combine(Application.persistentDataPath, UserStateFileName);
 
             _allDataProcessors.Clear();
-            IEnumerable<Type> processorTypes = TypeCache
-                .GetTypesDerivedFrom<IDataProcessor>()
-                .Where(t => !t.IsAbstract && !t.IsInterface && !t.IsGenericTypeDefinition);
-            foreach (Type type in processorTypes)
+            foreach (Type processorType in TypeCache.GetTypesDerivedFrom<IDataProcessor>())
             {
+                if (
+                    processorType.IsAbstract
+                    || processorType.IsInterface
+                    || processorType.IsGenericTypeDefinition
+                )
+                {
+                    continue;
+                }
+
                 try
                 {
-                    if (Activator.CreateInstance(type) is IDataProcessor instance)
+                    if (Activator.CreateInstance(processorType) is IDataProcessor instance)
                     {
                         _allDataProcessors.Add(instance);
                     }
@@ -1524,7 +1617,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 catch (Exception ex)
                 {
                     Debug.LogError(
-                        $"Failed to create instance of IDataProcessor '{type.FullName}': {ex}"
+                        $"Failed to create instance of IDataProcessor '{processorType.FullName}': {ex}"
                     );
                 }
             }
