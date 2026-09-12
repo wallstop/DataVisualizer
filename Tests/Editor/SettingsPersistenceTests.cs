@@ -10,7 +10,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class SettingsPersistenceTests
     {
-        private static DataVisualizerUserState CreatePopulatedUserState()
+        internal static DataVisualizerUserState CreatePopulatedUserState()
         {
             return new DataVisualizerUserState
             {
@@ -56,7 +56,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             };
         }
 
-        private static void AssertPopulatedUserState(DataVisualizerUserState state)
+        internal static void AssertPopulatedUserState(DataVisualizerUserState state)
         {
             Assert.AreEqual("Gameplay", state.namespaceOrder[0]);
             Assert.AreEqual("Gameplay", state.typeOrders[0].namespaceKey);
