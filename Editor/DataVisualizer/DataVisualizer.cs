@@ -633,7 +633,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Array.Sort(
                 entries,
-                (lhs, rhs) =>
+                static (lhs, rhs) =>
                 {
                     int valueComparison = lhs.value.CompareTo(rhs.value);
                     return valueComparison != 0 ? valueComparison : lhs.index.CompareTo(rhs.index);
@@ -696,7 +696,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             entries.Sort(
-                (lhs, rhs) =>
+                static (lhs, rhs) =>
                 {
                     int valueComparison = lhs.Value.CompareTo(rhs.Value);
                     return valueComparison != 0
@@ -728,7 +728,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 entries.Add(entry);
             }
 
-            entries.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Key, rhs.Key));
+            entries.Sort(static (lhs, rhs) => string.CompareOrdinal(lhs.Key, rhs.Key));
             foreach (KeyValuePair<string, List<Type>> entry in entries)
             {
                 List<Type> namespaceTypes = entry.Value;
@@ -1220,7 +1220,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchField.SetPlaceholderText(SearchPlaceholder);
             _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue));
             _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
-                (_, context) =>
+                static (_, context) =>
                 {
                     if (
                         !string.IsNullOrWhiteSpace(context._searchField.value)
@@ -1622,7 +1622,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            _allDataProcessors.Sort((lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
+            _allDataProcessors.Sort(static (lhs, rhs) => string.CompareOrdinal(lhs.Name, rhs.Name));
 
             /*
                 Don't load types here - it blocks the UI from appearing
@@ -2033,7 +2033,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _isLoadingSearchCacheAsync = false;
                 // Sort the fully-loaded cache once (search reads it sorted by name then type).
                 _allManagedObjectsCache.Sort(
-                    (a, b) =>
+                    static (a, b) =>
                     {
                         int nameComp = string.Compare(a.name, b.name, StringComparison.Ordinal);
                         return nameComp != 0
@@ -3889,7 +3889,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             dataFolderPathDisplay.AddToClassList("settings-data-folder-path-display");
             dataFolderPathDisplay.AddToClassList(StyleConstants.ClickableClass);
             dataFolderPathDisplay.RegisterCallback<PointerDownEvent, DataVisualizerSettings>(
-                (_, context) =>
+                static (_, context) =>
                 {
                     Object dataFolderPath = AssetDatabase.LoadAssetAtPath<Object>(
                         context.DataFolderPath
@@ -5461,7 +5461,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 virtualizationMethod = CollectionVirtualizationMethod.FixedHeight,
                 fixedItemHeight = ObjectRowFixedHeight,
                 makeItem = MakeObjectRow,
-                unbindItem = (element, _) => element.userData = null,
+                unbindItem = static (element, _) => element.userData = null,
                 reorderable = true,
                 /*
                     Animated gives the "floaty" reorder feel (rows slide to make room). Its drag-handle
@@ -6191,7 +6191,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 Array.Sort(
                     unassigned,
-                    (lhs, rhs) =>
+                    static (lhs, rhs) =>
                     {
                         int pathComparison = StringComparer.OrdinalIgnoreCase.Compare(
                             lhs.path,
@@ -6332,7 +6332,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             Array.Sort(
                 pendingRemaining,
-                (lhs, rhs) =>
+                static (lhs, rhs) =>
                 {
                     int orderComparison = lhs.order.CompareTo(rhs.order);
                     return orderComparison != 0 ? orderComparison : lhs.index.CompareTo(rhs.index);

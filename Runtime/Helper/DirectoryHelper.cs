@@ -85,7 +85,7 @@ namespace WallstopStudios.DataVisualizer.Helper
         {
             return FindRootPath(
                 startDirectory,
-                path => File.Exists(Path.Combine(path, "package.json"))
+                static path => File.Exists(Path.Combine(path, "package.json"))
             );
         }
 

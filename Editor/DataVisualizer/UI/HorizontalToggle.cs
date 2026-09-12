@@ -210,11 +210,11 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             RegisterCallback<GeometryChangedEvent>(OnGeometryChange);
 
             _leftLabel.RegisterCallback<ClickEvent, HorizontalToggle>(
-                (_, context) => context.SelectLeft(),
+                static (_, context) => context.SelectLeft(),
                 this
             );
             _rightLabel.RegisterCallback<ClickEvent, HorizontalToggle>(
-                (_, context) => context.SelectRight(),
+                static (_, context) => context.SelectRight(),
                 this
             );
 
