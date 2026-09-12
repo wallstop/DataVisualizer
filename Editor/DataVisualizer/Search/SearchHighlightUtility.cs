@@ -114,27 +114,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         /*
             Appends fullText[start, start + length) with < and > escaped, writing straight
             into the shared builder so segments never allocate substrings or intermediate
-            strings. Whitespace-only segments append nothing, matching the previous
-            EscapeRichText behavior (see issue #78 for the pinned whitespace-gap drop).
+            strings. Whitespace passes through unchanged so gaps between adjacent matches
+            keep their spacing.
         */
         private static void AppendEscaped(string fullText, int start, int length)
         {
             int end = start + length;
-            bool hasContent = false;
-            for (int i = start; i < end; i++)
-            {
-                if (!char.IsWhiteSpace(fullText[i]))
-                {
-                    hasContent = true;
-                    break;
-                }
-            }
-
-            if (!hasContent)
-            {
-                return;
-            }
-
             for (int i = start; i < end; i++)
             {
                 char current = fullText[i];

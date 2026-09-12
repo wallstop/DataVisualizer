@@ -51,22 +51,35 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "ShouldBuildHighlightedRichTextWhenScenarioApplies(no matches escapes)"
             );
             /*
-                A whitespace-only gap between two matches renders as nothing because
-                EscapeRichText maps whitespace-only segments to an empty string. Pinned
-                pre-existing behavior; recorded for a follow-up escape fix.
+                A whitespace-only gap between two matches renders between the bold terms
+                so adjacent matches keep their spacing (issue #78).
             */
             yield return new TestCaseData(
                 "Ab ab",
                 new List<(int, int)> { (0, 2), (3, 2) },
                 true,
-                "<color=yellow><b>Ab</b></color><color=yellow><b>ab</b></color>"
+                "<color=yellow><b>Ab</b></color> <color=yellow><b>ab</b></color>"
             ).SetName("ShouldBuildHighlightedRichTextWhenScenarioApplies(colorified matches)");
             yield return new TestCaseData(
                 "Ab ab",
                 new List<(int, int)> { (0, 2), (3, 2) },
                 false,
-                "<b>Ab</b><b>ab</b>"
+                "<b>Ab</b> <b>ab</b>"
             ).SetName("ShouldBuildHighlightedRichTextWhenScenarioApplies(hover keeps bold)");
+            yield return new TestCaseData(
+                " a",
+                new List<(int, int)> { (1, 1) },
+                true,
+                " <color=yellow><b>a</b></color>"
+            ).SetName(
+                "ShouldBuildHighlightedRichTextWhenScenarioApplies(whitespace-only leading gap)"
+            );
+            yield return new TestCaseData(
+                "a ",
+                new List<(int, int)> { (0, 1) },
+                true,
+                "<color=yellow><b>a</b></color> "
+            ).SetName("ShouldBuildHighlightedRichTextWhenScenarioApplies(whitespace-only tail)");
             yield return new TestCaseData(
                 "<b>",
                 new List<(int, int)> { (1, 1) },
