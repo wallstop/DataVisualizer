@@ -28,7 +28,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
                 return false;
             }
 
-            return relevantTypes.Contains(so.GetType()) || so is DataVisualizerSettings;
+            return so is DataVisualizerSettings || relevantTypes.Contains(so.GetType());
         }
 
         private static void OnPostprocessAllAssets(

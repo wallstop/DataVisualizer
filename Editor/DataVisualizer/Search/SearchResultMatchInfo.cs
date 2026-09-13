@@ -36,15 +36,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                 int fieldIndex = 0;
                 foreach (MatchDetail matchDetail in matchedFields)
                 {
-                    int termIndex = 0;
-                    foreach (string matchedTerm in matchDetail.MatchedTerms)
+                    IReadOnlyList<string> terms = matchDetail.MatchedTerms;
+                    int termCount = terms.Count;
+                    for (int termIndex = 0; termIndex < termCount; termIndex++)
                     {
+                        string matchedTerm = terms[termIndex];
                         if (IsFirstOccurrence(matchedTerm, fieldIndex, termIndex))
                         {
                             yield return matchedTerm;
                         }
-
-                        termIndex++;
                     }
 
                     fieldIndex++;

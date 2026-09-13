@@ -2036,7 +2036,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             // The cache is being rebuilt; it is not searchable until the batches below finish.
             _isSearchCachePopulated = false;
             // Managed-type set for this run, computed once and reused across all batches.
-            _searchCacheManagedTypes = CollectManagedTypesForSearchCache();
+            _searchCacheManagedTypes = CollectManagedTypes();
             int generation = ++_searchCacheGeneration;
 
             if (EnableAsyncLoadDebugLog)
@@ -2101,11 +2101,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _isSearchCachePopulated = true; // nothing to load; the (empty) cache is ready
                 RefreshActiveSearch(); // resolve any "Building search index…" popover immediately
             }
-        }
-
-        private HashSet<Type> CollectManagedTypesForSearchCache()
-        {
-            return CollectManagedTypes();
         }
 
         private void ContinuePopulatingSearchCache(int generation)
@@ -3078,8 +3073,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                         string secondFieldName = null;
                         string secondFieldValue = null;
                         int contextFieldCount = 0;
-                        foreach (MatchDetail matchedField in resultInfo.MatchedFields)
+                        IReadOnlyList<MatchDetail> matchedFields = resultInfo.MatchedFields;
+                        int matchedFieldCount = matchedFields.Count;
+                        for (
+                            int matchedFieldIndex = 0;
+                            matchedFieldIndex < matchedFieldCount;
+                            matchedFieldIndex++
+                        )
                         {
+                            MatchDetail matchedField = matchedFields[matchedFieldIndex];
                             string fieldName = matchedField.fieldName;
                             if (
                                 fieldName == MatchSource.ObjectName
