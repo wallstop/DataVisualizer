@@ -7,12 +7,38 @@ if ($tests.Count -eq 0) {
 }
 
 $failed = 0
-foreach ($test in $tests) {
-    Write-Host ''
-    Write-Host "Running $($test.Name)..."
-    & $test.FullName
-    if ($LASTEXITCODE -ne 0) {
-        $failed++
+
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    # The test files use unique per-call temp roots and mutate nothing outside
+    # them, so the same suites can run concurrently. Each file runs in a child
+    # pwsh process with redirected streams: parallel-runspace host writes bypass
+    # pipeline redirection, and the nested scripts the tests invoke must all be
+    # captured. Output is replayed in name order to keep logs deterministic.
+    $pwshExecutable = (Get-Process -Id $PID).Path
+    $results = $tests | ForEach-Object -Parallel {
+        $output = (& $using:pwshExecutable -NoProfile -File $_.FullName *>&1 | Out-String).TrimEnd()
+        [pscustomobject]@{
+            Name = $_.Name
+            ExitCode = $LASTEXITCODE
+            Output = $output
+        }
+    } -ThrottleLimit 4 | Sort-Object -Property Name
+    foreach ($result in $results) {
+        Write-Host ''
+        Write-Host "Running $($result.Name)..."
+        Write-Host $result.Output
+        if ($result.ExitCode -ne 0) {
+            $failed++
+        }
+    }
+} else {
+    foreach ($test in $tests) {
+        Write-Host ''
+        Write-Host "Running $($test.Name)..."
+        & $test.FullName
+        if ($LASTEXITCODE -ne 0) {
+            $failed++
+        }
     }
 }
 
