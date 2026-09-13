@@ -36,9 +36,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static readonly string[] BaseDataObjectPropertySignatures =
         {
-            "public virtual System.String Description { get; set; }",
-            "public virtual System.String Id { get; }",
-            "public virtual System.String Title { get; set; }",
+            "System.String Description { public virtual get; public virtual set; }",
+            "System.String Id { public virtual get; }",
+            "System.String Title { public virtual get; public virtual set; }",
         };
 
         private static readonly string[] BaseDataObjectMethodSignatures =
@@ -76,7 +76,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     "public System.Void BeforeRename(System.String)",
                 }
             },
-            { typeof(IDisplayable), new[] { "public System.String Title { get; }" } },
+            { typeof(IDisplayable), new[] { "System.String Title { public virtual get; }" } },
             {
                 typeof(IGUIProvider),
                 new[]
@@ -88,9 +88,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 typeof(IDataProcessor),
                 new[]
                 {
-                    "public System.Collections.Generic.IEnumerable<System.Type> Accepts { get; }",
-                    "public System.String Description { get; }",
-                    "public System.String Name { get; }",
+                    "System.Collections.Generic.IEnumerable<System.Type> Accepts { public virtual get; }",
+                    "System.String Description { public virtual get; }",
+                    "System.String Name { public virtual get; }",
                     "public default System.Int32 WillEffect(System.Type, System.Collections.Generic.IEnumerable<UnityEngine.ScriptableObject>)",
                     "public System.Void Process(System.Type, System.Collections.Generic.IEnumerable<UnityEngine.ScriptableObject>)",
                 }
@@ -100,15 +100,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 #if ODIN_INSPECTOR
         private static readonly string[] CustomDataVisualizationAttributePropertySignatures =
         {
-            "public System.String Namespace { get; set; }",
-            "public System.String TypeName { get; set; }",
-            "public System.Boolean UseOdinInspector { get; set; }",
+            "System.String Namespace { public get; public set; }",
+            "System.String TypeName { public get; public set; }",
+            "System.Boolean UseOdinInspector { public get; public set; }",
         };
 #else
         private static readonly string[] CustomDataVisualizationAttributePropertySignatures =
         {
-            "public System.String Namespace { get; set; }",
-            "public System.String TypeName { get; set; }",
+            "System.String Namespace { public get; public set; }",
+            "System.String TypeName { public get; public set; }",
         };
 #endif
 
@@ -244,12 +244,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return $"{FormatAccess(method)} {staticMarker}{virtualMarker}{FormatType(method.ReturnType)} {method.Name}({string.Join(", ", BuildParameterTypeNames(method))})";
         }
 
-        private static string BuildClassPropertySignature(PropertyInfo property)
+        private static string BuildPropertySignature(PropertyInfo property)
         {
-            MethodInfo accessor = property.GetGetMethod(true) ?? property.GetSetMethod(true);
-            string access = accessor == null ? "private" : FormatAccess(accessor);
-            string virtualMarker = IsEffectivelyVirtual(accessor) ? "virtual " : string.Empty;
-            return $"{access} {virtualMarker}{FormatType(property.PropertyType)} {property.Name} {{ {BuildAccessorText(property)} }}";
+            return $"{FormatType(property.PropertyType)} {property.Name} {{ {BuildAccessorText(property)} }}";
         }
 
         private static string BuildInterfaceMethodSignature(MethodInfo method)
@@ -258,22 +255,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return $"{FormatAccess(method)} {defaultMarker}{FormatType(method.ReturnType)} {method.Name}({string.Join(", ", BuildParameterTypeNames(method))})";
         }
 
-        private static string BuildInterfacePropertySignature(PropertyInfo property)
-        {
-            return $"public {FormatType(property.PropertyType)} {property.Name} {{ {BuildAccessorText(property)} }}";
-        }
-
         private static string BuildAccessorText(PropertyInfo property)
         {
+            MethodInfo getter = property.GetGetMethod(true);
+            MethodInfo setter = property.GetSetMethod(true);
             List<string> accessorNames = new(2);
-            if (property.CanRead)
+            if (getter != null)
             {
-                accessorNames.Add("get;");
+                string virtualMarker = IsEffectivelyVirtual(getter) ? " virtual" : string.Empty;
+                accessorNames.Add($"{FormatAccess(getter)}{virtualMarker} get;");
             }
 
-            if (property.CanWrite)
+            if (setter != null)
             {
-                accessorNames.Add("set;");
+                string virtualMarker = IsEffectivelyVirtual(setter) ? " virtual" : string.Empty;
+                accessorNames.Add($"{FormatAccess(setter)}{virtualMarker} set;");
             }
 
             return string.Join(" ", accessorNames);
@@ -312,7 +308,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             List<string> signatures = new();
             foreach (PropertyInfo property in type.GetProperties(DeclaredMemberBindingFlags))
             {
-                signatures.Add(BuildClassPropertySignature(property));
+                signatures.Add(BuildPropertySignature(property));
             }
 
             return signatures;
@@ -346,7 +342,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 PropertyInfo property in interfaceType.GetProperties(DeclaredMemberBindingFlags)
             )
             {
-                signatures.Add(BuildInterfacePropertySignature(property));
+                signatures.Add(BuildPropertySignature(property));
             }
 
             foreach (MethodInfo method in interfaceType.GetMethods(DeclaredMemberBindingFlags))
