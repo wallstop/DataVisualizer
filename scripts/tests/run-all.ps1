@@ -13,7 +13,10 @@ if ($PSVersionTable.PSVersion.Major -ge 7) {
     # them, so the same suites can run concurrently. Each file runs in a child
     # pwsh process with redirected streams: parallel-runspace host writes bypass
     # pipeline redirection, and the nested scripts the tests invoke must all be
-    # captured. Output is replayed in name order to keep logs deterministic.
+    # captured. A child pwsh costs ~1.5 s to start on CI, so the throttle equals
+    # the file count and every suite starts immediately instead of queueing
+    # behind a fixed-width wave; output is replayed in name order to keep logs
+    # deterministic.
     $pwshExecutable = (Get-Process -Id $PID).Path
     $results = $tests | ForEach-Object -Parallel {
         $output = (& $using:pwshExecutable -NoProfile -File $_.FullName *>&1 | Out-String).TrimEnd()
@@ -22,7 +25,7 @@ if ($PSVersionTable.PSVersion.Major -ge 7) {
             ExitCode = $LASTEXITCODE
             Output = $output
         }
-    } -ThrottleLimit 4 | Sort-Object -Property Name
+    } -ThrottleLimit $tests.Count | Sort-Object -Property Name
     foreach ($result in $results) {
         Write-Host ''
         Write-Host "Running $($result.Name)..."
