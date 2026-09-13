@@ -28,21 +28,29 @@ function Invoke-Runner {
         [switch]$PlanOnly
     )
 
-    $arguments = @(
-        '-NoProfile',
-        '-File', $runner,
-        '-HostProject', $Project,
-        '-UnityExecutable', $pwshPath,
-        '-UnityVersion', $Version,
-        '-FixtureSize', $Size,
-        '-Suite', $Mode,
-        '-OutputDirectory', $Output
-    )
-    if ($PlanOnly) {
-        $arguments += '-PlanOnly'
+    # The runner is invoked in-process: every pwsh child costs about 1.5 s to
+    # start on CI and five sequential launches per file made this suite the
+    # harness self-test critical path. Call-operator invocation preserves the
+    # runner's behavior contract: top-level exits surface through
+    # $LASTEXITCODE, and parameter-binding rejections (ValidateSet/ValidateRange)
+    # throw instead, which the catch below records as a rejected run.
+    $arguments = @{
+        HostProject = $Project
+        UnityExecutable = $pwshPath
+        UnityVersion = $Version
+        FixtureSize = $Size
+        Suite = $Mode
+        OutputDirectory = $Output
     }
-    & $pwshPath @arguments 2>&1 | Out-Null
-    return $LASTEXITCODE
+    if ($PlanOnly) {
+        $arguments.PlanOnly = $true
+    }
+    try {
+        & $runner @arguments *>&1 | Out-Null
+        return $LASTEXITCODE
+    } catch {
+        return -1
+    }
 }
 
 Invoke-TestCase 'Writes_ExplicitPlan_When_InputsAreValid' {
