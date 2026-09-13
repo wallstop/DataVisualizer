@@ -75,6 +75,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const float MinWindowWidth =
             MinNamespacePaneWidth + MinObjectPaneWidth + MinInspectorPaneWidth + 60f;
         private const float MinWindowHeight = 480f;
+        private const int SplitterWidthSaveDebounceMilliseconds = 250;
         private const int AsyncLoadBatchSize = 100;
         private const int AsyncLoadPriorityBatchSize = 100;
 
@@ -314,7 +315,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private float _lastSavedOuterWidth = -1f;
         private float _lastSavedInnerWidth = -1f;
-        private IVisualElementScheduledItem _saveWidthsTask;
+        private float _pendingOuterWidth;
+        private float _pendingInnerWidth;
+        private IVisualElementScheduledItem _splitterWidthSaveTask;
 
         private int _searchHighlightIndex = -1;
         private int _typePopoverHighlightIndex = -1;
@@ -1308,6 +1311,18 @@ namespace WallstopStudios.DataVisualizer.Editor
             _outerSplitView.Add(_innerSplitView);
             root.Add(_outerSplitView);
 
+            /*
+                Pane-width persistence is event-driven: a resolved pane geometry change schedules a
+                debounced save, and Cleanup flushes a pending save on close/reload. There is no
+                periodic poll.
+            */
+            _namespaceColumnElement.RegisterCallback<GeometryChangedEvent>(
+                HandleSplitterPaneGeometryChanged
+            );
+            _objectColumnElement.RegisterCallback<GeometryChangedEvent>(
+                HandleSplitterPaneGeometryChanged
+            );
+
             _settingsPopover = CreatePopoverBase("settings-popover");
             BuildSettingsPopoverContent();
             root.Add(_settingsPopover);
@@ -1390,7 +1405,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                             PopulateSearchCacheAsync();
                             // Restore selection with priority async loading
                             RestorePreviousSelection();
-                            StartPeriodicWidthSave();
                         })
                         .ExecuteLater(10);
                 })
@@ -1891,13 +1905,19 @@ namespace WallstopStudios.DataVisualizer.Editor
             _isSearchCachePopulated = false;
             CloseActivePopover();
             CancelDrag();
-            _saveWidthsTask?.Pause();
+            _namespaceColumnElement?.UnregisterCallback<GeometryChangedEvent>(
+                HandleSplitterPaneGeometryChanged
+            );
+            _objectColumnElement?.UnregisterCallback<GeometryChangedEvent>(
+                HandleSplitterPaneGeometryChanged
+            );
             if (!Settings.persistStateInSettingsAsset && _userStateDirty)
             {
                 SaveUserStateToFile();
             }
 
-            _saveWidthsTask = null;
+            // Flush a splitter-width change that never reached its debounce deadline.
+            FlushPendingSplitterWidths();
             _currentInspectorScriptableObject?.Dispose();
             _currentInspectorScriptableObject = null;
             _dragGhost?.RemoveFromHierarchy();
@@ -2294,48 +2314,87 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void StartPeriodicWidthSave()
+        private void HandleSplitterPaneGeometryChanged(GeometryChangedEvent _)
         {
-            _saveWidthsTask?.Pause();
-            _saveWidthsTask = rootVisualElement
-                .schedule.Execute(CheckAndSaveSplitterWidths)
-                .Every(1000);
+            ScheduleSplitterWidthSave();
         }
 
-        private void CheckAndSaveSplitterWidths()
+        private void ScheduleSplitterWidthSave()
         {
+            if (_namespaceColumnElement == null || _objectColumnElement == null)
+            {
+                return;
+            }
+
+            float currentOuterWidth = _namespaceColumnElement.resolvedStyle.width;
+            float currentInnerWidth = _objectColumnElement.resolvedStyle.width;
+
+            /*
+                Geometry below a pane minimum only happens outside real use (window teardown
+                collapses the layout); persisting it would corrupt the saved widths on close.
+            */
             if (
-                _outerSplitView == null
-                || _innerSplitView == null
-                || _namespaceColumnElement == null
-                || _objectColumnElement == null
-                || float.IsNaN(_namespaceColumnElement.resolvedStyle.width)
-                || float.IsNaN(_objectColumnElement.resolvedStyle.width)
+                float.IsNaN(currentOuterWidth)
+                || float.IsNaN(currentInnerWidth)
+                || currentOuterWidth < MinNamespacePaneWidth
+                || currentInnerWidth < MinObjectPaneWidth
             )
             {
                 return;
             }
 
-            float currentOuterWidth = Mathf.Max(
-                _namespaceColumnElement.resolvedStyle.width,
-                MinNamespacePaneWidth
-            );
-            float currentInnerWidth = Mathf.Max(
-                _objectColumnElement.resolvedStyle.width,
-                MinObjectPaneWidth
-            );
-
-            if (!Mathf.Approximately(currentOuterWidth, _lastSavedOuterWidth))
+            bool outerChanged = !Mathf.Approximately(currentOuterWidth, _lastSavedOuterWidth);
+            bool innerChanged = !Mathf.Approximately(currentInnerWidth, _lastSavedInnerWidth);
+            if (!outerChanged && !innerChanged)
             {
-                EditorPrefs.SetFloat(PrefsSplitterOuterKey, currentOuterWidth);
-                _lastSavedOuterWidth = currentOuterWidth;
+                return;
             }
 
-            if (!Mathf.Approximately(currentInnerWidth, _lastSavedInnerWidth))
+            if (outerChanged)
             {
-                EditorPrefs.SetFloat(PrefsSplitterInnerKey, currentInnerWidth);
-                _lastSavedInnerWidth = currentInnerWidth;
+                _pendingOuterWidth = currentOuterWidth;
             }
+
+            if (innerChanged)
+            {
+                _pendingInnerWidth = currentInnerWidth;
+            }
+
+            /*
+                Restart the debounce so a burst of geometry changes (initial layout, a splitter
+                drag, docking) persists once, after the last change settles.
+            */
+            _splitterWidthSaveTask?.Pause();
+            _splitterWidthSaveTask = rootVisualElement.schedule.Execute(SaveSplitterWidths);
+            _splitterWidthSaveTask.ExecuteLater(SplitterWidthSaveDebounceMilliseconds);
+        }
+
+        private void SaveSplitterWidths()
+        {
+            if (!Mathf.Approximately(_pendingOuterWidth, _lastSavedOuterWidth))
+            {
+                EditorPrefs.SetFloat(PrefsSplitterOuterKey, _pendingOuterWidth);
+                _lastSavedOuterWidth = _pendingOuterWidth;
+            }
+
+            if (!Mathf.Approximately(_pendingInnerWidth, _lastSavedInnerWidth))
+            {
+                EditorPrefs.SetFloat(PrefsSplitterInnerKey, _pendingInnerWidth);
+                _lastSavedInnerWidth = _pendingInnerWidth;
+            }
+
+            _splitterWidthSaveTask = null;
+        }
+
+        private void FlushPendingSplitterWidths()
+        {
+            if (_splitterWidthSaveTask == null)
+            {
+                return;
+            }
+
+            _splitterWidthSaveTask.Pause();
+            SaveSplitterWidths();
         }
 
         private void RestorePreviousSelection()
