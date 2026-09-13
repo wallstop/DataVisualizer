@@ -21,8 +21,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldKeepFirstSeenTermWhenMatchesDifferOnlyByCase()
         {
             SearchResultMatchInfo matchInfo = new();
-            matchInfo.matchedFields.Add(new MatchDetail("alpha", "BETA", "alpha"));
-            matchInfo.matchedFields.Add(new MatchDetail("Alpha", "gamma", "beta"));
+            matchInfo.AddMatchedField(new MatchDetail("alpha", "BETA", "alpha"));
+            matchInfo.AddMatchedField(new MatchDetail("Alpha", "gamma", "beta"));
 
             List<string> matchedTerms = new(matchInfo.AllMatchedTerms);
 
@@ -33,10 +33,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldReflectCurrentMatchesWithoutChangingEarlierMaterialization()
         {
             SearchResultMatchInfo matchInfo = new();
-            matchInfo.matchedFields.Add(new MatchDetail("first"));
+            matchInfo.AddMatchedField(new MatchDetail("first"));
             List<string> firstEnumeration = new(matchInfo.AllMatchedTerms);
 
-            matchInfo.matchedFields.Add(new MatchDetail("second"));
+            matchInfo.AddMatchedField(new MatchDetail("second"));
             List<string> secondEnumeration = new(matchInfo.AllMatchedTerms);
 
             CollectionAssert.AreEqual(new[] { "first" }, firstEnumeration);
@@ -47,7 +47,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldKeepLazyEnumerationsIndependentWhenInterleaved()
         {
             SearchResultMatchInfo matchInfo = new();
-            matchInfo.matchedFields.Add(new MatchDetail("first", "second", "FIRST"));
+            matchInfo.AddMatchedField(new MatchDetail("first", "second", "FIRST"));
 
             using IEnumerator<string> firstEnumeration = matchInfo.AllMatchedTerms.GetEnumerator();
             using IEnumerator<string> secondEnumeration = matchInfo.AllMatchedTerms.GetEnumerator();
@@ -68,11 +68,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldRejectFieldMutationWhileEnumerationIsActive()
         {
             SearchResultMatchInfo matchInfo = new();
-            matchInfo.matchedFields.Add(new MatchDetail("first", "second"));
+            matchInfo.AddMatchedField(new MatchDetail("first", "second"));
             using IEnumerator<string> enumeration = matchInfo.AllMatchedTerms.GetEnumerator();
             Assert.IsTrue(enumeration.MoveNext());
 
-            matchInfo.matchedFields.Add(new MatchDetail("third"));
+            matchInfo.AddMatchedField(new MatchDetail("third"));
 
             Assert.IsTrue(enumeration.MoveNext());
             Assert.AreEqual("second", enumeration.Current);
@@ -83,7 +83,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldRestartFromFirstTermWhenEarlierEnumerationStopsEarly()
         {
             SearchResultMatchInfo matchInfo = new();
-            matchInfo.matchedFields.Add(new MatchDetail("first", "second"));
+            matchInfo.AddMatchedField(new MatchDetail("first", "second"));
             using (
                 IEnumerator<string> partialEnumeration = matchInfo.AllMatchedTerms.GetEnumerator()
             )

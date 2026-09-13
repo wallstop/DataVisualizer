@@ -85,6 +85,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        private static IEnumerator WaitForSavedWidth(float expectedWidth)
+        {
+            float deadline = (float)EditorApplication.timeSinceStartup + DebounceTimeoutSeconds;
+            while (
+                (float)EditorApplication.timeSinceStartup < deadline
+                && !Mathf.Approximately(EditorPrefs.GetFloat(SplitterOuterKey), expectedWidth)
+            )
+            {
+                yield return null;
+            }
+
+            Assert.That(
+                EditorPrefs.GetFloat(SplitterOuterKey),
+                Is.EqualTo(expectedWidth).Within(PaneWidthTolerance),
+                "the debounced save must persist the changed pane width"
+            );
+        }
+
         [UnityTest]
         public IEnumerator ShouldPersistSplitterWidthChangeAfterDebounce()
         {
@@ -375,24 +393,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.Fail(
                 $"The fixed pane width never settled at {expectedWidth}; "
                     + $"last resolved width was {fixedPane.resolvedStyle.width}."
-            );
-        }
-
-        private IEnumerator WaitForSavedWidth(float expectedWidth)
-        {
-            float deadline = (float)EditorApplication.timeSinceStartup + DebounceTimeoutSeconds;
-            while (
-                (float)EditorApplication.timeSinceStartup < deadline
-                && !Mathf.Approximately(EditorPrefs.GetFloat(SplitterOuterKey), expectedWidth)
-            )
-            {
-                yield return null;
-            }
-
-            Assert.That(
-                EditorPrefs.GetFloat(SplitterOuterKey),
-                Is.EqualTo(expectedWidth).Within(PaneWidthTolerance),
-                "the debounced save must persist the changed pane width"
             );
         }
     }

@@ -37,7 +37,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                 foreach (MatchDetail matchDetail in matchedFields)
                 {
                     int termIndex = 0;
-                    foreach (string matchedTerm in matchDetail.matchedTerms)
+                    foreach (string matchedTerm in matchDetail.MatchedTerms)
                     {
                         if (IsFirstOccurrence(matchedTerm, fieldIndex, termIndex))
                         {
@@ -52,14 +52,27 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             }
         }
 
+        public IReadOnlyList<MatchDetail> MatchedFields => matchedFields;
+
         public bool isMatch;
-        public readonly List<MatchDetail> matchedFields = new();
+
+        private readonly List<MatchDetail> matchedFields = new();
+
+        public void AddMatchedField(MatchDetail detail)
+        {
+            matchedFields.Add(detail);
+        }
+
+        public void AddMatchedFields(List<MatchDetail> details)
+        {
+            matchedFields.AddRange(details);
+        }
 
         private bool IsFirstOccurrence(string term, int fieldIndex, int termIndex)
         {
             for (int previousFieldIndex = 0; previousFieldIndex <= fieldIndex; previousFieldIndex++)
             {
-                List<string> terms = matchedFields[previousFieldIndex].matchedTerms;
+                IReadOnlyList<string> terms = matchedFields[previousFieldIndex].MatchedTerms;
                 int termsToCheck = previousFieldIndex == fieldIndex ? termIndex : terms.Count;
                 for (
                     int previousTermIndex = 0;

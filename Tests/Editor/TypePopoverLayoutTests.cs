@@ -75,8 +75,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 yield return null;
 
-                bool allReady = elements.All(element =>
-                    element?.panel != null && IsPositiveFinite(element.resolvedStyle.height)
+                bool allReady = System.Array.TrueForAll(
+                    elements,
+                    element =>
+                        element?.panel != null && IsPositiveFinite(element.resolvedStyle.height)
                 );
                 if (!allReady)
                 {

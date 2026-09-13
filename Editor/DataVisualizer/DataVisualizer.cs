@@ -181,10 +181,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _hiddenNamespaces = value;
                 if (_namespaceColumnLabel != null)
                 {
-                    _namespaceColumnLabel.text =
-                        value <= 0 ? "Namespaces"
-                        : value <= 15 ? $"Namespaces (<b><color=yellow>{value}</color></b> hidden)"
-                        : $"Namespaces (<b><color=red>{value}</color></b> hidden)";
+                    if (value <= 0)
+                    {
+                        _namespaceColumnLabel.text = "Namespaces";
+                    }
+                    else if (value <= 15)
+                    {
+                        _namespaceColumnLabel.text =
+                            $"Namespaces (<b><color=yellow>{value}</color></b> hidden)";
+                    }
+                    else
+                    {
+                        _namespaceColumnLabel.text =
+                            $"Namespaces (<b><color=red>{value}</color></b> hidden)";
+                    }
                 }
             }
 #pragma warning restore CS0618 // Type or member is obsolete
@@ -435,7 +445,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 preferredSize.x,
                 preferredSize.y
             );
-            window.WriteWindowSize(PrefsPreferredWindowSizeKey, preferredSize);
+            WriteWindowSize(PrefsPreferredWindowSizeKey, preferredSize);
             window.BeginPackageWindowPlacement(centeredRect.size, preferredSize);
             /*
                 centeredRect and EditorWindow.position are both Unity Editor screen-space points.
@@ -1211,6 +1221,88 @@ namespace WallstopStudios.DataVisualizer.Editor
             return null;
         }
 
+        private static Label CreateHighlightedLabel(
+            string fullText,
+            IReadOnlyList<string> termsToHighlight,
+            string baseStyleClass,
+            bool bindToContextHovers = false,
+            params VisualElement[] contexts
+        )
+        {
+            Label label = new();
+            if (!string.IsNullOrWhiteSpace(baseStyleClass))
+            {
+                label.AddToClassList(baseStyleClass);
+            }
+
+            label.enableRichText = true;
+
+            if (
+                string.IsNullOrWhiteSpace(fullText)
+                || termsToHighlight == null
+                || termsToHighlight.Count == 0
+            )
+            {
+                label.text = fullText;
+                return label;
+            }
+
+            List<(int Start, int Length)> matches = new();
+            SearchHighlightUtility.CollectMatches(fullText, termsToHighlight, matches);
+
+            label.text = SearchHighlightUtility.BuildHighlightedRichText(fullText, matches, true);
+            label.RegisterCallback<MouseOverEvent>(_ =>
+            {
+                label.text = SearchHighlightUtility.BuildHighlightedRichText(
+                    fullText,
+                    matches,
+                    false
+                );
+            });
+            label.RegisterCallback<MouseOutEvent>(_ =>
+            {
+                label.text = SearchHighlightUtility.BuildHighlightedRichText(
+                    fullText,
+                    matches,
+                    true
+                );
+            });
+            if (bindToContextHovers)
+            {
+                foreach (VisualElement context in contexts)
+                {
+                    context.RegisterCallback<MouseOverEvent>(_ =>
+                    {
+                        label.text = SearchHighlightUtility.BuildHighlightedRichText(
+                            fullText,
+                            matches,
+                            false
+                        );
+                    });
+                    context.RegisterCallback<MouseOutEvent>(_ =>
+                    {
+                        label.text = SearchHighlightUtility.BuildHighlightedRichText(
+                            fullText,
+                            matches,
+                            true
+                        );
+                    });
+                }
+            }
+
+            return label;
+        }
+
+        private static bool TryReadWindowSize(string preferenceKey, out Vector2 size)
+        {
+            return MonitorUtility.TryParseSize(EditorPrefs.GetString(preferenceKey), out size);
+        }
+
+        private static void WriteWindowSize(string preferenceKey, Vector2 size)
+        {
+            EditorPrefs.SetString(preferenceKey, MonitorUtility.SerializeSize(size));
+        }
+
         public void CreateGUI()
         {
             VisualElement root = rootVisualElement;
@@ -1856,16 +1948,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             ApplyWindowMinimumSize(persistedClampIsActive);
         }
 
-        private bool TryReadWindowSize(string preferenceKey, out Vector2 size)
-        {
-            return MonitorUtility.TryParseSize(EditorPrefs.GetString(preferenceKey), out size);
-        }
-
-        private void WriteWindowSize(string preferenceKey, Vector2 size)
-        {
-            EditorPrefs.SetString(preferenceKey, MonitorUtility.SerializeSize(size));
-        }
-
         private void OnDestroy()
         {
             Cleanup();
@@ -2023,16 +2105,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private HashSet<Type> CollectManagedTypesForSearchCache()
         {
-            HashSet<Type> managedTypes = new();
-            foreach (List<Type> types in _scriptableObjectTypes.Values)
-            {
-                foreach (Type type in types)
-                {
-                    managedTypes.Add(type);
-                }
-            }
-
-            return managedTypes;
+            return CollectManagedTypes();
         }
 
         private void ContinuePopulatingSearchCache(int generation)
@@ -3005,7 +3078,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         string secondFieldName = null;
                         string secondFieldValue = null;
                         int contextFieldCount = 0;
-                        foreach (MatchDetail matchedField in resultInfo.matchedFields)
+                        foreach (MatchDetail matchedField in resultInfo.MatchedFields)
                         {
                             string fieldName = matchedField.fieldName;
                             if (
@@ -3151,7 +3224,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     );
                     if (reflectedMatch != null)
                     {
-                        reflectedMatch.matchedTerms.Add(term);
+                        reflectedMatch.AddMatchedTerm(term);
                         detailsForThisTerm.Add(reflectedMatch);
                         termMatchedThisLoop = true;
                     }
@@ -3160,83 +3233,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (termMatchedThisLoop)
                 {
                     resultInfo.isMatch = true;
-                    resultInfo.matchedFields.AddRange(detailsForThisTerm);
+                    resultInfo.AddMatchedFields(detailsForThisTerm);
                 }
             }
 
             return resultInfo;
-        }
-
-        private Label CreateHighlightedLabel(
-            string fullText,
-            IReadOnlyList<string> termsToHighlight,
-            string baseStyleClass,
-            bool bindToContextHovers = false,
-            params VisualElement[] contexts
-        )
-        {
-            Label label = new();
-            if (!string.IsNullOrWhiteSpace(baseStyleClass))
-            {
-                label.AddToClassList(baseStyleClass);
-            }
-
-            label.enableRichText = true;
-
-            if (
-                string.IsNullOrWhiteSpace(fullText)
-                || termsToHighlight == null
-                || termsToHighlight.Count == 0
-            )
-            {
-                label.text = fullText;
-                return label;
-            }
-
-            List<(int Start, int Length)> matches = new();
-            SearchHighlightUtility.CollectMatches(fullText, termsToHighlight, matches);
-
-            label.text = SearchHighlightUtility.BuildHighlightedRichText(fullText, matches, true);
-            label.RegisterCallback<MouseOverEvent>(_ =>
-            {
-                label.text = SearchHighlightUtility.BuildHighlightedRichText(
-                    fullText,
-                    matches,
-                    false
-                );
-            });
-            label.RegisterCallback<MouseOutEvent>(_ =>
-            {
-                label.text = SearchHighlightUtility.BuildHighlightedRichText(
-                    fullText,
-                    matches,
-                    true
-                );
-            });
-            if (bindToContextHovers)
-            {
-                foreach (VisualElement context in contexts)
-                {
-                    context.RegisterCallback<MouseOverEvent>(_ =>
-                    {
-                        label.text = SearchHighlightUtility.BuildHighlightedRichText(
-                            fullText,
-                            matches,
-                            false
-                        );
-                    });
-                    context.RegisterCallback<MouseOutEvent>(_ =>
-                    {
-                        label.text = SearchHighlightUtility.BuildHighlightedRichText(
-                            fullText,
-                            matches,
-                            true
-                        );
-                    });
-                }
-            }
-
-            return label;
         }
 
         private void NavigateToObject(ScriptableObject targetObject)
@@ -5648,10 +5649,20 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _labelAdvancedCollapseToggle.text = isCollapsed
                     ? StyleConstants.ArrowCollapsed
                     : StyleConstants.ArrowExpanded;
-                _labelAdvancedCollapseToggle.tooltip =
-                    isCollapsed ? "Explore advanced boolean label logic"
-                    : CanCollapseAdvancedLabelConfiguration() ? "Hide advanced boolean logic"
-                    : "Can not un-collapse due to either OR toggle or OR labels";
+
+                if (isCollapsed)
+                {
+                    _labelAdvancedCollapseToggle.tooltip = "Explore advanced boolean label logic";
+                }
+                else if (CanCollapseAdvancedLabelConfiguration())
+                {
+                    _labelAdvancedCollapseToggle.tooltip = "Hide advanced boolean logic";
+                }
+                else
+                {
+                    _labelAdvancedCollapseToggle.tooltip =
+                        "Can not un-collapse due to either OR toggle or OR labels";
+                }
             }
         }
 
@@ -5669,10 +5680,19 @@ namespace WallstopStudios.DataVisualizer.Editor
                     ? StyleConstants.ArrowCollapsed
                     : StyleConstants.ArrowExpanded;
 
-                _labelCollapseToggle.tooltip =
-                    isCollapsed ? "Explore label filtering logic"
-                    : CanCollapseAdvancedLabelConfiguration() ? "Hide label filtering logic"
-                    : "Can not un-collapse due to populated label configuration";
+                if (isCollapsed)
+                {
+                    _labelCollapseToggle.tooltip = "Explore label filtering logic";
+                }
+                else if (CanCollapseAdvancedLabelConfiguration())
+                {
+                    _labelCollapseToggle.tooltip = "Hide label filtering logic";
+                }
+                else
+                {
+                    _labelCollapseToggle.tooltip =
+                        "Can not un-collapse due to populated label configuration";
+                }
             }
         }
 
