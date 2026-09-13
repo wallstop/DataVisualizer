@@ -23,18 +23,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             }
 
             ScriptableObject so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
-            if (
-                so != null
-                && (
-                    relevantTypes.Contains(so.GetType())
-                    || typeof(DataVisualizerSettings).IsAssignableFrom(so.GetType())
-                )
-            )
+            if (so == null)
             {
-                return true;
+                return false;
             }
 
-            return false;
+            return so is DataVisualizerSettings || relevantTypes.Contains(so.GetType());
         }
 
         private static void OnPostprocessAllAssets(

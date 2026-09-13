@@ -36,8 +36,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Extensions
             textField.RegisterCallback<FocusInEvent>(_ => OnFocusIn());
             textField.RegisterCallback<FocusOutEvent>(_ => OnFocusOut());
 
-            return;
-
             void OnFocusIn()
             {
                 if (string.Equals(textField.value, placeholder, StringComparison.Ordinal))
