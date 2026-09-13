@@ -15,12 +15,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "WallstopStudios.Editor.DataVisualizer.SplitterOuterFixedPaneWidth";
         private const string SplitterInnerKey =
             "WallstopStudios.Editor.DataVisualizer.SplitterInnerFixedPaneWidth";
+        private const string InitialSizeAppliedKey =
+            "WallstopStudios.Editor.DataVisualizer.InitialSizeApplied";
+        private const string PreferredWindowSizeKey =
+            "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
+        private const string TemporaryWindowClampSizeKey =
+            "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
         private const float TestOuterWidth = 350f;
         private const float TestInnerWidth = 250f;
         private const float ChangedOuterWidth = 330f;
         private const float PaneWidthTolerance = 0.01f;
         private const float LayoutTimeoutSeconds = 5f;
         private const float DebounceTimeoutSeconds = 2f;
+        private static readonly Rect FloatingWindowRect = new(100f, 100f, 1200f, 800f);
 
         private DataVisualizerWindow _window;
         private TwoPaneSplitView _outerSplitView;
@@ -28,6 +35,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private float _originalOuter;
         private bool _hadOriginalInner;
         private float _originalInner;
+        private bool _hadInitialSizeApplied;
+        private bool _originalInitialSizeApplied;
+        private bool _hadPreferredWindowSize;
+        private string _originalPreferredWindowSize;
+        private bool _hadTemporaryWindowClampSize;
+        private string _originalTemporaryWindowClampSize;
 
         private static void CloseDataVisualizerWindows()
         {
@@ -60,6 +73,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             setFixedPaneDimension.Invoke(splitView, new object[] { width });
         }
 
+        private static void RestoreStringPreference(string key, bool existed, string value)
+        {
+            if (existed)
+            {
+                EditorPrefs.SetString(key, value);
+            }
+            else
+            {
+                EditorPrefs.DeleteKey(key);
+            }
+        }
+
         [UnityTest]
         public IEnumerator ShouldPersistSplitterWidthChangeAfterDebounce()
         {
@@ -69,7 +94,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(CloseLayoutTestWindows);
                 cleanup.Defer(CloseDataVisualizerWindows);
 
-                yield return OpenSplitterWindow();
+                yield return OpenSplitterWindow(floating: false);
 
                 Assert.AreEqual(
                     TestOuterWidth,
@@ -90,6 +115,63 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
+        public IEnumerator ShouldKeepUnchangedPaneWidthWhenOnlyOnePaneChanges()
+        {
+            using (TestCleanupScope cleanup = new())
+            {
+                cleanup.Defer(RestoreSplitterPreferences);
+                cleanup.Defer(CloseLayoutTestWindows);
+                cleanup.Defer(CloseDataVisualizerWindows);
+
+                yield return OpenSplitterWindow(floating: true);
+                yield return WaitForPersistedWidthsToMatchResolved();
+                float innerBefore = EditorPrefs.GetFloat(SplitterInnerKey);
+
+                ChangePaneWidth(_outerSplitView, ChangedOuterWidth);
+                yield return WaitForPaneWidth(ChangedOuterWidth);
+                yield return WaitForSavedWidth(ChangedOuterWidth);
+
+                Assert.AreEqual(
+                    innerBefore,
+                    EditorPrefs.GetFloat(SplitterInnerKey),
+                    "a save triggered by one pane change must not rewrite the unchanged sibling width"
+                );
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldNotPersistStaleStageWhenPaneWidthRevertsToSavedValue()
+        {
+            using (TestCleanupScope cleanup = new())
+            {
+                cleanup.Defer(RestoreSplitterPreferences);
+                cleanup.Defer(CloseLayoutTestWindows);
+                cleanup.Defer(CloseDataVisualizerWindows);
+
+                yield return OpenSplitterWindow(floating: false);
+
+                ChangePaneWidth(_outerSplitView, ChangedOuterWidth);
+                yield return WaitForPaneWidth(ChangedOuterWidth);
+                ChangePaneWidth(_outerSplitView, TestOuterWidth);
+                yield return WaitForPaneWidth(TestOuterWidth);
+
+                float settledAt = (float)EditorApplication.timeSinceStartup;
+                while (
+                    (float)EditorApplication.timeSinceStartup < settledAt + DebounceTimeoutSeconds
+                )
+                {
+                    yield return null;
+                }
+
+                Assert.AreEqual(
+                    TestOuterWidth,
+                    EditorPrefs.GetFloat(SplitterOuterKey),
+                    "a pane width that settles back to the saved value must cancel the pending save"
+                );
+            }
+        }
+
+        [UnityTest]
         public IEnumerator ShouldFlushPendingSplitterWidthChangeWhenWindowDisables()
         {
             using (TestCleanupScope cleanup = new())
@@ -98,7 +180,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(CloseLayoutTestWindows);
                 cleanup.Defer(CloseDataVisualizerWindows);
 
-                yield return OpenSplitterWindow();
+                yield return OpenSplitterWindow(floating: false);
 
                 ChangePaneWidth(_outerSplitView, ChangedOuterWidth);
                 yield return null;
@@ -121,7 +203,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
-        private IEnumerator OpenSplitterWindow()
+        private IEnumerator OpenSplitterWindow(bool floating)
         {
             CloseDataVisualizerWindows();
             CloseLayoutTestWindows();
@@ -129,17 +211,115 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             _originalOuter = _hadOriginalOuter ? EditorPrefs.GetFloat(SplitterOuterKey) : 0f;
             _hadOriginalInner = EditorPrefs.HasKey(SplitterInnerKey);
             _originalInner = _hadOriginalInner ? EditorPrefs.GetFloat(SplitterInnerKey) : 0f;
+            _hadInitialSizeApplied = EditorPrefs.HasKey(InitialSizeAppliedKey);
+            _originalInitialSizeApplied =
+                _hadInitialSizeApplied && EditorPrefs.GetBool(InitialSizeAppliedKey);
+            _hadPreferredWindowSize = EditorPrefs.HasKey(PreferredWindowSizeKey);
+            _originalPreferredWindowSize = _hadPreferredWindowSize
+                ? EditorPrefs.GetString(PreferredWindowSizeKey)
+                : null;
+            _hadTemporaryWindowClampSize = EditorPrefs.HasKey(TemporaryWindowClampSizeKey);
+            _originalTemporaryWindowClampSize = _hadTemporaryWindowClampSize
+                ? EditorPrefs.GetString(TemporaryWindowClampSizeKey)
+                : null;
             EditorPrefs.SetFloat(SplitterOuterKey, TestOuterWidth);
             EditorPrefs.SetFloat(SplitterInnerKey, TestInnerWidth);
 
-            EditorWindow.GetWindow<LayoutTestWindow>("Data Visualizer Test Anchor");
-            _window = EditorWindow.GetWindow<DataVisualizerWindow>(
-                "Data Visualizer",
-                false,
-                typeof(LayoutTestWindow)
-            );
+            if (floating)
+            {
+                _window = EditorWindow.GetWindow<DataVisualizerWindow>("Data Visualizer", false);
+                _window.position = FloatingWindowRect;
+            }
+            else
+            {
+                EditorWindow.GetWindow<LayoutTestWindow>("Data Visualizer Test Anchor");
+                _window = EditorWindow.GetWindow<DataVisualizerWindow>(
+                    "Data Visualizer",
+                    false,
+                    typeof(LayoutTestWindow)
+                );
+            }
 
             yield return WaitForSplitViews();
+        }
+
+        private IEnumerator WaitForPersistedWidthsToMatchResolved()
+        {
+            float deadline = (float)EditorApplication.timeSinceStartup + DebounceTimeoutSeconds;
+            while ((float)EditorApplication.timeSinceStartup < deadline)
+            {
+                yield return null;
+
+                if (
+                    IsPersistedWidthToResolved(SplitterOuterKey)
+                    && IsPersistedWidthToInnerResolved()
+                )
+                {
+                    yield break;
+                }
+            }
+        }
+
+        private bool IsPersistedWidthToInnerResolved()
+        {
+            TwoPaneSplitView innerSplitView = _outerSplitView.flexedPane as TwoPaneSplitView;
+            if (innerSplitView == null || innerSplitView.fixedPane == null)
+            {
+                return false;
+            }
+
+            return Mathf.Approximately(
+                EditorPrefs.GetFloat(SplitterInnerKey),
+                innerSplitView.fixedPane.resolvedStyle.width
+            );
+        }
+
+        private bool IsPersistedWidthToResolved(string preferenceKey)
+        {
+            return Mathf.Approximately(
+                EditorPrefs.GetFloat(preferenceKey),
+                _outerSplitView.fixedPane.resolvedStyle.width
+            );
+        }
+
+        private void RestoreSplitterPreferences()
+        {
+            if (_hadOriginalOuter)
+            {
+                EditorPrefs.SetFloat(SplitterOuterKey, _originalOuter);
+            }
+            else
+            {
+                EditorPrefs.DeleteKey(SplitterOuterKey);
+            }
+
+            if (_hadOriginalInner)
+            {
+                EditorPrefs.SetFloat(SplitterInnerKey, _originalInner);
+            }
+            else
+            {
+                EditorPrefs.DeleteKey(SplitterInnerKey);
+            }
+
+            RestoreStringPreference(
+                PreferredWindowSizeKey,
+                _hadPreferredWindowSize,
+                _originalPreferredWindowSize
+            );
+            RestoreStringPreference(
+                TemporaryWindowClampSizeKey,
+                _hadTemporaryWindowClampSize,
+                _originalTemporaryWindowClampSize
+            );
+            if (_hadInitialSizeApplied)
+            {
+                EditorPrefs.SetBool(InitialSizeAppliedKey, _originalInitialSizeApplied);
+            }
+            else
+            {
+                EditorPrefs.DeleteKey(InitialSizeAppliedKey);
+            }
         }
 
         private IEnumerator WaitForSplitViews()
@@ -214,27 +394,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Is.EqualTo(expectedWidth).Within(PaneWidthTolerance),
                 "the debounced save must persist the changed pane width"
             );
-        }
-
-        private void RestoreSplitterPreferences()
-        {
-            if (_hadOriginalOuter)
-            {
-                EditorPrefs.SetFloat(SplitterOuterKey, _originalOuter);
-            }
-            else
-            {
-                EditorPrefs.DeleteKey(SplitterOuterKey);
-            }
-
-            if (_hadOriginalInner)
-            {
-                EditorPrefs.SetFloat(SplitterInnerKey, _originalInner);
-            }
-            else
-            {
-                EditorPrefs.DeleteKey(SplitterInnerKey);
-            }
         }
     }
 }

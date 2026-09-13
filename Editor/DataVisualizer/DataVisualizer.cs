@@ -2345,19 +2345,20 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             bool outerChanged = !Mathf.Approximately(currentOuterWidth, _lastSavedOuterWidth);
             bool innerChanged = !Mathf.Approximately(currentInnerWidth, _lastSavedInnerWidth);
+
+            /*
+                Realign every unchanged pane to its last-saved width on each geometry event: a
+                pane that never changed must not resurrect a stale staged value at save time, and
+                one that settled back to the saved value must drop its earlier stage.
+            */
+            _pendingOuterWidth = outerChanged ? currentOuterWidth : _lastSavedOuterWidth;
+            _pendingInnerWidth = innerChanged ? currentInnerWidth : _lastSavedInnerWidth;
+
             if (!outerChanged && !innerChanged)
             {
+                _splitterWidthSaveTask?.Pause();
+                _splitterWidthSaveTask = null;
                 return;
-            }
-
-            if (outerChanged)
-            {
-                _pendingOuterWidth = currentOuterWidth;
-            }
-
-            if (innerChanged)
-            {
-                _pendingInnerWidth = currentInnerWidth;
             }
 
             /*
