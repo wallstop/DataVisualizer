@@ -690,8 +690,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         /*
             Orders namespace keys by persisted order value, breaking ties with an Ordinal key
-            comparison. List.Sort is unstable, so the tie-break belongs in the comparison itself;
-            dictionary keys are unique, making (value, Ordinal key) a total order.
+            comparison. List.Sort is unstable, so the tie-break belongs in the comparison itself.
+            Dictionary keys are unique, so persisting one order value per key yields a total order.
         */
         private static List<string> OrderNamespaceKeysByOrderThenOrdinalName(
             IReadOnlyDictionary<string, int> namespaceOrder
@@ -2134,17 +2134,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 ScriptableObject obj = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
-                if (obj != null)
+                /*
+                    Verify it's a managed type (O(1) against the set cached for this run). No cache
+                    membership check needed: the cache was cleared and GUIDs are unique, so the
+                    object can't already be present, and Contains() grows costlier as it fills.
+                */
+                if (obj != null && _searchCacheManagedTypes.Contains(obj.GetType()))
                 {
-                    /*
-                        Verify it's a managed type (O(1) against the set cached for this run). No cache
-                        membership check needed: the cache was cleared and GUIDs are unique, so the
-                        object can't already be present, and Contains() grows costlier as it fills.
-                    */
-                    if (_searchCacheManagedTypes.Contains(obj.GetType()))
-                    {
-                        loadedObjects.Add(obj);
-                    }
+                    loadedObjects.Add(obj);
                 }
             }
 
@@ -2920,7 +2917,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 /*
-                    Keep the popover open with a status line instead of dismissing the user's query;
+                    Keep the popover open with a status line instead of dismissing the user's query.
                     RefreshActiveSearch re-runs this search automatically once the cache is ready.
                 */
                 Label buildingLabel = new("Building search index…")
@@ -3511,7 +3508,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         popoverWidth =
                             popover.style.width.keyword == StyleKeyword.Auto
-                            || popover.style.width.value.value == 0
+                            || popover.style.width.value.value <= 0
                                 ? 350f
                                 : popover.style.width.value.value;
                     }
@@ -3519,7 +3516,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         popoverHeight =
                             popover.style.height.keyword == StyleKeyword.Auto
-                            || popover.style.height.value.value == 0
+                            || popover.style.height.value.value <= 0
                                 ? 150f
                                 : popover.style.height.value.value;
                     }
@@ -3596,12 +3593,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                             })
                             .ExecuteLater(10);
                     }
-                    else if (_activeNestedPopover == popover)
+                    else if (_activeNestedPopover == popover && shouldFocus)
                     {
-                        if (shouldFocus)
-                        {
-                            popover.Focus();
-                        }
+                        popover.Focus();
                     }
                 })
                 .ExecuteLater(1);
@@ -4519,7 +4513,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     $"Delete '<color=yellow><i>{objectToDelete.name}</i></color>'?\nThis cannot be undone."
                 )
                 {
-                    // TODO: CLEAN UP STYLE
+                    // Inline style is deliberate debt pending the USS migration.
                     style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },
                 }
             );
@@ -5313,7 +5307,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 name = "object-column",
                 style =
                 {
-                    // TODO: MIGRATE ALL STYLES TO USS + SPLIT STYLE SHEETS
+                    // Inline styles are deliberate debt until the USS migration splits the sheets.
                     borderRightWidth = 1,
                     borderRightColor = Color.gray,
                     flexDirection = FlexDirection.Column,
@@ -5997,6 +5991,74 @@ namespace WallstopStudios.DataVisualizer.Editor
             state.window.CancelDrag();
         }
 
+        /*
+            Fills the given map with the canonical display order for an async load: custom-ordered
+            assets first (in their saved sequence), then everything else by asset path, falling
+            back to the discovery order from MergeCandidates.
+        */
+        private static void FillAsyncDisplayOrder(
+            Dictionary<string, int> displayOrderByGuid,
+            string[] allGuids,
+            IReadOnlyList<string> customGuidOrder
+        )
+        {
+            HashSet<string> allGuidLookup = new(allGuids, StringComparer.Ordinal);
+            int displayIndex = 0;
+            foreach (string guid in customGuidOrder)
+            {
+                if (allGuidLookup.Contains(guid) && !displayOrderByGuid.ContainsKey(guid))
+                {
+                    displayOrderByGuid[guid] = displayIndex++;
+                }
+            }
+
+            /*
+                Order the unassigned GUIDs by asset path, then fall back to the discovery order
+                from MergeCandidates. OrderBy is stable and Array.Sort is not, so the original
+                index tiebreaker reproduces the previous tie behavior exactly (e.g. several
+                GUIDs that no longer resolve to a path all report the empty string).
+            */
+            int unassignedCount = 0;
+            for (int i = 0; i < allGuids.Length; ++i)
+            {
+                if (!displayOrderByGuid.ContainsKey(allGuids[i]))
+                {
+                    ++unassignedCount;
+                }
+            }
+
+            (string guid, string path, int index)[] unassigned = new (string, string, int)[
+                unassignedCount
+            ];
+            int unassignedCursor = 0;
+            for (int i = 0; i < allGuids.Length; ++i)
+            {
+                string guid = allGuids[i];
+                if (displayOrderByGuid.ContainsKey(guid))
+                {
+                    continue;
+                }
+
+                unassigned[unassignedCursor++] = (guid, AssetDatabase.GUIDToAssetPath(guid), i);
+            }
+
+            Array.Sort(
+                unassigned,
+                static (lhs, rhs) =>
+                {
+                    int pathComparison = StringComparer.OrdinalIgnoreCase.Compare(
+                        lhs.path,
+                        rhs.path
+                    );
+                    return pathComparison != 0 ? pathComparison : lhs.index.CompareTo(rhs.index);
+                }
+            );
+            for (int i = 0; i < unassignedCount; ++i)
+            {
+                displayOrderByGuid[unassigned[i].guid] = displayIndex++;
+            }
+        }
+
         internal void UpdateLabelAreaAndFilter()
         {
             ClearLabelFilterUI();
@@ -6275,65 +6337,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 assets by this map so drag/move ordering is preserved across async batches.
             */
             _asyncDisplayOrderByGuid.Clear();
-            {
-                HashSet<string> allGuidLookup = new(allGuids, StringComparer.Ordinal);
-                int displayIndex = 0;
-                foreach (string guid in customGuidOrder)
-                {
-                    if (allGuidLookup.Contains(guid) && !_asyncDisplayOrderByGuid.ContainsKey(guid))
-                    {
-                        _asyncDisplayOrderByGuid[guid] = displayIndex++;
-                    }
-                }
-
-                /*
-                    Order the unassigned GUIDs by asset path, then fall back to the discovery order
-                    from MergeCandidates. OrderBy is stable and Array.Sort is not, so the original
-                    index tiebreaker reproduces the previous tie behavior exactly (e.g. several
-                    GUIDs that no longer resolve to a path all report the empty string).
-                */
-                int unassignedCount = 0;
-                for (int i = 0; i < allGuids.Length; ++i)
-                {
-                    if (!_asyncDisplayOrderByGuid.ContainsKey(allGuids[i]))
-                    {
-                        ++unassignedCount;
-                    }
-                }
-
-                (string guid, string path, int index)[] unassigned = new (string, string, int)[
-                    unassignedCount
-                ];
-                int unassignedCursor = 0;
-                for (int i = 0; i < allGuids.Length; ++i)
-                {
-                    string guid = allGuids[i];
-                    if (_asyncDisplayOrderByGuid.ContainsKey(guid))
-                    {
-                        continue;
-                    }
-
-                    unassigned[unassignedCursor++] = (guid, AssetDatabase.GUIDToAssetPath(guid), i);
-                }
-
-                Array.Sort(
-                    unassigned,
-                    static (lhs, rhs) =>
-                    {
-                        int pathComparison = StringComparer.OrdinalIgnoreCase.Compare(
-                            lhs.path,
-                            rhs.path
-                        );
-                        return pathComparison != 0
-                            ? pathComparison
-                            : lhs.index.CompareTo(rhs.index);
-                    }
-                );
-                for (int i = 0; i < unassignedCount; ++i)
-                {
-                    _asyncDisplayOrderByGuid[unassigned[i].guid] = displayIndex++;
-                }
-            }
+            FillAsyncDisplayOrder(_asyncDisplayOrderByGuid, allGuids, customGuidOrder);
 
             // Prioritize: saved object, custom order, then remaining
             List<string> priorityGuids = new();
@@ -6720,7 +6724,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void OnTypePointerDown(VisualElement namespaceHeader, PointerDownEvent evt)
         {
-            // TODO IMPLEMENT NEW HANDLER
+            // Type-header drag start via pointer capture.
             if (evt.currentTarget is not VisualElement { userData: Type type } targetElement)
             {
                 return;
