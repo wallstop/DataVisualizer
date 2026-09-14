@@ -954,7 +954,15 @@ function countedLoopIndexIsPureElementRead(masked, open, close) {
       return false;
     }
   }
-  return 0 < found;
+  // A body that reassigns the collection or hands it to ref/out makes foreach read a different
+  // sequence than the counted loop; treat that as needing the counted form. (`in` cannot
+  // reassign its argument, so it stays legal; a nested `foreach (x in E)` is also just a read.)
+  const escapedCollection = collection.replace(/\$/g, "\\$");
+  const mutatedCollection = new RegExp(
+    `(?<![\\w.])${escapedCollection}(?!\\w)\\s*(?:=(?!=)|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|\\+\\+|--)` +
+      `|\\b(?:ref|out)\\s+${escapedCollection}(?!\\w)`
+  );
+  return found > 0 && !mutatedCollection.test(body);
 }
 
 /** The occurrence of the loop variable at `at` must be the read `collection[at]`. */
