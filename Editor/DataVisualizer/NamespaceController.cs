@@ -548,6 +548,16 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public void SelectType(DataVisualizer dataVisualizer, Type type)
         {
+            /*
+                Manual type switching starts asset loads and selection persistence; both are
+                package-driven work, so they stay suspended during Play Mode exactly like the
+                mutation actions.
+            */
+            if (dataVisualizer.IsAssetEditingSuspended)
+            {
+                return;
+            }
+
             if (_selectedType == type)
             {
                 return;

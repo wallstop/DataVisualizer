@@ -166,6 +166,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        /*
+            True while the package's background work is suspended for Play Mode (entering play,
+            playing, or a window enabled during play). Every package-driven mutation entry reads
+            this so user-initiated actions cannot edit assets or the managed catalog during play.
+        */
+        internal bool IsAssetEditingSuspended => _suspendedForPlayMode;
+
         private TypeLabelFilterConfig CurrentTypeLabelFilterConfig =>
             LoadOrCreateLabelFilterConfig(_namespaceController.SelectedType);
 
@@ -318,6 +325,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Button _addTypesFromDataFolderButton;
         private Button _createObjectButton;
         private Button _settingsButton;
+        private Label _pausedIndicator;
         private TextField _typeAddSearchField;
         private VisualElement _typePopoverListContainer;
 
@@ -1340,6 +1348,27 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             root.Add(headerRow);
 
+            /*
+                Play Mode paused indicator: shown while package-driven editing is suspended so the
+                inert mutation buttons have a visible explanation. Hidden again on resume.
+            */
+            _pausedIndicator = new Label("Package editing is paused during Play Mode")
+            {
+                name = "paused-indicator",
+                // Inline style is deliberate debt pending the USS migration.
+                style =
+                {
+                    display = DisplayStyle.None,
+                    unityTextAlign = TextAnchor.MiddleCenter,
+                    unityFontStyleAndWeight = FontStyle.Bold,
+                    paddingTop = 4,
+                    paddingBottom = 4,
+                    borderBottomWidth = 1,
+                    borderBottomColor = Color.gray,
+                },
+            };
+            root.Add(_pausedIndicator);
+
             _settingsButton = new Button(() => TogglePopover(_settingsPopover, _settingsButton))
             {
                 text = "…",
@@ -1643,7 +1672,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement triggerElement
         )
         {
-            if (_confirmActionPopover == null || onConfirm == null)
+            if (_confirmActionPopover == null || onConfirm == null || IsAssetEditingSuspended)
             {
                 return;
             }
@@ -2230,12 +2259,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             AssetGuidTypeIndex.Shared.Suspend();
             _asyncLoadTask?.Pause();
             _searchCacheLoadTask?.Pause();
+            SetPackageEditingPaused(true);
         }
 
         private void ResumeAfterPlayMode()
         {
             _suspendedForPlayMode = false;
             AssetGuidTypeIndex.Shared.Resume();
+            SetPackageEditingPaused(false);
             if (
                 _isLoadingObjectsAsync
                 && _asyncLoadTargetType != null
@@ -2278,6 +2309,25 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _needsRefresh = false;
                 ScheduleRefresh();
             }
+        }
+
+        /*
+            Single transition helper for the play-mode UI state: the paused indicator plus the
+            affordances whose click paths mutate assets or the managed catalog. Read-only
+            interactions (browsing, search, selection, reordering) stay enabled while paused.
+        */
+        private void SetPackageEditingPaused(bool paused)
+        {
+            if (_pausedIndicator != null)
+            {
+                _pausedIndicator.style.display = paused ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            _createObjectButton?.SetEnabled(!paused);
+            _addTypeButton?.SetEnabled(!paused);
+            _addTypesFromDataFolderButton?.SetEnabled(!paused);
+            _addTypesFromScriptFolderButton?.SetEnabled(!paused);
+            _inspectorContainer?.SetEnabled(!paused);
         }
 
         private void LoadInitialContent()
@@ -2786,6 +2836,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void RunDataProcessor(VisualElement context, IDataProcessor processor)
         {
+            if (IsAssetEditingSuspended)
+            {
+                return;
+            }
+
             ProcessorState state = CurrentProcessorState;
             if (processor == null || _namespaceController.SelectedType == null || state == null)
             {
@@ -4222,7 +4277,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             ScriptableObject dataObject
         )
         {
-            if (dataObject == null)
+            if (IsAssetEditingSuspended || dataObject == null)
             {
                 return;
             }
@@ -4390,6 +4445,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleCreateConfirmed(Type type, TextField nameField, Label errorLabel)
         {
+            if (IsAssetEditingSuspended)
+            {
+                return;
+            }
+
             errorLabel.style.display = DisplayStyle.None;
             string newName = nameField.value;
 
@@ -4516,6 +4576,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleRenameConfirmed(Label titleLabel, TextField nameField, Label errorLabel)
         {
+            if (IsAssetEditingSuspended)
+            {
+                return;
+            }
+
             errorLabel.style.display = DisplayStyle.None;
             string originalPath = _popoverContext as string;
             string newName = nameField.value;
@@ -4609,7 +4674,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OpenConfirmDeletePopover(VisualElement source, ScriptableObject dataObject)
         {
-            if (dataObject == null)
+            if (IsAssetEditingSuspended || dataObject == null)
             {
                 return;
             }
@@ -4677,6 +4742,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleDeleteConfirmed()
         {
+            if (IsAssetEditingSuspended)
+            {
+                return;
+            }
+
             ScriptableObject objectToDelete = _popoverContext as ScriptableObject;
             CloseActivePopover();
 
@@ -6382,7 +6452,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void LoadObjectTypesAsync(Type type, bool priorityLoad = false)
         {
-            if (type == null)
+            if (IsAssetEditingSuspended || type == null)
             {
                 return;
             }
@@ -6834,6 +6904,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _namespaceController.SelectedType != null
                         ? DisplayStyle.Flex
                         : DisplayStyle.None;
+                _createObjectButton.SetEnabled(!IsAssetEditingSuspended);
             }
         }
 
@@ -7697,6 +7768,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private bool AddManagedTypes(List<Type> typesToAdd)
         {
+            if (IsAssetEditingSuspended)
+            {
+                return false;
+            }
+
             bool stateChanged = false;
             foreach (Type typeToAdd in typesToAdd)
             {
@@ -8047,7 +8123,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void MoveObjectToFolder(ScriptableObject dataObject)
         {
-            if (dataObject == null)
+            if (IsAssetEditingSuspended || dataObject == null)
             {
                 return;
             }
@@ -8117,6 +8193,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _inspectorContainer.Clear();
             _inspectorScrollView.scrollOffset = Vector2.zero;
+            /*
+                Serialized editing is package-driven asset editing, so freshly built inspector
+                content starts disabled while suspended (selection changes during play rebuild
+                this view and would otherwise re-enable editing).
+            */
+            _inspectorContainer.SetEnabled(!IsAssetEditingSuspended);
 
             if (_selectedObject == null || _currentInspectorScriptableObject == null)
             {
@@ -8734,7 +8816,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void AddLabelToSelectedAsset()
         {
-            if (_selectedObject == null || _inspectorNewLabelInput == null)
+            if (
+                IsAssetEditingSuspended
+                || _selectedObject == null
+                || _inspectorNewLabelInput == null
+            )
             {
                 return;
             }
@@ -8782,7 +8868,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void RemoveLabelFromSelectedAsset(string labelToRemove)
         {
-            if (_selectedObject == null || string.IsNullOrWhiteSpace(labelToRemove))
+            if (
+                IsAssetEditingSuspended
+                || _selectedObject == null
+                || string.IsNullOrWhiteSpace(labelToRemove)
+            )
             {
                 return;
             }
@@ -8832,7 +8922,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void CloneObject(ScriptableObject originalObject)
         {
-            if (originalObject == null)
+            if (IsAssetEditingSuspended || originalObject == null)
             {
                 return;
             }
