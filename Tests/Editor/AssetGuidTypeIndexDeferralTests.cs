@@ -53,22 +53,34 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetGuidTypeIndex index = new();
                 bool isBusy = true;
                 index.AssetDatabaseBusyOverride = () => isBusy;
-                index.Rebuild();
+                try
+                {
+                    index.Rebuild();
 
-                Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
-                Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
-                Assert.IsFalse(index.IsComplete);
-                Assert.IsEmpty(index.GetKnownGuids(typeof(TestDataObject)));
+                    Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
+                    Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
+                    Assert.IsFalse(index.IsComplete);
+                    Assert.IsEmpty(index.GetKnownGuids(typeof(TestDataObject)));
 
-                int completedCount = 0;
-                index.IndexCompleted += () => completedCount++;
-                isBusy = false;
+                    int completedCount = 0;
+                    index.IndexCompleted += () => completedCount++;
+                    isBusy = false;
 
-                Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
-                Assert.IsTrue(index.ProcessPendingSlice(double.PositiveInfinity));
-                Assert.IsTrue(index.IsComplete);
-                CollectionAssert.Contains(index.GetKnownGuids(typeof(TestDataObject)), guid);
-                Assert.AreEqual(1, completedCount);
+                    Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
+                    Assert.IsTrue(index.ProcessPendingSlice(double.PositiveInfinity));
+                    Assert.IsTrue(index.IsComplete);
+                    CollectionAssert.Contains(index.GetKnownGuids(typeof(TestDataObject)), guid);
+                    Assert.AreEqual(1, completedCount);
+                }
+                finally
+                {
+                    /*
+                        Cancel unsubscribes the pump handler even when an assertion above fails
+                        mid-deferral, so a failing test cannot leak the instance onto
+                        EditorApplication.update.
+                    */
+                    index.Cancel();
+                }
             }
             finally
             {
@@ -90,26 +102,37 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.SaveAssets();
 
                 AssetGuidTypeIndex index = new() { AssetDatabaseBusyOverride = () => true };
-                index.Rebuild();
-                Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
+                try
+                {
+                    index.Rebuild();
+                    Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
 
-                /*
-                    The AssetPostprocessor runs inside the refresh and indexes the paths Unity
-                    just imported, so its reconciliation must stay synchronous: only the
-                    background pump defers while the database is busy.
-                */
-                Assert.IsTrue(
-                    index.ApplyAssetChanges(
-                        new[] { folder + "/ImportedWhileBusy.asset" },
-                        Array.Empty<string>(),
-                        Array.Empty<string>(),
-                        Array.Empty<string>()
-                    )
-                );
-                CollectionAssert.Contains(
-                    index.GetKnownGuids(typeof(TestDataObject)),
-                    importedGuid
-                );
+                    /*
+                        The AssetPostprocessor runs inside the refresh and indexes the paths Unity
+                        just imported, so its reconciliation must stay synchronous: only the
+                        background pump defers while the database is busy.
+                    */
+                    Assert.IsTrue(
+                        index.ApplyAssetChanges(
+                            new[] { folder + "/ImportedWhileBusy.asset" },
+                            Array.Empty<string>(),
+                            Array.Empty<string>(),
+                            Array.Empty<string>()
+                        )
+                    );
+                    CollectionAssert.Contains(
+                        index.GetKnownGuids(typeof(TestDataObject)),
+                        importedGuid
+                    );
+                }
+                finally
+                {
+                    /*
+                        The override never settles, so only Cancel unsubscribes the pump handler;
+                        leaving it subscribed would leak the instance onto EditorApplication.update.
+                    */
+                    index.Cancel();
+                }
             }
             finally
             {
@@ -131,14 +154,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.SaveAssets();
 
                 AssetGuidTypeIndex index = new();
-                index.Rebuild();
+                try
+                {
+                    index.Rebuild();
 
-                Assert.IsFalse(EditorApplication.isCompiling);
-                Assert.IsFalse(EditorApplication.isUpdating);
-                Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
-                Assert.IsTrue(index.ProcessPendingSlice(double.PositiveInfinity));
-                Assert.IsTrue(index.IsComplete);
-                CollectionAssert.Contains(index.GetKnownGuids(typeof(TestDataObject)), guid);
+                    Assert.IsFalse(EditorApplication.isCompiling);
+                    Assert.IsFalse(EditorApplication.isUpdating);
+                    Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
+                    Assert.IsTrue(index.ProcessPendingSlice(double.PositiveInfinity));
+                    Assert.IsTrue(index.IsComplete);
+                    CollectionAssert.Contains(index.GetKnownGuids(typeof(TestDataObject)), guid);
+                }
+                finally
+                {
+                    index.Cancel();
+                }
             }
             finally
             {
