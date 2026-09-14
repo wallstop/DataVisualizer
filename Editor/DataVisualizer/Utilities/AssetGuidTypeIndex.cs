@@ -19,6 +19,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public bool IsComplete => _state == AssetGuidTypeIndexState.Complete;
 
+        public bool IsSuspended => _suspended;
+
         private readonly Queue<string> _pendingAssetPaths = new();
         private readonly Dictionary<string, (Type Type, string Guid)> _assetsByPath = new(
             StringComparer.OrdinalIgnoreCase
@@ -26,6 +28,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private readonly Dictionary<Type, HashSet<string>> _guidsByType = new();
 
         private AssetGuidTypeIndexState _state;
+        private bool _suspended;
 
         public AssetGuidTypeIndex()
         {
@@ -72,11 +75,50 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _pendingAssetPaths.Clear();
             _assetsByPath.Clear();
             _guidsByType.Clear();
+            _suspended = false;
             TransitionTo(AssetGuidTypeIndexState.Idle);
+        }
+
+        /*
+            Pauses all index work: the editor-update pump stops and ApplyAssetChanges defers its
+            paths instead of resolving them. Used while the project is playing so the package does
+            no AssetDatabase work on the main thread.
+        */
+        public void Suspend()
+        {
+            _suspended = true;
+            EditorApplication.update -= ProcessEditorUpdate;
+        }
+
+        /*
+            Resumes after Suspend. A mid-flight pass continues; a complete index reclassifies only
+            the paths queued while suspended; an unstarted snapshot recaptures everything, which
+            already includes those paths.
+        */
+        public void Resume()
+        {
+            if (!_suspended)
+            {
+                return;
+            }
+
+            _suspended = false;
+            if (_state == AssetGuidTypeIndexState.Complete && 0 < _pendingAssetPaths.Count)
+            {
+                TransitionTo(AssetGuidTypeIndexState.Classifying);
+                return;
+            }
+
+            TransitionTo(_state);
         }
 
         public bool ProcessPendingSlice(double budgetMilliseconds)
         {
+            if (_suspended)
+            {
+                return false;
+            }
+
             EnsureStarted();
             return RunStateMachine(budgetMilliseconds);
         }
@@ -90,6 +132,20 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         {
             if (_state == AssetGuidTypeIndexState.Idle)
             {
+                return false;
+            }
+
+            if (_suspended)
+            {
+                /*
+                    Coalesce while paused: every changed path is queued and classification removes
+                    the stale entry before re-resolving each path, so the deferred pass reconciles
+                    imports, moves, and deletions without any AssetDatabase work right now.
+                */
+                QueueAssetPaths(importedAssets);
+                QueueAssetPaths(deletedAssets);
+                QueueAssetPaths(movedAssets);
+                QueueAssetPaths(movedFromAssetPaths);
                 return false;
             }
 
@@ -154,7 +210,29 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         private void ProcessEditorUpdate()
         {
+            if (_suspended)
+            {
+                return;
+            }
+
             ProcessPendingSlice(DefaultSliceMilliseconds);
+        }
+
+        private void QueueAssetPaths(IReadOnlyList<string> paths)
+        {
+            if (paths == null)
+            {
+                return;
+            }
+
+            for (int index = 0; index < paths.Count; index++)
+            {
+                string path = paths[index];
+                if (IsProjectAssetPath(path))
+                {
+                    _pendingAssetPaths.Enqueue(path);
+                }
+            }
         }
 
         private void CaptureAssetPaths()
