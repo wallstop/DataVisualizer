@@ -652,9 +652,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
 
             List<string> orderedKeys = new(entries.Length);
-            for (int i = 0; i < entries.Length; i++)
+            foreach ((string key, int _, int _) in entries)
             {
-                orderedKeys.Add(entries[i].key);
+                orderedKeys.Add(key);
             }
 
             return orderedKeys;
@@ -2213,14 +2213,13 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             List<string> namespaceOrder = OrderKeysByValueStable(_namespaceOrder);
             List<NamespaceTypeOrder> typeOrder = new(namespaceOrder.Count);
-            for (int i = 0; i < namespaceOrder.Count; i++)
+            foreach (string namespaceKey in namespaceOrder)
             {
-                string namespaceKey = namespaceOrder[i];
                 List<Type> types = _scriptableObjectTypes[namespaceKey];
                 List<string> typeNames = new(types.Count);
-                for (int j = 0; j < types.Count; j++)
+                foreach (Type type in types)
                 {
-                    typeNames.Add(types[j].FullName);
+                    typeNames.Add(type.FullName);
                 }
 
                 typeOrder.Add(
@@ -6019,9 +6018,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 GUIDs that no longer resolve to a path all report the empty string).
             */
             int unassignedCount = 0;
-            for (int i = 0; i < allGuids.Length; ++i)
+            foreach (string guid in allGuids)
             {
-                if (!displayOrderByGuid.ContainsKey(allGuids[i]))
+                if (!displayOrderByGuid.ContainsKey(guid))
                 {
                     ++unassignedCount;
                 }
@@ -6053,9 +6052,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return pathComparison != 0 ? pathComparison : lhs.index.CompareTo(rhs.index);
                 }
             );
-            for (int i = 0; i < unassignedCount; ++i)
+            foreach (var entry in unassigned)
             {
-                displayOrderByGuid[unassigned[i].guid] = displayIndex++;
+                displayOrderByGuid[entry.guid] = displayIndex++;
             }
         }
 
@@ -6471,9 +6470,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
 
             List<string> remainingSorted = new(pendingRemaining.Length);
-            for (int i = 0; i < pendingRemaining.Length; ++i)
+            foreach (var entry in pendingRemaining)
             {
-                remainingSorted.Add(pendingRemaining[i].guid);
+                remainingSorted.Add(entry.guid);
             }
 
             // Load first batch of remaining items if we have space
@@ -9484,9 +9483,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void UpdateAndSaveTypeOrder(string namespaceKey, List<Type> orderedTypes)
         {
             List<string> newTypeNameOrder = new(orderedTypes.Count);
-            for (int i = 0; i < orderedTypes.Count; i++)
+            foreach (Type type in orderedTypes)
             {
-                newTypeNameOrder.Add(orderedTypes[i].FullName);
+                newTypeNameOrder.Add(type.FullName);
             }
 
             SetTypeOrderForNamespace(namespaceKey, newTypeNameOrder);

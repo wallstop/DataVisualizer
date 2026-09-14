@@ -370,6 +370,115 @@ public sealed class Fixable
     }
 }
 
+Invoke-TestCase 'Fails_OnCountedArrayLoopWithUnusedIndex' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Loops.cs' -Content @'
+using System.Collections.Generic;
+
+public sealed class Loops
+{
+    public int Sum(string[] items)
+    {
+        int total = 0;
+        for (int i = 0; i < items.Length; ++i)
+        {
+            total += items[i].Length;
+        }
+
+        return total;
+    }
+
+    public void Keep(IReadOnlyList<string> list)
+    {
+        for (int i = 0; i < list.Count; i++)
+        {
+            System.Console.WriteLine(list[i]);
+        }
+    }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'counted array loop with unused index should fail'
+        Assert-True ($result.Output -match 'rule 21') "failure should identify the loop rule: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Passes_CountedLoopsWhenTheIndexIsNeeded' {
+    $root = New-TempRoot -Prefix 'member-order-'
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'KeepLoops.cs' -Content @'
+using System.Collections.Generic;
+
+public sealed class KeepLoops
+{
+    public int Parallel(string[] values, int[] weights)
+    {
+        int total = 0;
+        for (int i = 0; i < values.Length; ++i)
+        {
+            total += values[i].Length * weights[i];
+        }
+
+        return total;
+    }
+
+    public void WriteByIndex(string[] items)
+    {
+        for (int i = 0; i < items.Length; i += 1)
+        {
+            items[i] = items[i].Trim();
+        }
+    }
+
+    public int Offset(string[] items, int start)
+    {
+        int total = 0;
+        for (int i = start; i < items.Length; ++i)
+        {
+            total += items[i].Length;
+        }
+
+        return total;
+    }
+
+    public int InterfaceList(IReadOnlyList<string> list)
+    {
+        int total = 0;
+        for (int i = 0; i < list.Count; i++)
+        {
+            total += list[i].Length;
+        }
+
+        return total;
+    }
+
+    public int LastElement(string[] items)
+    {
+        int total = 0;
+        for (int i = 0; i < items.Length; ++i)
+        {
+            if (i == items.Length - 1)
+            {
+                total += 1;
+            }
+
+            total += items[i].Length;
+        }
+
+        return total;
+    }
+}
+'@
+        $result = Invoke-MemberOrderLint -Root $root
+        Assert-True ($result.ExitCode -eq 0) "index-needed and interface-typed loops must stay legal: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
 if ($script:TestFailureCount -gt 0) {
     exit 1
 }

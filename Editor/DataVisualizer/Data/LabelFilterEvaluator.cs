@@ -52,9 +52,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             */
             static bool AllPresent(List<string> required, IReadOnlyList<string> labels)
             {
-                for (int i = 0; i < required.Count; i++)
+                foreach (string requiredLabel in required)
                 {
-                    if (!Contains(labels, required[i]))
+                    if (!Contains(labels, requiredLabel))
                     {
                         return false;
                     }
@@ -64,9 +64,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
             static bool AnyPresent(List<string> candidates, IReadOnlyList<string> labels)
             {
-                for (int i = 0; i < candidates.Count; i++)
+                foreach (string candidate in candidates)
                 {
-                    if (Contains(labels, candidates[i]))
+                    if (Contains(labels, candidate))
                     {
                         return true;
                     }

@@ -116,7 +116,11 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
 21. Use `foreach` for arrays and concrete collections with value-type enumerators when
     the loop does not need an index. For variables typed as `IReadOnlyList<T>` or
     `IList<T>`, use a counted loop to avoid interface-enumerator allocation. Retain
-    `foreach` when the input is a stream or only exposes `IEnumerable<T>`.
+    `foreach` when the input is a stream or only exposes `IEnumerable<T>`. The C# source
+    lint flags `for (int i = 0; i < x.Length; ...)` loops whose index is used only to read
+    `x[i]`; `.Count` loops stay review-enforced because the declared type is not visible to
+    a source check. Owner-enforced in review (PR #98): sweep new and touched loops for this
+    rule before requesting review.
 22. Never use bitwise `|`, `&`, `|=`, or `&=` to aggregate Boolean results. Evaluate
     every side-effectful operation into its own named Boolean, then combine results
     with `||` or `&&`. Bitwise operators remain correct for flags and numeric values.
