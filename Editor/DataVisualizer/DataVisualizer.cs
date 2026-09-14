@@ -7112,10 +7112,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                         }
                     }
                 }
-                else
-                {
-                    Debug.LogWarning("DragPerform: Invalid drag data received.");
-                }
+                /*
+                    Not a package drag (external drops carry none of our generic data), and the
+                    hover handlers above already ignore them; drop silently instead of warning.
+                */
 
                 _draggedLabelText = null;
                 container.RemoveFromClassList("drop-target-hover");

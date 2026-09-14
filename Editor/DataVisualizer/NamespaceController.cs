@@ -1069,17 +1069,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
                 DataVisualizer.SignalRefresh();
             }
-            else
-            {
-                string[] typeDisplayNames = new string[typesToRemove.Count];
-                for (int index = 0; index < typesToRemove.Count; index++)
-                {
-                    typeDisplayNames[index] = typesToRemove[index].Name;
-                }
-                Debug.LogWarning(
-                    $"No change detected for namespace '{namespaceKey}' removal (tried to remove [{string.Join(",", typeDisplayNames)}])"
-                );
-            }
+            /*
+                A confirm whose targets already left the managed list (stale popover after a
+                refresh) is an idempotent no-op: the requested end state already exists, so drop
+                silently instead of warning.
+            */
         }
 
         private void HandleRemoveTypeConfirmed(DataVisualizer dataVisualizer, Type typeToRemove)
@@ -1110,12 +1104,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
                 DataVisualizer.SignalRefresh();
             }
-            else
-            {
-                Debug.LogWarning(
-                    $"Type '{typeName}' was not found in managed list during removal. Current list: [{string.Join(",", currentManagedList)}]."
-                );
-            }
+            /*
+                A confirm for a type that already left the managed list (stale popover after a
+                refresh) is an idempotent no-op: drop silently instead of warning.
+            */
         }
     }
 }
