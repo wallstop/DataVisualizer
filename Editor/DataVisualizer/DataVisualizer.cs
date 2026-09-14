@@ -2261,11 +2261,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (_initializationDeferredForPlayMode)
             {
                 /*
-                    The window was enabled during play and skipped its initial load; that load now
-                    covers the current project state, so a play-time refresh request is redundant.
+                    The window was enabled during play and skipped its initial load. Discard any
+                    suspended state left from a previous session: the load below snapshots the
+                    whole project fresh, which is the single source of truth for play-time changes,
+                    and a play-time refresh request is redundant.
                 */
                 _initializationDeferredForPlayMode = false;
                 _needsRefresh = false;
+                AssetGuidTypeIndex.Shared.Cancel();
                 LoadInitialContent();
                 return;
             }
@@ -2317,11 +2320,22 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             if (EditorApplication.isPlaying)
             {
-                _initializationDeferredForPlayMode = true;
+                DeferInitializationForPlayMode();
                 return;
             }
 
             LoadInitialContent();
+        }
+
+        private void DeferInitializationForPlayMode()
+        {
+            _initializationDeferredForPlayMode = true;
+            /*
+                A window enabled during play never observes ExitingEditMode, so it takes the same
+                suspension here: the shared index stops resolving, the refresh gates above coalesce
+                requests, and ResumeAfterPlayMode runs the initial load once edit mode returns.
+            */
+            SuspendForPlayMode();
         }
 
         private void SyncNamespaceAndTypeOrders()

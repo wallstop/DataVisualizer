@@ -11,8 +11,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     public sealed class PlayModeSuspensionTests
     {
         private static FieldInfo _instanceField;
-        private static FieldInfo _needsRefreshField;
-        private static MethodInfo _scheduleRefreshMethod;
 
         private static void EnsureFolderExists(string folder)
         {
@@ -64,30 +62,35 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static bool ReadNeedsRefresh(DataVisualizerWindow window)
         {
-            if (_needsRefreshField == null)
-            {
-                _needsRefreshField = typeof(DataVisualizerWindow).GetField(
-                    "_needsRefresh",
-                    BindingFlags.Instance | BindingFlags.NonPublic
-                );
-            }
+            return ReadPrivateField<bool>(window, "_needsRefresh");
+        }
 
-            Assert.IsNotNull(_needsRefreshField, "The _needsRefresh field must exist.");
-            return (bool)_needsRefreshField.GetValue(window);
+        private static T ReadPrivateField<T>(DataVisualizerWindow window, string fieldName)
+        {
+            FieldInfo field = typeof(DataVisualizerWindow).GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic
+            );
+            Assert.IsNotNull(field, $"The {fieldName} field must exist.");
+            return (T)field.GetValue(window);
         }
 
         private static void InvokeScheduleRefresh(DataVisualizerWindow window)
         {
-            if (_scheduleRefreshMethod == null)
-            {
-                _scheduleRefreshMethod = typeof(DataVisualizerWindow).GetMethod(
-                    "ScheduleRefresh",
-                    BindingFlags.Instance | BindingFlags.NonPublic
-                );
-            }
+            InvokePrivateParameterless(window, "ScheduleRefresh");
+        }
 
-            Assert.IsNotNull(_scheduleRefreshMethod, "The ScheduleRefresh method must exist.");
-            _scheduleRefreshMethod.Invoke(window, null);
+        private static void InvokePrivateParameterless(
+            DataVisualizerWindow window,
+            string methodName
+        )
+        {
+            MethodInfo method = typeof(DataVisualizerWindow).GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.NonPublic
+            );
+            Assert.IsNotNull(method, $"The {methodName} method must exist.");
+            method.Invoke(window, null);
         }
 
         [Test]
@@ -380,6 +383,27 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     UnityEngine.Object.DestroyImmediate(window);
                 }
 
+                RestoreSharedInstance(previousInstance);
+                AssetGuidTypeIndex.Shared.Cancel();
+            }
+        }
+
+        [Test]
+        public void ShouldSuspendSharedIndexWhenWindowInitializesDuringPlay()
+        {
+            object previousInstance = ReadSharedInstance();
+            DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
+            try
+            {
+                InvokePrivateParameterless(window, "DeferInitializationForPlayMode");
+
+                Assert.IsTrue(AssetGuidTypeIndex.Shared.IsSuspended);
+                Assert.IsTrue(ReadPrivateField<bool>(window, "_initializationDeferredForPlayMode"));
+                Assert.IsTrue(ReadPrivateField<bool>(window, "_suspendedForPlayMode"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(window);
                 RestoreSharedInstance(previousInstance);
                 AssetGuidTypeIndex.Shared.Cancel();
             }
