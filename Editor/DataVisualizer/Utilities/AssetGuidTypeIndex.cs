@@ -21,6 +21,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public bool IsSuspended => _suspended;
 
+        /*
+            Replaces the default busy check when set (deterministic tests and tooling seams; the
+            editor test assembly cannot access editor-assembly internals). Null keeps the default:
+            EditorApplication.isCompiling || EditorApplication.isUpdating.
+        */
+        public Func<bool> AssetDatabaseBusyOverride { get; set; }
+
         private readonly Queue<string> _pendingAssetPaths = new();
         private readonly Dictionary<string, (Type Type, string Guid)> _assetsByPath = new(
             StringComparer.OrdinalIgnoreCase
@@ -120,6 +127,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             EnsureStarted();
+            if (IsAssetDatabaseBusy())
+            {
+                return false;
+            }
+
             return RunStateMachine(budgetMilliseconds);
         }
 
@@ -216,6 +228,26 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             ProcessPendingSlice(DefaultSliceMilliseconds);
+        }
+
+        /*
+            Unity logs its built-in "The referenced script on this Behaviour (Game Object '<null>')
+            is missing!" warning whenever GetMainAssetTypeAtPath forces type resolution for an
+            asset whose script GUID is temporarily unresolvable. Right after a script recompile,
+            that transient state covers large parts of the import database while it refreshes, so
+            classifying during the window burst up to hundreds of user-facing warnings attributed
+            to this package (recorded three times on issue #36). Deferring until the database is
+            idle keeps the pump off that window; the deferred work completes on a later tick.
+        */
+        private bool IsAssetDatabaseBusy()
+        {
+            Func<bool> overridePredicate = AssetDatabaseBusyOverride;
+            if (overridePredicate != null)
+            {
+                return overridePredicate();
+            }
+
+            return EditorApplication.isCompiling || EditorApplication.isUpdating;
         }
 
         private void QueueAssetPaths(IReadOnlyList<string> paths)
