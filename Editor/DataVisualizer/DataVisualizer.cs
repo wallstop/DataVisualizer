@@ -361,9 +361,23 @@ namespace WallstopStudios.DataVisualizer.Editor
         private float? _lastEnterPressed;
         private bool _needsRefresh;
 
+        /*
+            Set while the project is playing: event-driven refreshes are coalesced into
+            _needsRefresh and batch chains pause instead of loading assets during play.
+            Driven by HandlePlayModeStateChanged, not by polling.
+        */
+        private bool _suspendedForPlayMode;
+
+        /*
+            Set when CreateGUI's deferred initial load finds the project playing; the load
+            runs once from ResumeAfterPlayMode instead of rebuilding the view during play.
+        */
+        private bool _initializationDeferredForPlayMode;
+
         // Async loading state
         private Type _asyncLoadTargetType;
         private IVisualElementScheduledItem _asyncLoadTask;
+        private IVisualElementScheduledItem _searchCacheLoadTask;
         private readonly Queue<string> _pendingObjectGuids = new();
         private readonly Queue<string> _pendingSearchCacheGuids = new();
         private bool _isLoadingObjectsAsync;
@@ -1462,45 +1476,23 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             /*
                 CreateGUI is now complete - window structure is ready
-                Defer ALL content building to next frame so window appears instantly
+                Defer ALL content building to next frame so window appears instantly.
+                While the project is playing, the load defers instead of running during play.
             */
-            rootVisualElement
-                .schedule.Execute(() =>
-                {
-                    if (EnableAsyncLoadDebugLog)
-                    {
-                        Debug.Log(
-                            $"[DataVisualizer] CreateGUI - Loading types and building views at {System.DateTime.Now:HH:mm:ss.fff}"
-                        );
-                    }
+            rootVisualElement.schedule.Execute(DeferInitialContentWhilePlaying).ExecuteLater(1);
+        }
 
-                    // Load types (fast now without CreateInstance)
-                    LoadScriptableObjectTypes();
-
-                    // Build all views - window is already visible at this point
-                    BuildNamespaceView();
-                    BuildProcessorColumnView();
-                    BuildObjectsView();
-                    BuildInspectorView();
-
-                    // Schedule the async initialization after views are built
-                    rootVisualElement
-                        .schedule.Execute(() =>
-                        {
-                            if (EnableAsyncLoadDebugLog)
-                            {
-                                Debug.Log(
-                                    $"[DataVisualizer] CreateGUI - Starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
-                                );
-                            }
-                            // Start async search cache population in background (low priority)
-                            PopulateSearchCacheAsync();
-                            // Restore selection with priority async loading
-                            RestorePreviousSelection();
-                        })
-                        .ExecuteLater(10);
-                })
-                .ExecuteLater(1); // Execute on next frame so window renders first
+        public void HandlePlayModeStateChanged(PlayModeStateChange state)
+        {
+            switch (state)
+            {
+                case PlayModeStateChange.ExitingEditMode:
+                    SuspendForPlayMode();
+                    break;
+                case PlayModeStateChange.EnteredEditMode:
+                    ResumeAfterPlayMode();
+                    break;
+            }
         }
 
         internal void PersistSettings(
@@ -1718,6 +1710,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             RestoreWindowMinimumSizeFromPersistedClamp();
             _nextColorIndex = 0;
             Instance = this;
+            EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
+            EditorApplication.playModeStateChanged += HandlePlayModeStateChanged;
             AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
             AssetGuidTypeIndex.Shared.IndexCompleted += SignalRefresh;
             _isSearchCachePopulated = false;
@@ -1955,9 +1949,16 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void Cleanup()
         {
+            EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
-            if (!AssetGuidTypeIndex.Shared.IsComplete)
+            if (!AssetGuidTypeIndex.Shared.IsComplete || AssetGuidTypeIndex.Shared.IsSuspended)
             {
+                /*
+                    A suspended index outlives its window when the window closes during play, and
+                    no EnteredEditMode callback will unsuspend it. Resetting keeps the shared index
+                    from leaking the suspension into the next session; the next window re-snapshots
+                    from scratch, which is a normal cold start.
+                */
                 AssetGuidTypeIndex.Shared.Cancel();
             }
 
@@ -1969,6 +1970,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Cancel async loading
             _asyncLoadTask?.Pause();
             _asyncLoadTask = null;
+            _searchCacheLoadTask?.Pause();
+            _searchCacheLoadTask = null;
             _asyncLoadTargetType = null;
             _pendingObjectGuids.Clear();
             _pendingSearchCacheGuids.Clear();
@@ -2155,9 +2158,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             // Continue with next batch
             if (0 < _pendingSearchCacheGuids.Count)
             {
-                rootVisualElement
-                    .schedule.Execute(() => ContinuePopulatingSearchCache(generation))
-                    .ExecuteLater(10);
+                _searchCacheLoadTask = rootVisualElement.schedule.Execute(() =>
+                    ContinuePopulatingSearchCache(generation)
+                );
+                _searchCacheLoadTask.ExecuteLater(10);
             }
             else
             {
@@ -2206,7 +2210,132 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _needsRefresh = true;
+            if (_suspendedForPlayMode || _initializationDeferredForPlayMode)
+            {
+                /*
+                    Playing: keep the last view and remember the request. The deferred-initial-load
+                    case covers a window enabled during play, which never observed ExitingEditMode.
+                    ResumeAfterPlayMode reissues or absorbs the refresh once edit mode returns, so
+                    no AssetDatabase work happens on the main thread while playing.
+                */
+                return;
+            }
+
             rootVisualElement.schedule.Execute(RefreshAllViews).ExecuteLater(1);
+        }
+
+        private void SuspendForPlayMode()
+        {
+            _suspendedForPlayMode = true;
+            AssetGuidTypeIndex.Shared.Suspend();
+            _asyncLoadTask?.Pause();
+            _searchCacheLoadTask?.Pause();
+        }
+
+        private void ResumeAfterPlayMode()
+        {
+            _suspendedForPlayMode = false;
+            AssetGuidTypeIndex.Shared.Resume();
+            if (
+                _isLoadingObjectsAsync
+                && _asyncLoadTargetType != null
+                && 0 < _pendingObjectGuids.Count
+            )
+            {
+                _asyncLoadTask?.Pause();
+                _asyncLoadTask = rootVisualElement.schedule.Execute(() =>
+                    ContinueLoadingObjects(_asyncLoadTargetType, _asyncLoadGeneration)
+                );
+                _asyncLoadTask.ExecuteLater(10);
+            }
+
+            if (_isLoadingSearchCacheAsync && 0 < _pendingSearchCacheGuids.Count)
+            {
+                _searchCacheLoadTask?.Pause();
+                _searchCacheLoadTask = rootVisualElement.schedule.Execute(() =>
+                    ContinuePopulatingSearchCache(_searchCacheGeneration)
+                );
+                _searchCacheLoadTask.ExecuteLater(10);
+            }
+
+            if (_initializationDeferredForPlayMode)
+            {
+                /*
+                    The window was enabled during play and skipped its initial load. Discard any
+                    suspended state left from a previous session: the load below snapshots the
+                    whole project fresh, which is the single source of truth for play-time changes,
+                    and a play-time refresh request is redundant.
+                */
+                _initializationDeferredForPlayMode = false;
+                _needsRefresh = false;
+                AssetGuidTypeIndex.Shared.Cancel();
+                LoadInitialContent();
+                return;
+            }
+
+            if (_needsRefresh)
+            {
+                _needsRefresh = false;
+                ScheduleRefresh();
+            }
+        }
+
+        private void LoadInitialContent()
+        {
+            if (EnableAsyncLoadDebugLog)
+            {
+                Debug.Log(
+                    $"[DataVisualizer] Initial content load - loading types and building views at {System.DateTime.Now:HH:mm:ss.fff}"
+                );
+            }
+
+            // Load types (fast now without CreateInstance)
+            LoadScriptableObjectTypes();
+
+            // Build all views - window is already visible at this point
+            BuildNamespaceView();
+            BuildProcessorColumnView();
+            BuildObjectsView();
+            BuildInspectorView();
+
+            // Schedule the async initialization after views are built
+            rootVisualElement
+                .schedule.Execute(() =>
+                {
+                    if (EnableAsyncLoadDebugLog)
+                    {
+                        Debug.Log(
+                            $"[DataVisualizer] Initial content load - starting async initialization at {System.DateTime.Now:HH:mm:ss.fff}"
+                        );
+                    }
+                    // Start async search cache population in background (low priority)
+                    PopulateSearchCacheAsync();
+                    // Restore selection with priority async loading
+                    RestorePreviousSelection();
+                })
+                .ExecuteLater(10);
+        }
+
+        private void DeferInitialContentWhilePlaying()
+        {
+            if (EditorApplication.isPlaying)
+            {
+                DeferInitializationForPlayMode();
+                return;
+            }
+
+            LoadInitialContent();
+        }
+
+        private void DeferInitializationForPlayMode()
+        {
+            _initializationDeferredForPlayMode = true;
+            /*
+                A window enabled during play never observes ExitingEditMode, so it takes the same
+                suspension here: the shared index stops resolving, the refresh gates above coalesce
+                requests, and ResumeAfterPlayMode runs the initial load once edit mode returns.
+            */
+            SuspendForPlayMode();
         }
 
         private void SyncNamespaceAndTypeOrders()
@@ -2245,6 +2374,16 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void RefreshAllViews()
         {
+            if (_suspendedForPlayMode || _initializationDeferredForPlayMode)
+            {
+                /*
+                    A refresh scheduled just before play started (or on a window enabled during
+                    play) can fire after the suspension; leave _needsRefresh set so the coalesced
+                    resume refresh or deferred initial load covers it.
+                */
+                return;
+            }
+
             Type selectedType = _namespaceController.SelectedType;
 
             string previousNamespaceKey =
