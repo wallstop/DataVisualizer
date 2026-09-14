@@ -29,8 +29,6 @@
     "Editor.meta",
     "Runtime",
     "Runtime.meta",
-    "docs",
-    "docs.meta",
     "README.md.meta",
     "LICENSE.meta",
     "package.json.meta"

@@ -14,7 +14,7 @@ Open **Tools → Walltop Studios → Data Visualizer** and dock it alongside the
 
 ## Window Layout
 
-![Data Visualizer layout with namespace, object, and inspector columns](docs/images/data-visualizer-layout.jpg)
+![Data Visualizer layout with namespace, object, and inspector columns](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-layout.jpg)
 *Full window overview at 00:27 in the walkthrough video.*
 
 The window uses a three-panel layout:
@@ -27,7 +27,7 @@ The window uses a three-panel layout:
 
 ## Instance Management
 
-![Clone, rename, move, and delete controls highlighted above the object list](docs/images/data-visualizer-instance-actions.jpg)
+![Clone, rename, move, and delete controls highlighted above the object list](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-instance-actions.jpg)
 *Instance actions demo at 03:35.*
 
 Asset management controls live above the Objects panel:
@@ -44,14 +44,14 @@ Inspector edits save immediately. Your selection persists when switching between
 
 ## Creating Assets
 
-![Create button and data folder selector above object list](docs/images/data-visualizer-create.jpg)
+![Create button and data folder selector above object list](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-create.jpg)
 *New asset workflow at 06:45.*
 
 The **Create** button spawns a new instance of the active type in your configured **Data Folder** (see Settings below). Clones stay beside their originals regardless of the Data Folder setting. Chain create with rename or move to place new assets exactly where you need them.
 
 ## Building Your Type Catalog
 
-![Namespace search dropdown with import controls visible](docs/images/data-visualizer-import.jpg)
+![Namespace search dropdown with import controls visible](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-import.jpg)
 *Adding ScriptableObject types around 12:45.*
 
 Three controls above the Namespace panel populate your catalog:
@@ -72,7 +72,7 @@ The filter field above the Namespace list narrows types and namespaces with case
 
 ## Settings
 
-![Settings dropdown showing persistence options and data folder field](docs/images/data-visualizer-settings.jpg)
+![Settings dropdown showing persistence options and data folder field](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-settings.jpg)
 *State management settings at 18:20.*
 
 **Persist state in user settings** stores layout, ordering, and tracked types in your local user cache instead of a shared project asset. Enable this to avoid merge conflicts when multiple developers customize their own workspace.
