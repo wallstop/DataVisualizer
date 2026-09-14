@@ -1951,8 +1951,14 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
-            if (!AssetGuidTypeIndex.Shared.IsComplete)
+            if (!AssetGuidTypeIndex.Shared.IsComplete || AssetGuidTypeIndex.Shared.IsSuspended)
             {
+                /*
+                    A suspended index outlives its window when the window closes during play, and
+                    no EnteredEditMode callback will unsuspend it. Resetting keeps the shared index
+                    from leaking the suspension into the next session; the next window re-snapshots
+                    from scratch, which is a normal cold start.
+                */
                 AssetGuidTypeIndex.Shared.Cancel();
             }
 

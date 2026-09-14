@@ -353,5 +353,36 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetGuidTypeIndex.Shared.Cancel();
             }
         }
+
+        [Test]
+        public void ShouldReleaseSharedSuspensionWhenWindowClosesWhileSuspended()
+        {
+            object previousInstance = ReadSharedInstance();
+            DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
+            try
+            {
+                window.HandlePlayModeStateChanged(PlayModeStateChange.ExitingEditMode);
+                Assert.IsTrue(AssetGuidTypeIndex.Shared.IsSuspended);
+
+                /*
+                    Closing the window during play must not leak the suspension into the next
+                    session: no EnteredEditMode callback will arrive for this window.
+                */
+                UnityEngine.Object.DestroyImmediate(window);
+                window = null;
+
+                Assert.IsFalse(AssetGuidTypeIndex.Shared.IsSuspended);
+            }
+            finally
+            {
+                if (window != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(window);
+                }
+
+                RestoreSharedInstance(previousInstance);
+                AssetGuidTypeIndex.Shared.Cancel();
+            }
+        }
     }
 }
