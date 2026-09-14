@@ -1727,6 +1727,16 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             void Confirm()
             {
+                /*
+                    The popover can already be open when play starts; the gate at the top only
+                    blocks opening a new one, so re-check here to keep a pre-opened confirm from
+                    running its mutation while suspended.
+                */
+                if (IsAssetEditingSuspended)
+                {
+                    return;
+                }
+
                 onConfirm();
                 CloseActivePopover();
             }

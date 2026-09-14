@@ -472,6 +472,53 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldGatePreOpenedConfirmationWhileSuspendedForPlayMode()
+        {
+            object previousInstance = ReadSharedInstance();
+            using (TestCleanupScope cleanup = new())
+            {
+                cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
+                cleanup.Defer(() => RestoreSharedInstance(previousInstance));
+
+                DataVisualizerWindow window =
+                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
+                window.CreateGUI();
+
+                int confirmCount = 0;
+                InvokePrivate(
+                    window,
+                    "BuildAndOpenConfirmationPopover",
+                    "Test confirm",
+                    "Run",
+                    (Action)(() => confirmCount++),
+                    new VisualElement()
+                );
+
+                VisualElement confirmPopover = ReadPrivateField<VisualElement>(
+                    window,
+                    "_confirmActionPopover"
+                );
+                Button confirmButton = confirmPopover.Q<Button>(className: "popover-delete-button");
+                Assert.IsNotNull(confirmButton, "the confirm button must carry the action");
+                Action confirmAction = (Action)confirmButton.userData;
+                Assert.AreEqual(0, confirmCount);
+
+                SuspendForPlayMode(window);
+                confirmAction();
+                Assert.AreEqual(
+                    0,
+                    confirmCount,
+                    "a confirmation popover that was already open when play started must not run while suspended"
+                );
+
+                ResumeFromPlayMode(window);
+                confirmAction();
+                Assert.AreEqual(1, confirmCount, "the same confirmation after resume must run");
+            }
+        }
+
+        [Test]
         public void ShouldBuildDisabledInspectorContentWhileSuspendedForPlayMode()
         {
             object previousInstance = ReadSharedInstance();
