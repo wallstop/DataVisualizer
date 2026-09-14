@@ -515,6 +515,16 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public void DecrementTypeSelection(DataVisualizer dataVisualizer)
         {
+            /*
+                Arrow-key browsing is manual type switching: the highlight mutations below run
+                before SelectType, so the gate must be here or the visual selection desyncs from
+                the actual selection while suspended.
+            */
+            if (dataVisualizer.IsAssetEditingSuspended)
+            {
+                return;
+            }
+
             if (!InternalDeselectAndGetCurrentIndex(out VisualElement parent, out int currentIndex))
             {
                 return;
@@ -532,6 +542,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public void IncrementTypeSelection(DataVisualizer dataVisualizer)
         {
+            if (dataVisualizer.IsAssetEditingSuspended)
+            {
+                return;
+            }
+
             if (!InternalDeselectAndGetCurrentIndex(out VisualElement parent, out int currentIndex))
             {
                 return;

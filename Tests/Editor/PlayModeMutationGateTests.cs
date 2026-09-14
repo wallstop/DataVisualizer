@@ -8,6 +8,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using UnityEngine;
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.Editor;
+    using WallstopStudios.DataVisualizer.Editor.Styles;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
 
@@ -101,6 +102,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
             Assert.IsNotNull(method, $"The {methodName} method must exist.");
             return method.Invoke(window, arguments);
+        }
+
+        private static T ReadControllerField<T>(object controller, string fieldName)
+        {
+            FieldInfo field = controller
+                .GetType()
+                .GetField(
+                    fieldName,
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+                );
+            Assert.IsNotNull(field, $"The {fieldName} field must exist.");
+            return (T)field.GetValue(controller);
         }
 
         private static void SuspendForPlayMode(DataVisualizerWindow window)
@@ -515,6 +528,82 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 ResumeFromPlayMode(window);
                 confirmAction();
                 Assert.AreEqual(1, confirmCount, "the same confirmation after resume must run");
+            }
+        }
+
+        [Test]
+        public void ShouldGateArrowKeyTypeBrowsingWhileSuspendedForPlayMode()
+        {
+            string folder = CreateFixtureFolder();
+            object previousInstance = ReadSharedInstance();
+            using (TestCleanupScope cleanup = new())
+            {
+                cleanup.Defer(() =>
+                {
+                    AssetDatabase.DeleteAsset(folder);
+                    AssetDatabase.Refresh();
+                });
+                cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
+                cleanup.Defer(() => RestoreSharedInstance(previousInstance));
+
+                DataVisualizerWindow window =
+                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
+                window.CreateGUI();
+
+                /*
+                    Two managed types so the arrow-key wrap genuinely moves the selection; the
+                    regression is the visual highlight drifting while the suspended SelectType
+                    call no-ops.
+                */
+                CreateFixtureAsset(folder, "First.asset");
+                Assert.IsTrue(
+                    (bool)InvokePrivate(
+                        window,
+                        "AddManagedTypes",
+                        new List<Type>
+                        {
+                            typeof(TestDataObject),
+                            typeof(SelectionPersistenceGuidData),
+                        }
+                    )
+                );
+                InvokePrivate(window, "BuildNamespaceView");
+
+                NamespaceController controller = ReadPrivateField<NamespaceController>(
+                    window,
+                    "_namespaceController"
+                );
+                controller.SelectType(window, typeof(TestDataObject));
+                Dictionary<Type, VisualElement> typeCache = ReadControllerField<
+                    Dictionary<Type, VisualElement>
+                >(controller, "_namespaceCache");
+                VisualElement selectedRow = typeCache[typeof(TestDataObject)];
+                VisualElement unselectedRow = typeCache[typeof(SelectionPersistenceGuidData)];
+
+                SuspendForPlayMode(window);
+                controller.IncrementTypeSelection(window);
+                Assert.AreEqual(
+                    typeof(TestDataObject),
+                    controller.SelectedType,
+                    "arrow-key browsing while suspended must not change the selection"
+                );
+                Assert.IsTrue(
+                    selectedRow.ClassListContains(StyleConstants.SelectedClass),
+                    "arrow-key browsing while suspended must not strip the selected row's highlight"
+                );
+                Assert.IsFalse(
+                    unselectedRow.ClassListContains(StyleConstants.SelectedClass),
+                    "arrow-key browsing while suspended must not highlight another row"
+                );
+
+                ResumeFromPlayMode(window);
+                controller.IncrementTypeSelection(window);
+                Assert.AreEqual(
+                    typeof(SelectionPersistenceGuidData),
+                    controller.SelectedType,
+                    "arrow-key browsing after resume must move the selection"
+                );
             }
         }
 
