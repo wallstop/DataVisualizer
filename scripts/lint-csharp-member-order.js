@@ -2,8 +2,9 @@
 // Adapted from Ambiguous-Interactive/unity-helpers at edbfe9b245c2ca20c461c746566b9c46fc133457 (MIT).
 /**
  * C# source policy enforcement: member ordering (#672), nested-type placement (#575), method
- * naming (#47), block formatting for multi-line comments (#57), and bounded LINQ-free source
- * areas (#61).
+ * naming (#47), block formatting for multi-line comments (#57), bounded LINQ-free source
+ * areas (#61), and foreach iteration for array/string loops whose index only reads elements
+ * (rule 21).
  *
  * The member ordering is the owner's, from #672. Every tier below is ordered public → protected →
  * internal → private, including const:
@@ -855,6 +856,177 @@ function prohibitedLinqViolations(text) {
   return violations;
 }
 
+const ASSIGNMENT_OPERATOR_AFTER_ELEMENT = new Set([
+  "=",
+  "+=",
+  "-=",
+  "*=",
+  "/=",
+  "%=",
+  "&=",
+  "|=",
+  "^="
+]);
+
+/**
+ * Counted loops whose index is only used to read elements of an array-or-string collection
+ * should be foreach (rule 21: arrays and other value-enumerator collections iterate by foreach
+ * unless the loop needs the index). The safe mechanical subset:
+ *
+ *   for (int V = 0; V < E.Length; V++)
+ *
+ * is flagged when the header has this exact simple shape and every occurrence of V in the
+ * braced body is a pure element read `E[V]` of the same E in a non-assignment position.
+ * `.Count` bounds are deliberately skipped: a counted loop is REQUIRED for
+ * IReadOnlyList<T>/IList<T> receivers (interface enumerators allocate, rule 21) and a source
+ * check cannot see the declared type behind `.Count`.
+ */
+function countedLoopViolations(text) {
+  const masked = maskNoise(text);
+  const violations = [];
+  const header = /\bfor\s*\(/g;
+  let match;
+  while ((match = header.exec(masked)) !== null) {
+    const open = match.index + match[0].length - 1;
+    const close = skipBalanced(masked, open);
+    header.lastIndex = Math.max(match.index + 1, open + 1);
+    if (close < 0) {
+      continue;
+    }
+    // skipBalanced returns the index just past the closing parenthesis.
+    if (countedLoopIndexIsPureElementRead(masked, open, close - 1)) {
+      violations.push({
+        line: lineOf(text, match.index),
+        kind: "counted loop over value enumerator"
+      });
+    }
+  }
+  return violations;
+}
+
+function countedLoopIndexIsPureElementRead(masked, open, close) {
+  const parts = masked
+    .slice(open + 1, close)
+    .split(";")
+    .map((part) => part.trim());
+  if (parts.length !== 3) {
+    return false;
+  }
+  const declared = /^int\s+([A-Za-z_]\w*)\s*=\s*0$/.exec(parts[0]);
+  if (declared === null) {
+    return false;
+  }
+  const variable = declared[1];
+  const bound = new RegExp(
+    `^${variable}\\s*<\\s*([A-Za-z_]\\w*)\\s*\\.\\s*Length$`
+  ).exec(parts[1]);
+  if (bound === null) {
+    return false;
+  }
+  const collection = bound[1];
+  const increment = new RegExp(
+    `^(?:${variable}\\+\\+|\\+\\+${variable}|${variable}\\s*\\+=\\s*1|${variable}\\s*=\\s*${variable}\\s*\\+\\s*1)$`
+  ).exec(parts[2]);
+  if (increment === null) {
+    return false;
+  }
+
+  let cursor = close + 1;
+  while (cursor < masked.length && /\s/.test(masked[cursor])) {
+    cursor += 1;
+  }
+  if (masked[cursor] !== "{") {
+    return false;
+  }
+  const bodyClose = skipBalanced(masked, cursor);
+  if (bodyClose < 0) {
+    return false;
+  }
+  const body = masked.slice(cursor + 1, bodyClose - 1);
+
+  const escaped = variable.replace(/\$/g, "\\$");
+  const occurrence = new RegExp(`(?<![\\w])${escaped}(?![\\w])`, "g");
+  let found = 0;
+  let elementMatch;
+  while ((elementMatch = occurrence.exec(body)) !== null) {
+    found += 1;
+    if (!isPureElementRead(masked, cursor + 1 + elementMatch.index, collection)) {
+      return false;
+    }
+  }
+  // A body that reassigns the collection or hands it to ref/out makes foreach read a different
+  // sequence than the counted loop; treat that as needing the counted form. (`in` cannot
+  // reassign its argument, so it stays legal; a nested `foreach (x in E)` is also just a read.)
+  const escapedCollection = collection.replace(/\$/g, "\\$");
+  const mutatedCollection = new RegExp(
+    `(?<![\\w.])${escapedCollection}(?!\\w)\\s*(?:=(?!=)|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|\\+\\+|--)` +
+      `|\\b(?:ref|out)\\s+${escapedCollection}(?!\\w)`
+  );
+  return found > 0 && !mutatedCollection.test(body);
+}
+
+/** The occurrence of the loop variable at `at` must be the read `collection[at]`. */
+function isPureElementRead(masked, at, collection) {
+  let cursor = at - 1;
+  while (0 <= cursor && /\s/.test(masked[cursor])) {
+    cursor -= 1;
+  }
+  if (masked[cursor] !== "[") {
+    return false;
+  }
+  let nameEnd = cursor - 1;
+  while (0 <= nameEnd && /\s/.test(masked[nameEnd])) {
+    nameEnd -= 1;
+  }
+  let nameStart = nameEnd;
+  while (0 <= nameStart && /[A-Za-z0-9_]/.test(masked[nameStart])) {
+    nameStart -= 1;
+  }
+  if (masked.slice(nameStart + 1, nameEnd + 1) !== collection) {
+    return false;
+  }
+  let keywordEnd = nameStart;
+  while (0 <= keywordEnd && /\s/.test(masked[keywordEnd])) {
+    keywordEnd -= 1;
+  }
+  const precedingWord = /\w+$/.exec(masked.slice(0, keywordEnd + 1));
+  if (precedingWord !== null && /^(?:out|ref|in)$/.test(precedingWord[0])) {
+    return false;
+  }
+
+  cursor = at + variableWidth(masked, at);
+  while (cursor < masked.length && /\s/.test(masked[cursor])) {
+    cursor += 1;
+  }
+  if (masked[cursor] !== "]") {
+    return false;
+  }
+  let after = cursor + 1;
+  while (after < masked.length && /\s/.test(masked[after])) {
+    after += 1;
+  }
+  const two = masked.slice(after, after + 2);
+  if (two === "++" || two === "--") {
+    return false;
+  }
+  if (ASSIGNMENT_OPERATOR_AFTER_ELEMENT.has(two)) {
+    return false;
+  }
+  if (masked[after] === "=" && masked[after + 1] !== "=") {
+    return false;
+  }
+  return true;
+}
+
+/** Width of the identifier occurrence at `at` on already-masked text. */
+function variableWidth(masked, at) {
+  let end = at;
+  while (end < masked.length && /[A-Za-z0-9_]/.test(masked[end])) {
+    end += 1;
+  }
+  return end - at;
+}
+
 /** The member's declaring identifier, for the violation message. */
 function memberName(masked, member) {
   const prefix = declarationPrefix(masked, member.headerStart, member.end);
@@ -949,6 +1121,7 @@ function analyzeFile(text, prohibitLinq = false) {
   if (prohibitLinq) {
     violations.push(...prohibitedLinqViolations(text));
   }
+  violations.push(...countedLoopViolations(text));
   const edits = [];
 
   for (const body of bodies) {
@@ -1356,6 +1529,13 @@ function main(argv) {
         );
         continue;
       }
+      if (violation.kind === "counted loop over value enumerator") {
+        remaining.push(
+          `${relative}:${violation.line}: use foreach for this loop; arrays and strings have ` +
+            `value-based enumerators and the index is used only to read elements (rule 21)`
+        );
+        continue;
+      }
       if (violation.kind === "underscored method") {
         remaining.push(
           `${relative}:${violation.line}: method '${violation.name}' in ` +
@@ -1397,6 +1577,8 @@ function main(argv) {
     console.error(
       `[csharp-member-order] ${remaining.length} C# source policy violation(s). ` +
         "Use block comments for multi-line prose; use underscore-free PascalCase method names; " +
+        "iterate arrays, strings, and other value-enumerator collections with foreach unless the " +
+        "loop needs the index; " +
         "keep Runtime, persisted editor-state, search-model, asset postprocessing, and " +
         "namespace-discovery code free of System.Linq; " +
         "reorder members into the #672 ordering " +
@@ -1429,7 +1611,8 @@ module.exports = {
   classifyMember,
   memberRank,
   multilineLineCommentViolations,
-  prohibitedLinqViolations
+  prohibitedLinqViolations,
+  countedLoopViolations
 };
 
 if (require.main === module) {
