@@ -58,11 +58,11 @@ try {
             )
             if (
                 $warningLevelArguments.Count -ne 1 -or
-                $warningLevelArguments[0] -notmatch '^(?:-|/)(?:warn|w):4$'
+                $warningLevelArguments[0] -notmatch '^(?:-|/)(?:warn|w):5$'
             ) {
                 Write-Host (
                     "[assembly-warnings] ERROR: $responseFilePath must contain exactly one " +
-                    'maximum warning-level argument (-warn:4)'
+                    'maximum warning-level argument (-warn:5)'
                 )
                 $errors++
             }

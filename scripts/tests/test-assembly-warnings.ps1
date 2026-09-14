@@ -11,7 +11,7 @@ $warningsAsErrorsRuleset = @'
   <IncludeAll Action="Error" />
 </RuleSet>
 '@
-$maximumWarningsResponseFile = '-warn:4'
+$maximumWarningsResponseFile = '-warn:5'
 
 function Write-AssemblyFixture {
     param(
@@ -113,7 +113,7 @@ Invoke-TestCase 'Fails_WhenCompilerWarningLevelIsMalformed' {
 
         $output = & $lintScript -Root $root *>&1 | Out-String
         Assert-ExitCode 1 'a malformed compiler warning level should fail'
-        Assert-True ($output -match 'maximum warning-level argument') "output should require -warn:4, got: $output"
+        Assert-True ($output -match 'maximum warning-level argument') "output should require -warn:5, got: $output"
     } finally {
         Remove-TempRoot $root
     }
@@ -171,7 +171,7 @@ Invoke-TestCase 'Fails_WhenCompilerResponseFileLoadsPackageAnalyzer' {
         Write-FixtureFile `
             -Root $root `
             -RelativePath 'Runtime/csc.rsp' `
-            -Content "-warn:4`n-analyzer:`"Runtime/Analyzer.dll`""
+            -Content "-warn:5`n-analyzer:`"Runtime/Analyzer.dll`""
 
         $output = & $lintScript -Root $root *>&1 | Out-String
         Assert-ExitCode 1 'a package-local analyzer argument should fail'
