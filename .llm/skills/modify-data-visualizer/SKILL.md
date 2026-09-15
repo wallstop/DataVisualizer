@@ -61,6 +61,11 @@ metadata:
 - Validate direct GUIDs with `GetMainAssetTypeAtPath` and exact type equality. Do not
   instantiate arbitrary user types to probe script metadata or broaden a per-type
   refresh into a synchronous project-wide asset scan.
+- While the AssetDatabase is busy (`AssetGuidDiscovery.IsAssetDatabaseBusy()`), skip GUID
+  normalization: `MergeCandidates` keeps referenced/saved order GUIDs as raw unverified
+  candidates and hands the raw saved GUID back, and the window re-normalizes saved
+  selections once the database settles instead of clearing them during the transient
+  post-recompile window that bursts Unity's missing-script warnings.
 - Never-registered assets missed by Unity's type filters come from the shared lazy
   `AssetGuidTypeIndex`. It snapshots project `.asset` paths after first use, classifies
   them cooperatively through `GetMainAssetTypeAtPath`, and refreshes the window after
