@@ -23,12 +23,15 @@
   },
   "author": "wallstop studios <wallstop@wallstopstudios.com> (https://wallstopstudios.com)",
   "homepage": "https://github.com/wallstop/DataVisualizer#readme",
+  "changelogUrl": "https://github.com/wallstop/DataVisualizer/blob/main/CHANGELOG.md",
   "main": "README.md",
   "files": [
     "Editor",
     "Editor.meta",
     "Runtime",
     "Runtime.meta",
+    "CHANGELOG.md",
+    "CHANGELOG.md.meta",
     "README.md.meta",
     "LICENSE.meta",
     "package.json.meta"
