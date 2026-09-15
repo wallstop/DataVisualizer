@@ -392,6 +392,16 @@ namespace WallstopStudios.DataVisualizer.Editor
         private bool _isLoadingSearchCacheAsync;
 
         /*
+            Types whose persisted saved selection came back raw/unverified from a busy-window
+            load: the re-normalization pump settles them once the AssetDatabase idles, clearing
+            only genuinely invalid selections instead of discarding them during the transient
+            window (issue #36). The pump is a self-rescheduling schedule item; entries survive a
+            window close (cleanup drops them) and the next idle load normalizes them then.
+        */
+        private readonly HashSet<Type> _pendingSavedSelectionNormalizationTypes = new();
+        private IVisualElementScheduledItem _savedSelectionNormalizationTask;
+
+        /*
             Total asset count for the in-progress async load, captured once from the
             initial FindAssets so per-batch progress updates never rescan the project.
         */
@@ -2011,6 +2021,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             _asyncLoadTask = null;
             _searchCacheLoadTask?.Pause();
             _searchCacheLoadTask = null;
+            _savedSelectionNormalizationTask?.Pause();
+            _savedSelectionNormalizationTask = null;
+            _pendingSavedSelectionNormalizationTypes.Clear();
             _asyncLoadTargetType = null;
             _pendingObjectGuids.Clear();
             _pendingSearchCacheGuids.Clear();
@@ -2091,6 +2104,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             HashSet<string> uniqueGuids = new(StringComparer.OrdinalIgnoreCase);
             int resolvedReferenceCount = 0;
             AssetGuidTypeIndex.Shared.EnsureStarted();
+            /*
+                One busy evaluation for the whole collection pass so every type is treated with
+                the same deferral decision (issue #36: no forced type resolution while busy).
+            */
+            bool deferNormalization = AssetGuidDiscovery.IsAssetDatabaseBusy();
 
             // Collect all GUIDs first (fast, no asset loading)
             foreach (List<Type> types in _scriptableObjectTypes.Values)
@@ -2103,7 +2121,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                         typeFilterGuids,
                         GetObjectOrderForType(type),
                         GetLastSelectedObjectGuidForType(type.FullName),
-                        out _
+                        out _,
+                        deferNormalization: deferNormalization
                     );
                     foreach (string guid in guids)
                     {
@@ -2269,6 +2288,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             AssetGuidTypeIndex.Shared.Suspend();
             _asyncLoadTask?.Pause();
             _searchCacheLoadTask?.Pause();
+            _savedSelectionNormalizationTask?.Pause();
+            _savedSelectionNormalizationTask = null;
             SetPackageEditingPaused(true);
         }
 
@@ -2298,6 +2319,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
                 _searchCacheLoadTask.ExecuteLater(10);
             }
+
+            KickSavedSelectionNormalizationPump();
 
             if (_initializationDeferredForPlayMode)
             {
@@ -6518,14 +6541,31 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             // Get all GUIDs for this type
             AssetGuidTypeIndex.Shared.EnsureStarted();
+            bool deferNormalization = AssetGuidDiscovery.IsAssetDatabaseBusy();
             string[] allGuids = AssetGuidDiscovery.MergeCandidates(
                 type,
                 AssetDatabase.FindAssets($"t:{type.Name}"),
                 customGuidOrder,
                 savedObjectGuid,
-                out string normalizedSavedObjectGuid
+                out string normalizedSavedObjectGuid,
+                deferNormalization: deferNormalization
             );
-            if (!string.IsNullOrWhiteSpace(savedObjectGuid) && normalizedSavedObjectGuid == null)
+            if (deferNormalization)
+            {
+                /*
+                    Busy window: the saved GUID came back raw and unverified, so keep it and
+                    settle the question after the AssetDatabase idles instead of clearing a
+                    selection that may still be valid (issue #36).
+                */
+                if (!string.IsNullOrWhiteSpace(savedObjectGuid))
+                {
+                    ScheduleSavedSelectionNormalization(type);
+                }
+            }
+            else if (
+                !string.IsNullOrWhiteSpace(savedObjectGuid)
+                && normalizedSavedObjectGuid == null
+            )
             {
                 SetLastSelectedObjectGuidForType(type.FullName, null);
             }
@@ -9113,6 +9153,86 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 // Re-binds the row (BindObjectRow refreshes the title) without a full rebuild.
                 _objectListView.RefreshItem(index);
+            }
+        }
+
+        /*
+            Queues a saved selection for re-normalization once the AssetDatabase idles and starts
+            the pump if it is not already running. The pump polls the same busy predicate the load
+            used, so the saved selection is judged when Unity's type resolution is reliable again;
+            while the database is busy, normalizing would both force the recorded missing-script
+            warning burst and misreport a transiently unresolvable selection as invalid.
+        */
+        private void ScheduleSavedSelectionNormalization(Type type)
+        {
+            if (type == null || !_pendingSavedSelectionNormalizationTypes.Add(type))
+            {
+                return;
+            }
+
+            KickSavedSelectionNormalizationPump();
+        }
+
+        private void KickSavedSelectionNormalizationPump()
+        {
+            if (_savedSelectionNormalizationTask != null || _suspendedForPlayMode)
+            {
+                return;
+            }
+
+            if (_pendingSavedSelectionNormalizationTypes.Count == 0)
+            {
+                return;
+            }
+
+            _savedSelectionNormalizationTask = rootVisualElement.schedule.Execute(
+                ProcessSavedSelectionNormalizations
+            );
+            _savedSelectionNormalizationTask.ExecuteLater(1);
+        }
+
+        private void ProcessSavedSelectionNormalizations()
+        {
+            _savedSelectionNormalizationTask = null;
+            if (_suspendedForPlayMode)
+            {
+                // The pump stops while playing; ResumeAfterPlayMode re-kicks it when entries remain.
+                return;
+            }
+
+            if (AssetGuidDiscovery.IsAssetDatabaseBusy())
+            {
+                _savedSelectionNormalizationTask = rootVisualElement.schedule.Execute(
+                    ProcessSavedSelectionNormalizations
+                );
+                _savedSelectionNormalizationTask.ExecuteLater(1);
+                return;
+            }
+
+            if (_pendingSavedSelectionNormalizationTypes.Count == 0)
+            {
+                return;
+            }
+
+            List<Type> pendingTypes = new(_pendingSavedSelectionNormalizationTypes);
+            _pendingSavedSelectionNormalizationTypes.Clear();
+            foreach (Type type in pendingTypes)
+            {
+                /*
+                    Re-read the persisted selection instead of the raw GUID captured at defer
+                    time: a selection made during the busy window is valid by construction and
+                    replaces the stale one.
+                */
+                string savedObjectGuid = GetLastSelectedObjectGuidForType(type.FullName);
+                if (string.IsNullOrWhiteSpace(savedObjectGuid))
+                {
+                    continue;
+                }
+
+                if (!AssetGuidDiscovery.TryNormalizeGuidForType(type, savedObjectGuid, out _))
+                {
+                    SetLastSelectedObjectGuidForType(type.FullName, null);
+                }
             }
         }
 
