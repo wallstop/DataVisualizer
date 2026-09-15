@@ -10,7 +10,7 @@ This guide captures the key points from the companion [video walkthrough](https:
 
 ## Getting Started
 
-Open **Tools → Walltop Studios → Data Visualizer** and dock it alongside the Inspector. The tool persists your layout, selection, and tracked types between sessions, so you can jump back into your workflow immediately.
+Open **Tools → Wallstop Studios → Data Visualizer** and dock it alongside the Inspector. The tool persists your layout, selection, and tracked types between sessions, so you can jump back into your workflow immediately.
 
 ## Window Layout
 
@@ -19,11 +19,11 @@ Open **Tools → Walltop Studios → Data Visualizer** and dock it alongside the
 
 The window uses a three-panel layout:
 
-**Namespace & Type Panel (left)** organizes ScriptableObject types by C# namespace. Click a namespace to expose its types, then select a type to load all instances. Reorder namespaces and types with drag-and-drop or arrow buttons—your ordering persists across sessions.
+**Namespace & Type Panel (left)** organizes ScriptableObject types by C# namespace. Click a namespace to expose its types, then select a type to load all instances. Reorder namespaces and types with the up and down arrow buttons—your ordering persists across sessions.
 
-**Objects Panel (center)** lists every instance of the selected type. Multi-select works with standard Unity shortcuts for batch operations. Arrow buttons let you reorder instances without dragging through long lists.
+**Objects Panel (center)** lists every instance of the selected type and keeps one selection at a time. Arrow buttons let you reorder instances without dragging through long lists, and batch edits run through the per-type processors area (scoped to all instances or the filtered set) and per-row actions.
 
-**Inspector Panel (right)** displays the full inspector for selected assets, including Odin Inspector integrations and custom editors. Changes save immediately, just like Unity's default Inspector.
+**Inspector Panel (right)** displays the full inspector for the selected asset, including Odin Inspector integrations and custom editors. Changes save immediately, just like Unity's default Inspector.
 
 ## Instance Management
 
@@ -36,7 +36,7 @@ Asset management controls live above the Objects panel:
 
 **Rename** opens a draggable prompt that renames the asset on disk. No need to coordinate between multiple panels or windows.
 
-**Move** retargets assets to different folders. The tool remembers your last location to speed up batch moves and prevents redundant operations.
+**Move** retargets assets to different folders. The move dialog opens in the moved asset's current folder each time, and a move to the same location is ignored.
 
 **Delete** removes assets permanently after confirmation. Click elsewhere or hit cancel to abort.
 
@@ -68,7 +68,7 @@ Organize the catalog to match your team's mental model. The structure persists a
 
 ## Search & Filtering
 
-The filter field above the Namespace list narrows types and namespaces with case-insensitive matching. The global search box above the Objects panel finds text across all loaded instances, letting you jump directly to specific assets without manual scanning.
+The filter field above the Namespace list narrows type rows by display name with case-insensitive matching; namespace headers are not filtered. The global search box above the Objects panel finds text across all loaded instances, letting you jump directly to specific assets without manual scanning.
 
 ## Settings
 
