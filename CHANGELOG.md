@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds the release archive and a `.sha256` checksum from the tracked,
   allowlisted package payload with no Unity invocation; two builds of the same
   tree are byte-identical. Not yet attached to the release workflow.
+- Standalone `.unitypackage` validator (`scripts/release/validate-unitypackage.mjs`):
+  verifies a built archive against the tracked, allowlisted payload with no
+  Unity invocation, using standard `tar` for listing and extraction; checks
+  the `.sha256` sidecar, every GUID directory, staged path, asset and `.meta`
+  byte, and archive member, and fails closed on corruption or drift.
+- Initial changelog. Release history before this entry is available in the
+  [repository history](https://github.com/wallstop/DataVisualizer/commits/main)
+  and on [npm](https://www.npmjs.com/package/com.wallstop-studios.data-visualizer).
 
 ### Changed
 
@@ -21,9 +29,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the packed payload against the `files` allowlist before publishing. The
   manual dispatch-and-publish workflow is replaced; rerun a release by
   dispatching the workflow with its `tag` input.
-
-### Added
-
-- Initial changelog. Release history before this entry is available in the
-  [repository history](https://github.com/wallstop/DataVisualizer/commits/main)
-  and on [npm](https://www.npmjs.com/package/com.wallstop-studios.data-visualizer).
