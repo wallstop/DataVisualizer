@@ -14,9 +14,11 @@
  * Archive layout (standard `.unitypackage` GUID directories, staged under
  * `Packages/<package name>/`):
  *   - Every payload file that is not a `.meta` yields `<guid>/pathname`,
- *     `<guid>/asset`, and `<guid>/asset.meta`, where the GUID is derived
- *     deterministically from the staged path and `asset.meta` carries the
- *     committed `.meta` content.
+ *     `<guid>/asset`, and `<guid>/asset.meta`, where `<guid>` is the `guid:`
+ *     field of the committed `.meta` and `asset.meta` carries the full
+ *     committed `.meta` content. This matches Unity's own exports, so an
+ *     import keeps the committed asset identities instead of reassigning
+ *     GUIDs.
  *   - Every payload `.meta` folds into its target's `asset.meta`; it never
  *     becomes a separate GUID entry.
  *   - A `.meta` whose target is a tracked directory (e.g. `Editor.meta`)
@@ -31,14 +33,17 @@
  *   - Every payload file must have its committed `.meta` companion, and every
  *     payload `.meta` must target a tracked file or directory. Missing and
  *     orphan `.meta` files both fail.
+ *   - Every used `.meta` must carry a well-formed `guid:` field, and no two
+ *     entries may share one GUID; malformed or duplicate identities fail.
  *   - Payload paths must be safe relative paths (no absolute paths, no
  *     backslashes, no `.`/`..`/empty segments).
  *
- * Determinism: GUIDs hash the staged path, members are emitted in sorted
- * staged-path order, tar headers use zeroed ownership and timestamps, and the
- * gzip stream carries no timestamp, so two builds of the same tree are
- * byte-identical. The archive carries only GUID-directory members, so staged
- * path length never approaches the ustar name field.
+ * Determinism: GUID directory names come from the committed `.meta` files,
+ * members are emitted in sorted staged-path order, tar headers use zeroed
+ * ownership and timestamps, and the gzip stream carries no timestamp, so two
+ * builds of the same tree are byte-identical. The archive carries only
+ * GUID-directory members, so staged path length never approaches the ustar
+ * name field.
  */
 
 import { createHash } from 'node:crypto';
@@ -155,15 +160,33 @@ function compareOrdinal(left, right) {
     return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function resolveGuid(stagedPath) {
-    return createHash('md5').update(stagedPath, 'utf8').digest('hex');
+const metaGuidPattern = /^guid:\s*([0-9a-fA-F]{32})\s*$/m;
+
+function resolveMetaGuid(metaPath, metaContent) {
+    const match = metaContent.toString('utf8').match(metaGuidPattern);
+    if (match === null) {
+        throw new Error(
+            `'${metaPath}' carries no well-formed 'guid:' field, so its .unitypackage entry ` +
+                'cannot be named with the committed asset identity.',
+        );
+    }
+    return match[1].toLowerCase();
 }
 
 function resolveMembers(root, entries) {
     const members = [];
+    const guidOwners = new Map();
     for (const entry of entries) {
-        const guid = resolveGuid(entry.stagedPath);
         const metaContent = readFileSync(join(root, entry.metaPath));
+        const guid = resolveMetaGuid(entry.metaPath, metaContent);
+        const owner = guidOwners.get(guid);
+        if (owner !== undefined) {
+            throw new Error(
+                `'${entry.metaPath}' reuses guid '${guid}', already carried by '${owner}'; ` +
+                    'duplicate identities would corrupt the import.',
+            );
+        }
+        guidOwners.set(guid, entry.metaPath);
         members.push({ name: `${guid}/pathname`, data: Buffer.from(`${entry.stagedPath}\n`, 'utf8') });
         if (!entry.stagedPath.endsWith('/')) {
             members.push({ name: `${guid}/asset`, data: readFileSync(join(root, entry.assetPath)) });

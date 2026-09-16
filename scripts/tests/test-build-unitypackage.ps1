@@ -10,6 +10,26 @@ Write-Host '== build-unitypackage self-tests =='
 
 $script:LongName = 'L' + ('o' * 76) + 'ng.cs'
 
+# Fixed 32-hex identities carried by the fixture's committed .meta files.
+$script:PackageMetaGuid = 'c1a2975a5c0e4fdd9e3f8a7b6c5d4e01'
+$script:ReadmeMetaGuid = 'c1a2975a5c0e4fdd9e3f8a7b6c5d4e02'
+$script:EditorMetaGuid = 'c1a2975a5c0e4fdd9e3f8a7b6c5d4e03'
+$script:ScriptMetaGuid = 'c1a2975a5c0e4fdd9e3f8a7b6c5d4e04'
+$script:LongMetaGuid = 'c1a2975a5c0e4fdd9e3f8a7b6c5d4e05'
+
+function New-MetaContent {
+    param([string]$Guid)
+    return (@(
+            'fileFormatVersion: 2',
+            "guid: $Guid",
+            'DefaultImporter:',
+            '  externalObjects: {}',
+            '  userData:',
+            '  assetBundleName:',
+            '  assetBundleVariant:'
+        ) -join "`n") + "`n"
+}
+
 function New-BuildFixture {
     param(
         [string]$Version = '0.0.38',
@@ -37,15 +57,20 @@ function New-BuildFixture {
             "}`n"
     }
     Write-FixtureFile -Root $root -RelativePath 'package.json' -Content $PackageJson
-    Write-FixtureFile -Root $root -RelativePath 'package.json.meta' -Content 'meta: package.json'
+    Write-FixtureFile -Root $root -RelativePath 'package.json.meta' -Content (
+        New-MetaContent $script:PackageMetaGuid)
     Write-FixtureFile -Root $root -RelativePath 'README.md' -Content '# Fixture readme'
-    Write-FixtureFile -Root $root -RelativePath 'README.md.meta' -Content 'meta: README.md'
-    Write-FixtureFile -Root $root -RelativePath 'Editor.meta' -Content 'meta: Editor'
+    Write-FixtureFile -Root $root -RelativePath 'README.md.meta' -Content (
+        New-MetaContent $script:ReadmeMetaGuid)
+    Write-FixtureFile -Root $root -RelativePath 'Editor.meta' -Content (
+        New-MetaContent $script:EditorMetaGuid)
     Write-FixtureFile -Root $root -RelativePath 'Editor/A.cs' -Content '// fixture content'
-    Write-FixtureFile -Root $root -RelativePath 'Editor/A.cs.meta' -Content 'meta: A.cs'
+    Write-FixtureFile -Root $root -RelativePath 'Editor/A.cs.meta' -Content (
+        New-MetaContent $script:ScriptMetaGuid)
     $longName = $script:LongName
     Write-FixtureFile -Root $root -RelativePath "Editor/Deep/$longName" -Content '// long path content'
-    Write-FixtureFile -Root $root -RelativePath "Editor/Deep/$longName.meta" -Content 'meta: long'
+    Write-FixtureFile -Root $root -RelativePath "Editor/Deep/$longName.meta" -Content (
+        New-MetaContent $script:LongMetaGuid)
     if (-not $NoGit -and -not $SkipCommit) {
         & git -C $root add -A
         & git -C $root commit --quiet -m 'Prepare release'
@@ -57,17 +82,6 @@ function New-BuildFixture {
 function Invoke-Build {
     param([string]$Root, [string[]]$Arguments)
     return (& node $buildScript --root $Root @Arguments *>&1 | Out-String), $LASTEXITCODE
-}
-
-function Get-PathGuid {
-    param([string]$Value)
-    $md5 = [System.Security.Cryptography.MD5]::Create()
-    try {
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
-        return (($md5.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join '')
-    } finally {
-        $md5.Dispose()
-    }
 }
 
 function Get-FixtureFileHash {
@@ -97,14 +111,15 @@ Invoke-TestCase 'Builds_DeterministicArchive_WithStandardGuidEntries' {
 
         $archive = Join-Path $firstOutput 'com.test.fixture-0.0.38.unitypackage'
         $longStaged = "Packages/com.test.fixture/Editor/Deep/$script:LongName"
+        # GUID directory names must equal the committed .meta guid fields.
         $expectedGuids = @(
-            @{ Staged = 'Packages/com.test.fixture/Editor/'; Kind = 'folder'; MetaContent = 'meta: Editor'; Relative = 'Editor' },
-            @{ Staged = 'Packages/com.test.fixture/Editor/A.cs'; Kind = 'file'; MetaContent = 'meta: A.cs'; Relative = 'Editor/A.cs' },
-            @{ Staged = $longStaged; Kind = 'file'; MetaContent = 'meta: long'; Relative = "Editor/Deep/$script:LongName" },
-            @{ Staged = 'Packages/com.test.fixture/README.md'; Kind = 'file'; MetaContent = 'meta: README.md'; Relative = 'README.md' },
-            @{ Staged = 'Packages/com.test.fixture/package.json'; Kind = 'file'; MetaContent = 'meta: package.json'; Relative = 'package.json' }
+            @{ Guid = $script:EditorMetaGuid; Staged = 'Packages/com.test.fixture/Editor/'; Kind = 'folder'; MetaContent = (New-MetaContent $script:EditorMetaGuid); Relative = 'Editor' },
+            @{ Guid = $script:ScriptMetaGuid; Staged = 'Packages/com.test.fixture/Editor/A.cs'; Kind = 'file'; MetaContent = (New-MetaContent $script:ScriptMetaGuid); Relative = 'Editor/A.cs' },
+            @{ Guid = $script:LongMetaGuid; Staged = $longStaged; Kind = 'file'; MetaContent = (New-MetaContent $script:LongMetaGuid); Relative = "Editor/Deep/$script:LongName" },
+            @{ Guid = $script:ReadmeMetaGuid; Staged = 'Packages/com.test.fixture/README.md'; Kind = 'file'; MetaContent = (New-MetaContent $script:ReadmeMetaGuid); Relative = 'README.md' },
+            @{ Guid = $script:PackageMetaGuid; Staged = 'Packages/com.test.fixture/package.json'; Kind = 'file'; MetaContent = (New-MetaContent $script:PackageMetaGuid); Relative = 'package.json' }
         ) | ForEach-Object { [pscustomobject]@{
-                Guid = Get-PathGuid $_.Staged
+                Guid = $_.Guid
                 Kind = $_.Kind
                 Staged = $_.Staged
                 MetaContent = $_.MetaContent
@@ -256,6 +271,40 @@ Invoke-TestCase 'Rejects_InvalidArguments' {
         } finally {
             Remove-TempRoot $root
         }
+    }
+}
+
+Invoke-TestCase 'Fails_When_UsedMetaCarriesNoGuidField' {
+    $root = New-BuildFixture
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Editor/A.cs.meta' -Content 'meta without guid'
+        & git -C $root add -A
+        & git -C $root commit --quiet -m 'Drop guid field'
+        $output, $exitCode = Invoke-Build -Root $root -Arguments @()
+        Assert-ExitCode 1 'a used meta without a guid field should fail closed'
+        Assert-True ($output -match "no well-formed 'guid:' field") (
+            "error should explain the missing guid field, got: $output")
+        Assert-True ($output -match 'A\.cs\.meta') "error should name the offending meta, got: $output"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_When_TwoMetasCarryTheSameGuid' {
+    $root = New-BuildFixture
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'Editor/A.cs.meta' -Content (
+            New-MetaContent $script:ReadmeMetaGuid)
+        & git -C $root add -A
+        & git -C $root commit --quiet -m 'Duplicate a guid'
+        $output, $exitCode = Invoke-Build -Root $root -Arguments @()
+        Assert-ExitCode 1 'a duplicated guid should fail closed'
+        Assert-True ($output -match 'reuses guid') (
+            "error should explain the duplicate guid, got: $output")
+        Assert-True ($output -match $script:ReadmeMetaGuid) (
+            "error should name the duplicated guid, got: $output")
+    } finally {
+        Remove-TempRoot $root
     }
 }
 
