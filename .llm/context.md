@@ -241,8 +241,10 @@ pre-commit config on staged `.cs` files.
   sentences is the maximum.
 - Short imperative subjects with the subsystem up front (for example
   "Fix settings persistence dirty state"); reference related issue IDs in the body.
-- PRs must include: behavior summary, reproduction/validation steps, screenshots or
-  GIFs for UI tweaks, and a risk callout plus rollback plan.
+- Keep PR bodies scannable: one-sentence summary of what and why, then the
+  template in `ship-changes` (Behavior, Validation, Risk/Rollback), at most two
+  bullets per section, 15 lines total. No paragraphs, history, or diff narration;
+  details live in commits, tests, and issues. Add screenshots or GIFs for UI tweaks.
 - Confirm CSharpier formatting, `npm pack`, and both Unity test suites before
   requesting review.
 - Version bumps: change `package.json`, then run `npm run lint:llm:fix` so the

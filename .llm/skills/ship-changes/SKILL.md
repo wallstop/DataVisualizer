@@ -48,11 +48,28 @@ Run the narrowest sufficient layer; escalate on failure:
 
 ## Pull Requests
 
-Include: behavior summary, reproduction/validation steps, screenshots or GIFs for UI
-tweaks, and a risk callout plus rollback plan. Write every item in Simplified
-Technical English (see `.llm/context.md`): short, plain sentences, no filler; a few
-sentences each, max. Confirm CSharpier, `npm pack`, and both Unity test suites before
-handoff.
+Use this body shape. Confirm CSharpier, `npm pack`, and both Unity test suites
+before handoff.
+
+```markdown
+<One sentence: what changed and why.>
+
+## Behavior
+<Up to two bullets.>
+
+## Validation
+<Up to two bullets: tests run, captures.>
+
+## Risk / Rollback
+<One line risk. One line revert plan.>
+```
+
+Rules (see `.llm/context.md`):
+
+- Body stays under 15 lines. Every section: bullets, not paragraphs.
+- No history, no diff narration, no "this PR", no restating commits.
+- Details live in commits, tests, and issues; link to them, do not paste.
+- UI tweaks add one screenshot or GIF under Validation.
 
 Never explicitly request a review from a person, team, bot, or automation. Do not
 mention a reviewer in a comment, call a reviewer-request API, or otherwise trigger a
