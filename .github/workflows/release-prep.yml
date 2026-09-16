@@ -48,7 +48,10 @@ jobs:
           # installation token or PAT); the default token keeps the workflow runnable
           # before that credential is configured.
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
-          persist-credentials: false
+          # Credentials must persist: the push step relies on the stored token, and a
+          # dropped credential would make the release-branch push fail. The runner is
+          # ephemeral, so the stored token does not outlive the job.
+          persist-credentials: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
