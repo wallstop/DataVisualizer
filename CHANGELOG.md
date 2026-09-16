@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Deterministic `.unitypackage` builder (`scripts/release/build-unitypackage.mjs`):
+  builds the release archive and a `.sha256` checksum from the tracked,
+  allowlisted package payload with no Unity invocation; two builds of the same
+  tree are byte-identical. Not yet attached to the release workflow.
+
 ### Changed
 
 - npm publishing is tag-driven: pushing an annotated `vX.Y.Z` release tag runs
