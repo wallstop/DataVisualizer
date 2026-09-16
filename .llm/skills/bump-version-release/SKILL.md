@@ -13,14 +13,18 @@ metadata:
    for pre-releases).
 2. Sync the harness: `npm run lint:llm:fix` updates the `**Version**:` line in
    `.llm/context.md` to match; rerun `npm run lint:llm` to confirm green.
-3. Verify the tarball: `npm pack` and inspect contents (must stay limited to
-   `Editor`, `Runtime`, and `docs` payloads per the `files` whitelist).
+3. Verify the tarball: `npm pack` and inspect contents (must stay limited to the
+   `Editor` and `Runtime` payloads and their `.meta` companions per the `files`
+   whitelist).
 4. Commit with the historical subject format: `Bump version from X to Y`, including
    `package.json` and `.llm/context.md` in the same commit. Keep the message in
    Simplified Technical English (see `.llm/context.md`).
-5. Dispatch the manual publish workflow
-   (`.github/workflows/npm-publish.yml`) via `workflow_dispatch`; use `dry_run: true`
-   first to check the resolved version/dist-tag.
+5. Publish through the release chain: merge the release/vX.Y.Z pull request the
+   release-prep workflow opened; the release-tag workflow creates the annotated
+   tag, whose push triggers the tag-driven publish workflow
+   (`.github/workflows/npm-publish.yml`). It verifies the tag against the package
+   version and the packed allowlist before publishing. To rerun a partially
+   completed release, dispatch `npm-publish.yml` with the `tag` input.
 
 ## Dist-Tag Rules
 
