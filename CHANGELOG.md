@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- npm publishing is tag-driven: pushing an annotated `vX.Y.Z` release tag runs
+  the publish workflow, which verifies the tag against the package version and
+  the packed payload against the `files` allowlist before publishing. The
+  manual dispatch-and-publish workflow is replaced; rerun a release by
+  dispatching the workflow with its `tag` input.
+
 ### Added
 
 - Initial changelog. Release history before this entry is available in the

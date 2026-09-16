@@ -1,15 +1,20 @@
 name: Publish to NPM
 
-# Manual, on-demand publishing: dispatch this workflow to publish the current package.json
-# version. The publish step is re-runnable (it skips a version already on the registry) and
-# uses npm Trusted Publishing through GitHub OIDC.
+# Tag-driven publishing: pushing an annotated vX.Y.Z tag (the release-tag
+# workflow's output) publishes that exact tag's package with npm Trusted
+# Publishing through GitHub OIDC. A manual dispatch supports reruns of a
+# partially completed release; the publish step skips a version already on the
+# registry. NOTE: a default GITHUB_TOKEN tag push cannot trigger this workflow,
+# so the release-tag workflow must push with RELEASE_TOKEN (see #109).
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: "Pack and report the version/dist-tag without publishing"
-        type: boolean
-        default: false
+      tag:
+        description: "Release tag to publish, e.g. v0.0.38 (required)"
+        type: string
+        required: true
 
 concurrency:
   group: publish-npm
@@ -27,9 +32,29 @@ jobs:
       contents: read
       id-token: write # required for npm Trusted Publishing through OIDC
     steps:
-      - name: Checkout
+      - name: Resolve the release tag
+        id: resolve
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG_REF: ${{ github.ref }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT}" = "push" ]; then
+            tag="${TAG_REF#refs/tags/}"
+          else
+            tag="${INPUT_TAG}"
+          fi
+          if ! printf '%s' "${tag}" | grep -qE '^v[0-9]'; then
+            echo "::error::'${tag}' is not a release tag; publishing requires a vX.Y.Z tag."
+            exit 1
+          fi
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout the exact release tag
         uses: actions/checkout@v7
         with:
+          ref: refs/tags/${{ steps.resolve.outputs.tag }}
           persist-credentials: false
 
       - name: Set up Node.js
@@ -39,30 +64,25 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
-      - name: Pack and resolve version / dist-tag
-        id: pack
+      - name: Run non-Unity repository validation
+        run: npm run lint:llm
+
+      - name: Verify the release tag and packed payload
+        id: verify
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
         run: |
           set -euo pipefail
-          pkg="$(jq -r '.name' package.json)"
-          ver="$(jq -r '.version' package.json)"
-          if [ -z "${pkg}" ] || [ "${pkg}" = "null" ] || [ -z "${ver}" ] || [ "${ver}" = "null" ]; then
-            echo "::error::package.json is missing name or version."
-            exit 1
-          fi
-          # rc/alpha/beta/preview pre-releases publish under the "next" dist-tag; stable under "latest".
-          if printf '%s' "${ver}" | grep -qiE '\-(rc|alpha|beta|preview)'; then
-            npm_tag="next"
-          else
-            npm_tag="latest"
-          fi
-          package_file="$(npm pack --json | jq -r '.[0].filename')"
-          {
-            echo "pkg=${pkg}"
-            echo "ver=${ver}"
-            echo "npm_tag=${npm_tag}"
-            echo "package_file=${package_file}"
-          } >> "${GITHUB_OUTPUT}"
-          echo "Prepared ${pkg}@${ver} -> dist-tag '${npm_tag}' (${package_file})."
+          output="$(node scripts/release/verify-release.mjs --tag "${TAG}")"
+          printf '%s\n' "${output}"
+          for key in pkg version npm_tag package_file entries; do
+            value="$(printf '%s\n' "${output}" | sed -n "s/^${key}: //p")"
+            if [ -z "${value}" ]; then
+              echo "::error::The verification script did not report '${key}'."
+              exit 1
+            fi
+            echo "${key}=${value}" >> "${GITHUB_OUTPUT}"
+          done
 
       - name: Verify npm trusted publishing toolchain
         run: |
@@ -77,24 +97,19 @@ jobs:
           fi
 
       - name: Publish to npm with trusted publishing
-        if: ${{ inputs.dry_run == false }}
         env:
-          PKG: ${{ steps.pack.outputs.pkg }}
-          VER: ${{ steps.pack.outputs.ver }}
-          NPM_TAG: ${{ steps.pack.outputs.npm_tag }}
-          PACKAGE_FILE: ${{ steps.pack.outputs.package_file }}
+          PKG: ${{ steps.verify.outputs.pkg }}
+          VER: ${{ steps.verify.outputs.version }}
+          NPM_TAG: ${{ steps.verify.outputs.npm_tag }}
+          PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
         run: |
           set -euo pipefail
-          # Re-runnable: skip if this exact name@version is already on the registry (a prior run may
-          # have published it before failing downstream). npm publish is otherwise irreversible.
+          # Re-runnable: skip if this exact name@version is already on the registry (a prior
+          # run may have published it before failing downstream). npm publish is otherwise
+          # irreversible.
           if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
             echo "::notice::${PKG}@${VER} is already on the registry; skipping publish."
           else
             npm publish "${PACKAGE_FILE}" --access public --tag "${NPM_TAG}"
             echo "::notice::Published ${PKG}@${VER} to dist-tag '${NPM_TAG}'."
           fi
-
-      - name: Dry-run summary
-        if: ${{ inputs.dry_run == true }}
-        run: |
-          echo "Dry run: would publish ${{ steps.pack.outputs.pkg }}@${{ steps.pack.outputs.ver }} to dist-tag '${{ steps.pack.outputs.npm_tag }}'."
