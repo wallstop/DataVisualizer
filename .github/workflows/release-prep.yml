@@ -1,0 +1,141 @@
+name: Prepare release
+
+# Dispatchable release preparation: bumps package.json, syncs the .llm/context.md
+# version line, rotates the Unreleased changelog section into a dated release section,
+# validates the tree, and opens a release/vX.Y.Z pull request. Dry-run computes and
+# validates without mutating anything or opening a PR.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Semantic version bump to apply"
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+      explicit_version:
+        description: "Explicit version, e.g. 0.0.38 or 0.0.38-rc.1 (overrides the bump)"
+        type: string
+        default: ""
+      dry_run:
+        description: "Compute and validate without mutating files or opening a PR"
+        type: boolean
+        default: false
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # push the release branch
+      pull-requests: write # open the release pull request
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # A default GITHUB_TOKEN push/opened PR cannot trigger other workflows, so the
+          # release PR would never run CI. Owners can add RELEASE_TOKEN (a GitHub App
+          # installation token or PAT); the default token keeps the workflow runnable
+          # before that credential is configured.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          # Credentials must persist: the push step relies on the stored token, and a
+          # dropped credential would make the release-branch push fail. The runner is
+          # ephemeral, so the stored token does not outlive the job.
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Bump version and rotate the changelog
+        id: prep
+        env:
+          BUMP: ${{ inputs.bump }}
+          EXPLICIT_VERSION: ${{ inputs.explicit_version }}
+        run: |
+          set -euo pipefail
+          args=(--root .)
+          if [ -n "${EXPLICIT_VERSION}" ]; then
+            args+=(--version "${EXPLICIT_VERSION}")
+          else
+            args+=(--bump "${BUMP}")
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          output="$(node scripts/release/prepare-release.mjs "${args[@]}")"
+          printf '%s\n' "${output}"
+          previous_version="$(printf '%s\n' "${output}" | sed -n 's/^previous-version: //p')"
+          version="$(printf '%s\n' "${output}" | sed -n 's/^next-version: //p')"
+          if [ -z "${previous_version}" ] || [ -z "${version}" ]; then
+            echo "::error::The preparation script did not report previous-version/next-version."
+            exit 1
+          fi
+          {
+            echo "previous_version=${previous_version}"
+            echo "version=${version}"
+            echo "branch=release/v${version}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Validate the release tree
+        run: |
+          set -euo pipefail
+          npm run lint:llm
+          npm pack --dry-run
+
+      - name: Commit and push the release branch
+        if: ${{ inputs.dry_run == false }}
+        env:
+          BRANCH: ${{ steps.prep.outputs.branch }}
+          PREVIOUS_VERSION: ${{ steps.prep.outputs.previous_version }}
+          VERSION: ${{ steps.prep.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "${BRANCH}"
+          git add package.json CHANGELOG.md .llm/context.md
+          git commit -m "Bump version from ${PREVIOUS_VERSION} to ${VERSION}"
+          git push origin "${BRANCH}"
+
+      - name: Open the release pull request
+        if: ${{ inputs.dry_run == false }}
+        env:
+          BRANCH: ${{ steps.prep.outputs.branch }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          PREVIOUS_VERSION: ${{ steps.prep.outputs.previous_version }}
+          VERSION: ${{ steps.prep.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh pr create --base main --head "${BRANCH}" \
+            --title "Release v${VERSION}" \
+            --body "$(cat <<EOF
+          ## Summary
+
+          - Bumps the package version from ${PREVIOUS_VERSION} to ${VERSION}.
+          - Rotates the \`Unreleased\` changelog section into \`## [${VERSION}]\`.
+          - Validates the release tree (\`npm run lint:llm\`, \`npm pack --dry-run\`).
+
+          Review and merge to apply the release bump; tagging and publishing arrive in
+          later release-automation slices.
+
+          _Prepared by the dispatchable release-prep workflow._
+          EOF
+          )"
+
+      - name: Dry-run summary
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          echo "Dry run: would prepare release v${{ steps.prep.outputs.version }} (branch ${{ steps.prep.outputs.branch }}); no files mutated and no PR opened."
