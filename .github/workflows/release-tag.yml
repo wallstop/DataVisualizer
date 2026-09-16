@@ -1,0 +1,130 @@
+name: Tag release
+
+# Creates one annotated vX.Y.Z tag for a merged release/vX.Y.Z pull request and
+# pushes it so the tag event can trigger the downstream publish workflow. The
+# verification and tagging mechanics live in scripts/release/tag-release.mjs and
+# fail closed on any inconsistency (branch/version mismatch, missing or duplicated
+# changelog section, existing tag, dirty tree). A manual dispatch supports reruns
+# and a verify-only dry run.
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Release branch to tag, e.g. release/v0.0.38 (required)"
+        type: string
+        required: true
+      dry_run:
+        description: "Verify the release tree without creating or pushing a tag"
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    name: Tag release
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+        startsWith(github.event.pull_request.head.ref, 'release/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create and push the annotated release tag
+    steps:
+      - name: Resolve the release branch and commit
+        id: resolve
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          INPUT_BRANCH: ${{ inputs.branch }}
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT}" = "pull_request" ]; then
+            branch="${HEAD_REF}"
+            if [ -z "${MERGE_SHA}" ]; then
+              echo "::error::The pull request carries no merge commit SHA."
+              exit 1
+            fi
+            checkout_ref="${MERGE_SHA}"
+          else
+            branch="${INPUT_BRANCH}"
+            if [ -z "${branch}" ]; then
+              echo "::error::The branch input is required when dispatching manually."
+              exit 1
+            fi
+            checkout_ref="${DISPATCH_REF}"
+          fi
+          {
+            echo "branch=${branch}"
+            echo "checkout_ref=${checkout_ref}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout the merged release commit
+        uses: actions/checkout@v7
+        with:
+          # A GITHUB_TOKEN tag push cannot trigger the downstream publish workflow, so
+          # owners can add RELEASE_TOKEN (a GitHub App installation token or PAT) with
+          # the same narrowly scoped contents permission; the default token keeps the
+          # workflow runnable before that credential is configured.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          # Credentials must persist: the push step relies on the stored token, and a
+          # dropped credential would make the tag push fail. The runner is ephemeral,
+          # so the stored token does not outlive the job.
+          persist-credentials: true
+          ref: ${{ steps.resolve.outputs.checkout_ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Configure the tagger identity
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Verify the release tree and create the annotated tag
+        id: tag
+        env:
+          BRANCH: ${{ steps.resolve.outputs.branch }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          args=(--branch "${BRANCH}")
+          if [ "${DRY_RUN}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          output="$(node scripts/release/tag-release.mjs "${args[@]}")"
+          printf '%s\n' "${output}"
+          tag="$(printf '%s\n' "${output}" | sed -n 's/^tag: //p')"
+          if [ -z "${tag}" ]; then
+            echo "::error::The tag script did not report a tag name."
+            exit 1
+          fi
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Push the release tag
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git push origin "refs/tags/${TAG}"
+
+      - name: Dry-run summary
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          echo "Dry run: verified the release tree for ${{ steps.resolve.outputs.branch }}; no tag created."
