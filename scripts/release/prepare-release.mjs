@@ -15,6 +15,9 @@
  * `-rc`, `-alpha`, `-beta`, or `-preview` (optionally `.N`), matching the dist-tag rules
  * in `.github/workflows/npm-publish.yml`. A version bump applies to the numeric core and
  * drops an existing prerelease suffix; prerelease flows use `--version` instead.
+ *
+ * `package.json` is patched in place (raw text, validated by JSON.parse after patching),
+ * so its formatting is preserved byte-for-byte apart from the version value.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -30,6 +33,7 @@ const versionRegex = new RegExp(versionPattern);
 const unreleasedHeadingPattern = /^## \[Unreleased\]\s*$/;
 const sectionHeadingPattern = /^## /;
 const contextVersionPattern = /(\*\*Version\*\*:\s*)([^\r\n]*)/;
+const packageVersionPattern = /("version"\s*:\s*")([^"\r\n]*)(")/;
 
 const usage = [
     'Prepare a release: bump the version and rotate the changelog.',
@@ -129,18 +133,38 @@ function readRepositoryFiles(root) {
             throw new Error(`Cannot read required release file '${filePath}'.`);
         }
     }
+    const packageRaw = readFileSync(packagePath, 'utf8');
+    let packageJson;
+    try {
+        packageJson = JSON.parse(packageRaw);
+    } catch (error) {
+        throw new Error(`'package.json' is not valid JSON: ${error.message}`);
+    }
     return {
         packagePath,
         changelogPath,
         contextPath,
-        packageJson: JSON.parse(readFileSync(packagePath, 'utf8')),
+        packageRaw,
+        packageJson,
         changelog: readFileSync(changelogPath, 'utf8'),
         context: readFileSync(contextPath, 'utf8'),
     };
 }
 
-function serializePackageJson(packageJson) {
-    return `${JSON.stringify(packageJson, null, 2)}\n`;
+function patchPackageVersion(packageRaw, version) {
+    const updated = packageRaw.replace(packageVersionPattern, `$1${version}$3`);
+    try {
+        const parsed = JSON.parse(updated);
+        if (parsed.version !== version) {
+            throw new Error(`'package.json' carries version '${parsed.version}' after patching.`);
+        }
+    } catch (error) {
+        throw new Error(
+            `Patching 'package.json' did not produce '${version}': ${error.message}. ` +
+                'The first "version" key must be the top-level package version.',
+        );
+    }
+    return updated;
 }
 
 function syncContextVersion(context, version) {
@@ -156,6 +180,9 @@ function rotateChangelog(changelog, version, dateStamp) {
     const unreleasedIndex = lines.findIndex((line) => unreleasedHeadingPattern.test(line));
     if (unreleasedIndex === -1) {
         throw new Error("CHANGELOG.md has no '## [Unreleased]' section to rotate.");
+    }
+    if (lines.filter((line) => unreleasedHeadingPattern.test(line)).length > 1) {
+        throw new Error('CHANGELOG.md carries more than one Unreleased section.');
     }
     if (duplicateSectionIndex(lines, version) !== -1) {
         throw new Error(`CHANGELOG.md already carries a '## [${version}]' section.`);
@@ -215,7 +242,7 @@ function main() {
         );
     }
 
-    const updatedPackageJson = { ...files.packageJson, version: targetVersion };
+    const updatedPackageJson = patchPackageVersion(files.packageRaw, targetVersion);
     const updatedContext = syncContextVersion(files.context, targetVersion);
     const updatedChangelog = rotateChangelog(files.changelog, targetVersion, utcDateStamp());
 
@@ -224,7 +251,7 @@ function main() {
         console.log(`dry-run: would bump ${currentVersion} -> ${targetVersion}`);
         console.log(`dry-run: would update ${changedFiles.join(', ')}`);
     } else {
-        writeFileSync(files.packagePath, serializePackageJson(updatedPackageJson));
+        writeFileSync(files.packagePath, updatedPackageJson);
         writeFileSync(files.contextPath, updatedContext);
         writeFileSync(files.changelogPath, updatedChangelog);
         console.log(`Bumped ${currentVersion} -> ${targetVersion}.`);

@@ -288,6 +288,84 @@ Invoke-TestCase 'Fails_When_PackageJson_IsMissingVersion' {
     }
 }
 
+Invoke-TestCase 'Preserves_PackageJsonFormatting' {
+    $root = New-ReleaseFixture
+    try {
+        $raw = @(
+            '{',
+            ' "name":"com.test.fixture",',
+            ' "version":  "0.0.37" ,',
+            ' "nested": {"version": "9.9.9"},',
+            '  "keep": true',
+            '}',
+            '',
+            '',
+            ''
+        ) -join "`n"
+        Write-FixtureFile -Root $root -RelativePath 'package.json' -Content $raw
+        $before = (Get-Content (Join-Path $root 'package.json') -Raw) -split "`n"
+        $output, $exitCode = Invoke-Prepare -Root $root -Arguments @('--bump', 'patch')
+        Assert-ExitCode 0 'the patch should succeed'
+        $after = (Get-Content (Join-Path $root 'package.json') -Raw) -split "`n"
+        Assert-True ($before.Count -eq $after.Count) (
+            "line count must not change ($($before.Count) vs $($after.Count))")
+        for ($index = 0; $index -lt $before.Count; $index++) {
+            if ($before[$index] -match '"version"') {
+                continue
+            }
+            Assert-True ($before[$index] -eq $after[$index]) (
+                "line $index must be unchanged: '$($before[$index])' vs '$($after[$index])'")
+        }
+        $package = Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
+        Assert-True ($package.version -eq '0.0.38') (
+            "package.json should carry 0.0.38, got $($package.version)")
+        Assert-True ($package.nested.version -eq '9.9.9') (
+            'a nested version key must stay untouched')
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_When_Changelog_HasDuplicateUnreleasedSections' {
+    $changelog = @(
+        '# Changelog',
+        '',
+        '## [Unreleased]',
+        '',
+        '- First.',
+        '',
+        '## [Unreleased]',
+        '',
+        '- Second.',
+        '',
+        '## [0.0.36] - 2026-07-07'
+    ) -join "`n"
+    $root = New-ReleaseFixture -Changelog $changelog
+    try {
+        $before = Get-FileHashText -Root $root
+        $output, $exitCode = Invoke-Prepare -Root $root -Arguments @('--bump', 'patch')
+        Assert-ExitCode 1 'duplicate Unreleased sections should fail'
+        Assert-True ($output -match 'more than one Unreleased') (
+            "error should explain the duplicate sections, got: $output")
+        Assert-True ((Get-FileHashText -Root $root) -eq $before) 'a failed run must not mutate files'
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Fails_When_PackageJson_IsInvalidJson' {
+    $root = New-ReleaseFixture
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'package.json' -Content '{"name": "broken"'
+        $output, $exitCode = Invoke-Prepare -Root $root -Arguments @('--bump', 'patch')
+        Assert-ExitCode 1 'invalid JSON should fail'
+        Assert-True ($output -match 'not valid JSON') (
+            "error should explain the invalid JSON, got: $output")
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
 Write-Host "== prepare-release: $script:TestFailureCount failure(s) =="
 if ($script:TestFailureCount -gt 0) {
     exit 1
