@@ -180,6 +180,33 @@ function resolveExpectedPayload(root, packageJson) {
     return new Set(expected);
 }
 
+function runNpm(args, root, purpose) {
+    // npm is a .cmd shim on Windows; spawning it without a shell fails there.
+    const result = spawnSync('npm', args, {
+        cwd: root,
+        encoding: 'utf8',
+        shell: process.platform === 'win32',
+    });
+    if (result.error) {
+        throw new Error(`Cannot run npm: ${result.error.message}`);
+    }
+    if (result.status !== 0) {
+        const detail = (result.stderr || result.stdout || '').trim();
+        throw new Error(`Cannot ${purpose}: ${detail || `npm exited with ${result.status}`}`);
+    }
+    return result.stdout;
+}
+
+function parseNpmPackJson(output) {
+    // Extract the JSON array defensively; npm may emit notice lines around it.
+    const start = output.indexOf('[');
+    const end = output.lastIndexOf(']');
+    if (start === -1 || end < start) {
+        throw new Error('npm pack --json produced no JSON array.');
+    }
+    return JSON.parse(output.slice(start, end + 1));
+}
+
 function resolvePackedPaths(root, packageFile) {
     if (packageFile !== undefined) {
         const tarballPath = isAbsolute(packageFile) ? packageFile : resolve(root, packageFile);
@@ -212,20 +239,7 @@ function resolvePackedPaths(root, packageFile) {
         }
         return { paths: [...paths], packageFile: basename(tarballPath) };
     }
-    const result = spawnSync('npm', ['pack', '--json'], { cwd: root, encoding: 'utf8' });
-    if (result.error) {
-        throw new Error(`Cannot run npm: ${result.error.message}`);
-    }
-    if (result.status !== 0) {
-        const detail = (result.stderr || result.stdout || '').trim();
-        throw new Error(`Cannot pack the package: ${detail || `npm exited with ${result.status}`}`);
-    }
-    let packed;
-    try {
-        packed = JSON.parse(result.stdout)[0];
-    } catch (error) {
-        throw new Error(`npm pack --json produced no readable result: ${error.message}`);
-    }
+    const packed = parseNpmPackJson(runNpm(['pack', '--json'], root, 'pack the package'))[0];
     return {
         paths: packed.files.map((file) => file.path),
         packageFile: packed.filename,
