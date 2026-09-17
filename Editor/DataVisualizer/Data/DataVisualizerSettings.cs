@@ -27,6 +27,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         [Tooltip("If true, when selecting an Object, it will be selected in the Inspector.")]
         public bool selectActiveObject;
 
+        [SerializeField]
+        [ReadOnly]
+        public string themeGuid = string.Empty;
+
         [Tooltip(
             "Path relative to the project root (e.g., Assets/Data) where DataObject assets might be located or created."
         )]
@@ -102,6 +106,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 return;
             }
 
+            themeGuid = userState.themeGuid;
             lastSelectedNamespaceKey = userState.lastSelectedNamespaceKey;
             lastSelectedTypeFullName = userState.lastSelectedTypeFullName;
             namespaceOrder = PersistedStateCopy.CloneStrings(userState.namespaceOrder);

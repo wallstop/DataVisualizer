@@ -81,6 +81,22 @@ The filter field above the Namespace list narrows type rows by display name with
 
 **Data Folder** defines where new assets land. Click to ping the current folder or browse to set a new default.
 
+### Custom themes
+
+Create a theme with **Assets → Create → Wallstop Studios → DataVisualizer → Data Visualizer Theme**. Assign a `.uss` asset to its **Style Sheet** field, then choose the theme in the window's **Settings → Theme** field. Keep your theme and stylesheet under an `Editor` folder; they are editor-only assets.
+
+The selected theme follows the existing project/user persistence setting. Switching that setting copies the current selection. Clear the field or use **Reset Theme** to restore the package style. A missing theme falls back to the package style without discarding its saved GUID; reset clears that reference too.
+
+For example, this stylesheet changes the action-button size:
+
+```css
+:root {
+    --dataviz-circle-size: 32px;
+}
+```
+
+The override stylesheet is applied after the package stylesheet. Normal USS selector precedence still applies, and inline C# styles take priority: this first theme slice does **not** yet expose every color, spacing, or typography setting. No additional presets ship yet. After changing the theme asset's stylesheet reference, reselect the theme or reopen the window. Third-party inspectors keep their own styling.
+
 ## Extensibility
 
 Data Visualizer exposes several extension points for custom workflows:

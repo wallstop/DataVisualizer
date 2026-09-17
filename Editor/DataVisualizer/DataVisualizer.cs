@@ -245,6 +245,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _objectColumnElement;
         private Label _objectLoadingIndicator;
 
+        private readonly DataVisualizerThemeSelection _themeSelection = new();
         private VisualElement _settingsPopover;
         private VisualElement _renamePopover;
         private VisualElement _createPopover;
@@ -1340,6 +1341,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement root = rootVisualElement;
             root.Clear();
             LoadStyleSheetIfAvailable(root);
+            _themeSelection.Apply(root, GetSelectedTheme());
 
             VisualElement headerRow = new()
             {
@@ -4089,6 +4091,45 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private DataVisualizerThemeSettings GetSelectedTheme()
+        {
+            string guid = Settings.persistStateInSettingsAsset
+                ? Settings.themeGuid
+                : UserState.themeGuid;
+            return DataVisualizerThemeSelection.Resolve(guid);
+        }
+
+        private void SelectTheme(DataVisualizerThemeSettings theme)
+        {
+            string guid =
+                theme != null
+                    ? AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(theme))
+                    : string.Empty;
+            PersistSettings(
+                settings =>
+                {
+                    if (string.Equals(settings.themeGuid, guid, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    settings.themeGuid = guid;
+                    return true;
+                },
+                state =>
+                {
+                    if (string.Equals(state.themeGuid, guid, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    state.themeGuid = guid;
+                    return true;
+                }
+            );
+            _themeSelection.Apply(rootVisualElement, theme);
+        }
+
         private void BuildSettingsPopoverContent()
         {
             VisualElement dragHandle = _settingsPopover.Q(className: "popover-drag-handle");
@@ -4182,6 +4223,29 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ApplySelectActiveObjectPreference(Settings, evt.newValue);
             });
             contentWrapper.Add(selectionToggle);
+
+            ObjectField themeField = new("Theme")
+            {
+                name = "theme-field",
+                objectType = typeof(DataVisualizerThemeSettings),
+                allowSceneObjects = false,
+                value = GetSelectedTheme(),
+                tooltip = "Optional stylesheet-backed theme. Clear to restore the default style.",
+            };
+            themeField.RegisterValueChangedCallback(evt =>
+                SelectTheme(evt.newValue as DataVisualizerThemeSettings)
+            );
+            contentWrapper.Add(themeField);
+            contentWrapper.Add(
+                new Button(() =>
+                {
+                    themeField.SetValueWithoutNotify(null);
+                    SelectTheme(null);
+                })
+                {
+                    text = "Reset Theme",
+                }
+            );
 
             VisualElement dataFolderContainer = new()
             {
