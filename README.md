@@ -81,21 +81,31 @@ The filter field above the Namespace list narrows type rows by display name with
 
 **Data Folder** defines where new assets land. Click to ping the current folder or browse to set a new default.
 
-### Custom themes
+### Themes
+
+**Classic**, **Nord**, and **Dracula** ship under `Editor/DataVisualizer/Styles` in the package. In **Settings → Theme**, select one with the object picker or drag its `.asset` from the Project window. Classic uses the original palette, Nord uses blue-gray surfaces and cyan accents, and Dracula uses dark surfaces and purple accents. These editor-only assets and their stylesheets are included in the package, not an optional sample.
+
+The palettes style list surfaces, selection borders, popovers, and the theme controls. **Reset Theme** uses the selected palette for its text, border, background, and hover/focus/pressed states; it also follows the preset's control spacing and font size. Reset clears the saved selection and restores Classic. Selecting the Classic asset gives the same appearance but keeps an explicit selection.
 
 Create a theme with **Assets → Create → Wallstop Studios → DataVisualizer → Data Visualizer Theme**. Assign a `.uss` asset to its **Style Sheet** field, then choose the theme in the window's **Settings → Theme** field. Keep your theme and stylesheet under an `Editor` folder; they are editor-only assets.
 
 The selected theme follows the existing project/user persistence setting. Switching that setting copies the current selection. Clear the field or use **Reset Theme** to restore the package style. A missing theme falls back to the package style without discarding its saved GUID; reset clears that reference too.
 
-For example, this stylesheet changes the action-button size:
+For example, this stylesheet changes the accent, reset-button states, control spacing, and action-button size:
 
 ```css
 :root {
+    --dataviz-accent: #88c0d0;
+    --dataviz-control-hover: #88c0d0;
+    --dataviz-control-pressed: #81a1c1;
+    --dataviz-on-accent: #2e3440;
+    --dataviz-control-padding: 7px;
+    --dataviz-font-size: 15px;
     --dataviz-circle-size: 32px;
 }
 ```
 
-The override stylesheet is applied after the package stylesheet. Normal USS selector precedence still applies, and inline C# styles take priority: this first theme slice does **not** yet expose every color, spacing, or typography setting. No additional presets ship yet. After changing the theme asset's stylesheet reference, reselect the theme or reopen the window. Third-party inspectors keep their own styling.
+The override stylesheet is applied after the package stylesheet. Normal USS selector precedence still applies, and inline C# styles take priority: themes do **not** expose every color, spacing, or typography setting. Use `Nord.uss` or `Dracula.uss` as a complete list of supported palette tokens; copy them under your project's `Editor` folder before customizing rather than editing installed package files. After changing the theme asset's stylesheet reference, reselect the theme or reopen the window. Third-party inspectors keep their own styling.
 
 ## Extensibility
 

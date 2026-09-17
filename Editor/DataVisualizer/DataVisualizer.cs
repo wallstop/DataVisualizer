@@ -4235,17 +4235,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             themeField.RegisterValueChangedCallback(evt =>
                 SelectTheme(evt.newValue as DataVisualizerThemeSettings)
             );
+            themeField.AddToClassList(StyleConstants.ThemeFieldClass);
             contentWrapper.Add(themeField);
-            contentWrapper.Add(
-                new Button(() =>
-                {
-                    themeField.SetValueWithoutNotify(null);
-                    SelectTheme(null);
-                })
-                {
-                    text = "Reset Theme",
-                }
-            );
+            Button resetThemeButton = new(() =>
+            {
+                themeField.SetValueWithoutNotify(null);
+                SelectTheme(null);
+            })
+            {
+                name = StyleConstants.ThemeResetButtonClass,
+                text = "Reset Theme",
+                tooltip = "Restore the Classic appearance and clear the saved theme selection.",
+            };
+            resetThemeButton.AddToClassList(StyleConstants.ThemeResetButtonClass);
+            resetThemeButton.AddToClassList(StyleConstants.ClickableClass);
+            contentWrapper.Add(resetThemeButton);
 
             VisualElement dataFolderContainer = new()
             {

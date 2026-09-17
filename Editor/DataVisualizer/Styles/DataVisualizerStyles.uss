@@ -1,6 +1,25 @@
 :root {
-    font-size: 16px;
+    font-size: var(--dataviz-font-size);
+    --dataviz-font-size: 16px;
     --dataviz-circle-size: 26px;
+    --dataviz-text: white;
+    --dataviz-muted: grey;
+    --dataviz-accent: chocolate;
+    --dataviz-on-accent: white;
+    --dataviz-popover: rgba(0, 0, 0, 0.75);
+    --dataviz-namespace: rgb(60, 60, 60);
+    --dataviz-row: rgba(255, 255, 255, 0.1);
+    --dataviz-border: rgba(128, 128, 128, 0.5);
+    --dataviz-selection: green;
+    --dataviz-selection-text: lightgreen;
+    --dataviz-selected-row: rgba(0, 0, 0, 0.2);
+    --dataviz-hover: rgba(200, 200, 200, 0.3);
+    --dataviz-pane: rgba(0, 0, 0, 0.4);
+    --dataviz-control: transparent;
+    --dataviz-control-hover: chocolate;
+    --dataviz-control-pressed: #8b4513;
+    --dataviz-control-padding: 6px;
+    --dataviz-control-radius: 6px;
 }
 
 * {
@@ -48,13 +67,13 @@
     min-width: 200px;
     min-height: 50px;
     max-width: 500px;
-    background-color: rgba(0, 0, 0, 0.75);
+    background-color: var(--dataviz-popover);
     border-radius: 10px;
     border-width: 0;
     display: none;
     flex-direction: column;
     padding: 10px;
-    color: white;
+    color: var(--dataviz-text);
 }
 
 .rename-object-label {
@@ -84,7 +103,7 @@
 }
 
 .popover-button {
-    color: white;
+    color: var(--dataviz-text);
     padding: 2px 6px;
     font-size: 16px;
     border-width: 2px;
@@ -99,7 +118,7 @@
 .popover-delete-button:hover {
     background-color: rgb(230, 102, 102);
     border-color: rgb(230, 102, 102);
-    color: white;
+    color: var(--dataviz-text);
 }
 
 .popover-rename-button {
@@ -109,7 +128,7 @@
 .popover-rename-button:hover {
     background-color: rgb(51, 153, 230);
     border-color: rgb(51, 153, 230);
-    color: white;
+    color: var(--dataviz-text);
 }
 
 .popover-create-button {
@@ -119,7 +138,7 @@
 .popover-create-button:hover {
     background-color: green;
     border-color: green;
-    color: white;
+    color: var(--dataviz-text);
 }
 
 .popover-drag-handle {
@@ -133,7 +152,7 @@
 }
 
 .popover-drag-handle.settings {
-    color: chocolate;
+    color: var(--dataviz-accent);
 }
 
 .popover-drag-handle.create {
@@ -169,7 +188,7 @@
 .popover-confirm-button:hover {
     border-color: green;
     background-color: green;
-    color: white;
+    color: var(--dataviz-text);
 }
 
 .popover-cancel-button:hover {
@@ -211,21 +230,21 @@
 }
 
 .object-item:hover {
-    background-color: rgba(200, 200, 200, 0.3);
-    border-color: green;
+    background-color: var(--dataviz-hover);
+    border-color: var(--dataviz-selection);
 }
 
 .object-item.selected {
-    color: lightgreen;
-    background-color: rgba(0, 0, 0, 0.2);
-    border-color: green;
+    color: var(--dataviz-selection-text);
+    background-color: var(--dataviz-selected-row);
+    border-color: var(--dataviz-selection);
 }
 
 .drag-ghost {
     position: absolute;
     border-width: 1px;
     border-color: white;
-    background-color: rgba(0, 0, 0, 0.75);
+    background-color: var(--dataviz-popover);
     border-radius: 3px;
     padding: 4px 8px;
     opacity: 0.8;
@@ -242,20 +261,20 @@
     padding: 4px 8px;
     margin: 6px;
     margin-bottom: 0;
-    color: grey;
-    border-color: rgba(128, 128, 128, 0.5);
-    background-color: rgba(60, 60, 60, 1);
+    color: var(--dataviz-muted);
+    border-color: var(--dataviz-border);
+    background-color: var(--dataviz-namespace);
     border-radius: 10px;
     border-width: 2px;
 }
 
 .namespace-item:hover {
-    border-color: lightgreen;
+    border-color: var(--dataviz-selection-text);
 }
 
 .namespace-item.selected {
-    color: white;
-    border-color: green;
+    color: var(--dataviz-text);
+    border-color: var(--dataviz-selection);
 }
 
 .namespace-item__label {
@@ -286,7 +305,7 @@
     margin-left: 10px;
     padding: 4px 6px;
     border-radius: 6px;
-    color: white;
+    color: var(--dataviz-text);
     margin-top: 0;
     margin-bottom: 6px;
     border-width: 2px;
@@ -296,7 +315,7 @@
 
 .type-item:hover {
     background-color: rgba(200, 200, 200, 0);
-    border-color: lightgreen;
+    border-color: var(--dataviz-selection-text);
     cursor: link;
 }
 
@@ -319,7 +338,7 @@
 
 .type-item.selected {
     background-color: rgba(0, 0, 0, 0.6);
-    border-color: green;
+    border-color: var(--dataviz-selection);
 }
 
 .type-item--disabled {
@@ -350,7 +369,7 @@
     height: 42px;
     flex-shrink: 0;
     border-bottom-width: 1px;
-    border-bottom-color: rgba(128, 128, 128, 0.5);
+    border-bottom-color: var(--dataviz-border);
 }
 
 .namespace-group-header > .unity-label {
@@ -382,7 +401,7 @@
 .object-item {
     color: white;
     min-width: 0;
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--dataviz-row);
     border-radius: 6px;
     margin: 0 2px;
     overflow: hidden;
@@ -409,7 +428,7 @@
     height: 42px;
     flex-shrink: 0;
     border-bottom-width: 1px;
-    border-bottom-color: rgba(128, 128, 128, 0.5);
+    border-bottom-color: var(--dataviz-border);
 }
 
 .object-header > .unity-label {
@@ -429,7 +448,7 @@
 /* Descendant (not direct-child): the virtualized ListView nests its scroll container deeper than a
    raw ScrollView did, so match at any depth to keep the dark, uniform backdrop behind the rows. */
 .object-scrollview .unity-scroll-view__content-and-vertical-scroll-container {
-    background-color: rgba(0, 0, 0, 0.4);
+    background-color: var(--dataviz-pane);
 }
 
 /* Hide the Animated reorder-mode drag handle and collapse the gutter its container reserves, so the
@@ -461,7 +480,7 @@
 }
 
 .namespace-scrollview > .unity-scroll-view__content-and-vertical-scroll-container {
-    background-color: rgba(0, 0, 0, 0.4);
+    background-color: var(--dataviz-pane);
 }
 
 .action-button {
@@ -523,7 +542,7 @@
 
 .go-button {
     border-color: white;
-    color: white;
+    color: var(--dataviz-text);
 }
 
 .go-button:hover {
@@ -533,7 +552,7 @@
 
 .create-button {
     -unity-font-style: bold;
-    color: white;
+    color: var(--dataviz-text);
     background-color: darkgreen;
     border-color: white;
     border-width: 2px;
@@ -560,8 +579,8 @@
 
 .load-from-data-folder-button {
     -unity-font-style: bold;
-    color: white;
-    background-color: chocolate;
+    color: var(--dataviz-text);
+    background-color: var(--dataviz-accent);
     border-color: white;
     border-width: 2px;
     font-size: 26px;
@@ -581,13 +600,13 @@
 
 .load-from-data-folder-button:hover {
     background-color: white;
-    color: chocolate;
-    border-color: chocolate;
+    color: var(--dataviz-accent);
+    border-color: var(--dataviz-accent);
 }
 
 .load-from-script-folder-button {
     -unity-font-style: bold;
-    color: white;
+    color: var(--dataviz-text);
     background-color: rgb(51, 153, 230);
     border-color: white;
     border-width: 2px;
@@ -710,7 +729,7 @@
 
 .type-selection-list-namespace--not-empty {
     border-color: white;
-    color: white;
+    color: var(--dataviz-text);
 }
 
 .type-selection-list-namespace--not-empty:hover {
@@ -830,16 +849,16 @@
     height: 26px;
     border-radius: 50%;
     padding-bottom: 18px;
-    color: white;
-    background-color: chocolate;
+    color: var(--dataviz-text);
+    background-color: var(--dataviz-accent);
     border-color: white;
     border-width: 2px;
 }
 
 .settings-button:hover {
-    color: chocolate;
+    color: var(--dataviz-accent);
     background-color: white;
-    border-color: chocolate;
+    border-color: var(--dataviz-accent);
 }
 
 .settings-data-folder-path-display {
@@ -890,6 +909,53 @@
 
 }
 
+.theme-reset-button {
+    align-self: flex-end;
+    flex-shrink: 0;
+    margin: 6px 0 2px 0;
+    padding: var(--dataviz-control-padding) 12px;
+    min-height: 28px;
+    border-width: 1px;
+    border-radius: var(--dataviz-control-radius);
+    border-color: var(--dataviz-accent);
+    background-color: var(--dataviz-control);
+    color: var(--dataviz-accent);
+    font-size: var(--dataviz-font-size);
+    -unity-font-style: bold;
+}
+
+.theme-reset-button:hover,
+.theme-reset-button:focus {
+    background-color: var(--dataviz-control-hover);
+    color: var(--dataviz-on-accent);
+    border-color: var(--dataviz-text);
+}
+
+.theme-reset-button:active {
+    background-color: var(--dataviz-control-pressed);
+    color: var(--dataviz-on-accent);
+}
+
+.theme-reset-button:disabled {
+    opacity: 0.5;
+}
+
+.theme-field {
+    margin-top: 8px;
+    color: var(--dataviz-text);
+    font-size: var(--dataviz-font-size);
+}
+
+.theme-field .unity-object-field__input {
+    background-color: var(--dataviz-control);
+    border-color: var(--dataviz-border);
+    border-radius: var(--dataviz-control-radius);
+}
+
+.theme-field .unity-object-field-display {
+    color: var(--dataviz-text);
+}
+
 .settings-data-folder-button {
     font-size: 16px;
     border-radius: 6px;
@@ -897,18 +963,18 @@
     flex-grow: 0;
     flex-shrink: 0;
     background-color: transparent;
-    color: chocolate;
-    border-color: chocolate;
+    color: var(--dataviz-accent);
+    border-color: var(--dataviz-accent);
     border-width: 2px;
 }
 
 .settings-data-folder-button:hover {
-    color: white;
-    background-color: chocolate;
+    color: var(--dataviz-text);
+    background-color: var(--dataviz-accent);
 }
 
 .settings-prefs-toggle > .unity-text-element {
-    color: white;
+    color: var(--dataviz-text);
     font-size: 16px;
 }
 
@@ -924,15 +990,15 @@
     height: 20px;
     border-radius: 50%;
     background-color: white;
-    border-color: chocolate;
-    color: white;
+    border-color: var(--dataviz-accent);
+    color: var(--dataviz-text);
     border-width: 4px;
     background-image: none;
 }
 
 .action-button-toggle__button:hover {
-    color: chocolate;
-    background-color: chocolate;
+    color: var(--dataviz-accent);
+    background-color: var(--dataviz-accent);
     border-color: white;
 }
 

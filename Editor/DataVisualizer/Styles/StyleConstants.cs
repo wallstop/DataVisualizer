@@ -15,6 +15,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
         public const string TypesContainerClass = "types-container";
         public const string ExpandedClass = "expanded";
 
+        public const string ThemeResetButtonClass = "theme-reset-button";
+        public const string ThemeFieldClass = "theme-field";
         public const string PopoverButtonClass = "popover-button";
         public const string PopoverCancelButtonClass = "popover-cancel-button";
         public const string PopoverPrimaryActionClass = "popover-primary-action";
