@@ -18,6 +18,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string TemporaryWindowClampSizeKey =
             "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
 
+        private static readonly bool[] WaitForScheduledCompletion = { false, true };
+
         private static Rect ThrowProviderException()
         {
             throw new InvalidOperationException("Expected test provider failure.");
@@ -264,7 +266,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
-        public IEnumerator ShouldPreservePreferredSizeThroughActualPlacementAndWindowRecreation()
+        public IEnumerator ShouldPreservePreferredSizeThroughActualPlacementAndWindowRecreation(
+            [ValueSource(nameof(WaitForScheduledCompletion))] bool waitForScheduledCompletion
+        )
         {
             bool hadInitialSizeApplied = EditorPrefs.HasKey(InitialSizeAppliedKey);
             bool initialSizeApplied = EditorPrefs.GetBool(InitialSizeAppliedKey);
@@ -311,6 +315,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 yield return null;
                 Assert.That(window.docked, Is.False);
                 DataVisualizerWindow.ShowWindow();
+                if (waitForScheduledCompletion)
+                {
+                    double deadline = EditorApplication.timeSinceStartup + 5d;
+                    while (
+                        EditorApplication.timeSinceStartup < deadline
+                        && !EditorPrefs.HasKey(TemporaryWindowClampSizeKey)
+                    )
+                    {
+                        yield return null;
+                    }
+                }
 
                 Assert.That(
                     EditorPrefs.GetString(PreferredWindowSizeKey),
@@ -319,6 +334,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Rect actualPosition = window.position;
                 Assert.That(actualPosition.width, Is.LessThanOrEqualTo(placementArea.width));
                 Assert.That(actualPosition.height, Is.LessThanOrEqualTo(placementArea.height));
+                if (waitForScheduledCompletion)
+                {
+                    Assert.That(
+                        MonitorUtility.TryParseSize(
+                            EditorPrefs.GetString(TemporaryWindowClampSizeKey),
+                            out Vector2 completedClampSize
+                        ),
+                        Is.True,
+                        "Scheduled placement must persist the clamp before the window closes."
+                    );
+                    Assert.That(
+                        MonitorUtility.IsSameSize(completedClampSize, actualPosition.size),
+                        Is.True
+                    );
+                }
+
                 window.Close();
                 Assert.That(
                     MonitorUtility.TryParseSize(
