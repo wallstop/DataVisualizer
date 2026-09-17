@@ -15,6 +15,18 @@
     --dataviz-control: #3b4252;
     --dataviz-control-hover: #88c0d0;
     --dataviz-control-pressed: #81a1c1;
+    --dataviz-background: #2e3440;
+    --dataviz-input: #3b4252;
+    --dataviz-danger: #bf616a;
+    --dataviz-on-danger: #2e3440;
+    --dataviz-positive: #a3be8c;
+    --dataviz-on-positive: #2e3440;
+    --dataviz-secondary: #81a1c1;
+    --dataviz-on-secondary: #2e3440;
+    --dataviz-warning: #ebcb8b;
+    --dataviz-on-warning: #2e3440;
+    --dataviz-emphasis: #d08770;
+    --dataviz-on-emphasis: #2e3440;
     --dataviz-control-padding: 7px;
     --dataviz-control-radius: 6px;
     --dataviz-font-size: 15px;

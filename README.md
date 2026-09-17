@@ -83,15 +83,15 @@ The filter field above the Namespace list narrows type rows by display name with
 
 ### Themes
 
-**Classic**, **Nord**, and **Dracula** ship under `Editor/DataVisualizer/Styles` in the package. In **Settings → Theme**, select one with the object picker or drag its `.asset` from the Project window. Classic uses the original palette, Nord uses blue-gray surfaces and cyan accents, and Dracula uses dark surfaces and purple accents. These editor-only assets and their stylesheets are included in the package, not an optional sample.
+**Classic**, **Nord**, and **Dracula** ship under `Editor/DataVisualizer/Styles` in the package. In **Settings → Theme**, click the current theme to open a searchable dropdown. Search by name or asset path, use Up/Down and Enter to select, or press Escape to cancel. Themes in both Assets and Packages are listed; duplicate names show their paths. Classic uses the original palette, Nord uses blue-gray surfaces and cyan accents, and Dracula uses dark surfaces and purple accents. These editor-only assets and their stylesheets are included in the package, not an optional sample.
 
-The palettes style list surfaces, selection borders, popovers, and the theme controls. **Reset Theme** uses the selected palette for its text, border, background, and hover/focus/pressed states; it also follows the preset's control spacing and font size. Reset clears the saved selection and restores Classic. Selecting the Classic asset gives the same appearance but keeps an explicit selection.
+The palettes style the window background and text, lists, search results, popovers, label and processor panels, dividers, and standard UI Toolkit inputs, buttons, foldouts, toggles, scrollers, and inspector surfaces. Action colors remain distinct: danger for delete, positive for create/clone/confirm, secondary for rename/script-folder loading, warning for cancel/move, and emphasis for alternate toggle modes. **Reset Theme** keeps the compact Data Folder button sizing, clears the saved selection, and restores Classic. Selecting the Classic asset gives the same appearance but keeps an explicit selection.
 
 Create a theme with **Assets → Create → Wallstop Studios → DataVisualizer → Data Visualizer Theme**. Assign a `.uss` asset to its **Style Sheet** field, then choose the theme in the window's **Settings → Theme** field. Keep your theme and stylesheet under an `Editor` folder; they are editor-only assets.
 
-The selected theme follows the existing project/user persistence setting. Switching that setting copies the current selection. Clear the field or use **Reset Theme** to restore the package style. A missing theme falls back to the package style without discarding its saved GUID; reset clears that reference too.
+The selected theme follows the existing project/user persistence setting. Switching that setting copies the current selection. Choose **Classic (Default / Reset)** or use **Reset Theme** to restore the package style. A missing theme falls back to the package style without discarding its saved GUID; reset clears that reference too.
 
-For example, this stylesheet changes the accent, reset-button states, control spacing, and action-button size:
+For example, this stylesheet changes the accent, standard button states, window font size, and action-button size:
 
 ```css
 :root {
@@ -99,13 +99,12 @@ For example, this stylesheet changes the accent, reset-button states, control sp
     --dataviz-control-hover: #88c0d0;
     --dataviz-control-pressed: #81a1c1;
     --dataviz-on-accent: #2e3440;
-    --dataviz-control-padding: 7px;
     --dataviz-font-size: 15px;
     --dataviz-circle-size: 32px;
 }
 ```
 
-The override stylesheet is applied after the package stylesheet. Normal USS selector precedence still applies, and inline C# styles take priority: themes do **not** expose every color, spacing, or typography setting. Use `Nord.uss` or `Dracula.uss` as a complete list of supported palette tokens; copy them under your project's `Editor` folder before customizing rather than editing installed package files. After changing the theme asset's stylesheet reference, reselect the theme or reopen the window. Third-party inspectors keep their own styling.
+The override stylesheet is applied after the package stylesheet. Standard control rules are scoped to `.dataviz-root` inside the Data Visualizer window. Normal USS selector precedence still applies, and explicit inline styles take priority. Data color swatches and label colors remain data-driven; IMGUI and custom third-party inspector styling are not replaced. Use `Nord.uss` or `Dracula.uss` as palette references; copy them under your project's `Editor` folder before customizing rather than editing installed package files. The `--dataviz-background` and `--dataviz-input` tokens control the window and input surfaces. Semantic `--dataviz-danger`, `--dataviz-positive`, `--dataviz-secondary`, `--dataviz-warning`, and `--dataviz-emphasis` tokens each have a matching `--dataviz-on-*` foreground token for filled states. After changing the theme asset's stylesheet reference, reselect the theme or reopen the window.
 
 ## Extensibility
 
