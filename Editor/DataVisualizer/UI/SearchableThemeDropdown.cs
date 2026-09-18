@@ -51,7 +51,9 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             name = "searchable-theme-dropdown";
             style.flexGrow = 1;
             style.minHeight = 0;
-            Add(new Label("Select Theme") { name = "theme-dropdown-title" });
+            Label title = new("Select Theme") { name = "theme-dropdown-title" };
+            title.AddToClassList("theme-dropdown-title");
+            Add(title);
             SearchField = new TextField("Search") { name = "theme-search-field" };
             Add(SearchField);
             Results = new ScrollView(ScrollViewMode.Vertical)
@@ -181,6 +183,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 };
                 row.AddToClassList(StyleConstants.NamespaceItemClass);
                 row.AddToClassList(StyleConstants.ClickableClass);
+                row.AddToClassList("theme-search-result");
                 _rows.Add(row);
                 Results.Add(row);
             }

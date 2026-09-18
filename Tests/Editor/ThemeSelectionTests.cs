@@ -280,11 +280,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Label title = dropdown.Q<Label>("theme-dropdown-title");
             Assert.IsNotNull(title);
             Assert.AreEqual("Select Theme", title.text);
+            Assert.IsTrue(title.ClassListContains("theme-dropdown-title"));
             List<Button> rows = dropdown.Results.Query<Button>("theme-search-result").ToList();
             Assert.AreEqual(items.Length, rows.Count);
             foreach (Button row in rows)
             {
                 Assert.IsTrue(row.ClassListContains(StyleConstants.ClickableClass), row.text);
+                Assert.IsTrue(row.ClassListContains("theme-search-result"), row.text);
                 Assert.AreEqual(StyleKeyword.Null, row.style.cursor.keyword, row.text);
             }
 
