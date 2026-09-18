@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Theme hot reload: an open Data Visualizer window re-applies the selected
+  theme immediately when its theme asset or referenced stylesheet is
+  reimported, reference-swapped, renamed, moved, or deleted; deletions fall
+  back to the package style with the existing saved-GUID semantics.
 - Deterministic `.unitypackage` builder (`scripts/release/build-unitypackage.mjs`):
   builds the release archive and a `.sha256` checksum from the tracked,
   allowlisted package payload with no Unity invocation; two builds of the same

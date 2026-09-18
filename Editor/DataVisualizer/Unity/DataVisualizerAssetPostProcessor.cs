@@ -61,6 +61,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
                 return;
             }
 
+            window.RefreshThemeIfAffected(importedAssets, deletedAssets, movedFromAssetPaths);
+
             HashSet<Type> relevantTypes = CollectRelevantTypes(window._scriptableObjectTypes);
             if (
                 ContainsRelevantDeletedAssetPath(deletedAssets)
