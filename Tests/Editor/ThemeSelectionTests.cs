@@ -634,6 +634,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Button select = new() { text = "Select" };
             select.AddToClassList("settings-data-folder-button");
             root.Add(select);
+            Button themeField = new() { text = "Dracula" };
+            themeField.AddToClassList(StyleConstants.ThemeFieldClass);
+            root.Add(themeField);
             VisualElement namespaceRow = new();
             namespaceRow.AddToClassList(StyleConstants.NamespaceItemClass);
             root.Add(namespaceRow);
@@ -664,6 +667,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     names[index]
                 );
                 Assert.AreEqual(select.resolvedStyle.fontSize, reset.resolvedStyle.fontSize);
+                Assert.AreEqual(select.resolvedStyle.color, themeField.resolvedStyle.color);
+                Assert.AreEqual(select.resolvedStyle.fontSize, themeField.resolvedStyle.fontSize);
+                Assert.AreEqual(
+                    select.resolvedStyle.borderTopWidth,
+                    themeField.resolvedStyle.borderTopWidth
+                );
                 Assert.AreEqual(select.resolvedStyle.paddingTop, reset.resolvedStyle.paddingTop);
                 Assert.AreEqual(
                     select.resolvedStyle.paddingBottom,

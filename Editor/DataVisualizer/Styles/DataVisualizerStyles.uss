@@ -1208,20 +1208,9 @@
     flex-shrink: 1;
     min-width: 0;
     margin: 0 4px;
-    color: var(--dataviz-text);
-    font-size: var(--dataviz-font-size);
 }
 
-.theme-field .unity-object-field__input {
-    background-color: var(--dataviz-control);
-    border-color: var(--dataviz-border);
-    border-radius: var(--dataviz-control-radius);
-}
-
-.theme-field .unity-object-field-display {
-    color: var(--dataviz-text);
-}
-
+.dataviz-root .theme-field,
 .dataviz-root .theme-reset-button,
 .dataviz-root .settings-data-folder-button {
     font-size: 16px;
@@ -1235,6 +1224,8 @@
     border-width: 2px;
 }
 
+.dataviz-root .theme-field:hover,
+.dataviz-root .theme-field:focus,
 .dataviz-root .theme-reset-button:hover,
 .dataviz-root .theme-reset-button:focus,
 .dataviz-root .settings-data-folder-button:hover,
@@ -1243,6 +1234,7 @@
     background-color: var(--dataviz-accent);
 }
 
+.dataviz-root .theme-field:active,
 .dataviz-root .theme-reset-button:active,
 .dataviz-root .settings-data-folder-button:active {
     color: var(--dataviz-on-accent);
