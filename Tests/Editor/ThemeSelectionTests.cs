@@ -286,7 +286,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 UnityEngine.UIElements.Cursor cursor = row.style.cursor.value;
                 Assert.IsNotNull(cursor.texture, row.text);
-                Assert.AreEqual(Vector2.zero, cursor.hotspot, row.text);
+                Assert.AreEqual(new Vector2(5f, 0f), cursor.hotspot, row.text);
             }
 
             dropdown.SetFilter("no matching palette");

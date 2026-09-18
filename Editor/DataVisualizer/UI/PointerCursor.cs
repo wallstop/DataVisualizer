@@ -22,6 +22,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                         wrapMode = TextureWrapMode.Clamp,
                         hideFlags = HideFlags.HideAndDontSave,
                     };
+                    Color32 outline = new(0, 0, 0, 255);
                     Color32 fill = new(255, 255, 255, 255);
                     Color32[] pixels = new Color32[_texture.width * _texture.height];
                     for (int y = 0; y < Shape.Length; y++)
@@ -29,7 +30,12 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                         string row = Shape[y];
                         for (int x = 0; x < row.Length; x++)
                         {
-                            pixels[y * _texture.width + x] = row[x] == 'X' ? fill : default;
+                            pixels[y * _texture.width + x] = row[x] switch
+                            {
+                                'X' => outline,
+                                'o' => fill,
+                                _ => default,
+                            };
                         }
                     }
 
@@ -40,28 +46,33 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 return new UnityEngine.UIElements.Cursor
                 {
                     texture = _texture,
-                    hotspot = new Vector2(0, 0),
+                    hotspot = new Vector2(5, 0),
                 };
             }
         }
 
         private static readonly string[] Shape =
         {
-            "X............",
-            "XX...........",
-            "X.X..........",
-            "X..X.........",
-            "X...X........",
-            "X....X.......",
-            "X.....X......",
-            "X......X.....",
-            "X.......X....",
-            "X........X...",
-            "X.....XX.....",
-            "X..X..X......",
-            "X.X.X........",
-            "XX..X........",
-            "....X........",
+            "....XX..........",
+            "...XooX.........",
+            "...XooX.........",
+            "...XooX.........",
+            "...XooX.........",
+            "...XooX.........",
+            "...XooXX........",
+            "...XoooXX.......",
+            "...XooooXX......",
+            "...XoooooXX.....",
+            "..XXoooooooX....",
+            ".XoXXoooooooX...",
+            ".XooXooooooooX..",
+            ".XoXoooooooooX..",
+            "..XooooooooooX..",
+            "..XooooooooooX..",
+            "..XooooooooooX..",
+            "..XoooooooooX...",
+            "..XoooooooooX...",
+            "...XXXXXXXXX....",
         };
 
         private static Texture2D _texture;
