@@ -188,6 +188,13 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     sort or match with the current culture and reorder across machines. Prefer static
     `string.Equals(a, b, StringComparison)` over instance `a.Equals(...)` so a null
     operand compares as a value instead of throwing.
+35. Never use `Assert.IsNull`/`Assert.IsNotNull`, and never use `?.`, `??`, or an
+    implicit bool test on a `UnityEngine.Object`. Unity overloads the equality
+    operators, so a destroyed-object wrapper compares null only through `== null` /
+    `!= null`; the other forms use reference equality and miss that lifetime. Write
+    `Assert.That(value == null)` / `Assert.That(value != null)`. The C# source lint
+    enforces the assertion forms; the `?.`/`??`/bool shapes are review-enforced
+    (#117).
 
 ### Skills Discipline
 
@@ -205,6 +212,7 @@ dotnet tool restore
 dotnet tool run csharpier -- format Editor Runtime Tests
 dotnet tool run csharpier -- check Editor Runtime Tests
 npm run lint:csharp-member-order
+npm run lint:csharp-null-assertions
 pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
 pwsh -NoProfile -File scripts/generate-skills-index.ps1
 pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput
@@ -217,8 +225,8 @@ unity -projectPath <path-to-host-project> -batchmode -quit -runTests -testPlatfo
 unity -projectPath <path-to-host-project> -batchmode -quit -runTests -testPlatform playmode
 ```
 
-Layers: the pre-commit framework hook runs CSharpier, C# member-order, and the fast
-`.llm` checks on staged files;
+Layers: the pre-commit framework hook runs CSharpier, C# member-order, null-assertions,
+and the fast `.llm` checks on staged files;
 `npm run lint:llm` is the local gate; CI (`.github/workflows/llm-lint.yml`) runs
 everything on ubuntu and windows. CSharpier and member ordering run via the
 pre-commit config on staged `.cs` files.
