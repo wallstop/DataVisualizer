@@ -181,7 +181,6 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 };
                 row.AddToClassList(StyleConstants.NamespaceItemClass);
                 row.AddToClassList(StyleConstants.ClickableClass);
-                row.style.cursor = PointerCursor.Pointer;
                 _rows.Add(row);
                 Results.Add(row);
             }

@@ -272,7 +272,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void ShouldTitleDropdownAndPointCursorOnResultRows()
+        public void ShouldTitleDropdownAndUseClickableHoverCursorOnResultRows()
         {
             using TestCleanupScope cleanup = new();
             ThemeDropdownItem[] items = CreateItems(cleanup);
@@ -284,9 +284,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual(items.Length, rows.Count);
             foreach (Button row in rows)
             {
-                UnityEngine.UIElements.Cursor cursor = row.style.cursor.value;
-                Assert.IsNotNull(cursor.texture, row.text);
-                Assert.AreEqual(new Vector2(5f, 0f), cursor.hotspot, row.text);
+                Assert.IsTrue(row.ClassListContains(StyleConstants.ClickableClass), row.text);
+                Assert.AreEqual(StyleKeyword.Null, row.style.cursor.keyword, row.text);
             }
 
             dropdown.SetFilter("no matching palette");

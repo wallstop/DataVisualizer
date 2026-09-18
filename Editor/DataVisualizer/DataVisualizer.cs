@@ -4280,7 +4280,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 );
             };
             themeField.AddToClassList(StyleConstants.ThemeFieldClass);
-            themeField.style.cursor = PointerCursor.Pointer;
+            themeField.AddToClassList(StyleConstants.ClickableClass);
             themeContainer.Add(themeField);
             Button resetThemeButton = new(ResetTheme)
             {
