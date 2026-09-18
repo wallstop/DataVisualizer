@@ -4243,6 +4243,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             Label themeLabel = new("Theme:");
             themeLabel.AddToClassList("settings-data-folder-label");
             themeContainer.Add(themeLabel);
+            VisualElement themeSpacer = new() { style = { flexGrow = 1 } };
+            themeContainer.Add(themeSpacer);
             DataVisualizerThemeSettings selectedTheme = GetSelectedTheme();
             Button themeField = new()
             {
