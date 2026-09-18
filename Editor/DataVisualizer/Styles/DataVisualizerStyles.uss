@@ -1,27 +1,257 @@
 :root {
-    font-size: 16px;
+    font-size: var(--dataviz-font-size);
+    --dataviz-font-size: 16px;
     --dataviz-circle-size: 26px;
+    --dataviz-text: white;
+    --dataviz-muted: grey;
+    --dataviz-accent: chocolate;
+    --dataviz-on-accent: white;
+    --dataviz-popover: rgba(0, 0, 0, 0.75);
+    --dataviz-namespace: rgb(60, 60, 60);
+    --dataviz-row: rgba(255, 255, 255, 0.1);
+    --dataviz-border: rgba(128, 128, 128, 0.5);
+    --dataviz-selection: green;
+    --dataviz-selection-text: lightgreen;
+    --dataviz-selected-row: rgba(0, 0, 0, 0.2);
+    --dataviz-hover: rgba(200, 200, 200, 0.3);
+    --dataviz-pane: rgba(0, 0, 0, 0.4);
+    --dataviz-control: transparent;
+    --dataviz-control-hover: chocolate;
+    --dataviz-control-pressed: #8b4513;
+    --dataviz-background: #383838;
+    --dataviz-input: #212121;
+    --dataviz-danger: rgb(230, 102, 102);
+    --dataviz-on-danger: #212121;
+    --dataviz-positive: #66b366;
+    --dataviz-on-positive: #152315;
+    --dataviz-secondary: rgb(51, 153, 230);
+    --dataviz-on-secondary: #102331;
+    --dataviz-warning: goldenrod;
+    --dataviz-on-warning: #29210d;
+    --dataviz-emphasis: coral;
+    --dataviz-on-emphasis: #30180f;
+    --dataviz-control-padding: 6px;
+    --dataviz-control-radius: 6px;
 }
 
-* {
-    --unity-selection-color: rgba(144, 238, 144, 0.3);
+.dataviz-root {
+    background-color: var(--dataviz-background);
+    color: var(--dataviz-text);
+}
+
+.dataviz-root * {
+    --unity-selection-color: var(--dataviz-selected-row);
     transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
 }
 
-.transparent-cursor {
+.dataviz-root Button {
+    background-color: var(--dataviz-control);
+    border-color: var(--dataviz-border);
+    color: var(--dataviz-text);
+}
+
+.dataviz-root Button:hover {
+    background-color: var(--dataviz-control-hover);
+    color: var(--dataviz-on-accent);
+}
+
+.dataviz-root Button:focus {
+    border-color: var(--dataviz-accent);
+}
+
+.dataviz-root Button:active {
+    background-color: var(--dataviz-control-pressed);
+    color: var(--dataviz-on-accent);
+}
+
+.dataviz-root Button:disabled {
+    opacity: 0.5;
+}
+
+.dataviz-root .unity-base-text-field__input,
+.dataviz-root .unity-popup-field__input,
+.dataviz-root .unity-enum-field__input,
+.dataviz-root .unity-object-field__input {
+    background-color: var(--dataviz-input);
+    border-color: var(--dataviz-border);
+    color: var(--dataviz-text);
+    --unity-cursor-color: var(--dataviz-text);
+}
+
+.dataviz-root .unity-base-field__label,
+.dataviz-root .unity-object-field-display,
+.dataviz-root .unity-popup-field__text,
+.dataviz-root .unity-enum-field__text,
+.dataviz-root .unity-toggle__text,
+.dataviz-root .unity-foldout__text {
+    color: var(--dataviz-text);
+}
+
+.dataviz-root .unity-base-text-field__input:hover,
+.dataviz-root .unity-popup-field__input:hover,
+.dataviz-root .unity-enum-field__input:hover,
+.dataviz-root .unity-object-field__input:hover {
+    border-color: var(--dataviz-secondary);
+}
+
+.dataviz-root .unity-base-text-field__input:focus,
+.dataviz-root .unity-base-text-field:focus > .unity-base-text-field__input,
+.dataviz-root .unity-popup-field:focus > .unity-popup-field__input,
+.dataviz-root .unity-enum-field:focus > .unity-enum-field__input,
+.dataviz-root .unity-object-field:focus > .unity-object-field__input {
+    border-color: var(--dataviz-accent);
+}
+
+.dataviz-root .unity-base-field:disabled > .unity-base-field__label,
+.dataviz-root .unity-base-text-field:disabled > .unity-base-text-field__input,
+.dataviz-root .unity-object-field:disabled .unity-object-field-display,
+.dataviz-root .unity-popup-field:disabled .unity-popup-field__text,
+.dataviz-root .unity-enum-field:disabled .unity-enum-field__text {
+    color: var(--dataviz-muted);
+}
+
+.dataviz-root .unity-object-field__selector,
+.dataviz-root .unity-scroller,
+.dataviz-root .unity-foldout__toggle {
+    background-color: var(--dataviz-control);
+    border-color: var(--dataviz-border);
+}
+
+.dataviz-root .unity-object-field__selector:hover,
+.dataviz-root .unity-foldout__toggle:hover {
+    background-color: var(--dataviz-hover);
+}
+
+.dataviz-root .unity-toggle__checkmark {
+    background-color: var(--dataviz-input);
+    border-color: var(--dataviz-border);
+    -unity-background-image-tint-color: var(--dataviz-text);
+}
+
+.dataviz-root .unity-toggle:hover .unity-toggle__checkmark,
+.dataviz-root .unity-toggle:focus .unity-toggle__checkmark {
+    border-color: var(--dataviz-accent);
+}
+
+.dataviz-root .unity-toggle:checked .unity-toggle__checkmark {
+    background-color: var(--dataviz-accent);
+    border-color: var(--dataviz-accent);
+    -unity-background-image-tint-color: var(--dataviz-on-accent);
+}
+
+.dataviz-root .unity-toggle:disabled .unity-toggle__checkmark {
+    opacity: 0.5;
+}
+
+.dataviz-root .unity-foldout__toggle .unity-toggle__checkmark,
+.dataviz-root .unity-foldout__toggle:checked .unity-toggle__checkmark {
+    background-color: transparent;
+    border-color: transparent;
+    -unity-background-image-tint-color: var(--dataviz-text);
+}
+
+.dataviz-root .unity-foldout__toggle:focus .unity-toggle__checkmark,
+.dataviz-root .unity-foldout__toggle:hover .unity-toggle__checkmark {
+    -unity-background-image-tint-color: var(--dataviz-accent);
+}
+
+.dataviz-root .unity-base-slider__tracker {
+    background-color: var(--dataviz-input);
+    border-color: var(--dataviz-border);
+}
+
+.dataviz-root .unity-base-slider__dragger {
+    background-color: var(--dataviz-border);
+    border-color: var(--dataviz-muted);
+}
+
+.dataviz-root .unity-base-slider__dragger:hover,
+.dataviz-root .unity-base-slider:focus .unity-base-slider__dragger {
+    background-color: var(--dataviz-accent);
+    border-color: var(--dataviz-accent);
+}
+
+.dataviz-root .unity-base-slider__dragger:active {
+    background-color: var(--dataviz-control-pressed);
+}
+
+.dataviz-root .unity-scroller__low-button,
+.dataviz-root .unity-scroller__high-button {
+    background-color: var(--dataviz-control);
+    border-color: var(--dataviz-border);
+    -unity-background-image-tint-color: var(--dataviz-text);
+}
+
+.dataviz-root .unity-scroller__low-button:hover,
+.dataviz-root .unity-scroller__high-button:hover {
+    background-color: var(--dataviz-control-hover);
+    -unity-background-image-tint-color: var(--dataviz-on-accent);
+}
+
+.dataviz-root .unity-scroller__low-button:active,
+.dataviz-root .unity-scroller__high-button:active {
+    background-color: var(--dataviz-control-pressed);
+    -unity-background-image-tint-color: var(--dataviz-on-accent);
+}
+
+.dataviz-root .unity-scroller:disabled {
+    opacity: 0.5;
+}
+
+.dataviz-root .unity-inspector-element,
+.dataviz-root .unity-list-view__header,
+.dataviz-root .unity-list-view__footer,
+.dataviz-root .unity-help-box {
+    background-color: var(--dataviz-namespace);
+    border-color: var(--dataviz-border);
+    color: var(--dataviz-text);
+}
+
+.dataviz-root .unity-help-box__text {
+    color: var(--dataviz-text);
+}
+
+.dataviz-root .dataviz-muted {
+    color: var(--dataviz-muted);
+}
+
+.dataviz-root .dataviz-error {
+    color: var(--dataviz-danger);
+}
+
+.dataviz-root .dataviz-divider {
+    border-color: var(--dataviz-border);
+}
+
+.dataviz-root .dataviz-separator {
+    background-color: var(--dataviz-border);
+}
+
+.dataviz-root .dataviz-suggestion {
+    background-color: transparent;
+    color: var(--dataviz-text);
+}
+
+.dataviz-root .dataviz-suggestion:hover,
+.dataviz-root .dataviz-suggestion:focus {
+    background-color: var(--dataviz-hover);
+}
+
+.dataviz-root .transparent-cursor,
+.dataviz-root .transparent-cursor .unity-base-text-field__input {
     --unity-cursor-color: transparent;
 }
 
 .styled-cursor {
-    --unity-cursor-color: white;
+    --unity-cursor-color: var(--dataviz-text);
 }
 
 .object-item {
     padding: 4px 8px;
     margin: 2px 0;
-    border-color: rgba(128, 128, 128, 0.5);
+    border-color: var(--dataviz-border);
     border-radius: 3px;
-    background-color: rgba(80, 80, 80, 0.2);
+    background-color: var(--dataviz-row);
     border-width: 2px;
 }
 
@@ -48,13 +278,13 @@
     min-width: 200px;
     min-height: 50px;
     max-width: 500px;
-    background-color: rgba(0, 0, 0, 0.75);
+    background-color: var(--dataviz-popover);
     border-radius: 10px;
     border-width: 0;
     display: none;
     flex-direction: column;
     padding: 10px;
-    color: white;
+    color: var(--dataviz-text);
 }
 
 .rename-object-label {
@@ -65,10 +295,10 @@
     margin-bottom: 5px;
     border-radius: 5px;
     padding: 2px 6px;
-    background-color: rgba(0, 0, 0, 1);
-    --unity-selection-color: rgba(51, 153, 230, 0.4);
-    border-color: rgb(51, 153, 230);
-    color: rgba(255, 255, 255, 0.7);
+    background-color: var(--dataviz-input);
+    --unity-selection-color: var(--dataviz-selected-row);
+    border-color: var(--dataviz-secondary);
+    color: var(--dataviz-text);
     border-width: 2px;
 }
 
@@ -76,15 +306,15 @@
     margin-bottom: 5px;
     border-radius: 5px;
     padding: 2px 6px;
-    background-color: rgba(0, 0, 0, 1);
-    --unity-selection-color: rgba(0, 128, 0, 0.4);
-    border-color: rgb(0, 128, 0);
-    color: rgba(255, 255, 255, 0.7);
+    background-color: var(--dataviz-input);
+    --unity-selection-color: var(--dataviz-selected-row);
+    border-color: var(--dataviz-positive);
+    color: var(--dataviz-text);
     border-width: 2px;
 }
 
-.popover-button {
-    color: white;
+.dataviz-root .popover-button {
+    color: var(--dataviz-text);
     padding: 2px 6px;
     font-size: 16px;
     border-width: 2px;
@@ -92,34 +322,40 @@
     margin-bottom: 2px;
 }
 
-.popover-delete-button {
-    border-color: rgb(230, 102, 102);
+.dataviz-root .popover-delete-button {
+    border-color: var(--dataviz-danger);
 }
 
-.popover-delete-button:hover {
-    background-color: rgb(230, 102, 102);
-    border-color: rgb(230, 102, 102);
-    color: white;
+.dataviz-root .popover-delete-button:hover,
+.dataviz-root .popover-delete-button:focus,
+.dataviz-root .popover-delete-button:active {
+    background-color: var(--dataviz-danger);
+    border-color: var(--dataviz-danger);
+    color: var(--dataviz-on-danger);
 }
 
-.popover-rename-button {
-    border-color: rgb(51, 153, 230);
+.dataviz-root .popover-rename-button {
+    border-color: var(--dataviz-secondary);
 }
 
-.popover-rename-button:hover {
-    background-color: rgb(51, 153, 230);
-    border-color: rgb(51, 153, 230);
-    color: white;
+.dataviz-root .popover-rename-button:hover,
+.dataviz-root .popover-rename-button:focus,
+.dataviz-root .popover-rename-button:active {
+    background-color: var(--dataviz-secondary);
+    border-color: var(--dataviz-secondary);
+    color: var(--dataviz-on-secondary);
 }
 
-.popover-create-button {
-    border-color: green;
+.dataviz-root .popover-create-button {
+    border-color: var(--dataviz-positive);
 }
 
-.popover-create-button:hover {
-    background-color: green;
-    border-color: green;
-    color: white;
+.dataviz-root .popover-create-button:hover,
+.dataviz-root .popover-create-button:focus,
+.dataviz-root .popover-create-button:active {
+    background-color: var(--dataviz-positive);
+    border-color: var(--dataviz-positive);
+    color: var(--dataviz-on-positive);
 }
 
 .popover-drag-handle {
@@ -133,58 +369,62 @@
 }
 
 .popover-drag-handle.settings {
-    color: chocolate;
+    color: var(--dataviz-accent);
 }
 
 .popover-drag-handle.create {
-    color: green;
+    color: var(--dataviz-positive);
 }
 
 .popover-drag-handle.namespace-add {
-    color: green;
+    color: var(--dataviz-positive);
 }
 
 .popover-drag-handle.rename {
-    color: rgb(51, 153, 230);
+    color: var(--dataviz-secondary);
 }
 
 .popover-drag-handle.confirm-delete {
-    color: rgb(230, 102, 102);
+    color: var(--dataviz-danger);
 }
 
 .popover-drag-handle > .unity-text-element {
     background-color: transparent;
 }
 
-.popover-cancel-button {
-    border-color: darkkhaki;
+.dataviz-root .popover-cancel-button {
+    border-color: var(--dataviz-warning);
     margin-right: 10px;
 }
 
-.popover-confirm-button {
-    border-color: green;
+.dataviz-root .popover-confirm-button {
+    border-color: var(--dataviz-positive);
     margin-right: 10px;
 }
 
-.popover-confirm-button:hover {
-    border-color: green;
-    background-color: green;
-    color: white;
+.dataviz-root .popover-confirm-button:hover,
+.dataviz-root .popover-confirm-button:focus,
+.dataviz-root .popover-confirm-button:active {
+    border-color: var(--dataviz-positive);
+    background-color: var(--dataviz-positive);
+    color: var(--dataviz-on-positive);
 }
 
-.popover-cancel-button:hover {
-    border-color: darkkhaki;
-    background-color: darkkhaki;
-    color: crimson;
+.dataviz-root .popover-cancel-button:hover,
+.dataviz-root .popover-cancel-button:focus,
+.dataviz-root .popover-cancel-button:active {
+    border-color: var(--dataviz-warning);
+    background-color: var(--dataviz-warning);
+    color: var(--dataviz-on-warning);
 }
 
-.popover-close-button {
-    color: rgb(230, 102, 102);
+.dataviz-root .popover-close-button {
+    color: var(--dataviz-danger);
     -unity-font-style: bold;
     padding: 10px 5px;
     font-size: 16px;
     border-width: 2px;
-    border-color: rgb(230, 102, 102);
+    border-color: var(--dataviz-danger);
     border-radius: 50%;
 }
 
@@ -194,11 +434,11 @@
     flex-shrink: 1;
     width: auto;
     max-height: 500px;
-    background-color: rgba(0, 0, 0, 0.9);
+    background-color: var(--dataviz-popover);
     border-width: 2px;
     border-radius: 8px;
     margin-top: 2px;
-    border-color: rgba(0, 0, 0, 0.9);
+    border-color: var(--dataviz-popover);
     display: none;
 }
 
@@ -211,21 +451,21 @@
 }
 
 .object-item:hover {
-    background-color: rgba(200, 200, 200, 0.3);
-    border-color: green;
+    background-color: var(--dataviz-hover);
+    border-color: var(--dataviz-selection);
 }
 
 .object-item.selected {
-    color: lightgreen;
-    background-color: rgba(0, 0, 0, 0.2);
-    border-color: green;
+    color: var(--dataviz-selection-text);
+    background-color: var(--dataviz-selected-row);
+    border-color: var(--dataviz-selection);
 }
 
 .drag-ghost {
     position: absolute;
     border-width: 1px;
-    border-color: white;
-    background-color: rgba(0, 0, 0, 0.75);
+    border-color: var(--dataviz-text);
+    background-color: var(--dataviz-popover);
     border-radius: 3px;
     padding: 4px 8px;
     opacity: 0.8;
@@ -234,7 +474,7 @@
 .drop-indicator {
     position: absolute;
     height: 2px;
-    background-color: #6E98C2;
+    background-color: var(--dataviz-secondary);
     width: 100%;
 }
 
@@ -242,20 +482,20 @@
     padding: 4px 8px;
     margin: 6px;
     margin-bottom: 0;
-    color: grey;
-    border-color: rgba(128, 128, 128, 0.5);
-    background-color: rgba(60, 60, 60, 1);
+    color: var(--dataviz-muted);
+    border-color: var(--dataviz-border);
+    background-color: var(--dataviz-namespace);
     border-radius: 10px;
     border-width: 2px;
 }
 
 .namespace-item:hover {
-    border-color: lightgreen;
+    border-color: var(--dataviz-selection-text);
 }
 
 .namespace-item.selected {
-    color: white;
-    border-color: green;
+    color: var(--dataviz-text);
+    border-color: var(--dataviz-selection);
 }
 
 .namespace-item__label {
@@ -286,17 +526,17 @@
     margin-left: 10px;
     padding: 4px 6px;
     border-radius: 6px;
-    color: white;
+    color: var(--dataviz-text);
     margin-top: 0;
     margin-bottom: 6px;
     border-width: 2px;
-    border-color: black;
-    background-color: rgba(90, 90, 90, 0.1);
+    border-color: var(--dataviz-border);
+    background-color: var(--dataviz-row);
 }
 
 .type-item:hover {
-    background-color: rgba(200, 200, 200, 0);
-    border-color: lightgreen;
+    background-color: transparent;
+    border-color: var(--dataviz-selection-text);
     cursor: link;
 }
 
@@ -318,27 +558,27 @@
 }
 
 .type-item.selected {
-    background-color: rgba(0, 0, 0, 0.6);
-    border-color: green;
+    background-color: var(--dataviz-selected-row);
+    border-color: var(--dataviz-selection);
 }
 
 .type-item--disabled {
     opacity: 0.5;
-    background-color: rgba(70, 70, 70, 0.1);
+    background-color: var(--dataviz-row);
 }
 
 .in-place-ghost {
     opacity: 0.5;
     border-width: 1px;
-    border-color: grey;
+    border-color: var(--dataviz-muted);
 }
 
 .overlay-ghost {
     position: absolute;
     opacity: 0.5;
     border-width: 1px;
-    border-color: cornflowerblue;
-    background-color: rgba(100, 150, 255, 0.1);
+    border-color: var(--dataviz-secondary);
+    background-color: var(--dataviz-selected-row);
 }
 
 .namespace-group-header {
@@ -350,7 +590,7 @@
     height: 42px;
     flex-shrink: 0;
     border-bottom-width: 1px;
-    border-bottom-color: rgba(128, 128, 128, 0.5);
+    border-bottom-color: var(--dataviz-border);
 }
 
 .namespace-group-header > .unity-label {
@@ -380,9 +620,9 @@
 }
 
 .object-item {
-    color: white;
+    color: var(--dataviz-text);
     min-width: 0;
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--dataviz-row);
     border-radius: 6px;
     margin: 0 2px;
     overflow: hidden;
@@ -409,7 +649,7 @@
     height: 42px;
     flex-shrink: 0;
     border-bottom-width: 1px;
-    border-bottom-color: rgba(128, 128, 128, 0.5);
+    border-bottom-color: var(--dataviz-border);
 }
 
 .object-header > .unity-label {
@@ -429,7 +669,7 @@
 /* Descendant (not direct-child): the virtualized ListView nests its scroll container deeper than a
    raw ScrollView did, so match at any depth to keep the dark, uniform backdrop behind the rows. */
 .object-scrollview .unity-scroll-view__content-and-vertical-scroll-container {
-    background-color: rgba(0, 0, 0, 0.4);
+    background-color: var(--dataviz-pane);
 }
 
 /* Hide the Animated reorder-mode drag handle and collapse the gutter its container reserves, so the
@@ -461,7 +701,7 @@
 }
 
 .namespace-scrollview > .unity-scroll-view__content-and-vertical-scroll-container {
-    background-color: rgba(0, 0, 0, 0.4);
+    background-color: var(--dataviz-pane);
 }
 
 .action-button {
@@ -502,40 +742,47 @@
     background-color: transparent;
     border-width: 2px;
     -unity-font-style: bold;
-    border-color: grey;
-    color: grey;
+    border-color: var(--dataviz-muted);
+    color: var(--dataviz-muted);
     -unity-text-align: middle-center;
 }
 
-.action-button:hover {
+.dataviz-root .action-button {
+    background-color: transparent;
+}
+
+.dataviz-root .action-button:hover {
     cursor: link;
-    background-color: rgba(255, 255, 255, 0.9);
+    background-color: var(--dataviz-hover);
 }
 
 .selected.action-button {
     -unity-font-style: bold;
 }
 
-.selected.action-button:hover {
-    background-color: rgba(255, 255, 255, 0.35);
-    border-color: rgba(255, 255, 255, 0.35);
+.dataviz-root .selected.action-button:hover {
+    background-color: var(--dataviz-hover);
+    border-color: var(--dataviz-selection);
 }
 
-.go-button {
-    border-color: white;
-    color: white;
+.dataviz-root .go-button {
+    border-color: var(--dataviz-text);
+    color: var(--dataviz-text);
 }
 
-.go-button:hover {
-    border-color: black;
-    color: black;
+.dataviz-root .go-button:hover,
+.dataviz-root .go-button:focus,
+.dataviz-root .go-button:active {
+    background-color: var(--dataviz-accent);
+    border-color: var(--dataviz-accent);
+    color: var(--dataviz-on-accent);
 }
 
-.create-button {
+.dataviz-root .create-button {
     -unity-font-style: bold;
-    color: white;
-    background-color: darkgreen;
-    border-color: white;
+    color: var(--dataviz-on-positive);
+    background-color: var(--dataviz-positive);
+    border-color: var(--dataviz-text);
     border-width: 2px;
     font-size: 26px;
     border-radius: 50%;
@@ -552,17 +799,19 @@
     -unity-text-align: middle-center;
 }
 
-.create-button:hover {
-    background-color: white;
-    color: darkgreen;
-    border-color: darkgreen;
+.dataviz-root .create-button:hover,
+.dataviz-root .create-button:focus,
+.dataviz-root .create-button:active {
+    background-color: var(--dataviz-on-positive);
+    color: var(--dataviz-positive);
+    border-color: var(--dataviz-positive);
 }
 
-.load-from-data-folder-button {
+.dataviz-root .load-from-data-folder-button {
     -unity-font-style: bold;
-    color: white;
-    background-color: chocolate;
-    border-color: white;
+    color: var(--dataviz-on-accent);
+    background-color: var(--dataviz-accent);
+    border-color: var(--dataviz-text);
     border-width: 2px;
     font-size: 26px;
     border-radius: 50%;
@@ -579,17 +828,19 @@
     -unity-text-align: middle-center;
 }
 
-.load-from-data-folder-button:hover {
-    background-color: white;
-    color: chocolate;
-    border-color: chocolate;
+.dataviz-root .load-from-data-folder-button:hover,
+.dataviz-root .load-from-data-folder-button:focus,
+.dataviz-root .load-from-data-folder-button:active {
+    background-color: var(--dataviz-input);
+    color: var(--dataviz-accent);
+    border-color: var(--dataviz-accent);
 }
 
-.load-from-script-folder-button {
+.dataviz-root .load-from-script-folder-button {
     -unity-font-style: bold;
-    color: white;
-    background-color: rgb(51, 153, 230);
-    border-color: white;
+    color: var(--dataviz-on-secondary);
+    background-color: var(--dataviz-secondary);
+    border-color: var(--dataviz-text);
     border-width: 2px;
     font-size: 26px;
     border-radius: 50%;
@@ -606,31 +857,68 @@
     -unity-text-align: middle-center;
 }
 
-.load-from-script-folder-button:hover {
-    background-color: white;
-    color: rgb(51, 153, 230);
-    border-color: rgb(51, 153, 230);
+.dataviz-root .load-from-script-folder-button:hover,
+.dataviz-root .load-from-script-folder-button:focus,
+.dataviz-root .load-from-script-folder-button:active {
+    background-color: var(--dataviz-on-secondary);
+    color: var(--dataviz-secondary);
+    border-color: var(--dataviz-secondary);
 }
 
-.delete-button {
-    border-color: rgb(230, 102, 102);
-    color: rgb(230, 102, 102);
+.dataviz-root .delete-button {
+    border-color: var(--dataviz-danger);
+    color: var(--dataviz-danger);
 }
 
-.clone-button {
-    border-color: rgb(102, 179, 102);
-    color: rgb(102, 179, 102);
+.dataviz-root .delete-button:hover,
+.dataviz-root .delete-button:focus,
+.dataviz-root .delete-button:active,
+.dataviz-root .popover-close-button:hover,
+.dataviz-root .popover-close-button:focus,
+.dataviz-root .popover-close-button:active {
+    background-color: var(--dataviz-danger);
+    border-color: var(--dataviz-danger);
+    color: var(--dataviz-on-danger);
 }
 
-.move-button {
-    border-color: goldenrod;
-    color: goldenrod;
+.dataviz-root .clone-button {
+    border-color: var(--dataviz-positive);
+    color: var(--dataviz-positive);
 }
 
-.rename-button {
+.dataviz-root .clone-button:hover,
+.dataviz-root .clone-button:focus,
+.dataviz-root .clone-button:active {
+    background-color: var(--dataviz-positive);
+    border-color: var(--dataviz-positive);
+    color: var(--dataviz-on-positive);
+}
+
+.dataviz-root .move-button {
+    border-color: var(--dataviz-warning);
+    color: var(--dataviz-warning);
+}
+
+.dataviz-root .move-button:hover,
+.dataviz-root .move-button:focus,
+.dataviz-root .move-button:active {
+    background-color: var(--dataviz-warning);
+    border-color: var(--dataviz-warning);
+    color: var(--dataviz-on-warning);
+}
+
+.dataviz-root .rename-button {
     background-color: transparent;
-    border-color: rgb(51, 153, 230);
-    color: rgb(51, 153, 230);
+    border-color: var(--dataviz-secondary);
+    color: var(--dataviz-secondary);
+}
+
+.dataviz-root .rename-button:hover,
+.dataviz-root .rename-button:focus,
+.dataviz-root .rename-button:active {
+    background-color: var(--dataviz-secondary);
+    border-color: var(--dataviz-secondary);
+    color: var(--dataviz-on-secondary);
 }
 
 .namespace-group-item--empty {
@@ -659,7 +947,7 @@
 }
 
 .empty-object-list-label {
-    color: grey;
+    color: var(--dataviz-muted);
     white-space: normal;
     margin: 10px;
 }
@@ -682,8 +970,8 @@
 }
 
 .type-selection-list-item:hover {
-    color: black;
-    background-color: rgb(89, 89, 89);
+    color: var(--dataviz-text);
+    background-color: var(--dataviz-hover);
 }
 
 .type-selection-list-item--disabled {
@@ -709,20 +997,21 @@
 }
 
 .type-selection-list-namespace--not-empty {
-    border-color: white;
-    color: white;
+    border-color: var(--dataviz-text);
+    color: var(--dataviz-text);
 }
 
 .type-selection-list-namespace--not-empty:hover {
-    border-color: lightgreen;
+    border-color: var(--dataviz-selection-text);
 }
 
 .type-selection-list-namespace--empty {
-    color: grey;
+    color: var(--dataviz-muted);
 }
 
-.unity-text-field__placeholder > .unity-base-text-field__input {
-    color: #969696
+.dataviz-root .unity-text-field__placeholder > .unity-base-text-field__input,
+.dataviz-root .unity-base-text-field__input--placeholder {
+    color: var(--dataviz-muted);
 }
 
 .popover-namespace-header {
@@ -749,13 +1038,13 @@
 }
 
 .search-result-item:hover {
-    background-color: rgb(89, 89, 89);
-    color: black;
+    background-color: var(--dataviz-hover);
+    color: var(--dataviz-text);
 }
 
 .search-result-item--highlighted {
-    background-color: rgb(89, 89, 89);
-    color: black;
+    background-color: var(--dataviz-hover);
+    color: var(--dataviz-text);
 }
 
 .search-result-type-label {
@@ -766,7 +1055,7 @@
 
 .search-result-context-label {
     font-size: 14px;
-    color: grey;
+    color: var(--dataviz-muted);
     margin-left: 10px;
     white-space: nowrap;
     overflow: hidden;
@@ -804,17 +1093,17 @@
 }
 
 .popover-item--highlighted {
-    background-color: rgb(89, 89, 89);
-    color: black;
+    background-color: var(--dataviz-hover);
+    color: var(--dataviz-text);
 }
 
 .popover-item--highlighted > .type-selection-list-namespace--not-empty {
-    color: black;
+    color: var(--dataviz-text);
     border-color: transparent;
 }
 
-.readonly-display-field > .unity-base-text-field__input {
-    color: grey;
+.dataviz-root .readonly-display-field > .unity-base-text-field__input {
+    color: var(--dataviz-muted);
     background-color: transparent;
     border-width: 0;
 }
@@ -823,23 +1112,25 @@
     opacity: 1 !important;
 }
 
-.settings-button {
+.dataviz-root .settings-button {
     font-size: 26px;
     padding: 2px 6px;
     width: 26px;
     height: 26px;
     border-radius: 50%;
     padding-bottom: 18px;
-    color: white;
-    background-color: chocolate;
-    border-color: white;
+    color: var(--dataviz-on-accent);
+    background-color: var(--dataviz-accent);
+    border-color: var(--dataviz-text);
     border-width: 2px;
 }
 
-.settings-button:hover {
-    color: chocolate;
-    background-color: white;
-    border-color: chocolate;
+.dataviz-root .settings-button:hover,
+.dataviz-root .settings-button:focus,
+.dataviz-root .settings-button:active {
+    color: var(--dataviz-accent);
+    background-color: var(--dataviz-input);
+    border-color: var(--dataviz-accent);
 }
 
 .settings-data-folder-path-display {
@@ -848,7 +1139,7 @@
 }
 
 .settings-data-folder-path-display.unity-label {
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--dataviz-muted);
     padding: 0 6px;
     margin: 0 4px;
     border-radius: 5px;
@@ -858,7 +1149,7 @@
     background-color: transparent;
     -unity-text-align: middle-center;
     border-width: 2px;
-    border-color: grey;
+    border-color: var(--dataviz-muted);
 }
 
 .settings-data-folder-label {
@@ -872,11 +1163,11 @@
     flex-shrink: 1;
     width: auto;
     max-height: 500px;
-    background-color: rgba(0, 0, 0, 0.9);
+    background-color: var(--dataviz-popover);
     border-width: 2px;
     border-radius: 8px;
     margin-top: 2px;
-    border-color: rgba(0, 0, 0, 0.9);
+    border-color: var(--dataviz-popover);
     display: none;
 }
 
@@ -890,25 +1181,68 @@
 
 }
 
-.settings-data-folder-button {
+.theme-dropdown-title {
+    padding: 6px 8px 2px 8px;
+    color: var(--dataviz-accent);
+    -unity-font-style: bold;
+    font-size: var(--dataviz-font-size);
+}
+
+.theme-search-result {
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.theme-search-result:hover,
+.theme-search-result:focus {
+    background-color: var(--dataviz-hover);
+}
+
+.theme-search-empty {
+    padding: 8px;
+    color: var(--dataviz-muted);
+}
+
+.theme-field {
+    flex-grow: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    margin: 0 4px;
+}
+
+.dataviz-root .theme-field,
+.dataviz-root .theme-reset-button,
+.dataviz-root .settings-data-folder-button {
     font-size: 16px;
     border-radius: 6px;
     margin-right: 0;
     flex-grow: 0;
     flex-shrink: 0;
     background-color: transparent;
-    color: chocolate;
-    border-color: chocolate;
+    color: var(--dataviz-accent);
+    border-color: var(--dataviz-accent);
     border-width: 2px;
 }
 
-.settings-data-folder-button:hover {
-    color: white;
-    background-color: chocolate;
+.dataviz-root .theme-field:hover,
+.dataviz-root .theme-field:focus,
+.dataviz-root .theme-reset-button:hover,
+.dataviz-root .theme-reset-button:focus,
+.dataviz-root .settings-data-folder-button:hover,
+.dataviz-root .settings-data-folder-button:focus {
+    color: var(--dataviz-on-accent);
+    background-color: var(--dataviz-accent);
+}
+
+.dataviz-root .theme-field:active,
+.dataviz-root .theme-reset-button:active,
+.dataviz-root .settings-data-folder-button:active {
+    color: var(--dataviz-on-accent);
+    background-color: var(--dataviz-control-pressed);
 }
 
 .settings-prefs-toggle > .unity-text-element {
-    color: white;
+    color: var(--dataviz-text);
     font-size: 16px;
 }
 
@@ -919,28 +1253,41 @@
     align-self: flex-end;
 }
 
-.action-button-toggle__button {
+.dataviz-root .action-button-toggle__button {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background-color: white;
-    border-color: chocolate;
-    color: white;
+    background-color: var(--dataviz-input);
+    border-color: var(--dataviz-muted);
+    color: var(--dataviz-text);
     border-width: 4px;
     background-image: none;
 }
 
-.action-button-toggle__button:hover {
-    color: chocolate;
-    background-color: chocolate;
-    border-color: white;
+.dataviz-root .action-button-toggle__button--on {
+    background-color: var(--dataviz-accent);
+    border-color: var(--dataviz-accent);
+    color: var(--dataviz-on-accent);
 }
 
-.add-label-button {
+.dataviz-root .action-button-toggle__button:hover {
+    border-color: var(--dataviz-text);
+}
+
+.dataviz-root .action-button-toggle__button:active {
+    background-color: var(--dataviz-control-pressed);
+}
+
+.dataviz-root .action-button-toggle:disabled {
+    opacity: 0.5;
+}
+
+.dataviz-root .add-label-button {
     min-height: 24px;
     font-size: 16px;
     -unity-font-style: bold;
-    background-color: darkgreen;
+    color: var(--dataviz-on-positive);
+    background-color: var(--dataviz-positive);
     border-width: 0;
     margin: 6px 8px 2px 0;
     border-radius: 4px;
@@ -948,15 +1295,17 @@
     align-self: center;
 }
 
-.add-label-button:hover {
-    background-color: white;
-    color: darkgreen;
-    border-color: darkgreen;
+.dataviz-root .add-label-button:hover,
+.dataviz-root .add-label-button:focus,
+.dataviz-root .add-label-button:active {
+    background-color: var(--dataviz-on-positive);
+    color: var(--dataviz-positive);
+    border-color: var(--dataviz-positive);
 }
 
 .collapse-row {
     flex-direction: row;
-    background-color: rgb(33, 33, 33);
+    background-color: var(--dataviz-pane);
 }
 
 .labels-label {
@@ -976,7 +1325,7 @@
 }
 
 .label-container-container {
-    background-color: rgb(33, 33, 33);
+    background-color: var(--dataviz-pane);
 }
 
 .label-filter-section-root {
@@ -1006,11 +1355,11 @@
     margin-right: 4px;
     min-height: 36px;
     padding: 4px;
-    border-color: rgba(128, 128, 128, 0.5);
+    border-color: var(--dataviz-border);
     border-width: 1px;
     border-radius: 6px;
     min-width: 100px;
-    background-color: rgb(56, 56, 56);
+    background-color: var(--dataviz-namespace);
 }
 
 .label-header {
@@ -1049,7 +1398,7 @@
 }
 
 .drop-target-hover {
-    background-color: rgb(0, 0, 0);
+    background-color: var(--dataviz-selected-row);
 }
 
 .label-pill-container.clickable {
@@ -1080,8 +1429,8 @@
 }
 
 .processor-list-container {
-    border-color: rgba(128, 128, 128, 0.5);
-    background-color: rgb(56, 56, 56);
+    border-color: var(--dataviz-border);
+    background-color: var(--dataviz-namespace);
     border-width: 1px;
     border-radius: 6px;
     min-width: 100px;
@@ -1092,7 +1441,7 @@
 }
 
 .processor-area {
-    background-color: rgb(33, 33, 33);
+    background-color: var(--dataviz-pane);
 }
 
 .processor-column-header {
@@ -1102,16 +1451,16 @@
     padding: 0;
     flex-shrink: 0;
     padding-bottom: 6px;
-    background-color: rgb(33, 33, 33);
+    background-color: var(--dataviz-pane);
     border-bottom-width: 1px;
-    border-bottom-color: rgba(128, 128, 128, 0.5);
+    border-bottom-color: var(--dataviz-border);
 }
 
 .processor-list-scrollview {
     flex-grow: 1;
     padding: 0;
     border-bottom-width: 1px;
-    border-bottom-color: rgba(128, 128, 128, 0.5);
+    border-bottom-color: var(--dataviz-border);
 }
 
 .horizontal-toggle {
@@ -1131,7 +1480,7 @@
 .horizontal-toggle__container {
     flex-grow: 1;
     height: 100%;
-    border-color: rgba(128, 128, 128, 0.5);
+    border-color: var(--dataviz-border);
     border-width: 1px;
     flex-direction: row;
     border-radius: 6px;
@@ -1170,6 +1519,59 @@
     top: 0;
     height: 100%;
     border-radius: 6px;
+}
+
+.dataviz-root .horizontal-toggle__container {
+    background-color: var(--dataviz-input);
+}
+
+.dataviz-root .horizontal-toggle__indicator {
+    background-color: var(--dataviz-positive);
+}
+
+.dataviz-root .horizontal-toggle__left-label,
+.dataviz-root .horizontal-toggle__right-label {
+    color: var(--dataviz-muted);
+    background-color: transparent;
+}
+
+.dataviz-root .horizontal-toggle__left-label.selected,
+.dataviz-root .horizontal-toggle__right-label.selected {
+    color: var(--dataviz-on-positive);
+}
+
+.dataviz-root .horizontal-toggle.dataviz-alternate-mode .horizontal-toggle__indicator {
+    background-color: var(--dataviz-emphasis);
+}
+
+.dataviz-root .horizontal-toggle.dataviz-alternate-mode .horizontal-toggle__left-label.selected,
+.dataviz-root .horizontal-toggle.dataviz-alternate-mode .horizontal-toggle__right-label.selected {
+    color: var(--dataviz-on-emphasis);
+}
+
+.dataviz-root .horizontal-toggle__left-label.unselected:hover,
+.dataviz-root .horizontal-toggle__right-label.unselected:hover {
+    color: var(--dataviz-text);
+}
+
+.dataviz-root .horizontal-toggle:disabled {
+    opacity: 0.5;
+}
+
+.dataviz-root .label-pill-remove-button,
+.dataviz-root .label-pill-remove-button:hover,
+.dataviz-root .label-pill-remove-button:active {
+    background-color: transparent;
+}
+
+.dataviz-root .go-button-disabled {
+    background-color: transparent;
+    border-color: var(--dataviz-muted);
+    color: var(--dataviz-muted);
+}
+
+.dataviz-root .processor-column {
+    border-right-color: var(--dataviz-border);
 }
 
 /* Manual pagination was replaced by the virtualized object ListView; its page-controller styles

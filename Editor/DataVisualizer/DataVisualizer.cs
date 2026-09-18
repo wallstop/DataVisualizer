@@ -245,6 +245,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _objectColumnElement;
         private Label _objectLoadingIndicator;
 
+        private readonly DataVisualizerThemeSelection _themeSelection = new();
         private VisualElement _settingsPopover;
         private VisualElement _renamePopover;
         private VisualElement _createPopover;
@@ -1339,7 +1340,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             VisualElement root = rootVisualElement;
             root.Clear();
+            root.AddToClassList("dataviz-root");
             LoadStyleSheetIfAvailable(root);
+            _themeSelection.Apply(root, GetSelectedTheme());
 
             VisualElement headerRow = new()
             {
@@ -1353,9 +1356,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                     paddingLeft = 5,
                     paddingRight = 5,
                     borderBottomWidth = 1,
-                    borderBottomColor = Color.gray,
                 },
             };
+            headerRow.AddToClassList("dataviz-divider");
             root.Add(headerRow);
 
             /*
@@ -1374,9 +1377,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                     paddingTop = 4,
                     paddingBottom = 4,
                     borderBottomWidth = 1,
-                    borderBottomColor = Color.gray,
                 },
             };
+            _pausedIndicator.AddToClassList("dataviz-divider");
             root.Add(_pausedIndicator);
 
             _settingsButton = new Button(() => TogglePopover(_settingsPopover, _settingsButton))
@@ -2789,7 +2792,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _processorLogicToggle.AddToClassList("processor");
             _processorLogicToggle.OnLeftSelected += () =>
             {
-                _processorLogicToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
+                _processorLogicToggle.EnableInClassList("dataviz-alternate-mode", false);
                 _processorLogicToggle.LeftLabel.EnableInClassList(
                     StyleConstants.ClickableClass,
                     false
@@ -2807,11 +2810,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             _processorLogicToggle.OnRightSelected += () =>
             {
-                _processorLogicToggle.Indicator.style.backgroundColor = new Color(
-                    1f,
-                    0.5f,
-                    0.3137254902f
-                );
+                _processorLogicToggle.EnableInClassList("dataviz-alternate-mode", true);
                 _processorLogicToggle.LeftLabel.EnableInClassList(
                     StyleConstants.ClickableClass,
                     true
@@ -3365,20 +3364,19 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             else
             {
-                listContainer.Add(
-                    new Label("No matching objects found.")
+                Label emptyLabel = new("No matching objects found.")
+                {
+                    style =
                     {
-                        style =
-                        {
-                            color = Color.grey,
-                            paddingBottom = 10,
-                            paddingTop = 10,
-                            paddingLeft = 10,
-                            paddingRight = 10,
-                            unityTextAlign = TextAnchor.MiddleCenter,
-                        },
-                    }
-                );
+                        paddingBottom = 10,
+                        paddingTop = 10,
+                        paddingLeft = 10,
+                        paddingRight = 10,
+                        unityTextAlign = TextAnchor.MiddleCenter,
+                    },
+                };
+                emptyLabel.AddToClassList("dataviz-muted");
+                listContainer.Add(emptyLabel);
                 _searchPopover.style.maxHeight = StyleKeyword.None;
             }
         }
@@ -4089,6 +4087,55 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private DataVisualizerThemeSettings GetSelectedTheme()
+        {
+            string guid = Settings.persistStateInSettingsAsset
+                ? Settings.themeGuid
+                : UserState.themeGuid;
+            return DataVisualizerThemeSelection.Resolve(guid);
+        }
+
+        private void SelectTheme(DataVisualizerThemeSettings theme)
+        {
+            string guid =
+                theme != null
+                    ? AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(theme))
+                    : string.Empty;
+            PersistSettings(
+                settings =>
+                {
+                    if (string.Equals(settings.themeGuid, guid, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    settings.themeGuid = guid;
+                    return true;
+                },
+                state =>
+                {
+                    if (string.Equals(state.themeGuid, guid, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    state.themeGuid = guid;
+                    return true;
+                }
+            );
+            _themeSelection.Apply(rootVisualElement, theme);
+            Button themeField = rootVisualElement.Q<Button>("theme-field");
+            if (themeField != null)
+            {
+                themeField.text = theme != null ? theme.name : "Classic";
+            }
+        }
+
+        private void ResetTheme()
+        {
+            SelectTheme(null);
+        }
+
         private void BuildSettingsPopoverContent()
         {
             VisualElement dragHandle = _settingsPopover.Q(className: "popover-drag-handle");
@@ -4182,6 +4229,71 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ApplySelectActiveObjectPreference(Settings, evt.newValue);
             });
             contentWrapper.Add(selectionToggle);
+
+            VisualElement themeContainer = new()
+            {
+                name = "theme-row",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    marginTop = 10,
+                },
+            };
+            Label themeLabel = new("Theme:");
+            themeLabel.AddToClassList("settings-data-folder-label");
+            themeContainer.Add(themeLabel);
+            VisualElement themeSpacer = new() { style = { flexGrow = 1 } };
+            themeContainer.Add(themeSpacer);
+            DataVisualizerThemeSettings selectedTheme = GetSelectedTheme();
+            Button themeField = new()
+            {
+                name = "theme-field",
+                text = selectedTheme != null ? selectedTheme.name : "Classic",
+                tooltip =
+                    "Search available themes. Choose Classic (Default / Reset) to restore the default style.",
+                style =
+                {
+                    overflow = Overflow.Hidden,
+                    textOverflow = TextOverflow.Ellipsis,
+                    whiteSpace = WhiteSpace.NoWrap,
+                },
+            };
+            themeField.clicked += () =>
+            {
+                Rect anchor = themeField.worldBound;
+                if (
+                    float.IsNaN(anchor.x)
+                    || float.IsNaN(anchor.y)
+                    || float.IsNaN(anchor.width)
+                    || float.IsNaN(anchor.height)
+                )
+                {
+                    return;
+                }
+
+                UnityEditor.PopupWindow.Show(
+                    anchor,
+                    new ThemeDropdownPopup(
+                        GetSelectedTheme(),
+                        SelectTheme,
+                        LoadStyleSheetIfAvailable
+                    )
+                );
+            };
+            themeField.AddToClassList(StyleConstants.ThemeFieldClass);
+            themeField.AddToClassList(StyleConstants.ClickableClass);
+            themeContainer.Add(themeField);
+            Button resetThemeButton = new(ResetTheme)
+            {
+                name = StyleConstants.ThemeResetButtonClass,
+                text = "Reset Theme",
+                tooltip = "Restore the Classic appearance and clear the saved theme selection.",
+            };
+            resetThemeButton.AddToClassList(StyleConstants.ThemeResetButtonClass);
+            resetThemeButton.AddToClassList(StyleConstants.ClickableClass);
+            themeContainer.Add(resetThemeButton);
+            contentWrapper.Add(themeContainer);
 
             VisualElement dataFolderContainer = new()
             {
@@ -4369,13 +4481,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             Label errorLabel = new()
             {
                 name = "error-label",
-                style =
-                {
-                    color = Color.red,
-                    height = 18,
-                    display = DisplayStyle.None,
-                },
+                style = { height = 18, display = DisplayStyle.None },
             };
+            errorLabel.AddToClassList("dataviz-error");
             contentWrapper.Add(errorLabel);
             VisualElement buttonContainer = new();
             buttonContainer.AddToClassList("popover-button-container");
@@ -4446,13 +4554,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             Label errorLabel = new()
             {
                 name = "error-label",
-                style =
-                {
-                    color = Color.red,
-                    height = 18,
-                    display = DisplayStyle.None,
-                },
+                style = { height = 18, display = DisplayStyle.None },
             };
+            errorLabel.AddToClassList("dataviz-error");
             contentWrapper.Add(errorLabel);
             VisualElement buttonContainer = new();
             buttonContainer.AddToClassList("popover-button-container");
@@ -4883,13 +4987,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 style =
                 {
                     borderRightWidth = 1,
-                    borderRightColor = Color.gray,
                     height = Length.Percent(100),
                     minWidth = MinNamespacePaneWidth,
                     flexShrink = 0,
                 },
             };
 
+            namespaceColumn.AddToClassList("dataviz-divider");
             VisualElement nsHeader = new();
             _namespaceColumnLabel = new Label("Namespaces")
             {
@@ -5288,20 +5392,19 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (isFiltering && !foundMatches)
                 {
-                    _typePopoverListContainer.Add(
-                        new Label("No matching types found.")
+                    Label emptyLabel = new("No matching types found.")
+                    {
+                        style =
                         {
-                            style =
-                            {
-                                color = Color.grey,
-                                paddingBottom = 10,
-                                paddingTop = 10,
-                                paddingLeft = 10,
-                                paddingRight = 10,
-                                unityTextAlign = TextAnchor.MiddleCenter,
-                            },
-                        }
-                    );
+                            paddingBottom = 10,
+                            paddingTop = 10,
+                            paddingLeft = 10,
+                            paddingRight = 10,
+                            unityTextAlign = TextAnchor.MiddleCenter,
+                        },
+                    };
+                    emptyLabel.AddToClassList("dataviz-muted");
+                    _typePopoverListContainer.Add(emptyLabel);
                     _typeAddPopover.style.maxHeight = StyleKeyword.None;
                 }
                 else
@@ -5550,7 +5653,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     // Inline styles are deliberate debt until the USS migration splits the sheets.
                     borderRightWidth = 1,
-                    borderRightColor = Color.gray,
                     flexDirection = FlexDirection.Column,
                     height = Length.Percent(100),
                     minWidth = MinObjectPaneWidth,
@@ -5558,6 +5660,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
 
+            objectColumn.AddToClassList("dataviz-divider");
             VisualElement objectHeader = new() { name = "object-header" };
             objectHeader.AddToClassList("object-header");
 
@@ -5579,7 +5682,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectLoadingIndicator.style.marginLeft = 8;
             _objectLoadingIndicator.style.fontSize = 11;
             _objectLoadingIndicator.style.unityFontStyleAndWeight = FontStyle.Italic;
-            _objectLoadingIndicator.style.color = new Color(0.7f, 0.7f, 0.7f);
+            _objectLoadingIndicator.AddToClassList("dataviz-muted");
             headerLeft.Add(_objectLoadingIndicator);
 
             objectHeader.Add(headerLeft);
@@ -5709,7 +5812,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _andOrToggle.AddToClassList("label");
             _andOrToggle.OnLeftSelected += () =>
             {
-                _andOrToggle.Indicator.style.backgroundColor = new Color(0, 0.392f, 0);
+                _andOrToggle.EnableInClassList("dataviz-alternate-mode", false);
                 _andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, false);
                 _andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, true);
                 config = CurrentTypeLabelFilterConfig;
@@ -5722,7 +5825,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             _andOrToggle.OnRightSelected += () =>
             {
-                _andOrToggle.Indicator.style.backgroundColor = new Color(1f, 0.5f, 0.3137254902f);
+                _andOrToggle.EnableInClassList("dataviz-alternate-mode", true);
                 _andOrToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, true);
                 _andOrToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, false);
                 config = CurrentTypeLabelFilterConfig;
@@ -5776,12 +5879,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 name = "filter-status-label",
                 style =
                 {
-                    color = Color.gray,
                     alignSelf = Align.Center,
                     marginTop = 3,
                     minHeight = 12,
                 },
             };
+            _filterStatusLabel.AddToClassList("dataviz-muted");
             _labelFilterSelectionRoot.Add(_filterStatusLabel);
 
             SetupDropTarget(_availableLabelsContainer, LabelFilterSection.Available);
@@ -8294,12 +8397,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                         style =
                         {
                             height = 1,
-                            backgroundColor = new Color(0.3f, 0.3f, 0.3f),
                             marginTop = 3,
                             marginBottom = 8,
                             flexShrink = 0,
                         },
                     };
+                    separator.AddToClassList("dataviz-separator");
                     _inspectorContainer.Add(separator);
                 }
                 catch (Exception ex)
@@ -8663,12 +8766,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                             evt.StopPropagation();
                         }
                     });
-                    suggestionItem.RegisterCallback<MouseEnterEvent>(_ =>
-                        suggestionItem.style.backgroundColor = new Color(0.35f, 0.35f, 0.35f)
-                    );
-                    suggestionItem.RegisterCallback<MouseLeaveEvent>(_ =>
-                        suggestionItem.style.backgroundColor = Color.clear
-                    );
+                    suggestionItem.AddToClassList("dataviz-suggestion");
                     _inspectorLabelSuggestionsPopover.Add(suggestionItem);
                     _currentLabelSuggestionItems.Add(suggestionItem);
                 }
@@ -8819,17 +8917,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (currentLabels.Length == 0)
             {
-                _inspectorCurrentLabelsContainer.Add(
-                    new Label("No labels assigned.")
-                    {
-                        style =
-                        {
-                            color = Color.gray,
-                            fontSize = 10,
-                            unityFontStyleAndWeight = FontStyle.Italic,
-                        },
-                    }
-                );
+                Label emptyLabel = new("No labels assigned.")
+                {
+                    style = { fontSize = 10, unityFontStyleAndWeight = FontStyle.Italic },
+                };
+                emptyLabel.AddToClassList("dataviz-muted");
+                _inspectorCurrentLabelsContainer.Add(emptyLabel);
                 return;
             }
 

@@ -36,6 +36,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "persistStateInSettingsAsset",
             "processorStates",
             "selectActiveObject",
+            "themeGuid",
             "typeOrders",
         };
 
@@ -50,6 +51,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "namespaceOrder",
             "objectOrders",
             "processorStates",
+            "themeGuid",
             "typeOrders",
         };
 

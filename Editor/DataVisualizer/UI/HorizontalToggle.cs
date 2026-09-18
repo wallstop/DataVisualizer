@@ -56,7 +56,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
         }
         public Color SelectedBackgroundColor
         {
-            get => _selectedBackgroundColor;
+            get => _selectedBackgroundColor ?? _indicator.resolvedStyle.backgroundColor;
             set
             {
                 _selectedBackgroundColor = value;
@@ -65,7 +65,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
         }
         public Color UnselectedBackgroundColor
         {
-            get => _unselectedBackgroundColor;
+            get => _unselectedBackgroundColor ?? _container.resolvedStyle.backgroundColor;
             set
             {
                 _unselectedBackgroundColor = value;
@@ -74,7 +74,9 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
         }
         public Color SelectedTextColor
         {
-            get => _selectedTextColor;
+            get =>
+                _selectedTextColor
+                ?? (_isLeftSelected ? _leftLabel : _rightLabel).resolvedStyle.color;
             set
             {
                 _selectedTextColor = value;
@@ -83,7 +85,9 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
         }
         public Color UnselectedTextColor
         {
-            get => _unselectedTextColor;
+            get =>
+                _unselectedTextColor
+                ?? (_isLeftSelected ? _rightLabel : _leftLabel).resolvedStyle.color;
             set
             {
                 _unselectedTextColor = value;
@@ -92,7 +96,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
         }
         public Color IndicatorColor
         {
-            get => _indicatorColor;
+            get => _indicatorColor ?? _indicator.resolvedStyle.backgroundColor;
             set
             {
                 _indicatorColor = value;
@@ -118,15 +122,15 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
 
         private string _rightText = "Right";
 
-        private Color _selectedBackgroundColor = new(0.1f, 0.5f, 0.8f);
+        private Color? _selectedBackgroundColor;
 
-        private Color _unselectedBackgroundColor = new(0.2f, 0.2f, 0.2f);
+        private Color? _unselectedBackgroundColor;
 
-        private Color _selectedTextColor = Color.white;
+        private Color? _selectedTextColor;
 
-        private Color _unselectedTextColor = new(0.7f, 0.7f, 0.7f);
+        private Color? _unselectedTextColor;
 
-        private Color _indicatorColor = new(0.15f, 0.65f, 0.95f);
+        private Color? _indicatorColor;
 
         public HorizontalToggle()
         {
@@ -146,10 +150,6 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 return;
             }
 
-            _leftLabel.EnableInClassList("selected", true);
-            _rightLabel.EnableInClassList("selected", false);
-            _leftLabel.EnableInClassList("unselected", false);
-            _rightLabel.EnableInClassList("unselected", true);
             _isLeftSelected = true;
             UpdateColors();
             UpdateIndicatorPosition(animate);
@@ -171,10 +171,6 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             {
                 return;
             }
-            _leftLabel.EnableInClassList("selected", false);
-            _rightLabel.EnableInClassList("selected", true);
-            _leftLabel.EnableInClassList("unselected", true);
-            _rightLabel.EnableInClassList("unselected", false);
             _isLeftSelected = false;
             UpdateColors();
             UpdateIndicatorPosition(animate);
@@ -241,19 +237,27 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 return;
             }
 
-            _container.style.backgroundColor = UnselectedBackgroundColor;
-            _indicator.style.backgroundColor = IndicatorColor;
+            _leftLabel.EnableInClassList("selected", _isLeftSelected);
+            _rightLabel.EnableInClassList("selected", !_isLeftSelected);
+            _leftLabel.EnableInClassList("unselected", !_isLeftSelected);
+            _rightLabel.EnableInClassList("unselected", _isLeftSelected);
 
-            if (_isLeftSelected)
-            {
-                _leftLabel.style.color = SelectedTextColor;
-                _rightLabel.style.color = UnselectedTextColor;
-            }
-            else
-            {
-                _leftLabel.style.color = UnselectedTextColor;
-                _rightLabel.style.color = SelectedTextColor;
-            }
+            _container.style.backgroundColor = _unselectedBackgroundColor.HasValue
+                ? new StyleColor(_unselectedBackgroundColor.Value)
+                : new StyleColor(StyleKeyword.Null);
+            Color? indicatorColor = _indicatorColor ?? _selectedBackgroundColor;
+            _indicator.style.backgroundColor = indicatorColor.HasValue
+                ? new StyleColor(indicatorColor.Value)
+                : new StyleColor(StyleKeyword.Null);
+
+            StyleColor selectedTextColor = _selectedTextColor.HasValue
+                ? new StyleColor(_selectedTextColor.Value)
+                : new StyleColor(StyleKeyword.Null);
+            StyleColor unselectedTextColor = _unselectedTextColor.HasValue
+                ? new StyleColor(_unselectedTextColor.Value)
+                : new StyleColor(StyleKeyword.Null);
+            _leftLabel.style.color = _isLeftSelected ? selectedTextColor : unselectedTextColor;
+            _rightLabel.style.color = _isLeftSelected ? unselectedTextColor : selectedTextColor;
         }
 
         private void UpdateIndicatorPosition(bool animate)

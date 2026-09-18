@@ -8,6 +8,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
     [Serializable]
     public sealed class DataVisualizerUserState
     {
+        public string themeGuid = string.Empty;
         public string lastSelectedNamespaceKey = string.Empty;
 
         [FormerlySerializedAs("lastSelectedTypeName")]
@@ -65,6 +66,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 return;
             }
 
+            themeGuid = settings.themeGuid;
             lastSelectedNamespaceKey = settings.lastSelectedNamespaceKey;
             lastSelectedTypeFullName = settings.lastSelectedTypeFullName;
             namespaceOrder = PersistedStateCopy.CloneStrings(settings.namespaceOrder);
