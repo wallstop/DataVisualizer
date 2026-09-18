@@ -99,7 +99,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             IReadOnlyList<ThemeDropdownItem> items = SearchableThemeDropdown.DiscoverItems();
             Assert.That(items.Count, Is.GreaterThanOrEqualTo(4));
             Assert.IsTrue(items[0].IsDefault);
-            Assert.IsNull(items[0].Theme);
+            Assert.That(items[0].Theme == null);
             Assert.AreEqual(string.Empty, items[0].Path);
             Assert.AreEqual("Classic (Default / Reset)", items[0].DisplayName);
             HashSet<string> paths = new(System.StringComparer.Ordinal);
@@ -128,8 +128,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 string path = folder + name + ".asset";
                 DataVisualizerThemeSettings theme =
                     AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(path);
-                Assert.IsNotNull(theme, path);
-                Assert.IsNotNull(theme.StyleSheet, path);
+                Assert.That(theme != null, path);
+                Assert.That(theme.StyleSheet != null, path);
                 ThemeDropdownItem[] matches = items.Where(item => item.Path == path).ToArray();
                 Assert.AreEqual(1, matches.Length, path);
                 Assert.AreSame(theme, matches[0].Theme, path);
@@ -174,7 +174,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 expectedIndex == 0 ? "Restore the Classic appearance." : items[expectedIndex].Path,
                 row.tooltip
             );
-            Assert.IsNull(dropdown.Results.Q<Label>("theme-search-empty"));
+            Assert.That(dropdown.Results.Q<Label>("theme-search-empty") == null);
         }
 
         [TestCase(null)]
@@ -191,7 +191,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual(query ?? string.Empty, dropdown.Filter);
             CollectionAssert.AreEqual(items, dropdown.FilteredItems);
             AssertHighlight(dropdown, 0);
-            Assert.IsNull(dropdown.Results.Q<Label>("theme-search-empty"));
+            Assert.That(dropdown.Results.Q<Label>("theme-search-empty") == null);
         }
 
         [TestCase(false)]
@@ -278,7 +278,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             ThemeDropdownItem[] items = CreateItems(cleanup);
             SearchableThemeDropdown dropdown = new(items, null, null);
             Label title = dropdown.Q<Label>("theme-dropdown-title");
-            Assert.IsNotNull(title);
+            Assert.That(title != null);
             Assert.AreEqual("Select Theme", title.text);
             Assert.IsTrue(title.ClassListContains("theme-dropdown-title"));
             List<Button> rows = dropdown.Results.Query<Button>("theme-search-result").ToList();
@@ -336,7 +336,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             window.rootVisualElement.Add(dropdown);
             window.ShowUtility();
             yield return null;
-            Assert.IsNotNull(dropdown.panel);
+            Assert.That(dropdown.panel != null);
             dropdown.SearchField.Focus();
             SendKey(dropdown.SearchField, KeyCode.UpArrow);
             AssertHighlight(dropdown, 0);
@@ -359,7 +359,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             CollectionAssert.AreEqual(new[] { items[0] }, dropdown.FilteredItems);
             SendKey(dropdown.SearchField, KeyCode.Return);
             Assert.AreEqual(3, selections.Count);
-            Assert.IsNull(selections[2]);
+            Assert.That(selections[2] == null);
             dropdown.SearchField.value = "no matching palette";
             SendKey(dropdown.SearchField, KeyCode.DownArrow);
             SendKey(dropdown.SearchField, KeyCode.UpArrow);
@@ -381,7 +381,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             StyleSheet baseSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
                 folder + "DataVisualizerStyles.uss"
             );
-            Assert.IsNotNull(baseSheet);
+            Assert.That(baseSheet != null);
             LayoutTestWindow window = ScriptableObject.CreateInstance<LayoutTestWindow>();
             cleanup.Defer(window.Close);
             VisualElement root = window.rootVisualElement;
@@ -413,10 +413,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             VisualElement toggleContainer = toggle.Q(
                 className: HorizontalToggle.containerUssClassName
             );
-            Assert.IsNotNull(input);
-            Assert.IsNotNull(tracker);
-            Assert.IsNotNull(dragger);
-            Assert.IsNotNull(toggleContainer);
+            Assert.That(input != null);
+            Assert.That(tracker != null);
+            Assert.That(dragger != null);
+            Assert.That(toggleContainer != null);
             DataVisualizerThemeSelection selection = new();
             cleanup.Defer(() => selection.Apply(null, null));
             List<string> failures = new();
@@ -441,12 +441,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         );
                 if (names[index] != null)
                 {
-                    Assert.IsNotNull(theme, names[index]);
-                    Assert.IsNotNull(theme.StyleSheet, names[index]);
+                    Assert.That(theme != null, names[index]);
+                    Assert.That(theme.StyleSheet != null, names[index]);
                 }
                 selection.Apply(root, theme);
                 yield return new WaitForSecondsRealtime(0.5f);
-                Assert.IsNotNull(root.panel);
+                Assert.That(root.panel != null);
                 Assert.IsTrue(root.styleSheets.Contains(baseSheet));
                 Assert.AreEqual(
                     initialSheets.Length + (theme == null ? 0 : 1),
@@ -651,8 +651,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
                         folder + names[index] + ".asset"
                     );
-                Assert.IsNotNull(theme, names[index]);
-                Assert.IsNotNull(theme.StyleSheet, names[index]);
+                Assert.That(theme != null, names[index]);
+                Assert.That(theme.StyleSheet != null, names[index]);
                 string guid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(theme));
                 Assert.AreSame(theme, DataVisualizerThemeSelection.Resolve(guid));
                 selection.Apply(root, theme);
@@ -740,7 +740,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             restored.HydrateFrom(settings);
             restored = DataVisualizerUserState.FromJson(JsonUtility.ToJson(restored));
             Assert.AreEqual(guid, restored.themeGuid);
-            Assert.IsNull(DataVisualizerThemeSelection.Resolve(restored.themeGuid));
+            Assert.That(DataVisualizerThemeSelection.Resolve(restored.themeGuid) == null);
             Assert.AreEqual(guid, restored.themeGuid);
         }
 
@@ -749,7 +749,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             DataVisualizerUserState state = DataVisualizerUserState.FromJson("{}");
             Assert.IsTrue(string.IsNullOrEmpty(state.themeGuid));
-            Assert.IsNull(DataVisualizerThemeSelection.Resolve(state.themeGuid));
+            Assert.That(DataVisualizerThemeSelection.Resolve(state.themeGuid) == null);
         }
 
         [Test]

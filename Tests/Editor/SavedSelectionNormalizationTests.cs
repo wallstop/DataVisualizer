@@ -70,7 +70,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 fieldName,
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            Assert.IsNotNull(field, $"The {fieldName} field must exist.");
+            Assert.That(field != null, $"The {fieldName} field must exist.");
             return (T)field.GetValue(window);
         }
 
@@ -84,7 +84,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 fieldName,
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            Assert.IsNotNull(field, $"The {fieldName} field must exist.");
+            Assert.That(field != null, $"The {fieldName} field must exist.");
             field.SetValue(window, value);
         }
 
@@ -98,7 +98,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 methodName,
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            Assert.IsNotNull(method, $"The {methodName} method must exist.");
+            Assert.That(method != null, $"The {methodName} method must exist.");
             return method.Invoke(window, arguments);
         }
 
@@ -178,11 +178,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     ),
                     typeof(TestDataObject)
                 );
-                Assert.IsNotNull(
+                Assert.That(
                     ReadPrivateField<IVisualElementScheduledItem>(
                         window,
                         "_savedSelectionNormalizationTask"
-                    ),
+                    ) != null,
                     "a queued normalization must schedule the pump"
                 );
             }
@@ -220,8 +220,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 isBusy = false;
                 InvokePrivate(window, "ProcessSavedSelectionNormalizations");
 
-                Assert.IsNull(
-                    ReadSavedSelection(window, typeFullName),
+                Assert.That(
+                    ReadSavedSelection(window, typeFullName) == null,
                     "an invalid saved selection must be cleared once the AssetDatabase settles"
                 );
                 Assert.IsEmpty(
@@ -313,11 +313,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 InvokePrivate(window, "LoadObjectTypesAsync", typeof(TestDataObject), false);
 
                 SuspendForPlayMode(window);
-                Assert.IsNull(
+                Assert.That(
                     ReadPrivateField<IVisualElementScheduledItem>(
                         window,
                         "_savedSelectionNormalizationTask"
-                    ),
+                    ) == null,
                     "suspending for play mode must stop the pump"
                 );
                 CollectionAssert.Contains(
@@ -330,17 +330,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 );
 
                 ResumeFromPlayMode(window);
-                Assert.IsNotNull(
+                Assert.That(
                     ReadPrivateField<IVisualElementScheduledItem>(
                         window,
                         "_savedSelectionNormalizationTask"
-                    ),
+                    ) != null,
                     "resuming must re-kick the pump for the queued normalization"
                 );
 
                 isBusy = false;
                 InvokePrivate(window, "ProcessSavedSelectionNormalizations");
-                Assert.IsNull(ReadSavedSelection(window, typeFullName));
+                Assert.That(ReadSavedSelection(window, typeFullName) == null);
             }
         }
     }

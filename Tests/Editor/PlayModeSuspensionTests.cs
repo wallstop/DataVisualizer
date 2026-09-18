@@ -71,7 +71,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 fieldName,
                 BindingFlags.Instance | BindingFlags.NonPublic
             );
-            Assert.IsNotNull(field, $"The {fieldName} field must exist.");
+            Assert.That(field != null, $"The {fieldName} field must exist.");
             return (T)field.GetValue(window);
         }
 
@@ -89,7 +89,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 methodName,
                 BindingFlags.Instance | BindingFlags.NonPublic
             );
-            Assert.IsNotNull(method, $"The {methodName} method must exist.");
+            Assert.That(method != null, $"The {methodName} method must exist.");
             method.Invoke(window, null);
         }
 

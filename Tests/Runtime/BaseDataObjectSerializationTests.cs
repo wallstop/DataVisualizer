@@ -39,7 +39,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Runtime
 
             JsonUtility.FromJsonOverwrite("{}", target);
 
-            Assert.IsNull(target.AssetGuidValue);
+            Assert.That(target.AssetGuidValue == null);
             Assert.AreEqual(string.Empty, target.TitleValue);
             Assert.AreEqual(string.Empty, target.DescriptionValue);
             Object.Destroy(target);

@@ -321,7 +321,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase("{\"lastSelectedTypeFullName\":}")]
         public void ShouldReturnNullWithoutThrowingWhenLoadingInvalidUserStateJson(string json)
         {
-            Assert.IsNull(DataVisualizerUserState.FromJson(json));
+            Assert.That(DataVisualizerUserState.FromJson(json) == null);
         }
 
         [Test]

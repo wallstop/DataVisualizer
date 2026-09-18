@@ -70,7 +70,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 );
 
                 Assert.IsEmpty(idleGuids);
-                Assert.IsNull(idleNormalizedSavedObjectGuid);
+                Assert.That(idleNormalizedSavedObjectGuid == null);
             }
         }
 

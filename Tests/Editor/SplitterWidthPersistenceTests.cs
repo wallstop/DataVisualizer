@@ -66,8 +66,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "SetFixedPaneDimension",
                 BindingFlags.Instance | BindingFlags.NonPublic
             );
-            Assert.IsNotNull(
-                setFixedPaneDimension,
+            Assert.That(
+                setFixedPaneDimension != null,
                 "TwoPaneSplitView.SetFixedPaneDimension is required to drive a pane-width change."
             );
             setFixedPaneDimension.Invoke(splitView, new object[] { width });
@@ -346,8 +346,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "_outerSplitView",
                 BindingFlags.Instance | BindingFlags.NonPublic
             );
-            Assert.IsNotNull(
-                outerField,
+            Assert.That(
+                outerField != null,
                 "DataVisualizer must declare the '_outerSplitView' field."
             );
 

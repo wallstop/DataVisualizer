@@ -43,6 +43,7 @@
     "lint:assembly-warnings": "pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1",
     "lint:csharp-member-order": "node scripts/lint-csharp-member-order.js",
     "lint:csharp-member-order:fix": "node scripts/lint-csharp-member-order.js --fix",
+    "lint:csharp-null-assertions": "node scripts/lint-csharp-null-assertions.js",
     "lint:llm:full": "pwsh -NoProfile -File scripts/generate-skills-index.ps1 && pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput && pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -VerboseOutput && node scripts/lint-csharp-member-order.js --verbose && pwsh -NoProfile -File scripts/tests/run-all.ps1",
     "mcp:sync": "bash .llm/mcp/sync-mcp.sh",
     "unity:mcp:host": "node .llm/mcp/unity-mcp-host.mjs",

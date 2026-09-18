@@ -77,7 +77,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
 
             Assert.IsFalse(succeeded);
-            Assert.IsNull(relativePath);
+            Assert.That(relativePath == null);
         }
 
         [Test]
@@ -90,7 +90,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
 
             Assert.IsFalse(succeeded);
-            Assert.IsNull(relativePath);
+            Assert.That(relativePath == null);
         }
     }
 }

@@ -72,7 +72,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 fieldName,
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            Assert.IsNotNull(field, $"The {fieldName} field must exist.");
+            Assert.That(field != null, $"The {fieldName} field must exist.");
             return (T)field.GetValue(window);
         }
 
@@ -86,7 +86,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 fieldName,
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            Assert.IsNotNull(field, $"The {fieldName} field must exist.");
+            Assert.That(field != null, $"The {fieldName} field must exist.");
             field.SetValue(window, value);
         }
 
@@ -100,7 +100,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 methodName,
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            Assert.IsNotNull(method, $"The {methodName} method must exist.");
+            Assert.That(method != null, $"The {methodName} method must exist.");
             return method.Invoke(window, arguments);
         }
 
@@ -112,7 +112,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     fieldName,
                     BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
                 );
-            Assert.IsNotNull(field, $"The {fieldName} field must exist.");
+            Assert.That(field != null, $"The {fieldName} field must exist.");
             return (T)field.GetValue(controller);
         }
 
@@ -150,15 +150,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 SuspendForPlayMode(window);
                 InvokePrivate(window, "HandleDeleteConfirmed");
-                Assert.IsNotNull(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset"),
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset")
+                        != null,
                     "a delete confirmed while suspended must not delete the asset"
                 );
 
                 ResumeFromPlayMode(window);
                 InvokePrivate(window, "HandleDeleteConfirmed");
-                Assert.IsNull(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset"),
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset")
+                        == null,
                     "the same delete after resume must delete the asset"
                 );
             }
@@ -187,19 +189,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 SuspendForPlayMode(window);
                 InvokePrivate(window, "CloneObject", asset);
-                Assert.IsNull(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(
-                        folder + "/First (Clone).asset"
-                    ),
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First (Clone).asset")
+                        == null,
                     "cloning must not create an asset while suspended"
                 );
 
                 ResumeFromPlayMode(window);
                 InvokePrivate(window, "CloneObject", asset);
-                Assert.IsNotNull(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(
-                        folder + "/First (Clone).asset"
-                    ),
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First (Clone).asset")
+                        != null,
                     "cloning after resume must create the clone"
                 );
             }
@@ -235,8 +235,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     new TextField { value = "Renamed" },
                     new Label()
                 );
-                Assert.IsNotNull(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset"),
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset")
+                        != null,
                     "a rename confirmed while suspended must not rename the asset"
                 );
 
@@ -248,12 +249,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     new TextField { value = "Renamed" },
                     new Label()
                 );
-                Assert.IsNull(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset"),
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset")
+                        == null,
                     "the same rename after resume must rename the asset"
                 );
-                Assert.IsNotNull(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/Renamed.asset"),
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/Renamed.asset")
+                        != null,
                     "the rename after resume must land at the new path"
                 );
             }
@@ -377,8 +380,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 SuspendForPlayMode(window);
                 controller.SelectType(window, typeof(TestDataObject));
-                Assert.IsNull(
-                    controller.SelectedType,
+                Assert.That(
+                    controller.SelectedType == null,
                     "a type switch while suspended must not select the type"
                 );
 
@@ -419,7 +422,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     ReadPrivateField<bool>(window, "_isLoadingObjectsAsync"),
                     "a manual type load while suspended must not start the load chain"
                 );
-                Assert.IsNull(ReadPrivateField<Type>(window, "_asyncLoadTargetType"));
+                Assert.That(ReadPrivateField<Type>(window, "_asyncLoadTargetType") == null);
                 Assert.AreEqual(
                     0,
                     ReadPrivateField<List<ScriptableObject>>(window, "_selectedObjects").Count,
@@ -513,7 +516,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     "_confirmActionPopover"
                 );
                 Button confirmButton = confirmPopover.Q<Button>(className: "popover-delete-button");
-                Assert.IsNotNull(confirmButton, "the confirm button must carry the action");
+                Assert.That(confirmButton != null, "the confirm button must carry the action");
                 Action confirmAction = (Action)confirmButton.userData;
                 Assert.AreEqual(0, confirmCount);
 
