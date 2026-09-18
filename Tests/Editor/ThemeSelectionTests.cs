@@ -951,5 +951,33 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.IsFalse(root.styleSheets.Contains(firstSheet));
             Assert.AreSame(secondSheet, root.styleSheets[1]);
         }
+
+        [Test]
+        public void ShouldDropDestroyedAppliedSheetWhenThemeReapplies()
+        {
+            using TestCleanupScope cleanup = new();
+            StyleSheet baseSheet = CreateSheet(cleanup);
+            StyleSheet sheet = CreateSheet(cleanup);
+            DataVisualizerThemeSettings theme = CreateTheme(cleanup, sheet);
+            VisualElement root = new();
+            root.styleSheets.Add(baseSheet);
+            DataVisualizerThemeSelection selection = new();
+            selection.Apply(root, theme);
+            Assert.AreEqual(2, root.styleSheets.count);
+
+            Object.DestroyImmediate(sheet);
+            selection.Apply(root, theme);
+            Assert.AreEqual(1, root.styleSheets.count);
+            Assert.AreSame(baseSheet, root.styleSheets[0]);
+
+            StyleSheet replacement = CreateSheet(cleanup);
+            DataVisualizerThemeSettings replacementTheme = CreateTheme(cleanup, replacement);
+            selection.Apply(root, replacementTheme);
+            Assert.AreEqual(2, root.styleSheets.count);
+            Assert.AreSame(replacement, root.styleSheets[1]);
+            selection.Apply(root, null);
+            Assert.AreEqual(1, root.styleSheets.count);
+            Assert.AreSame(baseSheet, root.styleSheets[0]);
+        }
     }
 }

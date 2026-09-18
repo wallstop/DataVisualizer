@@ -1,6 +1,7 @@
 namespace WallstopStudios.DataVisualizer.Editor.Styles
 {
     using System;
+    using System.Collections.Generic;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.UIElements;
@@ -47,10 +48,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
 
         public void Apply(VisualElement root, DataVisualizerThemeSettings theme)
         {
-            if (_root != null && _appliedSheet != null)
-            {
-                _root.styleSheets.Remove(_appliedSheet);
-            }
+            RemoveAppliedSheet();
 
             _root = root;
             _appliedSheet = null;
@@ -76,6 +74,42 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
                 || ContainsPath(importedAssets, _appliedSheetPath)
                 || ContainsPath(deletedAssets, _appliedSheetPath)
                 || ContainsPath(movedFromAssetPaths, _appliedSheetPath);
+        }
+
+        private void RemoveAppliedSheet()
+        {
+            if (_root == null || ReferenceEquals(_appliedSheet, null))
+            {
+                return;
+            }
+
+            if (_appliedSheet != null)
+            {
+                _root.styleSheets.Remove(_appliedSheet);
+                return;
+            }
+
+            /*
+                The wrapper is a destroyed StyleSheet (fake null), so
+                styleSheets.Remove throws instead of removing it. Rebuild the
+                list without the dead entry, preserving the order of every
+                sheet this class does not own.
+            */
+            List<StyleSheet> keep = new(_root.styleSheets.count);
+            for (int index = 0; index < _root.styleSheets.count; index++)
+            {
+                StyleSheet sheet = _root.styleSheets[index];
+                if (!ReferenceEquals(sheet, _appliedSheet))
+                {
+                    keep.Add(sheet);
+                }
+            }
+
+            _root.styleSheets.Clear();
+            foreach (StyleSheet sheet in keep)
+            {
+                _root.styleSheets.Add(sheet);
+            }
         }
     }
 }
