@@ -35,11 +35,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 object zeroValue = Enum.ToObject(enumType, 0);
                 string zeroMemberName = Enum.GetName(enumType, zeroValue);
-                Assert.IsNotNull(zeroMemberName, $"{enumType.FullName} must declare a zero value.");
+                Assert.That(
+                    zeroMemberName != null,
+                    $"{enumType.FullName} must declare a zero value."
+                );
 
                 FieldInfo zeroMember = enumType.GetField(zeroMemberName);
-                Assert.IsNotNull(
-                    zeroMember.GetCustomAttribute<ObsoleteAttribute>(),
+                Assert.That(
+                    zeroMember.GetCustomAttribute<ObsoleteAttribute>() != null,
                     $"{enumType.FullName}.{zeroMemberName} must be marked obsolete."
                 );
             }

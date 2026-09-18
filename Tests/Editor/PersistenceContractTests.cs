@@ -250,7 +250,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string savedJson = JsonUtility.ToJson(populated);
             DataVisualizerUserState loaded = DataVisualizerUserState.FromJson(savedJson);
 
-            Assert.IsNotNull(loaded);
+            Assert.That(loaded != null);
             Assert.AreEqual(
                 savedJson,
                 JsonUtility.ToJson(loaded),

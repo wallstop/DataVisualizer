@@ -257,7 +257,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
 
             Assert.AreSame(discoveredGuids, mergedGuids);
-            Assert.IsNull(normalizedSavedObjectGuid);
+            Assert.That(normalizedSavedObjectGuid == null);
         }
 
         [Test]
@@ -270,7 +270,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     out string normalizedGuid
                 )
             );
-            Assert.IsNull(normalizedGuid);
+            Assert.That(normalizedGuid == null);
         }
 
         [Test]
@@ -378,7 +378,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         out string resolvedPath
                     )
                 );
-                Assert.IsNull(resolvedPath);
+                Assert.That(resolvedPath == null);
             }
         }
 
@@ -414,7 +414,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         out string resolvedPath
                     )
                 );
-                Assert.IsNull(resolvedPath);
+                Assert.That(resolvedPath == null);
             }
         }
     }

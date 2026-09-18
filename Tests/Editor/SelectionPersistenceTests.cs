@@ -268,7 +268,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
 
             Assert.IsTrue(userState.SetLastObjectForType(typeFullName, null));
-            Assert.IsNull(userState.GetLastObjectForType(typeFullName));
+            Assert.That(userState.GetLastObjectForType(typeFullName) == null);
             Assert.IsFalse(
                 userState.SetLastObjectForType(typeFullName, null),
                 "clearing an absent saved object selection should be unchanged"
@@ -461,7 +461,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 );
 
                 CollectionAssert.AreEqual(new[] { savedGuid }, includedGuids);
-                Assert.IsNull(normalizedSavedObjectGuid);
+                Assert.That(normalizedSavedObjectGuid == null);
             }
         }
 

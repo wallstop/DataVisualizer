@@ -90,7 +90,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     "GetNamespaceKey",
                     BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
                 );
-            Assert.IsNotNull(method, "The GetNamespaceKey method must exist.");
+            Assert.That(method != null, "The GetNamespaceKey method must exist.");
             return (string)method.Invoke(null, new object[] { type });
         }
 
@@ -106,7 +106,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     methodName,
                     BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
                 );
-            Assert.IsNotNull(method, $"The {methodName} method must exist.");
+            Assert.That(method != null, $"The {methodName} method must exist.");
             method.Invoke(controller, arguments);
         }
 
@@ -115,7 +115,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Type sectionType = typeof(DataVisualizerWindow).Assembly.GetType(
                 "WallstopStudios.DataVisualizer.Editor.LabelFilterSection"
             );
-            Assert.IsNotNull(sectionType, "The LabelFilterSection type must exist.");
+            Assert.That(sectionType != null, "The LabelFilterSection type must exist.");
             return Enum.Parse(sectionType, name);
         }
 
@@ -124,7 +124,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Type controllerType = typeof(DataVisualizerWindow).Assembly.GetType(
                 "WallstopStudios.DataVisualizer.Editor.NamespaceController"
             );
-            Assert.IsNotNull(controllerType, "The NamespaceController type must exist.");
+            Assert.That(controllerType != null, "The NamespaceController type must exist.");
             return controllerType;
         }
 
@@ -152,7 +152,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     fieldName,
                     BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
                 );
-            Assert.IsNotNull(field, $"The {fieldName} field must exist.");
+            Assert.That(field != null, $"The {fieldName} field must exist.");
             return (T)field.GetValue(target);
         }
 
@@ -164,7 +164,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     fieldName,
                     BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
                 );
-            Assert.IsNotNull(field, $"The {fieldName} field must exist.");
+            Assert.That(field != null, $"The {fieldName} field must exist.");
             field.SetValue(target, value);
         }
 
@@ -178,7 +178,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 methodName,
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            Assert.IsNotNull(method, $"The {methodName} method must exist.");
+            Assert.That(method != null, $"The {methodName} method must exist.");
             method.Invoke(window, arguments);
         }
 
@@ -291,8 +291,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     }
                 }
 
-                Assert.IsNotNull(
-                    matchingConfig,
+                Assert.That(
+                    matchingConfig != null,
                     "the label filter config must exist after the drop"
                 );
                 List<string> andLabels = ReadPrivateField<List<string>>(
@@ -386,7 +386,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     ReadSettings(window),
                     "managedTypeNames"
                 );
-                Assert.IsNotNull(persistedManagedTypes, "the active removal must persist");
+                Assert.That(persistedManagedTypes != null, "the active removal must persist");
                 Assert.IsEmpty(
                     persistedManagedTypes,
                     "the active removal confirm must remove the type from the persisted list"
@@ -465,7 +465,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     ReadSettings(window),
                     "managedTypeNames"
                 );
-                Assert.IsNotNull(persistedManagedTypes, "the active removal must persist");
+                Assert.That(persistedManagedTypes != null, "the active removal must persist");
                 Assert.IsEmpty(
                     persistedManagedTypes,
                     "the active removal confirm must remove the type from the persisted list"
