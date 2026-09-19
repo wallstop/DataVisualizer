@@ -162,7 +162,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             string folder = GetThemeFolder();
-            foreach (string name in new[] { "Classic", "Nord", "Dracula" })
+            foreach (string name in new[] { "Classic", "Compact", "Dracula", "Minimal", "Nord" })
             {
                 string path = folder + name + ".asset";
                 DataVisualizerThemeSettings theme =
@@ -761,6 +761,71 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "DataVisualizerStyles.uss")
                 )
             );
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldResolveDensityTokensForShippedStyleVariants()
+        {
+            string folder = GetThemeFolder();
+            using TestCleanupScope cleanup = new();
+            EditorWindow window = ScriptableObject.CreateInstance<EditorWindow>();
+            cleanup.Defer(window.Close);
+            window.Show();
+            VisualElement root = window.rootVisualElement;
+            root.AddToClassList("dataviz-root");
+            root.styleSheets.Add(
+                AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "DataVisualizerStyles.uss")
+            );
+            Button actionButton = new() { text = "X" };
+            actionButton.AddToClassList("action-button");
+            root.Add(actionButton);
+            Button controlButton = new() { text = "Y" };
+            controlButton.AddToClassList("settings-data-folder-button");
+            root.Add(controlButton);
+            DataVisualizerThemeSelection selection = new();
+            string[] names = { "Classic", "Compact", "Minimal" };
+            int[] fontSizes = { 16, 13, 12 };
+            int[] secondaryFonts = { 14, 11, 10 };
+            int[] circleSizes = { 26, 20, 16 };
+            int[] radii = { 6, 4, 0 };
+            for (int index = 0; index < names.Length; index++)
+            {
+                DataVisualizerThemeSettings theme =
+                    AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
+                        folder + names[index] + ".asset"
+                    );
+                Assert.That(theme != null, names[index]);
+                Assert.That(theme.StyleSheet != null, names[index]);
+                selection.Apply(root, theme);
+                yield return new WaitForSecondsRealtime(0.5f);
+                Assert.AreEqual(
+                    fontSizes[index],
+                    controlButton.resolvedStyle.fontSize,
+                    $"{names[index]} control font size"
+                );
+                Assert.AreEqual(
+                    radii[index],
+                    controlButton.resolvedStyle.borderTopLeftRadius,
+                    $"{names[index]} control radius"
+                );
+                Assert.AreEqual(
+                    circleSizes[index],
+                    actionButton.resolvedStyle.height,
+                    $"{names[index]} action button size"
+                );
+                Assert.AreEqual(
+                    secondaryFonts[index],
+                    actionButton.resolvedStyle.fontSize,
+                    $"{names[index]} action button font"
+                );
+            }
+
+            selection.Apply(root, null);
+            yield return new WaitForSecondsRealtime(0.5f);
+            Assert.AreEqual(16, controlButton.resolvedStyle.fontSize, "reset control font size");
+            Assert.AreEqual(6, controlButton.resolvedStyle.borderTopLeftRadius, "reset radius");
+            Assert.AreEqual(26, actionButton.resolvedStyle.height, "reset action button size");
+            Assert.AreEqual(14, actionButton.resolvedStyle.fontSize, "reset action button font");
         }
 
         [TestCase("")]

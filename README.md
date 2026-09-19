@@ -6,6 +6,8 @@
 
 Data Visualizer streamlines working with ScriptableObject-heavy systems by centralizing asset management, inspection, and batch operations in a single window. Instead of hunting through the Project panel and repeatedly switching contexts, you get a namespace-organized view of all your data types with inline editing, batch operations, and workflow automation.
 
+Data Visualizer is free forever: no subscriptions, no paid upgrades, no feature-gated tiers. The full source is MIT-licensed, and every capability documented here ships in the free package.
+
 This guide captures the key points from the companion [video walkthrough](https://youtu.be/3oUxUSKNyhw) while keeping the instructions project-agnostic.
 
 ## Getting Started
@@ -83,7 +85,7 @@ The filter field above the Namespace list narrows type rows by display name with
 
 ### Themes
 
-**Classic**, **Nord**, and **Dracula** ship under `Editor/DataVisualizer/Styles` in the package. In **Settings → Theme**, click the current theme to open a searchable dropdown. Search by name or asset path, use Up/Down and Enter to select, or press Escape to cancel. Themes in both Assets and Packages are listed; duplicate names show their paths. Classic uses the original palette, Nord uses blue-gray surfaces and cyan accents, and Dracula uses dark surfaces and purple accents. These editor-only assets and their stylesheets are included in the package, not an optional sample.
+**Classic**, **Nord**, **Dracula**, **Compact**, and **Minimal** ship under `Editor/DataVisualizer/Styles` in the package. In **Settings → Theme**, click the current theme to open a searchable dropdown. Search by name or asset path, use Up/Down and Enter to select, or press Escape to cancel. Themes in both Assets and Packages are listed; duplicate names show their paths. Classic uses the original palette, Nord uses blue-gray surfaces and cyan accents, and Dracula uses dark surfaces and purple accents. Compact and Minimal keep the Classic palette and shrink the density: window typography, action buttons, and control chrome. Compact uses 13px type with 20px action buttons and 4px control radii; Minimal uses 12px type with 16px action buttons and square control corners. These editor-only assets and their stylesheets are included in the package, not an optional sample.
 
 The palettes style the window background and text, lists, search results, popovers, label and processor panels, dividers, and standard UI Toolkit inputs, buttons, foldouts, toggles, scrollers, and inspector surfaces. Action colors remain distinct: danger for delete, positive for create/clone/confirm, secondary for rename/script-folder loading, warning for cancel/move, and emphasis for alternate toggle modes. **Reset Theme** keeps the compact Data Folder button sizing, clears the saved selection, and restores Classic. Selecting the Classic asset gives the same appearance but keeps an explicit selection.
 

@@ -1,0 +1,8 @@
+:root {
+    --dataviz-font-size: 13px;
+    --dataviz-font-size-secondary: 11px;
+    --dataviz-font-size-caption: 10px;
+    --dataviz-font-size-indicator: 8px;
+    --dataviz-circle-size: 20px;
+    --dataviz-control-radius: 4px;
+}

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Compact and Minimal built-in style variants: density-only theme presets that
+  keep the Classic palette and shrink window typography, action buttons, and
+  control chrome (Compact 13px type, 20px action buttons, 4px control radii;
+  Minimal 12px type, 16px action buttons, square control corners).
 - Theme hot reload: an open Data Visualizer window re-applies the selected
   theme immediately when its theme asset or referenced stylesheet is
   reimported, reference-swapped, renamed, moved, or deleted; deletions fall
@@ -28,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Control typography and radii in the base stylesheet now resolve from the
+  `--dataviz-font-size`, `--dataviz-circle-size`, and `--dataviz-control-radius`
+  tokens instead of hardcoded values. The Classic preset keeps its type and
+  glyph sizes; the three large round action buttons are 1px smaller to match
+  the action-button token, and themes that override `--dataviz-font-size` now
+  also restyle the standard prose controls.
 - npm publishing is tag-driven: pushing an annotated `vX.Y.Z` release tag runs
   the publish workflow, which verifies the tag against the package version and
   the packed payload against the `files` allowlist before publishing. The
