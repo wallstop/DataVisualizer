@@ -189,10 +189,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             finally
             {
                 InvokeCleanup(window);
+                /*
+                    Restore before CloseWindow destroys the window: PersistSettings needs a
+                    live instance, and later teardown steps must not be skipped on a throw.
+                */
+                persistedSelection?.Restore(window);
                 EditorSurfaceCapture.CloseWindow(window);
                 AssetGuidTypeIndex.Shared.Cancel();
                 instanceField.SetValue(null, previousInstance);
-                persistedSelection?.Restore(window);
                 preferences.Restore();
                 DeleteFixtureAssets();
             }
