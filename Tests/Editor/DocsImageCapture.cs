@@ -6,6 +6,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.Reflection;
     using UnityEditor;
     using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor;
     using WallstopStudios.DataVisualizer.Editor.Data;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
