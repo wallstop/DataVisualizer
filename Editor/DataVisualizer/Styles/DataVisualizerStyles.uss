@@ -1,6 +1,9 @@
 :root {
     font-size: var(--dataviz-font-size);
     --dataviz-font-size: 16px;
+    --dataviz-font-size-secondary: 14px;
+    --dataviz-font-size-caption: 12px;
+    --dataviz-font-size-indicator: 10px;
     --dataviz-circle-size: 26px;
     --dataviz-text: white;
     --dataviz-muted: grey;
@@ -316,7 +319,7 @@
 .dataviz-root .popover-button {
     color: var(--dataviz-text);
     padding: 2px 6px;
-    font-size: 16px;
+    font-size: var(--dataviz-font-size);
     border-width: 2px;
     border-radius: 10px;
     margin-bottom: 2px;
@@ -422,7 +425,7 @@
     color: var(--dataviz-danger);
     -unity-font-style: bold;
     padding: 10px 5px;
-    font-size: 16px;
+    font-size: var(--dataviz-font-size);
     border-width: 2px;
     border-color: var(--dataviz-danger);
     border-radius: 50%;
@@ -613,7 +616,7 @@
 
 .namespace-indicator {
     width: 16px;
-    font-size: 10px;
+    font-size: var(--dataviz-font-size-indicator);
     margin-right: 10px;
     -unity-font-style: bold;
     flex-shrink: 0;
@@ -706,7 +709,7 @@
 
 .action-button {
     flex-shrink: 0;
-    font-size: 14px;
+    font-size: var(--dataviz-font-size-secondary);
     width: var(--dataviz-circle-size);
     height: var(--dataviz-circle-size);
     min-width: var(--dataviz-circle-size);
@@ -738,7 +741,7 @@
 
 .go-button-disabled {
     flex-shrink: 0;
-    font-size: 14px;
+    font-size: var(--dataviz-font-size-secondary);
     background-color: transparent;
     border-width: 2px;
     -unity-font-style: bold;
@@ -784,12 +787,12 @@
     background-color: var(--dataviz-positive);
     border-color: var(--dataviz-text);
     border-width: 2px;
-    font-size: 26px;
+    font-size: var(--dataviz-circle-size);
     border-radius: 50%;
-    width: 27px;
-    height: 27px;
-    min-width: 27px;
-    min-height: 27px;
+    width: var(--dataviz-circle-size);
+    height: var(--dataviz-circle-size);
+    min-width: var(--dataviz-circle-size);
+    min-height: var(--dataviz-circle-size);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -813,12 +816,12 @@
     background-color: var(--dataviz-accent);
     border-color: var(--dataviz-text);
     border-width: 2px;
-    font-size: 26px;
+    font-size: var(--dataviz-circle-size);
     border-radius: 50%;
-    width: 27px;
-    height: 27px;
-    min-width: 27px;
-    min-height: 27px;
+    width: var(--dataviz-circle-size);
+    height: var(--dataviz-circle-size);
+    min-width: var(--dataviz-circle-size);
+    min-height: var(--dataviz-circle-size);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -842,12 +845,12 @@
     background-color: var(--dataviz-secondary);
     border-color: var(--dataviz-text);
     border-width: 2px;
-    font-size: 26px;
+    font-size: var(--dataviz-circle-size);
     border-radius: 50%;
-    width: 27px;
-    height: 27px;
-    min-width: 27px;
-    min-height: 27px;
+    width: var(--dataviz-circle-size);
+    height: var(--dataviz-circle-size);
+    min-width: var(--dataviz-circle-size);
+    min-height: var(--dataviz-circle-size);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1027,7 +1030,7 @@
 
 .popover-namespace-indicator {
     padding-top: 6px;
-    font-size: 10px;
+    font-size: var(--dataviz-font-size-indicator);
 }
 
 .search-result-item {
@@ -1049,12 +1052,12 @@
 
 .search-result-type-label {
     -unity-text-align: middle-right;
-    font-size: 12px;
+    font-size: var(--dataviz-font-size-caption);
     flex-shrink: 0;
 }
 
 .search-result-context-label {
-    font-size: 14px;
+    font-size: var(--dataviz-font-size-secondary);
     color: var(--dataviz-muted);
     margin-left: 10px;
     white-space: nowrap;
@@ -1113,6 +1116,11 @@
 }
 
 .dataviz-root .settings-button {
+    /*
+        Kept at fixed 26px: the padding-bottom offset that raises the glyph
+        is tuned to this size and would clip the glyph at smaller circle
+        sizes, so this control does not follow the density tokens.
+    */
     font-size: 26px;
     padding: 2px 6px;
     width: 26px;
@@ -1213,8 +1221,8 @@
 .dataviz-root .theme-field,
 .dataviz-root .theme-reset-button,
 .dataviz-root .settings-data-folder-button {
-    font-size: 16px;
-    border-radius: 6px;
+    font-size: var(--dataviz-font-size);
+    border-radius: var(--dataviz-control-radius);
     margin-right: 0;
     flex-grow: 0;
     flex-shrink: 0;
@@ -1243,7 +1251,7 @@
 
 .settings-prefs-toggle > .unity-text-element {
     color: var(--dataviz-text);
-    font-size: 16px;
+    font-size: var(--dataviz-font-size);
 }
 
 .settings-prefs-toggle > .unity-toggle__input {
@@ -1284,7 +1292,7 @@
 
 .dataviz-root .add-label-button {
     min-height: 24px;
-    font-size: 16px;
+    font-size: var(--dataviz-font-size);
     -unity-font-style: bold;
     color: var(--dataviz-on-positive);
     background-color: var(--dataviz-positive);
@@ -1378,7 +1386,7 @@
 }
 
 .label-pill-remove-button {
-    font-size: 16px;
+    font-size: var(--dataviz-font-size);
     -unity-font-style: bold;
     background-color: transparent;
     border-width: 0;
