@@ -6,6 +6,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.Reflection;
     using UnityEditor;
     using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor.Utilities;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
     using PlayModeDataObject = WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject;
 
@@ -243,7 +244,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AssetDatabase.CreateFolder("Assets", Path.GetFileName(FixtureFolder));
             for (int index = 0; index < FixtureTitles.Length; index++)
             {
-                PlayModeDataObject asset = CreateInstance<PlayModeDataObject>();
+                PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
                 AssetDatabase.CreateAsset(asset, $"{FixtureFolder}/{FixtureTitles[index]}.asset");
             }
 
