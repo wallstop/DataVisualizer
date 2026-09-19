@@ -35,10 +35,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
                 return false;
             }
 
-            return Array.Exists(
-                paths,
-                path => string.Equals(path, target, StringComparison.Ordinal)
-            );
+            foreach (string path in paths)
+            {
+                if (string.Equals(path, target, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public void Apply(VisualElement root, DataVisualizerThemeSettings theme)

@@ -2760,7 +2760,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                 .Query<VisualElement>(className: "type-item")
                 .ToList();
 
-            return typeItems.Find(item => item.userData is Type itemType && itemType == targetType);
+            foreach (VisualElement item in typeItems)
+            {
+                if (item.userData is Type itemType && itemType == targetType)
+                {
+                    return item;
+                }
+            }
+
+            return null;
         }
 
         private void CreateProcessorColumn()
@@ -4681,9 +4689,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 List<string> objectGuids = GetObjectOrderForType(type);
                 string instanceGuid = AssetDatabase.AssetPathToGUID(assetPath);
-                bool orderContainsInstance = objectGuids.Exists(existingGuid =>
-                    string.Equals(existingGuid, instanceGuid, StringComparison.OrdinalIgnoreCase)
-                );
+                bool orderContainsInstance = false;
+                foreach (string existingGuid in objectGuids)
+                {
+                    if (
+                        string.Equals(
+                            existingGuid,
+                            instanceGuid,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
+                    {
+                        orderContainsInstance = true;
+                        break;
+                    }
+                }
 
                 if (!orderContainsInstance && AssetGuidOrder.PlaceLast(objectGuids, instanceGuid))
                 {

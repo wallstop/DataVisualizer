@@ -65,10 +65,13 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             SearchField.RegisterValueChangedCallback(evt => SetFilter(evt.newValue));
             RegisterCallback<KeyDownEvent>(OnKeyDown, TrickleDown.TrickleDown);
             SetFilter(string.Empty);
-            int selectedIndex = _filteredItems.FindIndex(item => item.Theme == selectedTheme);
-            if (0 <= selectedIndex)
+            for (int i = 0; i < _filteredItems.Count; ++i)
             {
-                Highlight(selectedIndex);
+                if (_filteredItems[i].Theme == selectedTheme)
+                {
+                    Highlight(i);
+                    break;
+                }
             }
         }
 
