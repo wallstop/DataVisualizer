@@ -21,8 +21,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 string firstId = first.GetObjectIdString();
                 string secondId = second.GetObjectIdString();
 
-                Assert.That(firstId, Is.Not.Null.And.Not.Empty);
-                Assert.That(secondId, Is.Not.Null.And.Not.Empty);
+                Assert.That(!string.IsNullOrEmpty(firstId));
+                Assert.That(!string.IsNullOrEmpty(secondId));
                 Assert.AreEqual(
                     firstId,
                     first.GetObjectIdString(),

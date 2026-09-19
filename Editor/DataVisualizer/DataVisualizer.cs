@@ -2065,6 +2065,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _isSearchCachePopulated = false;
             CloseActivePopover();
             CancelDrag();
+            _themeSelection.Apply(null, null);
             _namespaceColumnElement?.UnregisterCallback<GeometryChangedEvent>(
                 HandleSplitterPaneGeometryChanged
             );

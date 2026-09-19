@@ -134,7 +134,12 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
 25. Mutable services are instantiable sealed classes. Put state, events, and lifecycle
     callbacks on the instance, and expose only one explicit static shared instance when
     production needs global coordination. Static classes remain appropriate for pure
-    functions, extension methods, constants, and platform interop.
+    functions, extension methods, constants, and platform interop. Static shared state
+    must document why it is static (cross-instance coordination), key by lifecycle
+    owner with weak references where the owner is disposable, unregister on every
+    removal path, and be reset by the owning window's cleanup
+    (`AssetGuidTypeIndex.Shared` and the theme-selection ownership registry are the
+    precedents).
 26. Within each C# type, order members as: constants, events, delegates, static
     properties, static fields, properties, fields, constructors, static methods,
     methods, then nested types. Within every tier use public, protected, internal,
@@ -188,13 +193,13 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     sort or match with the current culture and reorder across machines. Prefer static
     `string.Equals(a, b, StringComparison)` over instance `a.Equals(...)` so a null
     operand compares as a value instead of throwing.
-35. Never use `Assert.IsNull`/`Assert.IsNotNull`, and never use `?.`, `??`, or an
-    implicit bool test on a `UnityEngine.Object`. Unity overloads the equality
-    operators, so a destroyed-object wrapper compares null only through `== null` /
-    `!= null`; the other forms use reference equality and miss that lifetime. Write
-    `Assert.That(value == null)` / `Assert.That(value != null)`. The C# source lint
-    enforces the assertion forms; the `?.`/`??`/bool shapes are review-enforced
-    (#117).
+35. Never use `Assert.IsNull`/`Assert.IsNotNull`, the `Is.Null`/`Is.Not.Null`
+    constraints, `?.`, `??`, or an implicit bool test on a `UnityEngine.Object`. Unity
+    overloads the equality operators, so a destroyed-object wrapper compares null only
+    through `== null` / `!= null`; the other forms use reference equality and miss that
+    lifetime. Write `Assert.That(value == null)` / `Assert.That(value != null)`. The C#
+    source lint enforces the assertion and constraint forms; the `?.`/`??`/bool shapes
+    are review-enforced (#117).
 
 ### Skills Discipline
 
