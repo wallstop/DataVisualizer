@@ -6,6 +6,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.Reflection;
     using UnityEditor;
     using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor.Data;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
     using PlayModeDataObject = WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject;
@@ -23,12 +24,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         preferences the arrangement touches are snapshotted and restored, mirroring the
         hygiene of EditorSurfaceCaptureTests.
 
-        The window's Instance field, namespace-controller field, Cleanup, and SelectObject
-        members are private or internal with no public equivalent, and Unity's compilation
-        does not honor InternalsVisibleTo for the editor-to-tests assembly pair (see
-        ObjectIdExtensions). They are reached reflectively, exactly like the merged
-        EditorSurfaceCaptureTests do; a Unity rename fails closed here with an exception
-        instead of silently capturing the wrong state.
+        The window's Instance field, namespace-controller field, Cleanup, LoadInitialContent,
+        SelectObject, and PersistSettings members are private or internal with no public
+        equivalent, and Unity's compilation does not honor InternalsVisibleTo for the
+        editor-to-tests assembly pair (see ObjectIdExtensions). They are reached
+        reflectively, exactly like the merged EditorSurfaceCaptureTests do; a Unity upgrade
+        that removes one fails closed here with an exception instead of silently capturing
+        the wrong state.
+
+        CreateGUI defers its content load to a scheduled tick, and SelectType returns
+        silently when the type is missing from the tree, so the driver invokes the initial
+        load synchronously and verifies both selections instead of trusting them. The
+        persisted last-selected namespace/type/object state that the arrangement rewrites
+        is snapshotted and restored through the window's own PersistSettings.
 
         The SelectType object load is asynchronous; the three repaint/render cycles inside
         EditorSurfaceCapture.Capture give it time to populate on the capture host. With
@@ -158,16 +166,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             object previousInstance = instanceField.GetValue(null);
             DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
+            PersistedSelectionSnapshot persistedSelection = null;
             try
             {
                 preferences.ApplyWidePanes();
                 CreateFixtureAssets();
+                persistedSelection = PersistedSelectionSnapshot.Capture(window);
 
                 EditorSurfaceCapture.ShowPopup(window);
                 window.position = new Rect(40f, 40f, WindowWidth, WindowHeight);
                 window.CreateGUI();
-                SelectFixtureType(window);
+                InvokeInitialContentLoad(window);
+                NamespaceController controller = GetNamespaceController(window);
+                SelectFixtureType(window, controller);
+                VerifySelectedType(controller);
                 SelectObject(window, LoadFirstFixtureAsset());
+                VerifySelectedObject(window);
 
                 return EditorSurfaceCapture.Capture(window, capturePath);
             }
@@ -177,6 +191,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 EditorSurfaceCapture.CloseWindow(window);
                 AssetGuidTypeIndex.Shared.Cancel();
                 instanceField.SetValue(null, previousInstance);
+                persistedSelection?.Restore(window);
                 preferences.Restore();
                 DeleteFixtureAssets();
             }
@@ -276,29 +291,86 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return asset;
         }
 
-        private static void SelectFixtureType(DataVisualizerWindow window)
+        /*
+            CreateGUI defers content building to a scheduled tick; the driver needs the
+            namespace tree built now, so the private loader runs synchronously here.
+        */
+        private static void InvokeInitialContentLoad(DataVisualizerWindow window)
+        {
+            MethodInfo loadInitialContent = typeof(DataVisualizerWindow).GetMethod(
+                "LoadInitialContent",
+                ReflectedInstanceMembers,
+                binder: null,
+                types: Type.EmptyTypes,
+                modifiers: null
+            );
+            if (loadInitialContent == null)
+            {
+                throw new InvalidOperationException(
+                    "The DataVisualizer window exposes no LoadInitialContent member; the "
+                        + "capture driver cannot build the namespace tree."
+                );
+            }
+
+            loadInitialContent.Invoke(window, null);
+        }
+
+        private static NamespaceController GetNamespaceController(DataVisualizerWindow window)
         {
             FieldInfo controllerField = typeof(DataVisualizerWindow).GetField(
                 "_namespaceController",
                 ReflectedInstanceMembers
             );
             object controller = controllerField?.GetValue(window);
-            MethodInfo selectType = controllerField?.FieldType.GetMethod(
-                "SelectType",
-                ReflectedInstanceMembers,
-                binder: null,
-                types: new[] { typeof(DataVisualizerWindow), typeof(Type) },
-                modifiers: null
-            );
-            if (controller == null || selectType == null)
+            if (controller == null)
             {
                 throw new InvalidOperationException(
-                    "The DataVisualizer window exposes no namespace controller SelectType "
-                        + "member; the capture driver cannot select the fixture type."
+                    "The DataVisualizer window exposes no namespace controller; the capture "
+                        + "driver cannot select the fixture type."
                 );
             }
 
-            selectType.Invoke(controller, new object[] { window, typeof(PlayModeDataObject) });
+            return (NamespaceController)controller;
+        }
+
+        private static void SelectFixtureType(
+            DataVisualizerWindow window,
+            NamespaceController controller
+        )
+        {
+            controller.SelectType(window, typeof(PlayModeDataObject));
+        }
+
+        /*
+            SelectType returns silently when the type is missing from the namespace tree, so
+            the arrangement is verified instead of trusted: a missed selection fails closed.
+        */
+        private static void VerifySelectedType(NamespaceController controller)
+        {
+            if (controller.SelectedType != typeof(PlayModeDataObject))
+            {
+                throw new InvalidOperationException(
+                    "The fixture type was not selected after SelectType (selected: "
+                        + $"{controller.SelectedType?.FullName ?? "null"}); the capture would "
+                        + "show an unarranged window."
+                );
+            }
+        }
+
+        private static void VerifySelectedObject(DataVisualizerWindow window)
+        {
+            FieldInfo selectedObjectField = typeof(DataVisualizerWindow).GetField(
+                "_selectedObject",
+                ReflectedInstanceMembers
+            );
+            object selected = selectedObjectField?.GetValue(window);
+            if (selected is not PlayModeDataObject)
+            {
+                throw new InvalidOperationException(
+                    "The fixture asset was not selected after SelectObject; the capture "
+                        + "would show an empty inspector."
+                );
+            }
         }
 
         private static void SelectObject(DataVisualizerWindow window, ScriptableObject asset)
@@ -453,6 +525,157 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     _hadTemporaryWindowClampSize,
                     _temporaryWindowClampSize
                 );
+            }
+        }
+
+        /*
+            Snapshot of the persisted selection state the arrangement rewrites (SelectType
+            saves the last namespace/type, SelectObject saves the last object per type, into
+            the settings asset or the user-state JSON depending on the host's persistence
+            mode). Restore routes through the window's own PersistSettings so the write-back
+            respects the same persistence mode and dirty/save handling. The settings-side
+            members are internal with no public equivalent, so they are reached reflectively
+            like the window lifecycle members above.
+        */
+        private sealed class PersistedSelectionSnapshot
+        {
+            private const string NamespaceKeyMember = "lastSelectedNamespaceKey";
+            private const string TypeFullNameMember = "lastSelectedTypeFullName";
+            private const string ObjectSelectionsMember = "lastObjectSelections";
+
+            private readonly string _settingsNamespaceKey;
+            private readonly string _settingsTypeFullName;
+            private readonly List<LastObjectSelectionEntry> _settingsObjectSelections;
+            private readonly string _userStateNamespaceKey;
+            private readonly string _userStateTypeFullName;
+            private readonly List<LastObjectSelectionEntry> _userStateObjectSelections;
+
+            private PersistedSelectionSnapshot(
+                string settingsNamespaceKey,
+                string settingsTypeFullName,
+                List<LastObjectSelectionEntry> settingsObjectSelections,
+                string userStateNamespaceKey,
+                string userStateTypeFullName,
+                List<LastObjectSelectionEntry> userStateObjectSelections
+            )
+            {
+                _settingsNamespaceKey = settingsNamespaceKey;
+                _settingsTypeFullName = settingsTypeFullName;
+                _settingsObjectSelections = settingsObjectSelections;
+                _userStateNamespaceKey = userStateNamespaceKey;
+                _userStateTypeFullName = userStateTypeFullName;
+                _userStateObjectSelections = userStateObjectSelections;
+            }
+
+            internal static PersistedSelectionSnapshot Capture(DataVisualizerWindow window)
+            {
+                DataVisualizerSettings settings = ReadProperty<DataVisualizerSettings>(
+                    window,
+                    "Settings"
+                );
+                DataVisualizerUserState userState = ReadProperty<DataVisualizerUserState>(
+                    window,
+                    "UserState"
+                );
+                if (settings == null || userState == null)
+                {
+                    throw new InvalidOperationException(
+                        "The DataVisualizer window exposes no Settings/UserState; the capture "
+                            + "driver cannot snapshot the persisted selection."
+                    );
+                }
+
+                return new PersistedSelectionSnapshot(
+                    settingsNamespaceKey: ReadMember<string>(settings, NamespaceKeyMember),
+                    settingsTypeFullName: ReadMember<string>(settings, TypeFullNameMember),
+                    settingsObjectSelections: CloneSelections(
+                        ReadMember<List<LastObjectSelectionEntry>>(settings, ObjectSelectionsMember)
+                    ),
+                    userStateNamespaceKey: userState.lastSelectedNamespaceKey,
+                    userStateTypeFullName: userState.lastSelectedTypeFullName,
+                    userStateObjectSelections: CloneSelections(userState.lastObjectSelections)
+                );
+            }
+
+            private static T ReadProperty<T>(object target, string propertyName)
+            {
+                PropertyInfo property = target
+                    .GetType()
+                    .GetProperty(propertyName, ReflectedInstanceMembers);
+                return (T)property?.GetValue(target);
+            }
+
+            private static T ReadMember<T>(object target, string memberName)
+            {
+                FieldInfo field = target.GetType().GetField(memberName, ReflectedInstanceMembers);
+                return (T)field?.GetValue(target);
+            }
+
+            private static void SetMember(object target, string memberName, object value)
+            {
+                FieldInfo field = target.GetType().GetField(memberName, ReflectedInstanceMembers);
+                field?.SetValue(target, value);
+            }
+
+            private static List<LastObjectSelectionEntry> CloneSelections(
+                List<LastObjectSelectionEntry> entries
+            )
+            {
+                List<LastObjectSelectionEntry> clones = new();
+                if (entries == null)
+                {
+                    return clones;
+                }
+
+                foreach (LastObjectSelectionEntry entry in entries)
+                {
+                    clones.Add(entry?.Clone());
+                }
+
+                return clones;
+            }
+
+            internal void Restore(DataVisualizerWindow window)
+            {
+                MethodInfo persistSettings = typeof(DataVisualizerWindow).GetMethod(
+                    "PersistSettings",
+                    ReflectedInstanceMembers,
+                    binder: null,
+                    types: new[]
+                    {
+                        typeof(Func<DataVisualizerSettings, bool>),
+                        typeof(Func<DataVisualizerUserState, bool>),
+                    },
+                    modifiers: null
+                );
+                if (persistSettings == null)
+                {
+                    throw new InvalidOperationException(
+                        "The DataVisualizer window exposes no PersistSettings member; the "
+                            + "capture driver cannot restore the persisted selection."
+                    );
+                }
+
+                Func<DataVisualizerSettings, bool> settingsApplier = settings =>
+                {
+                    SetMember(settings, NamespaceKeyMember, _settingsNamespaceKey);
+                    SetMember(settings, TypeFullNameMember, _settingsTypeFullName);
+                    SetMember(
+                        settings,
+                        ObjectSelectionsMember,
+                        CloneSelections(_settingsObjectSelections)
+                    );
+                    return true;
+                };
+                Func<DataVisualizerUserState, bool> userStateApplier = userState =>
+                {
+                    userState.lastSelectedNamespaceKey = _userStateNamespaceKey;
+                    userState.lastSelectedTypeFullName = _userStateTypeFullName;
+                    userState.lastObjectSelections = CloneSelections(_userStateObjectSelections);
+                    return true;
+                };
+
+                persistSettings.Invoke(window, new object[] { settingsApplier, userStateApplier });
             }
         }
     }

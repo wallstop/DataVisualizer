@@ -20,7 +20,6 @@
  * `--fix` moves reportable usings inside the namespace's opening brace, preserving order.
  * It declines files whose pre-namespace region holds anything besides comments, usings,
  * and blank lines (for example `#if` blocks), leaving those as manual barriers.
- *
  * `--verbose` also prints the scanned file count when clean. Exit codes: 0 = clean (or
  * fixed clean), 1 = at least one misplaced using remains.
  */
@@ -176,9 +175,11 @@ function fixFile(text, maskedLines) {
       usingIndexes.push(index);
       continue;
     }
-    if (masked.trim() !== "" || lines[index].trim() !== "") {
-      return null;
+    // Masked-blank lines are comments, blank lines, or strings: safe to leave in place.
+    if (masked.trim() === "") {
+      continue;
     }
+    return null;
   }
   if (usingIndexes.length === 0) {
     return null;

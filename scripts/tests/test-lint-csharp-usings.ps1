@@ -39,6 +39,7 @@ namespace Demo
 '@
 
 $misplacedFixture = @'
+// Misplaced.cs carries a header comment above the misplaced usings.
 using System;
 using System.Collections.Generic;
 
@@ -111,8 +112,8 @@ Invoke-TestCase 'Fails_OnUsingsOutsideNamespaceWithLocations' {
         Write-FixtureFile -Root $root -RelativePath 'Misplaced.cs' -Content $misplacedFixture
         $result = Invoke-UsingLint -Root $root
         Assert-True ($result.ExitCode -eq 1) "misplaced fixture should fail: $($result.Output)"
-        Assert-True ($result.Output -match 'Misplaced\.cs:1') "must report the first using line: $($result.Output)"
-        Assert-True ($result.Output -match 'Misplaced\.cs:2') "must report the second using line: $($result.Output)"
+        Assert-True ($result.Output -match 'Misplaced\.cs:2') "must report the first using line: $($result.Output)"
+        Assert-True ($result.Output -match 'Misplaced\.cs:3') "must report the second using line: $($result.Output)"
     } finally {
         Remove-TempRoot $root
     }
@@ -159,6 +160,9 @@ Invoke-TestCase 'Fix_MovesUsingsInsideNamespaceAndRepairsExitCode' {
 
         $after = Get-Content -LiteralPath $fixturePath -Raw
         Assert-True ($after -ne $before) "fix must rewrite the fixture"
+        Assert-True (
+            $after -match 'header comment above the misplaced usings'
+        ) "fix must preserve header comments"
         Assert-True (
             $after -match 'namespace Demo\s*\{\s*\r?\n\s*using System;'
         ) "usings must move inside the namespace: $after"
