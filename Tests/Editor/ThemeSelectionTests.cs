@@ -1008,13 +1008,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             window.CreateGUI();
 
             VisualElement root = window.rootVisualElement;
-            int baselineCount = root.styleSheets.count;
-            StyleSheet sheet = CreateSheet(cleanup);
-            DataVisualizerThemeSettings theme = CreateTheme(cleanup, sheet);
             DataVisualizerThemeSelection selection = ReadPrivateField<DataVisualizerThemeSelection>(
                 window,
                 "_themeSelection"
             );
+
+            /*
+                CreateGUI applied the host's persisted theme, so drop it first:
+                the baseline below must not depend on the host's saved settings.
+            */
+            selection.Apply(root, null);
+            int baselineCount = root.styleSheets.count;
+            StyleSheet sheet = CreateSheet(cleanup);
+            DataVisualizerThemeSettings theme = CreateTheme(cleanup, sheet);
             selection.Apply(root, theme);
             Assert.AreEqual(baselineCount + 1, root.styleSheets.count);
 
@@ -1022,6 +1028,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.IsFalse(
                 root.styleSheets.Contains(sheet),
                 "Cleanup must remove the sheet the window's selection owns."
+            );
+            Assert.AreEqual(
+                baselineCount,
+                root.styleSheets.count,
+                "Cleanup must leave no selection-owned sheet behind."
             );
             int afterCleanupCount = root.styleSheets.count;
             new DataVisualizerThemeSelection().Apply(root, null);
