@@ -49,6 +49,11 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
 
         public override void OnGUI(Rect rect) { }
 
+        public override void OnClose()
+        {
+            _themeSelection.Apply(null, null);
+        }
+
         private void SelectAndClose(DataVisualizerThemeSettings theme)
         {
             _onSelect?.Invoke(theme);

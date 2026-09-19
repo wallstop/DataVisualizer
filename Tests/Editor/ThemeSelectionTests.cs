@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.Collections;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Reflection;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
@@ -11,9 +12,35 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using WallstopStudios.DataVisualizer.Editor.Data;
     using WallstopStudios.DataVisualizer.Editor.Styles;
     using WallstopStudios.DataVisualizer.Editor.UI;
+    using WallstopStudios.DataVisualizer.Editor.Utilities;
+    using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
 
     public sealed class ThemeSelectionTests
     {
+        private static T ReadPrivateField<T>(object target, string fieldName)
+        {
+            FieldInfo field = target
+                .GetType()
+                .GetField(
+                    fieldName,
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+                );
+            Assert.That(field != null, $"The {fieldName} field must exist.");
+            return (T)field.GetValue(target);
+        }
+
+        private static void InvokePrivate(object target, string methodName)
+        {
+            MethodInfo method = target
+                .GetType()
+                .GetMethod(
+                    methodName,
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+                );
+            Assert.That(method != null, $"The {methodName} method must exist.");
+            method.Invoke(target, null);
+        }
+
         private static DataVisualizerThemeSettings CreateTheme(
             TestCleanupScope cleanup,
             StyleSheet sheet
@@ -962,6 +989,47 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreSame(baseSheet, root.styleSheets[0]);
             first.Apply(root, null);
             Assert.AreEqual(1, root.styleSheets.count, "No entry may survive both owners' resets.");
+        }
+
+        [Test]
+        public void ShouldRemoveOwnedThemeSheetWhenWindowCleanupRuns()
+        {
+            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField(
+                "Instance",
+                BindingFlags.Static | BindingFlags.NonPublic
+            );
+            Assert.That(instanceField != null, "The window Instance field must exist.");
+            object previousInstance = instanceField.GetValue(null);
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
+            cleanup.Defer(() => instanceField.SetValue(null, previousInstance));
+            DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
+            window.CreateGUI();
+
+            VisualElement root = window.rootVisualElement;
+            int baselineCount = root.styleSheets.count;
+            StyleSheet sheet = CreateSheet(cleanup);
+            DataVisualizerThemeSettings theme = CreateTheme(cleanup, sheet);
+            DataVisualizerThemeSelection selection = ReadPrivateField<DataVisualizerThemeSelection>(
+                window,
+                "_themeSelection"
+            );
+            selection.Apply(root, theme);
+            Assert.AreEqual(baselineCount + 1, root.styleSheets.count);
+
+            InvokePrivate(window, "Cleanup");
+            Assert.IsFalse(
+                root.styleSheets.Contains(sheet),
+                "Cleanup must remove the sheet the window's selection owns."
+            );
+            int afterCleanupCount = root.styleSheets.count;
+            new DataVisualizerThemeSelection().Apply(root, null);
+            Assert.AreEqual(
+                afterCleanupCount,
+                root.styleSheets.count,
+                "A fresh reset after Cleanup must be a no-op."
+            );
         }
 
         [Test]

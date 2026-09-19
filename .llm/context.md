@@ -134,7 +134,12 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
 25. Mutable services are instantiable sealed classes. Put state, events, and lifecycle
     callbacks on the instance, and expose only one explicit static shared instance when
     production needs global coordination. Static classes remain appropriate for pure
-    functions, extension methods, constants, and platform interop.
+    functions, extension methods, constants, and platform interop. Static shared state
+    must document why it is static (cross-instance coordination), key by lifecycle
+    owner with weak references where the owner is disposable, unregister on every
+    removal path, and be reset by the owning window's cleanup
+    (`AssetGuidTypeIndex.Shared` and the theme-selection ownership registry are the
+    precedents).
 26. Within each C# type, order members as: constants, events, delegates, static
     properties, static fields, properties, fields, constructors, static methods,
     methods, then nested types. Within every tier use public, protected, internal,

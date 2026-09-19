@@ -12,10 +12,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
         /*
             Sheets this class added, per root, so a later Apply through any
             selection instance can adopt (and remove) a theme entry it finds
-            already applied. Keyed by root so closed windows are never pinned;
-            values are stylesheet assets that stay referenced by the root
-            anyway. Sheets that predate Apply, such as the base stylesheet a
-            theme references, are never registered, so reset preserves them.
+            already applied. Static is what makes the #121 fix work: instance
+            fields cannot recognize an entry another instance added, and the
+            production window plus the theme dropdown popup each own their own
+            selection instance. The table is keyed by root, so entries die with
+            their window instead of pinning it, and every removal path
+            unregisters. Owners reset their selection on teardown - the
+            window's Cleanup, the popup's OnClose - so nothing outlives it.
+            Sheets that predate Apply, such as the base stylesheet a theme
+            references, are never registered, so reset preserves them.
         */
         private static readonly ConditionalWeakTable<
             VisualElement,
