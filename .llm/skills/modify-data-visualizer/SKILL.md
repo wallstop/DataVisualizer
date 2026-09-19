@@ -115,6 +115,26 @@ metadata:
   is material. If pooling is proven, define reset and retention semantics first and
   generalize only when at least two call sites share those semantics.
 
+## Collection Scans
+
+- Default to hand-rolled `foreach` first-match scans. Measured on the Unity
+  6000.4.6f1 Mono editor (PR #119 benchmark): at N=5, `foreach` runs in 77 ns with
+  zero allocation while `Array.Exists` with a capturing lambda takes 154 ns (2x)
+  and `Array.Exists` with a static method group takes 326 ns (4x); the lambda
+  shapes allocate a closure plus delegate per call (~108 B/call measured via
+  `List.FindIndex` at N=1000). Rule 33 says the same for bounded small inputs.
+- Static helpers (`Array.Exists`, `List<T>.Exists`/`.Find`/`.FindIndex`) are not
+  forbidden - they are plain `System.Array`/`List<T>` members, legal even in the
+  `System.Linq`-restricted files (rule 32) - but treat them as a measured
+  optimization, not a default. The one shape that beat `foreach` on time was
+  `List<T>.Exists`/`FindIndex` at N=1000 (internal indexed loop vs struct
+  enumerator, ~19% faster), still paying the per-call delegate allocation;
+  only consider that trade on cold paths with genuinely large collections.
+- Do not assume method groups are cached or allocation-free on Unity's C# 9
+  compiler; measure before converting. Do not "simplify" an existing allocation-free
+  scan into a helper form without data - reviewer-enforced (PR #119): the owner
+  benchmarked an `Array.Find` suggestion and had it reverted.
+
 ## Styling
 
 - Add USS classes to `DataVisualizerStyles.uss` and expose names through

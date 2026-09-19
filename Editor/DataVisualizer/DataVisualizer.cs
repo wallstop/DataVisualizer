@@ -1537,6 +1537,26 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        public void RefreshThemeIfAffected(
+            string[] importedAssets,
+            string[] deletedAssets,
+            string[] movedFromAssetPaths
+        )
+        {
+            if (
+                !_themeSelection.IsAffectedByAssetChanges(
+                    importedAssets,
+                    deletedAssets,
+                    movedFromAssetPaths
+                )
+            )
+            {
+                return;
+            }
+
+            ApplyThemeToWindow(GetSelectedTheme());
+        }
+
         internal void PersistSettings(
             Func<DataVisualizerSettings, bool> settingsApplier,
             Func<DataVisualizerUserState, bool> userStateApplier
@@ -4123,6 +4143,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return true;
                 }
             );
+            ApplyThemeToWindow(theme);
+        }
+
+        private void ApplyThemeToWindow(DataVisualizerThemeSettings theme)
+        {
             _themeSelection.Apply(rootVisualElement, theme);
             Button themeField = rootVisualElement.Q<Button>("theme-field");
             if (themeField != null)

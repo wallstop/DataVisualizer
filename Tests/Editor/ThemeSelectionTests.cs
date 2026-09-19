@@ -42,6 +42,45 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return System.IO.Path.GetDirectoryName(path).Replace('\\', '/') + "/";
         }
 
+        private static string CreateTempAssetsFolder(TestCleanupScope cleanup)
+        {
+            const string folder = "Assets/TempThemeHotReloadTests";
+            if (AssetDatabase.IsValidFolder(folder))
+            {
+                AssetDatabase.DeleteAsset(folder);
+            }
+            string created = AssetDatabase.CreateFolder("Assets", "TempThemeHotReloadTests");
+            Assert.IsFalse(
+                string.IsNullOrEmpty(created),
+                "The temporary theme assets folder must be created."
+            );
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(folder));
+            return folder;
+        }
+
+        private static StyleSheet CreateSheetAsset(string path)
+        {
+            System.IO.File.WriteAllText(
+                path,
+                ".hot-reload-test\n" + "{\n" + "    color: rgb(1, 2, 3);\n" + "}\n"
+            );
+            AssetDatabase.ImportAsset(path);
+            StyleSheet sheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(path);
+            Assert.That(sheet != null, path);
+            return sheet;
+        }
+
+        private static DataVisualizerThemeSettings CreateThemeAsset(string path, StyleSheet sheet)
+        {
+            DataVisualizerThemeSettings theme =
+                ScriptableObject.CreateInstance<DataVisualizerThemeSettings>();
+            using SerializedObject serialized = new(theme);
+            serialized.FindProperty("styleSheet").objectReferenceValue = sheet;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.CreateAsset(theme, path);
+            return theme;
+        }
+
         private static ThemeDropdownItem[] CreateItems(TestCleanupScope cleanup)
         {
             DataVisualizerThemeSettings nord = CreateTheme(cleanup, null);
@@ -812,6 +851,133 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual(1, second.styleSheets.count);
             selection.Apply(null, null);
             Assert.AreEqual(0, second.styleSheets.count);
+        }
+
+        [Test]
+        public void ShouldDetectAssetChangesOnlyForAppliedThemeAndSheetPaths()
+        {
+            using TestCleanupScope cleanup = new();
+            string folder = CreateTempAssetsFolder(cleanup);
+            StyleSheet sheet = CreateSheetAsset(folder + "/HotReload.uss");
+            DataVisualizerThemeSettings theme = CreateThemeAsset(
+                folder + "/HotReloadTheme.asset",
+                sheet
+            );
+            string themePath = AssetDatabase.GetAssetPath(theme);
+            string sheetPath = AssetDatabase.GetAssetPath(sheet);
+            DataVisualizerThemeSelection selection = new();
+            string[] empty = System.Array.Empty<string>();
+
+            Assert.IsFalse(
+                selection.IsAffectedByAssetChanges(new[] { themePath }, new[] { sheetPath }, empty)
+            );
+            Assert.IsFalse(selection.IsAffectedByAssetChanges(null, null, null));
+
+            selection.Apply(new VisualElement(), theme);
+            Assert.IsTrue(
+                selection.IsAffectedByAssetChanges(new[] { themePath }, empty, empty),
+                "imported theme"
+            );
+            Assert.IsTrue(
+                selection.IsAffectedByAssetChanges(empty, new[] { themePath }, empty),
+                "deleted theme"
+            );
+            Assert.IsTrue(
+                selection.IsAffectedByAssetChanges(empty, empty, new[] { themePath }),
+                "moved theme"
+            );
+            Assert.IsTrue(
+                selection.IsAffectedByAssetChanges(new[] { sheetPath }, empty, empty),
+                "imported sheet"
+            );
+            Assert.IsTrue(
+                selection.IsAffectedByAssetChanges(empty, new[] { sheetPath }, empty),
+                "deleted sheet"
+            );
+            Assert.IsTrue(
+                selection.IsAffectedByAssetChanges(empty, empty, new[] { sheetPath }),
+                "moved sheet"
+            );
+            Assert.IsFalse(
+                selection.IsAffectedByAssetChanges(
+                    new[] { folder + "/Other.uss" },
+                    new[] { folder + "/Other.asset" },
+                    new[] { folder + "/Renamed.asset" }
+                ),
+                "unrelated paths"
+            );
+
+            selection.Apply(new VisualElement(), null);
+            Assert.IsFalse(
+                selection.IsAffectedByAssetChanges(
+                    new[] { themePath },
+                    new[] { sheetPath },
+                    new[] { themePath }
+                ),
+                "reset clears tracking"
+            );
+        }
+
+        [Test]
+        public void ShouldSwapAppliedSheetWhenTheThemeReferenceChangesOnReimport()
+        {
+            using TestCleanupScope cleanup = new();
+            string folder = CreateTempAssetsFolder(cleanup);
+            StyleSheet firstSheet = CreateSheetAsset(folder + "/First.uss");
+            StyleSheet secondSheet = CreateSheetAsset(folder + "/Second.uss");
+            DataVisualizerThemeSettings theme = CreateThemeAsset(
+                folder + "/Theme.asset",
+                firstSheet
+            );
+            VisualElement root = new();
+            root.styleSheets.Add(CreateSheet(cleanup));
+            DataVisualizerThemeSelection selection = new();
+            selection.Apply(root, theme);
+            Assert.AreSame(firstSheet, root.styleSheets[1]);
+
+            using (SerializedObject serialized = new(theme))
+            {
+                serialized.FindProperty("styleSheet").objectReferenceValue = secondSheet;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+            }
+            Assert.IsTrue(
+                selection.IsAffectedByAssetChanges(
+                    new[] { AssetDatabase.GetAssetPath(theme) },
+                    System.Array.Empty<string>(),
+                    System.Array.Empty<string>()
+                )
+            );
+            selection.Apply(root, theme);
+            Assert.IsFalse(root.styleSheets.Contains(firstSheet));
+            Assert.AreSame(secondSheet, root.styleSheets[1]);
+        }
+
+        [Test]
+        public void ShouldDropDestroyedAppliedSheetWhenThemeReapplies()
+        {
+            using TestCleanupScope cleanup = new();
+            StyleSheet baseSheet = CreateSheet(cleanup);
+            StyleSheet sheet = CreateSheet(cleanup);
+            DataVisualizerThemeSettings theme = CreateTheme(cleanup, sheet);
+            VisualElement root = new();
+            root.styleSheets.Add(baseSheet);
+            DataVisualizerThemeSelection selection = new();
+            selection.Apply(root, theme);
+            Assert.AreEqual(2, root.styleSheets.count);
+
+            Object.DestroyImmediate(sheet);
+            selection.Apply(root, theme);
+            Assert.AreEqual(1, root.styleSheets.count);
+            Assert.AreSame(baseSheet, root.styleSheets[0]);
+
+            StyleSheet replacement = CreateSheet(cleanup);
+            DataVisualizerThemeSettings replacementTheme = CreateTheme(cleanup, replacement);
+            selection.Apply(root, replacementTheme);
+            Assert.AreEqual(2, root.styleSheets.count);
+            Assert.AreSame(replacement, root.styleSheets[1]);
+            selection.Apply(root, null);
+            Assert.AreEqual(1, root.styleSheets.count);
+            Assert.AreSame(baseSheet, root.styleSheets[0]);
         }
     }
 }
