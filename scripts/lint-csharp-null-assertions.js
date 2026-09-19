@@ -3,12 +3,14 @@
  * C# source policy enforcement: null comparisons on UnityEngine.Object must use the
  * explicit `== null` / `!= null` operators (issue #117).
  *
- * NUnit's Assert.IsNull / Assert.IsNotNull compare with object.Equals, so a destroyed
+ * NUnit's Assert.IsNull / Assert.IsNotNull and the equivalent `Is.Null` /
+ * `Is.Not.Null` constraints compare with object reference semantics, so a destroyed
  * UnityEngine.Object wrapper (Unity's "fake null") is reported as not-null. The same
  * applies to `?.`, `??`, and implicit bool tests on UnityEngine.Object. This lint bans
- * the mechanically detectable half, the assertion forms, so every null assertion in the
- * repository is written as `Assert.That(value == null)` or `Assert.That(value != null)`,
- * which binds Unity's overloaded operators and matches the lifetime the test means.
+ * the mechanically detectable forms - the Assert.Is(Not)Null calls and the Is.Null /
+ * Is.Not.Null constraints - so every null assertion in the repository is written as
+ * `Assert.That(value == null)` or `Assert.That(value != null)`, which binds Unity's
+ * overloaded operators and matches the lifetime the test means.
  *
  * Comments and string literals are masked before scanning, so prose or fixture text that
  * mentions the banned forms cannot fail the scan. Interpolated strings are masked whole,
@@ -34,6 +36,7 @@ const SCAN_ROOTS = process.env.CSHARP_NULL_ASSERTION_ROOTS
 const EXCLUDED_PREFIXES = ["Runtime/Utils/SevenZip"];
 
 const BANNED_ASSERTION = /\bAssert\.Is(?:Not)?Null\s*\(/g;
+const BANNED_CONSTRAINT = /\bIs\.Not\.Null\b|\bIs\.Null\b/g;
 
 function maskNoise(text) {
   const out = text.split("");
@@ -137,7 +140,8 @@ function main() {
       const lines = masked.split("\n");
       for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
         BANNED_ASSERTION.lastIndex = 0;
-        if (BANNED_ASSERTION.test(lines[lineIndex])) {
+        BANNED_CONSTRAINT.lastIndex = 0;
+        if (BANNED_ASSERTION.test(lines[lineIndex]) || BANNED_CONSTRAINT.test(lines[lineIndex])) {
           violations.push(`${file.display}:${lineIndex + 1}`);
         }
       }
@@ -147,7 +151,9 @@ function main() {
     console.error(
       "Banned null assertions found. Use Assert.That(value == null) or " +
         "Assert.That(value != null) so destroyed UnityEngine.Object wrappers compare " +
-        "with Unity's overloaded operators (issue #117):"
+        "with Unity's overloaded operators; Assert.IsNull/IsNotNull and the Is.Null/" +
+        "Is.Not.Null constraints compare with object reference semantics and miss that " +
+        "lifetime (issue #117):"
     );
     for (const violation of violations) {
       console.error(`  ${violation}`);

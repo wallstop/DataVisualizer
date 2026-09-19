@@ -188,13 +188,13 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     sort or match with the current culture and reorder across machines. Prefer static
     `string.Equals(a, b, StringComparison)` over instance `a.Equals(...)` so a null
     operand compares as a value instead of throwing.
-35. Never use `Assert.IsNull`/`Assert.IsNotNull`, and never use `?.`, `??`, or an
-    implicit bool test on a `UnityEngine.Object`. Unity overloads the equality
-    operators, so a destroyed-object wrapper compares null only through `== null` /
-    `!= null`; the other forms use reference equality and miss that lifetime. Write
-    `Assert.That(value == null)` / `Assert.That(value != null)`. The C# source lint
-    enforces the assertion forms; the `?.`/`??`/bool shapes are review-enforced
-    (#117).
+35. Never use `Assert.IsNull`/`Assert.IsNotNull`, the `Is.Null`/`Is.Not.Null`
+    constraints, `?.`, `??`, or an implicit bool test on a `UnityEngine.Object`. Unity
+    overloads the equality operators, so a destroyed-object wrapper compares null only
+    through `== null` / `!= null`; the other forms use reference equality and miss that
+    lifetime. Write `Assert.That(value == null)` / `Assert.That(value != null)`. The C#
+    source lint enforces the assertion and constraint forms; the `?.`/`??`/bool shapes
+    are review-enforced (#117).
 
 ### Skills Discipline
 
