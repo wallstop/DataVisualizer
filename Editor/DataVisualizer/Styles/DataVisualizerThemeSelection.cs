@@ -2,12 +2,26 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
 {
     using System;
     using System.Collections.Generic;
+    using System.Runtime.CompilerServices;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.UIElements;
 
     public sealed class DataVisualizerThemeSelection
     {
+        /*
+            Sheets this class added, per root, so a later Apply through any
+            selection instance can adopt (and remove) a theme entry it finds
+            already applied. Keyed by root so closed windows are never pinned;
+            values are stylesheet assets that stay referenced by the root
+            anyway. Sheets that predate Apply, such as the base stylesheet a
+            theme references, are never registered, so reset preserves them.
+        */
+        private static readonly ConditionalWeakTable<
+            VisualElement,
+            HashSet<StyleSheet>
+        > OwnedSheetsByRoot = new();
+
         private StyleSheet _appliedSheet;
         private VisualElement _root;
         private string _appliedThemePath;
@@ -46,6 +60,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
             return false;
         }
 
+        private static void UnregisterOwnedSheet(VisualElement root, StyleSheet sheet)
+        {
+            if (OwnedSheetsByRoot.TryGetValue(root, out HashSet<StyleSheet> owned))
+            {
+                owned.Remove(sheet);
+            }
+        }
+
         public void Apply(VisualElement root, DataVisualizerThemeSettings theme)
         {
             RemoveAppliedSheet();
@@ -55,11 +77,39 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
             _appliedThemePath = GetAssetPathOrNull(theme);
             StyleSheet sheet = theme != null ? theme.StyleSheet : null;
             _appliedSheetPath = GetAssetPathOrNull(sheet);
-            if (root != null && sheet != null && !root.styleSheets.Contains(sheet))
+            if (root == null || sheet == null)
             {
-                root.styleSheets.Add(sheet);
-                _appliedSheet = sheet;
+                return;
             }
+
+            if (root.styleSheets.Contains(sheet))
+            {
+                /*
+                    Adopt an entry this class added, so a later Apply or reset
+                    through this instance can remove it. Sheets that predate
+                    Apply keep their previous behavior: never tracked, never
+                    removed.
+                */
+                if (
+                    OwnedSheetsByRoot.TryGetValue(root, out HashSet<StyleSheet> owned)
+                    && owned.Contains(sheet)
+                )
+                {
+                    _appliedSheet = sheet;
+                }
+
+                return;
+            }
+
+            root.styleSheets.Add(sheet);
+            if (!OwnedSheetsByRoot.TryGetValue(root, out HashSet<StyleSheet> ownedSheets))
+            {
+                ownedSheets = new HashSet<StyleSheet>();
+                OwnedSheetsByRoot.Add(root, ownedSheets);
+            }
+
+            ownedSheets.Add(sheet);
+            _appliedSheet = sheet;
         }
 
         public bool IsAffectedByAssetChanges(
@@ -86,6 +136,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
             if (_appliedSheet != null)
             {
                 _root.styleSheets.Remove(_appliedSheet);
+                UnregisterOwnedSheet(_root, _appliedSheet);
                 return;
             }
 
@@ -110,6 +161,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
             {
                 _root.styleSheets.Add(sheet);
             }
+
+            UnregisterOwnedSheet(_root, _appliedSheet);
         }
     }
 }

@@ -902,6 +902,69 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldAdoptSelectionAppliedSheetFoundOnRootSoResetRemovesIt()
+        {
+            using TestCleanupScope cleanup = new();
+            StyleSheet baseSheet = CreateSheet(cleanup);
+            StyleSheet sheet = CreateSheet(cleanup);
+            DataVisualizerThemeSettings theme = CreateTheme(cleanup, sheet);
+            VisualElement root = new();
+            root.styleSheets.Add(baseSheet);
+            DataVisualizerThemeSelection first = new();
+            DataVisualizerThemeSelection second = new();
+
+            first.Apply(root, theme);
+            Assert.AreEqual(2, root.styleSheets.count);
+            second.Apply(root, theme);
+            Assert.AreEqual(
+                2,
+                root.styleSheets.count,
+                "A selection-added sheet must be adopted, never duplicated."
+            );
+            Assert.AreSame(sheet, root.styleSheets[1]);
+            second.Apply(root, null);
+            Assert.AreEqual(1, root.styleSheets.count);
+            Assert.AreSame(baseSheet, root.styleSheets[0]);
+            first.Apply(root, null);
+            Assert.AreEqual(
+                1,
+                root.styleSheets.count,
+                "A stale tracker must not remove a pre-existing sheet."
+            );
+        }
+
+        [Test]
+        public void ShouldConvergeInterleavedInstancesToOneOwnedSheetAndResetRemovesIt()
+        {
+            using TestCleanupScope cleanup = new();
+            StyleSheet baseSheet = CreateSheet(cleanup);
+            StyleSheet firstSheet = CreateSheet(cleanup);
+            StyleSheet secondSheet = CreateSheet(cleanup);
+            DataVisualizerThemeSettings firstTheme = CreateTheme(cleanup, firstSheet);
+            DataVisualizerThemeSettings secondTheme = CreateTheme(cleanup, secondSheet);
+            VisualElement root = new();
+            root.styleSheets.Add(baseSheet);
+            DataVisualizerThemeSelection first = new();
+            DataVisualizerThemeSelection second = new();
+
+            first.Apply(root, firstTheme);
+            second.Apply(root, secondTheme);
+            Assert.AreEqual(3, root.styleSheets.count);
+            second.Apply(root, firstTheme);
+            Assert.AreEqual(
+                2,
+                root.styleSheets.count,
+                "Re-applying a still-present selection-added theme must converge to one entry."
+            );
+            Assert.AreSame(firstSheet, root.styleSheets[1]);
+            second.Apply(root, null);
+            Assert.AreEqual(1, root.styleSheets.count);
+            Assert.AreSame(baseSheet, root.styleSheets[0]);
+            first.Apply(root, null);
+            Assert.AreEqual(1, root.styleSheets.count, "No entry may survive both owners' resets.");
+        }
+
+        [Test]
         public void ShouldRemovePreviousRootOverrideWhenRootChanges()
         {
             using TestCleanupScope cleanup = new();
