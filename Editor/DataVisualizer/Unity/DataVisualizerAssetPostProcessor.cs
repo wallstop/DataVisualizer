@@ -92,26 +92,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
 
         private static bool ContainsRelevantDeletedAssetPath(string[] paths)
         {
-            foreach (string path in paths)
-            {
-                if (IsDeletedAssetPathRelevant(path))
-                {
-                    return true;
-                }
-            }
-            return false;
+            return Array.Exists(paths, IsDeletedAssetPathRelevant);
         }
 
         private static bool ContainsRelevantAsset(HashSet<Type> relevantTypes, string[] paths)
         {
-            foreach (string path in paths)
-            {
-                if (IsRelevantAsset(relevantTypes, path))
-                {
-                    return true;
-                }
-            }
-            return false;
+            return Array.Exists(paths, path => IsRelevantAsset(relevantTypes, path));
         }
     }
 #endif

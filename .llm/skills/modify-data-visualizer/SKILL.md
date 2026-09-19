@@ -115,6 +115,21 @@ metadata:
   is material. If pooling is proven, define reset and retention semantics first and
   generalize only when at least two call sites share those semantics.
 
+## Collection Scans
+
+- Prefer static first-match helpers over hand-rolled scan loops: `Array.Exists`,
+  `Array.Find`, `Array.FindIndex` for arrays and `List<T>.Exists`, `.Find`,
+  `.FindIndex`, `.TrueForAll` for lists. The codebase convention uses these helpers
+  widely; a manual `foreach` that only tests a predicate and returns is review
+  friction (owner-enforced, PR #119). The helpers are plain `System.Array`/`List<T>`
+  members, so they stay legal in the `System.Linq`-restricted files (rule 32).
+- When the predicate is an existing static method, pass the method group
+  (`Array.Exists(paths, IsRelevant)`) - no closure, no delegate allocation.
+- Keep the manual loop when the collection is interface-typed (`IReadOnlyList<T>`,
+  `IEnumerable<T>`), where no helper exists and retyping would narrow the contract,
+  or when a capturing lambda would allocate on a hot path that documents an
+  allocation-free intent (per-keystroke search, per-object label filtering).
+
 ## Styling
 
 - Add USS classes to `DataVisualizerStyles.uss` and expose names through

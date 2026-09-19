@@ -135,15 +135,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 return -1;
             }
 
-            for (int index = 0; index < order.Count; index++)
-            {
-                if (string.Equals(order[index], guid, StringComparison.OrdinalIgnoreCase))
-                {
-                    return index;
-                }
-            }
-
-            return -1;
+            return order.FindIndex(existing =>
+                string.Equals(existing, guid, StringComparison.OrdinalIgnoreCase)
+            );
         }
     }
 #endif
