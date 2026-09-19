@@ -1116,10 +1116,15 @@
 }
 
 .dataviz-root .settings-button {
-    font-size: var(--dataviz-circle-size);
+    /*
+        Kept at fixed 26px: the padding-bottom offset that raises the glyph
+        is tuned to this size and would clip the glyph at smaller circle
+        sizes, so this control does not follow the density tokens.
+    */
+    font-size: 26px;
     padding: 2px 6px;
-    width: var(--dataviz-circle-size);
-    height: var(--dataviz-circle-size);
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     padding-bottom: 18px;
     color: var(--dataviz-on-accent);
