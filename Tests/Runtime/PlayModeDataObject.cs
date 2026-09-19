@@ -2,7 +2,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Runtime
 {
     using WallstopStudios.DataVisualizer;
 
-    internal sealed class PlayModeDataObject : BaseDataObject
+    /*
+        Public so the Tests/Editor docs-image driver (DocsImageCapture) can create fixture
+        assets and select this type; InternalsVisibleTo is not honored for the
+        editor-to-tests assembly pair in Unity's compilation.
+    */
+    public sealed class PlayModeDataObject : BaseDataObject
     {
         internal string AssetGuidValue
         {

@@ -34,6 +34,13 @@ repos:
         pass_filenames: false
         files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
         description: Bans Assert.IsNull/Assert.IsNotNull so UnityEngine.Object null checks use the overloaded == and != operators.
+      - id: lint-csharp-usings
+        name: Enforce namespace-scoped usings
+        entry: node scripts/lint-csharp-usings.js
+        language: system
+        pass_filenames: false
+        files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
+        description: Moves `using` directives inside the namespace; file-level usings stay sanctioned for assembly-attribute preambles.
       - id: lint-assembly-warnings
         name: Enforce assembly warning policy
         entry: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1

@@ -57,7 +57,10 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
 ### C# and Unity
 
 1. Target C# 10 with 4-space indentation and block-scoped namespaces; place `using`
-   directives inside the namespace, matching existing files.
+   directives inside the namespace, matching existing files. `npm run lint:csharp-usings`
+   enforces this; file-level usings are sanctioned only for namespaceless
+   assembly-attribute files and `[assembly: ...]` preambles such as `InternalsVisibleTo`
+   (#124).
 2. Format every modified `.cs` file with CSharpier 1.1.2
    (`dotnet tool run csharpier -- format <paths>`); treat formatting as a gate.
 3. Resolve analyzer warnings before review.
@@ -218,6 +221,7 @@ dotnet tool run csharpier -- format Editor Runtime Tests
 dotnet tool run csharpier -- check Editor Runtime Tests
 npm run lint:csharp-member-order
 npm run lint:csharp-null-assertions
+npm run lint:csharp-usings
 pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
 pwsh -NoProfile -File scripts/generate-skills-index.ps1
 pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput
