@@ -1,7 +1,10 @@
 ###############################################################################
-# Set default behavior to automatically normalize line endings.
+# LF is the one canonical line ending: it is what this repository stores and
+# what .editorconfig asks editors and CSharpier to write. Pinning eol keeps the
+# checkout ending on every platform, so `csharpier -- check` and the pre-commit
+# hook agree with git instead of only working on Windows.
 ###############################################################################
-* text=auto
+* text=auto eol=lf
 
 ###############################################################################
 # Shell scripts must stay LF so shebangs and bash parsing survive Windows

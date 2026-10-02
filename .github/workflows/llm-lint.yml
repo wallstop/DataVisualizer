@@ -17,6 +17,8 @@ on:
       - ".github/copilot-instructions.md"
       - ".github/workflows/llm-lint.yml"
       - ".pre-commit-config.yaml"
+      - ".editorconfig"
+      - ".gitattributes"
       - ".devcontainer/**"
       - "Editor/**/*.cs"
       - "Runtime/**/*.cs"
@@ -40,6 +42,8 @@ on:
       - ".github/copilot-instructions.md"
       - ".github/workflows/llm-lint.yml"
       - ".pre-commit-config.yaml"
+      - ".editorconfig"
+      - ".gitattributes"
       - ".devcontainer/**"
       - "Editor/**/*.cs"
       - "Runtime/**/*.cs"
@@ -87,6 +91,9 @@ jobs:
 
       - name: Enforce the release credential contract
         run: node scripts/lint-release-secrets.js --verbose
+
+      - name: Enforce the line-ending contract
+        run: node scripts/lint-line-endings.js --verbose
 
       - name: Enforce assembly warning policy
         run: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1

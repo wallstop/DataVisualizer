@@ -30,6 +30,11 @@ metadata:
   domain-specific how-to.
 - Optional spec keys (`license`, `compatibility`, `allowed-tools`, `metadata.*`) are
   tolerated but rarely needed.
+- Tolerance has no teeth: an unrecognized key is ignored rather than rejected. A
+  misspelled `metadata.category`, or `category` written at the top level instead of
+  under `metadata`, silently falls back to `Feature`, so the skill is filed under the
+  wrong heading in the generated index with a passing lint. Check the category in
+  `.llm/skills/index.md` after regenerating.
 
 ## Body Contract
 

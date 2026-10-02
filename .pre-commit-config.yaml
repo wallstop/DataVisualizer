@@ -48,6 +48,13 @@ repos:
         pass_filenames: false
         files: ^(\.llm/references/RELEASING\.md|\.github/workflows/(release-prep|release-tag|npm-publish)\.yml)$
         description: Fails when a release workflow reads an undocumented secret, or a documented secret is read by no release workflow.
+      - id: lint-line-endings
+        name: Enforce the line-ending contract
+        entry: node scripts/lint-line-endings.js
+        language: system
+        pass_filenames: false
+        files: ^(\.editorconfig|\.gitattributes)$
+        description: Fails when .editorconfig and .gitattributes disagree about the line ending CSharpier writes and git checks out.
       - id: lint-assembly-warnings
         name: Enforce assembly warning policy
         entry: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
