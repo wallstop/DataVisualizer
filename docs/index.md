@@ -1,0 +1,47 @@
+# Data Visualizer
+
+Data Visualizer is a Unity editor window for ScriptableObject-heavy projects.
+It gathers your data in one place: a catalog of your ScriptableObject types
+organized by namespace, a list of every instance of the selected type, and the
+inspector for the asset you picked. You edit, reorder, and batch-process data
+without moving between the Project panel and the Inspector.
+
+Data Visualizer is free forever. There are no subscriptions, no paid upgrades,
+and no feature-gated tiers. The full source is MIT-licensed, and every
+capability described here ships in the free package.
+
+## What it does
+
+| Task | What the window gives you |
+| --- | --- |
+| Find | Search your ScriptableObject types by name, add a whole namespace at once, or scan a folder for assets you already have. |
+| Inspect | Edit the selected asset in the inspector you already know, including custom editors and Odin Inspector integration. |
+| Organize | Reorder namespaces, types, and instances, filter by label, and keep the arrangement across sessions. |
+| Edit | Clone, rename, move, delete, and create assets in place, then run processors over one type or all of its instances. |
+
+## Requirements
+
+- Unity 2021.3 or newer.
+- No additional package dependencies.
+
+## Install
+
+1. Open **Window → Package Manager**.
+2. Select **+**, then **Add package from git URL**.
+3. Enter `https://github.com/wallstop/DataVisualizer.git` and select **Add**.
+
+Open the window with **Tools → Wallstop Studios → Data Visualizer**.
+[Getting started](getting-started.md) walks through the first session.
+
+!!! note
+
+    Data Visualizer is alpha software. It was built for wallstop studios'
+    internal use, there is no support commitment yet, and breaking changes can
+    arrive in any release. Feel free to use it, and report what breaks.
+
+## Where to go next
+
+- [Getting started](getting-started.md) — install the package, open the window, and edit your first asset.
+- [README](https://github.com/wallstop/DataVisualizer#readme) — the full feature guide, including themes, search, filtering, persistence, and extension points.
+- [Video walkthrough](https://youtu.be/3oUxUSKNyhw) — a visual tour of the window.
+- [Issues](https://github.com/wallstop/DataVisualizer/issues) — known problems and feature requests.
