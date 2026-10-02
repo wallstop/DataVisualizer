@@ -6,6 +6,9 @@ on:
     paths:
       - ".llm/**"
       - "scripts/**"
+      - ".github/workflows/release-prep.yml"
+      - ".github/workflows/release-tag.yml"
+      - ".github/workflows/npm-publish.yml"
       - "AGENTS.md"
       - "CLAUDE.md"
       - "GEMINI.md"
@@ -26,6 +29,9 @@ on:
     paths:
       - ".llm/**"
       - "scripts/**"
+      - ".github/workflows/release-prep.yml"
+      - ".github/workflows/release-tag.yml"
+      - ".github/workflows/npm-publish.yml"
       - "AGENTS.md"
       - "CLAUDE.md"
       - "GEMINI.md"
@@ -78,6 +84,9 @@ jobs:
 
       - name: Enforce namespace-scoped usings
         run: node scripts/lint-csharp-usings.js --verbose
+
+      - name: Enforce the release credential contract
+        run: node scripts/lint-release-secrets.js --verbose
 
       - name: Enforce assembly warning policy
         run: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
