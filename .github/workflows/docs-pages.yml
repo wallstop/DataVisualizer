@@ -18,7 +18,8 @@ on:
       - ".github/workflows/docs-pages.yml"
 
 # Publication runs to completion instead of being cancelled by a later merge,
-# so a half-written deploy never replaces a good site.
+# so a half-written deploy never replaces a good site. Pull-request builds get
+# their own group, so a merge never queues behind review feedback.
 concurrency:
   group: docs-pages-${{ github.ref }}
   cancel-in-progress: false
@@ -31,8 +32,6 @@ jobs:
     name: Build the documentation site
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    outputs:
-      pages_enabled: ${{ steps.pages.outputs.enabled }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -53,27 +52,13 @@ jobs:
         with:
           path: site
 
-      # Pages is a one-time repository setting that this workflow cannot make.
-      # Report it instead of failing the run, so the validated site stays
-      # available as a run artifact until an owner enables Pages.
-      - name: Detect GitHub Pages
-        id: pages
-        if: github.event_name == 'push'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh api "repos/${{ github.repository }}/pages" > /dev/null 2>&1; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::GitHub Pages is not enabled for ${{ github.repository }}. Set Settings > Pages > Source to GitHub Actions to publish; this run's artifact holds the validated site."
-          fi
-
+  # The repository's Pages source is already GitHub Actions, so the first push
+  # to main that touches documentation publishes the site. No Unity, no
+  # credentials, and no generated content beyond the strict build.
   deploy:
     name: Publish to GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
-    if: needs.build.outputs.pages_enabled == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
