@@ -113,7 +113,7 @@ test_server_fleet_is_identical_across_frontends() {
     assert_eq \
         "opencode fleet matches catalog" \
         "${expected}" \
-        "$(jq -r '.mcp | keys | join(" ")' "${SANDBOX}/opencode.json" 2>/dev/null)"
+        "$(jq -r '.mcp.servers | keys | join(" ")' "${SANDBOX}/opencode.json" 2>/dev/null)"
     assert_eq \
         "nanocoder fleet matches catalog" \
         "${expected}" \
@@ -136,6 +136,65 @@ test_server_fleet_is_identical_across_frontends() {
         "cursor fleet matches host-executable catalog" \
         "${cursor_expected}" \
         "$(jq -r '.mcpServers | keys | join(" ")' "${SANDBOX}/.cursor/mcp.json" 2>/dev/null)"
+    destroy_sandbox
+}
+
+test_opencode_v2_shape_and_legacy_migration() {
+    # Sync must emit the native OpenCode V2 shape (servers under mcp.servers,
+    # `disabled` instead of `enabled`, per-server timeout split into
+    # catalog/execution), strip legacy V1 flat entries on re-sync, and
+    # preserve unrelated user settings and a valid V2 mcp.timeout block.
+    make_sandbox
+    cat > "${SANDBOX}/opencode.json" <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "system",
+  "mcp": {
+    "legacy-local": { "type": "local", "command": ["x"], "enabled": true },
+    "unity": { "type": "remote", "url": "http://stale:1/mcp", "enabled": false, "timeout": 1000 },
+    "timeout": { "startup": 45000 }
+  }
+}
+JSON
+    run_sync
+    assert_eq "sync migrates legacy v1 opencode.json without error" 0 "${RUN_EXIT}"
+    assert_eq \
+        "legacy v1 flat server entries are stripped" \
+        "" \
+        "$(jq -r '[.mcp | keys[] | select(. != "servers" and . != "timeout")] | join(" ")' \
+            "${SANDBOX}/opencode.json")"
+    assert_eq \
+        "stale legacy entry replaced by the catalog definition" \
+        "http://host.docker.internal:9020/mcp" \
+        "$(jq -r '.mcp.servers.unity.url' "${SANDBOX}/opencode.json")"
+    assert_eq \
+        "no v2 entry keeps the v1 enabled field" \
+        "false" \
+        "$(jq -r '[.mcp.servers[] | has("enabled")] | any' "${SANDBOX}/opencode.json")"
+    assert_eq \
+        "every v2 entry carries the disabled field" \
+        "true" \
+        "$(jq -r '[.mcp.servers[] | has("disabled")] | all' "${SANDBOX}/opencode.json")"
+    assert_eq \
+        "v1 timeout splits into catalog/execution" \
+        "300000 300000" \
+        "$(jq -r '"\(.mcp.servers.unity.timeout.catalog) \(.mcp.servers.unity.timeout.execution)"' \
+            "${SANDBOX}/opencode.json")"
+    assert_eq \
+        "valid v2 mcp.timeout block survives sync" \
+        "45000" \
+        "$(jq -r '.mcp.timeout.startup' "${SANDBOX}/opencode.json")"
+    assert_eq \
+        "unrelated settings survive migration" \
+        "system" \
+        "$(jq -r '.theme' "${SANDBOX}/opencode.json")"
+    cp "${SANDBOX}/opencode.json" "${SANDBOX}/opencode.first.json"
+    run_sync
+    assert_eq "re-sync exits zero" 0 "${RUN_EXIT}"
+    assert_eq \
+        "re-sync is idempotent" \
+        "" \
+        "$(diff "${SANDBOX}/opencode.first.json" "${SANDBOX}/opencode.json")"
     destroy_sandbox
 }
 
@@ -212,6 +271,7 @@ test_generated_configs_contain_no_literal_secrets() {
 for test_fn in \
     test_sync_generates_all_frontends \
     test_server_fleet_is_identical_across_frontends \
+    test_opencode_v2_shape_and_legacy_migration \
     test_claude_project_servers_are_preapproved \
     test_generated_configs_contain_no_literal_secrets; do
     "${test_fn}"

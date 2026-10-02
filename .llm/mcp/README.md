@@ -35,7 +35,7 @@ Outputs (all machine-local, gitignored, regenerated on every container start):
 | --- | --- |
 | Claude Code | `.mcp.json` (project scope) + `.claude/settings.local.json` (auto-approval) |
 | Codex | `${CODEX_HOME:-~/.codex}/config.toml` (marker-managed block) |
-| OpenCode | `opencode.json` (`mcp` block, `{env:VAR}` refs) |
+| OpenCode | `opencode.json` (V2 `mcp.servers` block, `{env:VAR}` refs) |
 | Nanocoder | `.nanocoder/mcp.json` (via `NANOCODER_MCPSERVERS_FILE`) + directory trust seed + `agents.config.json` providers (zai via `api.z.ai/api/paas/v4`, openrouter) |
 | VS Code | `.vscode/mcp.json` (`${env:VAR}` refs) |
 | Cursor | `.cursor/mcp.json` (project scope, `${env:VAR}` refs) |

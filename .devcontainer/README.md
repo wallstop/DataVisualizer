@@ -9,7 +9,7 @@ server fleet.
 | Layer | Tools |
 | --- | --- |
 | Runtimes | .NET SDK (base image), Node.js LTS via NVM, Python 3 + uv/uvx |
-| Coding CLIs | `@nanocollective/nanocoder`, `opencode-ai`, `@openai/codex`, `@anthropic-ai/claude-code` (npm `latest`, refreshed on create and every start) |
+| Coding CLIs | `@nanocollective/nanocoder`, `@opencode/cli` (OpenCode v2), `@openai/codex`, `@anthropic-ai/claude-code` (npm `latest`, refreshed on create and every start) |
 | Gateway backends | `codex-zai`, `claude-zai` (Z.ai GLM Coding Plan) and `codex-openrouter`, `claude-openrouter` (OpenRouter) launchers |
 | Repo tooling | PowerShell (lint scripts), CSharpier via `dotnet tool restore` |
 | MCP servers | unity (official Unity CLI, ~140 tools), github (all toolsets), context7, fetch, git, zai-vision, zai-web-search, zai-image — auto-configured into Claude Code, Codex, OpenCode, Nanocoder, VS Code, and Cursor |

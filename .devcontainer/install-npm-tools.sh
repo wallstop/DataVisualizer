@@ -24,7 +24,7 @@ fi
 
 readonly NPM_TOOL_PACKAGES=(
     "@nanocollective/nanocoder@latest"
-    "opencode-ai@latest"
+    "@opencode/cli@latest"
     "@openai/codex@latest"
     "@anthropic-ai/claude-code@latest"
 )
@@ -170,7 +170,7 @@ done
 # and Claude Code use install scripts and are the only trusted global packages.
 if [ "${#packages_to_install[@]}" -gt 0 ]; then
     if run_with_retries "${install_attempts}" npm install --global \
-        --allow-scripts=opencode-ai,@anthropic-ai/claude-code \
+        --allow-scripts=@opencode/cli,@anthropic-ai/claude-code \
         "${packages_to_install[@]}"; then
         clean_tool_cache=1
     else
