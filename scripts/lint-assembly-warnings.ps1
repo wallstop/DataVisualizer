@@ -3,6 +3,11 @@ param([string]$Root)
 
 $ErrorActionPreference = 'Stop'
 
+# The one argument a compiler response file may carry: the ruleset already
+# promotes every warning, so a response file that also switched
+# warnings-as-errors on or off would give one policy two sources of truth.
+$maximumWarningsArgumentPattern = '^(?:-|/)(?:warn|w):5$'
+
 function Format-DisplayPath {
     param([string]$FullPath, [string]$BasePath)
 
@@ -52,29 +57,25 @@ try {
                 ForEach-Object { $_.Trim() } |
                 Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
             )
-            $warningLevelArguments = @(
+            # The response file carries the warning level and nothing else, so
+            # every argument other than the maximum warning level fails instead
+            # of a name being checked for: a switch this guard does not name,
+            # such as -nowarn: or -warnaserror-, turns off the policy silently.
+            # Comment lines, several arguments on one line, and a repeated
+            # warning level fail too, because the guard does not model them.
+            $unexpectedArguments = @(
                 $responseArguments |
-                Where-Object { $_ -match '^(?:-|/)(?:warn|w)(?::|$)' }
+                Where-Object { $_ -notmatch $maximumWarningsArgumentPattern }
             )
-            if (
-                $warningLevelArguments.Count -ne 1 -or
-                $warningLevelArguments[0] -notmatch '^(?:-|/)(?:warn|w):5$'
-            ) {
+            if ($responseArguments.Count -ne 1 -or 0 -lt $unexpectedArguments.Count) {
+                $foundArguments = if (0 -eq $responseArguments.Count) {
+                    'no arguments'
+                } else {
+                    $responseArguments -join ' '
+                }
                 Write-Host (
                     "[assembly-warnings] ERROR: $responseFilePath must contain exactly one " +
-                    'maximum warning-level argument (-warn:5)'
-                )
-                $errors++
-            }
-
-            $analyzerArguments = @(
-                $responseArguments |
-                Where-Object { $_ -match '^(?:-|/)analyzer:' }
-            )
-            if (0 -lt $analyzerArguments.Count) {
-                Write-Host (
-                    "[assembly-warnings] ERROR: $responseFilePath must not load analyzers from " +
-                    'this package repository; configure development analyzers in the host Unity project'
+                    "argument, the maximum warning level (-warn:5); found: $foundArguments"
                 )
                 $errors++
             }
