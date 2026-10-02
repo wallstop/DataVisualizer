@@ -17,18 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   theme immediately when its theme asset or referenced stylesheet is
   reimported, reference-swapped, renamed, moved, or deleted; deletions fall
   back to the package style with the existing saved-GUID semantics.
-- Deterministic `.unitypackage` builder (`scripts/release/build-unitypackage.mjs`):
-  builds the release archive and a `.sha256` checksum from the tracked,
-  allowlisted package payload with no Unity invocation; two builds of the same
-  tree are byte-identical. Not yet attached to the release workflow.
-- Standalone `.unitypackage` validator (`scripts/release/validate-unitypackage.mjs`):
-  verifies a built archive against the tracked, allowlisted payload with no
-  Unity invocation, using standard `tar` for listing and extraction; checks
-  the `.sha256` sidecar, every GUID directory, staged path, asset and `.meta`
-  byte, and archive member, and fails closed on corruption or drift.
-- Initial changelog. Release history before this entry is available in the
-  [repository history](https://github.com/wallstop/DataVisualizer/commits/main)
-  and on [npm](https://www.npmjs.com/package/com.wallstop-studios.data-visualizer).
+- A `.unitypackage` is now built and verified on each release and attached to
+  the GitHub Release alongside the npm package.
 
 ### Changed
 
@@ -38,8 +28,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   glyph sizes; the three large round action buttons are 1px smaller to match
   the action-button token, and themes that override `--dataviz-font-size` now
   also restyle the standard prose controls.
-- npm publishing is tag-driven: pushing an annotated `vX.Y.Z` release tag runs
-  the publish workflow, which verifies the tag against the package version and
-  the packed payload against the `files` allowlist before publishing. The
-  manual dispatch-and-publish workflow is replaced; rerun a release by
-  dispatching the workflow with its `tag` input.
