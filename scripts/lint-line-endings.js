@@ -25,7 +25,9 @@
  * that sets `eol` without `text` is rejected because git ignores it.
  *
  * Only the glob subset the two files use is supported: `*`, `?`, and `{a,b}`
- * alternation, where a pattern without a slash matches a basename at any depth.
+ * alternation, where a pattern without a slash matches a basename at any depth. A
+ * recursive `**` is refused instead of guessed, because a matcher that reads it
+ * as two `*` silently stops matching and would hide the drift behind it.
  *
  * `--verbose` prints the resolved canonical ending and the compared paths. Exit
  * codes: 0 = in sync, 1 = drift, a malformed rule, or an unreadable input.
@@ -54,6 +56,8 @@ const SAMPLE_NAME = "sample";
 
 function readFileOrThrow(filePath, purpose) {
     try {
+        // Every line is trimmed before it is parsed, and trimming already drops
+        // the byte-order mark some editors put on line one.
         return fs.readFileSync(filePath, "utf8");
     } catch {
         throw new Error(`Cannot ${purpose}: '${filePath}' is missing or unreadable.`);
@@ -73,7 +77,7 @@ function displayPath(filePath) {
     Splits one `{a,b,c}` glob into its alternatives. Nesting is not used by
     either file, so an inner brace stays literal instead of being expanded.
 */
-function expandBraces(glob) {
+function expandBraces(glob, origin) {
     const open = glob.indexOf("{");
     const close = glob.indexOf("}", open + 1);
     if (open < 0 || close < 0) {
@@ -84,10 +88,18 @@ function expandBraces(glob) {
     return glob
         .slice(open + 1, close)
         .split(",")
-        .flatMap((alternative) => expandBraces(prefix + alternative + suffix));
+        .flatMap((alternative) => expandBraces(prefix + alternative + suffix, origin));
 }
 
-function compileGlob(glob) {
+function compileGlob(glob, origin) {
+    // A recursive `**` needs git's depth rules matched exactly, and a matcher
+    // that reads it as two `*` silently stops matching. The two files use plain
+    // `*`, so refuse the pattern rather than guess.
+    if (glob.includes("**")) {
+        throw new Error(
+            `${origin} uses the recursive glob '${glob}', which this check cannot match.`,
+        );
+    }
     let source = "^";
     for (const character of glob) {
         if (character === "*") {
@@ -101,9 +113,9 @@ function compileGlob(glob) {
     return new RegExp(`${source}$`);
 }
 
-function globMatches(glob, filePath) {
-    for (const alternative of expandBraces(glob)) {
-        const expression = compileGlob(alternative);
+function globMatches(glob, filePath, origin) {
+    for (const alternative of expandBraces(glob, origin)) {
+        const expression = compileGlob(alternative, origin);
         if (expression.test(filePath)) {
             return true;
         }
@@ -119,8 +131,8 @@ function globMatches(glob, filePath) {
     it governs to the comparison: `*.cs` becomes `sample.cs`, a literal path
     stays itself, and a bare `*` becomes an extensionless sample.
 */
-function samplePath(glob) {
-    const widest = expandBraces(glob)[0];
+function samplePath(glob, origin) {
+    const widest = expandBraces(glob, origin)[0];
     return widest.includes("*") ? widest.replace(/\*/g, SAMPLE_NAME) : widest;
 }
 
@@ -173,19 +185,39 @@ function parseEditorConfig(filePath) {
     The last matching section that sets `end_of_line` wins, which is how
     `.editorconfig` resolves precedence.
 */
-function resolveEditorEnding(sections, filePath, origin) {
+function resolveEditorEnding(sections, filePath, source) {
     let resolved = null;
     for (const section of sections) {
         const value = section.properties.get("end_of_line");
-        if (value === undefined || !globMatches(section.glob, filePath)) {
+        const origin = `${displayPath(source)}:${section.lineNumber}`;
+        if (value === undefined || !globMatches(section.glob, filePath, origin)) {
             continue;
         }
         resolved = {
-            ending: normalizeEnding(value, `${displayPath(origin)}:${section.lineNumber}`),
+            ending: normalizeEnding(value, origin),
             lineNumber: section.lineNumber,
         };
     }
     return resolved;
+}
+
+/*
+    One `.gitattributes` attribute token. `-name` unsets an attribute, `!name`
+    resets it to git's default, and a bare `name` sets it; neither leading mark is
+    a boolean `false` written after '='.
+*/
+function parseAttribute(field) {
+    const separator = field.indexOf("=");
+    if (separator >= 0) {
+        return [field.slice(0, separator), field.slice(separator + 1)];
+    }
+    if (field.startsWith("-")) {
+        return [field.slice(1), false];
+    }
+    if (field.startsWith("!")) {
+        return [field.slice(1), "unset"];
+    }
+    return [field, true];
 }
 
 function parseGitAttributes(filePath) {
@@ -199,14 +231,13 @@ function parseGitAttributes(filePath) {
         const fields = line.split(/\s+/);
         const attributes = new Map();
         for (const field of fields.slice(1)) {
-            const separator = field.indexOf("=");
-            if (separator < 0) {
-                // `-text` unsets an attribute and `!text` resets it to git's
-                // default; neither is a boolean `false` written after '='.
-                attributes.set(field.replace(/^[-!]/, ""), field.startsWith("-") ? false : field.startsWith("!") ? "unset" : true);
-            } else {
-                attributes.set(field.slice(0, separator), field.slice(separator + 1));
-            }
+            const [name, value] = parseAttribute(field);
+            attributes.set(name, value);
+        }
+        // `binary` is git's macro for `-diff -merge -text`, so it decides the
+        // ending the same way an explicit `-text` does.
+        if (attributes.has("binary")) {
+            attributes.set("text", false);
         }
         rules.push({ pattern: fields[0], lineNumber: index + 1, attributes });
     }
@@ -216,34 +247,35 @@ function parseGitAttributes(filePath) {
 /*
     Git resolves each attribute from the last matching rule that sets it, so the
     `text` and `eol` answers can come from different rules. A binary path needs
-    no ending, which is reported as no ending at all.
+    no ending at all and is reported as such.
 */
-function resolveGitEnding(rules, filePath, origin) {
-    let text = { value: undefined, lineNumber: 0 };
-    let ending = { value: undefined, lineNumber: 0 };
-    let matched = { lineNumber: 0 };
+function resolveGitEnding(rules, filePath, source) {
+    let isBinary = false;
+    let ending;
+    let matched = 0;
     for (const rule of rules) {
-        if (!globMatches(rule.pattern, filePath)) {
+        if (!globMatches(rule.pattern, filePath, `${displayPath(source)}:${rule.lineNumber}`)) {
             continue;
         }
-        matched = rule;
+        matched = rule.lineNumber;
         if (rule.attributes.has("text")) {
-            text = { value: rule.attributes.get("text"), lineNumber: rule.lineNumber };
+            const value = rule.attributes.get("text");
+            isBinary = value === false || value === "unset";
         }
         if (rule.attributes.has("eol")) {
             ending = { value: rule.attributes.get("eol"), lineNumber: rule.lineNumber };
         }
     }
-    if (text.value === false || text.value === "unset") {
-        return { binary: true, ending: null, lineNumber: matched.lineNumber };
+    if (isBinary) {
+        return { binary: true, ending: null, lineNumber: matched };
     }
-    if (ending.value === undefined) {
-        return { binary: false, ending: null, lineNumber: matched.lineNumber };
+    if (ending === undefined) {
+        return { binary: false, ending: null, lineNumber: matched };
     }
     return {
         binary: false,
-        ending: normalizeEnding(ending.value, `${displayPath(origin)}:${matched.lineNumber}`),
-        lineNumber: matched.lineNumber,
+        ending: normalizeEnding(ending.value, `${displayPath(source)}:${ending.lineNumber}`),
+        lineNumber: matched,
     };
 }
 
@@ -293,14 +325,15 @@ function main() {
     const candidates = [];
     for (const section of sections) {
         if (section.properties.has("end_of_line")) {
-            candidates.push(samplePath(section.glob));
+            candidates.push(samplePath(section.glob, editorName));
         }
     }
     for (const rule of rules) {
-        candidates.push(samplePath(rule.pattern));
+        candidates.push(samplePath(rule.pattern, `${gitName}:${rule.lineNumber}`));
     }
+    const compared = [...new Set(candidates)];
 
-    for (const candidate of [...new Set(candidates)]) {
+    for (const candidate of compared) {
         const editor = resolveEditorEnding(sections, candidate, EDITORCONFIG);
         const git = resolveGitEnding(rules, candidate, GITATTRIBUTES);
         if (git.binary || editor === null) {
@@ -334,11 +367,12 @@ function main() {
     }
 
     if (verbose) {
-        const textRules = rules.filter((rule) => rule.attributes.has("text") || rule.attributes.has("eol"))
-            .length;
+        const endingRules = rules.filter(
+            (rule) => rule.attributes.has("text") || rule.attributes.has("eol"),
+        ).length;
         console.log(
-            `Line-ending contract in sync: ${canonical.ending} across ` +
-                `${new Set(candidates).size} path(s) and ${textRules} rule(s) in '${gitName}'.`,
+            `Line-ending contract in sync: ${canonical.ending} across ${compared.length} path(s) ` +
+                `and ${endingRules} rule(s) in '${gitName}'.`,
         );
     }
     process.exit(0);

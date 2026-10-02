@@ -215,6 +215,31 @@ $cases = @(
         ExpectPass = $true
         Expect = ''
     }
+    [pscustomobject]@{
+        # `binary` is git's macro for `-text`, so a path it covers carries no
+        # ending and a narrower editor section must not be reported against it.
+        Name = 'Passes_WhenTheBinaryMacroCoversAPathTheEditorNarrows'
+        EditorConfig = "$editorConfigLf`n`n[*.png]`nend_of_line = crlf`n"
+        GitAttributes = "* text=auto eol=lf`n*.png binary`n"
+        ExpectPass = $true
+        Expect = ''
+    }
+    [pscustomobject]@{
+        # A `**` pattern is refused rather than read as two `*`: a matcher that
+        # guessed would stop matching deeper paths and hide the drift behind them.
+        Name = 'Fails_WhenAGitAttributesRuleUsesARecursiveGlob'
+        EditorConfig = $editorConfigLf
+        GitAttributes = "* text=auto eol=lf`nEditor/** text eol=crlf`n"
+        ExpectPass = $false
+        Expect = "recursive glob 'Editor/\*\*'"
+    }
+    [pscustomobject]@{
+        Name = 'Fails_WhenAnEditorConfigSectionUsesARecursiveGlob'
+        EditorConfig = "$editorConfigLf`n`n[Editor/**]`nend_of_line = crlf`n"
+        GitAttributes = $gitAttributesLf
+        ExpectPass = $false
+        Expect = "recursive glob 'Editor/\*\*'"
+    }
 )
 
 foreach ($script:case in $cases) {
