@@ -152,17 +152,32 @@ test_opencode_v2_shape_and_legacy_migration() {
   "mcp": {
     "legacy-local": { "type": "local", "command": ["x"], "enabled": true },
     "unity": { "type": "remote", "url": "http://stale:1/mcp", "enabled": false, "timeout": 1000 },
-    "timeout": { "startup": 45000 }
+    "timeout": { "startup": 45000 },
+    "servers": {
+      "my-tools": { "type": "remote", "url": "https://example.com/mcp" }
+    }
   }
 }
 JSON
     run_sync
     assert_eq "sync migrates legacy v1 opencode.json without error" 0 "${RUN_EXIT}"
     assert_eq \
-        "legacy v1 flat server entries are stripped" \
+        "no mixed v1/v2 map remains" \
         "" \
         "$(jq -r '[.mcp | keys[] | select(. != "servers" and . != "timeout")] | join(" ")' \
             "${SANDBOX}/opencode.json")"
+    assert_eq \
+        "user-added v1 server is converted and preserved" \
+        "x" \
+        "$(jq -r '.mcp.servers["legacy-local"].command[0]' "${SANDBOX}/opencode.json")"
+    assert_eq \
+        "converted v1 server carries the v2 disabled field" \
+        "false" \
+        "$(jq -r '.mcp.servers["legacy-local"].disabled' "${SANDBOX}/opencode.json")"
+    assert_eq \
+        "user-added v2 server survives sync" \
+        "https://example.com/mcp" \
+        "$(jq -r '.mcp.servers["my-tools"].url' "${SANDBOX}/opencode.json")"
     assert_eq \
         "stale legacy entry replaced by the catalog definition" \
         "http://host.docker.internal:9020/mcp" \
@@ -172,9 +187,9 @@ JSON
         "false" \
         "$(jq -r '[.mcp.servers[] | has("enabled")] | any' "${SANDBOX}/opencode.json")"
     assert_eq \
-        "every v2 entry carries the disabled field" \
+        "managed v2 entries carry the disabled field" \
         "true" \
-        "$(jq -r '[.mcp.servers[] | has("disabled")] | all' "${SANDBOX}/opencode.json")"
+        "$(jq -r '.mcp.servers.unity | has("disabled")' "${SANDBOX}/opencode.json")"
     assert_eq \
         "v1 timeout splits into catalog/execution" \
         "300000 300000" \

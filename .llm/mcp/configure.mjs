@@ -767,16 +767,27 @@ function main() {
                 const filePath = path.join(WORKSPACE_ROOT, "opencode.json");
                 const existing = readJson(filePath) || {};
                 const mcp = { ...(existing.mcp || {}) };
-                // Strip legacy V1 flat server entries (names directly under
-                // `mcp`) so a V2 reader never sees a mixed V1/V2 map.
+                // Convert legacy V1 flat server entries (names directly under
+                // `mcp`) into the V2 shape instead of dropping them, so
+                // user-added servers survive the migration and a V2 reader
+                // never sees a mixed V1/V2 map.
+                const converted = {};
                 for (const key of Object.keys(mcp)) {
                     if (key !== "servers" && key !== "timeout") {
                         if (mcp[key] && typeof mcp[key] === "object") {
+                            converted[key] = opencodeServerV2(mcp[key]);
                             delete mcp[key];
                         }
                     }
                 }
-                mcp.servers = { ...managedOpencode };
+                // Merge like the other frontends: user-added servers (V2
+                // shaped, or converted from V1) are preserved; managed
+                // entries win.
+                mcp.servers = {
+                    ...converted,
+                    ...(existing.mcp?.servers || {}),
+                    ...managedOpencode,
+                };
                 const next = { ...existing, mcp };
                 const changed =
                     JSON.stringify(existing.mcp || {}) !== JSON.stringify(mcp);
