@@ -8,8 +8,10 @@
 //   unity-mcp-host.mjs [--port N] [--host H]
 //
 // On the host:
-//   npm run unity:mcp:host        # proxies `unity mcp` on http://127.0.0.1:9020/mcp
+//   npm run unity:mcp:host        # proxies `unity mcp` on http://0.0.0.0:9020/mcp
 // Container clients then connect to http://host.docker.internal:9020/mcp.
+// Linux Docker cannot reach a host-loopback bind through host.docker.internal,
+// so the bridge listens on all interfaces; UNITY_MCP_TOKEN gates access.
 //
 // The bridge is transparent: JSON-RPC requests are forwarded verbatim to the
 // CLI process (request ids are remapped so concurrent HTTP requests cannot
@@ -367,7 +369,7 @@ Environment:
     const hostFlag = argv.indexOf("--host");
     const port =
         portFlag !== -1 && argv[portFlag + 1] ? Number(argv[portFlag + 1]) : DEFAULT_PORT;
-    const host = hostFlag !== -1 && argv[hostFlag + 1] ? argv[hostFlag + 1] : "127.0.0.1";
+    const host = hostFlag !== -1 && argv[hostFlag + 1] ? argv[hostFlag + 1] : "0.0.0.0";
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
         console.error("❌ --port must be an integer between 1 and 65535.");
         process.exit(1);

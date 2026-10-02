@@ -113,7 +113,7 @@ Unity's official CLI MCP server (`unity mcp`, ~140 tools) runs on the
 cd /path/to/UnityProject && unity pipeline install
 
 # On the host (keep running while agent containers are up):
-npm run unity:mcp:host             # bridges `unity mcp` on http://127.0.0.1:9020/mcp
+npm run unity:mcp:host             # bridges `unity mcp` on http://0.0.0.0:9020/mcp
 
 # Host-side GUI clients (Cursor, Windsurf, Claude Desktop):
 unity mcp configure <client>

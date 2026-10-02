@@ -99,7 +99,7 @@ binds to editor-localhost only, so container agents cannot launch it directly.
 streamable-HTTP JSON-RPC:
 
 ```bash
-npm run unity:mcp:host   # host: spawns `unity mcp`, serves http://127.0.0.1:9020/mcp
+npm run unity:mcp:host   # host: spawns `unity mcp`, serves http://0.0.0.0:9020/mcp
 ```
 
 Container agents connect to `http://host.docker.internal:9020/mcp` (written
@@ -118,9 +118,11 @@ Environment (prefer a gitignored `.env.local` at the workspace root):
 | `UNITY_MCP_TOKEN` | Optional bearer token required by the bridge when set |
 | `UNITY_MCP_TIMEOUT_MS` | Per-request timeout (default 180000) |
 
-Security: the bridge binds to loopback by default; `UNITY_MCP_TOKEN`
-(`.env.local`) gates HTTP access when set. Only set `UNITY_MCP_TOKEN` if you
-accept managing bearer headers in every frontend config.
+Security: the bridge listens on all interfaces by default (Linux Docker cannot
+reach a host-loopback bind via `host.docker.internal`); pass `--host 127.0.0.1`
+to restrict it. `UNITY_MCP_TOKEN` (`.env.local`) gates HTTP access when set.
+Only set `UNITY_MCP_TOKEN` if you accept managing bearer headers in every
+frontend config.
 
 ### Removing the legacy custom bridge
 
