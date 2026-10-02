@@ -26,6 +26,13 @@ metadata:
    version and the packed allowlist before publishing. To rerun a partially
    completed release, dispatch `npm-publish.yml` with the `tag` input.
 
+## Changelog
+
+- `CHANGELOG.md` is user-facing only: features, fixes, visible behavior. No
+  tests, CI, tooling, or release mechanics. Write plain Simplified Technical
+  English. The GitHub Release notes are extracted from the released section,
+  so keep that section's copy release-ready.
+
 ## Dist-Tag Rules
 
 - Versions matching `-rc`, `-alpha`, `-beta`, `-preview` (case-insensitive) publish

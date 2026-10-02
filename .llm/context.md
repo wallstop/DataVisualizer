@@ -253,9 +253,13 @@ pre-commit config on staged `.cs` files.
 ### Commit & Pull Requests
 
 - Write all agent-to-user copy (PR titles and bodies, commit messages, code
-  comments, handoffs) in Simplified Technical English: short, plain, active
-  sentences, no filler. Say how; add why/what for PR descriptions. A few
-  sentences is the maximum.
+  comments, handoffs, CHANGELOG entries) in Simplified Technical English:
+  short, plain, active sentences, no filler. PR descriptions lead with why
+  and how, and stay brief.
+- CHANGELOG.md lists user-facing changes only: new features, fixes, and
+  visible behavior changes. Never record tests, CI, tooling, refactors, or
+  internal release mechanics there; those belong in commits, issues, and the
+  PR body.
 - Short imperative subjects with the subsystem up front (for example
   "Fix settings persistence dirty state"); reference related issue IDs in the body.
 - Keep PR bodies scannable: one-sentence summary of what and why, then the

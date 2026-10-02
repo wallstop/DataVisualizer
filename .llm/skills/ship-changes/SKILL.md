@@ -45,6 +45,9 @@ Run the narrowest sufficient layer; escalate on failure:
 - Reference related issue IDs in the body.
 - Never commit generated `.llm/skills/index.md` without its source skills, and never
   commit a stale index.
+- CHANGELOG entries are user-facing only (features, fixes, visible behavior).
+  Tests, CI, tooling, and release mechanics go in commits and PR bodies, never
+  in `CHANGELOG.md`. Write them in Simplified Technical English.
 
 ## Pull Requests
 
