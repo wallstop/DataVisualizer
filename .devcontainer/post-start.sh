@@ -68,6 +68,31 @@ if [ -d "${uv_cache}" ] && [ ! -w "${uv_cache}" ]; then
     sudo -n chown -R "$(id -u):$(id -g)" "${uv_cache}" 2>/dev/null || true
 fi
 
+# The npm cache Docker volume can come up root-owned for the same reason;
+# without this every `npm` command fails with EACCES on _cacache/_logs.
+npm_cache="${HOME}/.npm"
+if [ -d "${npm_cache}" ] && [ ! -w "${npm_cache}" ]; then
+    sudo -n chown -R "$(id -u):$(id -g)" "${npm_cache}" 2>/dev/null || true
+fi
+
 bash .llm/mcp/sync-mcp.sh "${workspace_dir}"
+
+# OpenCode V2 runs a shared background server (serve --service) that lazy-loads
+# project config on first attach: the very first `opencode mcp list` after a
+# service restart can briefly report "No MCP servers configured". Warm the
+# service at startup so that race never surfaces in a user's first command.
+# The service inherits the env of the first client that triggers it, so source
+# .env.local first — otherwise MCP servers would connect with empty credentials
+# for the service's whole lifetime.
+if command -v opencode >/dev/null 2>&1; then
+    if [ -f "${workspace_dir}/.devcontainer/env-local.sh" ]; then
+        # shellcheck source=./env-local.sh
+        . "${workspace_dir}/.devcontainer/env-local.sh"
+        load_env_local "${workspace_dir}/.env.local"
+    fi
+    opencode mcp list >/dev/null 2>&1 || true
+    sleep 1
+    opencode mcp list >/dev/null 2>&1 || true
+fi
 
 echo "✅ Data Visualizer dev container ready."

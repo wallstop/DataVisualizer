@@ -417,6 +417,19 @@ function buildCatalog() {
     return servers;
 }
 
+// OpenCode 2.x reads V1 config, but the native V2 shape is canonical:
+// servers live under mcp.servers, `enabled: true` inverts to `disabled: false`,
+// and the single request timeout splits into mcp.timeout.catalog/execution
+// (mapping the old value onto both, per the V1→V2 migration guide).
+function opencodeServerV2(opencodeDefinition) {
+    const { enabled, timeout, ...rest } = opencodeDefinition;
+    const next = { ...rest, disabled: enabled === false ? true : false };
+    if (typeof timeout === "number") {
+        next.timeout = { catalog: timeout, execution: timeout };
+    }
+    return next;
+}
+
 // ---------------------------------------------------------------------------
 // Writers
 // ---------------------------------------------------------------------------
@@ -668,7 +681,7 @@ function writeNanocoderProviders() {
         {
             name: "openrouter",
             baseUrl: "https://openrouter.ai/api/v1",
-            apiKey: "${OPEN_ROUTER_API_KEY}",
+            apiKey: "${OPENROUTER_API_KEY}",
             // Plain slug: nanocoder rejects the codex-style "~" alias prefix.
             models: ["openai/gpt-5-mini"],
             timeout: 300000,
@@ -707,7 +720,7 @@ function main() {
     for (const [name, definition] of catalog) {
         managedClaude[name] = definition.claude;
         managedCodex[name] = definition.codex;
-        managedOpencode[name] = definition.opencode;
+        managedOpencode[name] = opencodeServerV2(definition.opencode);
         managedNanocoder[name] = definition.nanocoder;
         managedVscode[name] = definition.vscode;
         if (definition.cursor) managedCursor[name] = definition.cursor;
@@ -749,13 +762,40 @@ function main() {
             },
         },
         {
-            label: "OpenCode (opencode.json mcp block)",
-            write: () =>
-                writeMergedJsonMap(
-                    path.join(WORKSPACE_ROOT, "opencode.json"),
-                    "mcp",
-                    managedOpencode,
-                ),
+            label: "OpenCode (opencode.json mcp.servers block)",
+            write: () => {
+                const filePath = path.join(WORKSPACE_ROOT, "opencode.json");
+                const existing = readJson(filePath) || {};
+                const mcp = { ...(existing.mcp || {}) };
+                // Convert legacy V1 flat server entries (names directly under
+                // `mcp`) into the V2 shape instead of dropping them, so
+                // user-added servers survive the migration and a V2 reader
+                // never sees a mixed V1/V2 map.
+                const converted = {};
+                for (const key of Object.keys(mcp)) {
+                    if (key !== "servers" && key !== "timeout") {
+                        if (mcp[key] && typeof mcp[key] === "object") {
+                            converted[key] = opencodeServerV2(mcp[key]);
+                            delete mcp[key];
+                        }
+                    }
+                }
+                // Merge like the other frontends: user-added servers (V2
+                // shaped, or converted from V1) are preserved; managed
+                // entries win.
+                mcp.servers = {
+                    ...converted,
+                    ...(existing.mcp?.servers || {}),
+                    ...managedOpencode,
+                };
+                const next = { ...existing, mcp };
+                const changed =
+                    JSON.stringify(existing.mcp || {}) !== JSON.stringify(mcp);
+                if (changed && !CHECK_ONLY) {
+                    writeAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`);
+                }
+                return changed;
+            },
         },
         {
             label: "Nanocoder (.nanocoder/mcp.json + trust seed + providers)",

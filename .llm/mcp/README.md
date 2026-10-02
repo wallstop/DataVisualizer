@@ -35,7 +35,7 @@ Outputs (all machine-local, gitignored, regenerated on every container start):
 | --- | --- |
 | Claude Code | `.mcp.json` (project scope) + `.claude/settings.local.json` (auto-approval) |
 | Codex | `${CODEX_HOME:-~/.codex}/config.toml` (marker-managed block) |
-| OpenCode | `opencode.json` (`mcp` block, `{env:VAR}` refs) |
+| OpenCode | `opencode.json` (V2 `mcp.servers` block, `{env:VAR}` refs) |
 | Nanocoder | `.nanocoder/mcp.json` (via `NANOCODER_MCPSERVERS_FILE`) + directory trust seed + `agents.config.json` providers (zai via `api.z.ai/api/paas/v4`, openrouter) |
 | VS Code | `.vscode/mcp.json` (`${env:VAR}` refs) |
 | Cursor | `.cursor/mcp.json` (project scope, `${env:VAR}` refs) |
@@ -99,7 +99,7 @@ binds to editor-localhost only, so container agents cannot launch it directly.
 streamable-HTTP JSON-RPC:
 
 ```bash
-npm run unity:mcp:host   # host: spawns `unity mcp`, serves http://127.0.0.1:9020/mcp
+npm run unity:mcp:host   # host: spawns `unity mcp`, serves http://0.0.0.0:9020/mcp
 ```
 
 Container agents connect to `http://host.docker.internal:9020/mcp` (written
@@ -118,9 +118,11 @@ Environment (prefer a gitignored `.env.local` at the workspace root):
 | `UNITY_MCP_TOKEN` | Optional bearer token required by the bridge when set |
 | `UNITY_MCP_TIMEOUT_MS` | Per-request timeout (default 180000) |
 
-Security: the bridge binds to loopback by default; `UNITY_MCP_TOKEN`
-(`.env.local`) gates HTTP access when set. Only set `UNITY_MCP_TOKEN` if you
-accept managing bearer headers in every frontend config.
+Security: the bridge listens on all interfaces by default (Linux Docker cannot
+reach a host-loopback bind via `host.docker.internal`); pass `--host 127.0.0.1`
+to restrict it. `UNITY_MCP_TOKEN` (`.env.local`) gates HTTP access when set.
+Only set `UNITY_MCP_TOKEN` if you accept managing bearer headers in every
+frontend config.
 
 ### Removing the legacy custom bridge
 

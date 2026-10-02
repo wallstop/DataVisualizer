@@ -9,7 +9,7 @@ server fleet.
 | Layer | Tools |
 | --- | --- |
 | Runtimes | .NET SDK (base image), Node.js LTS via NVM, Python 3 + uv/uvx |
-| Coding CLIs | `@nanocollective/nanocoder`, `opencode-ai`, `@openai/codex`, `@anthropic-ai/claude-code` (npm `latest`, refreshed on create and every start) |
+| Coding CLIs | `@nanocollective/nanocoder`, `@opencode/cli` (OpenCode v2), `@openai/codex`, `@anthropic-ai/claude-code` (npm `latest`, refreshed on create and every start) |
 | Gateway backends | `codex-zai`, `claude-zai` (Z.ai GLM Coding Plan) and `codex-openrouter`, `claude-openrouter` (OpenRouter) launchers |
 | Repo tooling | PowerShell (lint scripts), CSharpier via `dotnet tool restore` |
 | MCP servers | unity (official Unity CLI, ~140 tools), github (all toolsets), context7, fetch, git, zai-vision, zai-web-search, zai-image — auto-configured into Claude Code, Codex, OpenCode, Nanocoder, VS Code, and Cursor |
@@ -113,7 +113,7 @@ Unity's official CLI MCP server (`unity mcp`, ~140 tools) runs on the
 cd /path/to/UnityProject && unity pipeline install
 
 # On the host (keep running while agent containers are up):
-npm run unity:mcp:host             # bridges `unity mcp` on http://127.0.0.1:9020/mcp
+npm run unity:mcp:host             # bridges `unity mcp` on http://0.0.0.0:9020/mcp
 
 # Host-side GUI clients (Cursor, Windsurf, Claude Desktop):
 unity mcp configure <client>
