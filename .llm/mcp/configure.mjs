@@ -668,7 +668,7 @@ function writeNanocoderProviders() {
         {
             name: "openrouter",
             baseUrl: "https://openrouter.ai/api/v1",
-            apiKey: "${OPEN_ROUTER_API_KEY}",
+            apiKey: "${OPENROUTER_API_KEY}",
             // Plain slug: nanocoder rejects the codex-style "~" alias prefix.
             models: ["openai/gpt-5-mini"],
             timeout: 300000,
