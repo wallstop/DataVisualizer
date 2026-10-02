@@ -67,27 +67,37 @@ beside their original, whatever the Data Folder is.
 
 ## Filter and search
 
+Three finders narrow different things, and they do not affect each other. The
+[Search and filtering](search-and-filter.md) page covers each one in full.
+
+- The **Search** box in the window header row searches every tracked type, not
+  only the type you selected. It matches asset names, type names, asset GUIDs,
+  and string fields on the assets themselves, so you can find an asset by what is
+  inside it.
 - The filter field above the namespace list narrows the type rows by display
   name, without case sensitivity. Namespace headers stay visible.
-- The search box above the object list searches the text of all loaded
-  instances, so you can jump to an asset by its contents.
 - Drag labels from **Available** into the **AND:** or **OR:** rows to show only
-  assets that carry them. The **AND &&** and **OR ||** toggle switches between
-  matching every dragged label and matching any of them.
+  assets that carry them. The **AND &&** and **OR ||** switch chooses between
+  matching every label you dragged and matching any of them.
 
 ## Keep your arrangement
 
-Pane widths, ordering, tracked types, and your selection persist between
-sessions. Under **Settings**, choose where that state lives:
+Ordering, collapse state, tracked types, and your selection persist between
+sessions, and you can reorder namespaces, types, and instances directly in the
+window. The [Organizing your data](organizing.md) page covers ordering,
+persistence, themes, and the Play Mode pause.
 
-- **Persist state in user settings** (default) stores it in your local user
-  cache, so each developer keeps a private arrangement and version control
-  stays free of layout churn.
+Under **Settings**, choose where that state lives:
+
+- **Persist State in UserState** (default) stores it in your local user cache, so
+  each developer keeps a private arrangement and version control stays free of
+  layout churn.
 - The project settings asset stores the state in the repository, which suits a
   team that wants one shared arrangement.
 
-**Select active object** mirrors your Data Visualizer selection in Unity's
-Inspector, and **Data Folder** sets where new assets are created.
+**Select Active Object** mirrors your Data Visualizer selection in Unity's
+Inspector, and **Data Folder** sets where new assets are created. New assets land
+in a per-type folder under it; clones stay beside their original.
 
 ## While the editor is playing
 
@@ -104,9 +114,12 @@ Everything resumes when you leave Play Mode.
 
 ## Next steps
 
-- Themes: pick Classic, Nord, Dracula, Compact, or Minimal under **Settings →
-  Theme**, or author your own.
-- Extensibility: derive from `BaseDataObject`, implement the lifecycle
-  interfaces, and return your own UI Toolkit content from `BuildGUI`.
-- The [README](https://github.com/wallstop/DataVisualizer#readme) documents
-  every control, the theme tokens, and the runtime extension points.
+- [Search and filtering](search-and-filter.md) — what global search matches, its
+  25-result limit, and the exact AND/OR label rules.
+- [Managing assets](managing-assets.md) — where each asset operation lives, where
+  created files go, how clones are named, and how processors are scoped.
+- [Organizing your data](organizing.md) — ordering, themes and their tokens,
+  persistence, and what pauses during Play Mode.
+- [Extending the window](extending.md) — attributes, `BaseDataObject`, lifecycle
+  hooks, processors, and custom inspector content.
+- The [video walkthrough](https://youtu.be/3oUxUSKNyhw) gives a visual tour.

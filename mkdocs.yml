@@ -45,6 +45,10 @@ theme:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Search and filtering: search-and-filter.md
+  - Managing assets: managing-assets.md
+  - Organizing your data: organizing.md
+  - Extending the window: extending.md
 
 validation:
   nav:

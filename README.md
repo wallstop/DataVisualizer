@@ -8,7 +8,7 @@ Data Visualizer streamlines working with ScriptableObject-heavy systems by centr
 
 Data Visualizer is free forever: no subscriptions, no paid upgrades, no feature-gated tiers. The full source is MIT-licensed, and every capability documented here ships in the free package.
 
-This guide captures the key points from the companion [video walkthrough](https://youtu.be/3oUxUSKNyhw) while keeping the instructions project-agnostic.
+This guide captures the key points from the companion [video walkthrough](https://youtu.be/3oUxUSKNyhw) while keeping the instructions project-agnostic. A browsable version of this documentation, with per-topic pages, is published at <https://wallstop.github.io/DataVisualizer/>.
 
 ## Getting Started
 
@@ -21,20 +21,20 @@ Open **Tools → Wallstop Studios → Data Visualizer** and dock it alongside th
 
 The window uses a three-panel layout:
 
-**Namespace & Type Panel (left)** organizes ScriptableObject types by C# namespace. Click a namespace to expose its types, then select a type to load all instances. Reorder namespaces and types with the up and down arrow buttons—your ordering persists across sessions.
+**Namespace & Type Panel (left)** organizes ScriptableObject types by C# namespace. Click a namespace to expose its types, then select a type to load all instances. Reorder namespaces and types by dragging them, or with the up and down arrow buttons, which move a row to the top or bottom of its list. Your ordering persists across sessions.
 
-**Objects Panel (center)** lists every instance of the selected type and keeps one selection at a time. Arrow buttons let you reorder instances without dragging through long lists, and batch edits run through the per-type processors area (scoped to all instances or the filtered set) and per-row actions.
+**Objects Panel (center)** lists every instance of the selected type and keeps one selection at a time. Drag a row to place an instance precisely, or use its arrow buttons to move it to the top or bottom. Batch edits run through the per-type processors area, scoped to all instances or to the filtered set, and through the per-row actions.
 
 **Inspector Panel (right)** displays the full inspector for the selected asset, including Odin Inspector integrations and custom editors. Changes save immediately, just like Unity's default Inspector.
 
 ## Instance Management
 
-![Clone, rename, move, and delete controls highlighted above the object list](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-instance-actions.jpg)
+![Clone, rename, move, and delete controls on an object row](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-instance-actions.jpg)
 *Instance actions demo at 03:35.*
 
-Asset management controls live above the Objects panel:
+Asset management controls sit on the right of each object row:
 
-**Clone** duplicates the selected asset with a "Clone" suffix in the same folder as the original. Useful for creating variants without leaving the window.
+**Clone** (`++`) duplicates that row's asset in the same folder as the original, directly after it in the list. Any existing `(Clone)` or `(Clone n)` suffix is stripped from the source name first, then reapplied, so repeated clones read `(Clone)`, `(Clone 1)`, `(Clone 2)`, and so on. Useful for creating variants without leaving the window.
 
 **Rename** opens a draggable prompt that renames the asset on disk. No need to coordinate between multiple panels or windows.
 
@@ -49,7 +49,7 @@ Inspector edits save immediately. Your selection persists when switching between
 ![Create button and data folder selector above object list](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-create.jpg)
 *New asset workflow at 06:45.*
 
-The **Create** button spawns a new instance of the active type in your configured **Data Folder** (see Settings below). Clones stay beside their originals regardless of the Data Folder setting. Chain create with rename or move to place new assets exactly where you need them.
+The **Create** button asks for a name and spawns a new instance of the active type under your configured **Data Folder** (see Settings below), in a per-type folder named after the type's full namespace, such as `Assets/Data/MyGame/Items/WeaponData/`. Those folders are created for you. Clones stay beside their originals regardless of the Data Folder setting. Chain create with rename or move to place new assets exactly where you need them.
 
 ## Building Your Type Catalog
 
@@ -70,18 +70,26 @@ Organize the catalog to match your team's mental model. The structure persists a
 
 ## Search & Filtering
 
-The filter field above the Namespace list narrows type rows by display name with case-insensitive matching; namespace headers are not filtered. The global search box above the Objects panel finds text across all loaded instances, letting you jump directly to specific assets without manual scanning.
+Three finders narrow different things.
+
+The **Search** box in the window header row, next to the Settings button, searches every tracked type rather than only the selected one. A space-separated query matches an asset when any one of its terms matches an asset name, a type name, an exact asset GUID, or a string field on the asset or a nested plain object; field matching is case-insensitive and skips primitives, vectors, colors, and references to other Unity objects. Results are ordered by asset name then full type name, list up to two matched fields for context, highlight the matched terms, and cap at 25 results. Use Up and Down to move, Enter to open the highlighted asset, Escape to dismiss.
+
+The filter field above the Namespace list narrows type rows by display name with case-insensitive matching; namespace headers are not filtered.
+
+Dragging labels from **Available** into the **AND:** or **OR:** rows filters the selected type's instances by Unity asset labels. The **AND &&** and **OR ||** switch chooses between requiring every dragged label and requiring any one of them; in OR mode an empty clause never counts as a match. The Advanced row refuses to collapse while OR mode or any OR label is active, so a filter that hides rows is never left concealed. A line under the filter reports how many objects are hidden. The selected asset's inspector panel adds and removes its labels, and the filter re-applies immediately.
 
 ## Settings
 
 ![Settings dropdown showing persistence options and data folder field](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-settings.jpg)
 *State management settings at 18:20.*
 
-**Persist state in user settings** stores layout, ordering, and tracked types in your local user cache instead of a shared project asset. Enable this to avoid merge conflicts when multiple developers customize their own workspace.
+**Persist State in UserState** (the default) stores the selected namespace and type, the selected object per type, namespace, type, and object ordering, collapse state, tracked types, per-type label filters, and the per-type processor scope in a per-user JSON file instead of a shared project asset. Each developer keeps a private arrangement and version control stays free of layout churn.
 
-**Select active object** syncs selection between Data Visualizer and Unity's Inspector window. Useful for cross-referencing assets in other editor windows.
+Turning the setting off stores the same state inside a `DataVisualizerSettings` asset in the project, which suits a team that wants one shared arrangement. Data Visualizer creates one at `Assets/Editor/DataVisualizerSettings.asset` on first use if no such asset exists. Switching between the two copies the current state across.
 
-**Data Folder** defines where new assets land. Click to ping the current folder or browse to set a new default.
+**Select Active Object** syncs selection between Data Visualizer and Unity's Inspector window. Useful for cross-referencing assets in other editor windows.
+
+**Data Folder** defines where new assets land, each in a per-type folder named after its full namespace. Click the path to ping the current folder, or browse to set a new default.
 
 ### Themes
 
@@ -112,7 +120,7 @@ The override stylesheet is applied after the package stylesheet. Standard contro
 
 Data Visualizer exposes several extension points for custom workflows:
 
-**Attributes** let you override display namespace or friendly names on ScriptableObject classes. Useful when code organization doesn't match your content taxonomy.
+**Attributes** let you override display namespace or friendly names on ScriptableObject classes. `[CustomDataVisualization(Namespace = "...", TypeName = "...")]` replaces the namespace group and the display name the window shows. Without it the window files a type under the last segment of its C# namespace. Useful when code organization doesn't match your content taxonomy.
 
 **BaseDataObject** provides a ready-made base class for ScriptableObjects with built-in lifecycle support:
 - Stores an asset GUID, title, and description for display and stable identity
@@ -123,7 +131,9 @@ Derived classes override only what they need—GUID generation, cache resets, co
 
 **Lifecycle Interfaces** hook into asset events before and after clone, create, and rename operations. Enforce invariants like regenerating IDs or pushing audit logs to telemetry without writing per-asset editor scripts.
 
-**UI Toolkit Extensions** render custom UI alongside the default inspector. Return a `VisualElement` tree—graphs, thumbnails, validation badges, or any UI Toolkit component—and Data Visualizer slots it in automatically. Because the entire window runs on UI Toolkit, this approach scales to complex dashboards without leaving the unified workflow.
+**UI Toolkit Extensions** render custom UI alongside the default inspector. Return a `VisualElement` tree—graphs, thumbnails, validation badges, or any UI Toolkit component—from `IGUIProvider.BuildGUI` (or `BaseDataObject.BuildGUI`) and Data Visualizer slots it in below the inspector. The `DataVisualizerGUIContext` argument carries the selected asset's `SerializedObject` for writing changes back. Because the entire window runs on UI Toolkit, this approach scales to complex dashboards without leaving the unified workflow.
+
+**Processors** are plain `IDataProcessor` classes that the window discovers with no registration. `Name` labels the button, `Description` is its tooltip, `Accepts` lists the types it applies to, and `Process(Type, IEnumerable<ScriptableObject>)` receives the **ALL** or **FILTERED** object set you chose. The window instantiates processors through their public parameterless constructor, skips any that lack one, and surfaces a thrown exception in a dialog without stopping other processors.
 
 ## Workflow Tips
 

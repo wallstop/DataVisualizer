@@ -43,6 +43,10 @@ Open the window with **Tools → Wallstop Studios → Data Visualizer**.
 ## Where to go next
 
 - [Getting started](getting-started.md) — install the package, open the window, and edit your first asset.
-- [README](https://github.com/wallstop/DataVisualizer#readme) — the full feature guide, including themes, search, filtering, persistence, and extension points.
+- [Search and filtering](search-and-filter.md) — global search, the type filter, and label filtering.
+- [Managing assets](managing-assets.md) — create, clone, rename, move, delete, and run processors.
+- [Organizing your data](organizing.md) — ordering, layout, themes, persistence, and Play Mode.
+- [Extending the window](extending.md) — attributes, `BaseDataObject`, processors, and custom inspector content.
+- [README](https://github.com/wallstop/DataVisualizer#readme) — the repository README, which links the video walkthrough.
 - [Video walkthrough](https://youtu.be/3oUxUSKNyhw) — a visual tour of the window.
 - [Issues](https://github.com/wallstop/DataVisualizer/issues) — known problems and feature requests.
