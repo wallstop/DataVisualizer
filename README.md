@@ -29,12 +29,12 @@ The window uses a three-panel layout:
 
 ## Instance Management
 
-![Clone, rename, move, and delete controls highlighted above the object list](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-instance-actions.jpg)
+![Clone, rename, move, and delete controls on an object row](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-instance-actions.jpg)
 *Instance actions demo at 03:35.*
 
-Asset management controls live above the Objects panel:
+Asset management controls sit on the right of each object row:
 
-**Clone** duplicates the selected asset in the same folder as the original, directly after it in the list. Any existing `(Clone)` or `(Clone n)` suffix is stripped from the source name first, then reapplied, so repeated clones read `(Clone)`, `(Clone 1)`, `(Clone 2)`, and so on. Useful for creating variants without leaving the window.
+**Clone** (`++`) duplicates that row's asset in the same folder as the original, directly after it in the list. Any existing `(Clone)` or `(Clone n)` suffix is stripped from the source name first, then reapplied, so repeated clones read `(Clone)`, `(Clone 1)`, `(Clone 2)`, and so on. Useful for creating variants without leaving the window.
 
 **Rename** opens a draggable prompt that renames the asset on disk. No need to coordinate between multiple panels or windows.
 
@@ -72,7 +72,7 @@ Organize the catalog to match your team's mental model. The structure persists a
 
 Three finders narrow different things.
 
-The **Search** box in the window header row, next to the Settings button, searches every tracked type rather than only the selected one. A space-separated query matches when every term matches an asset name, a type name, an exact asset GUID, or a string field on the asset or a nested plain object; field matching is case-insensitive and skips primitives, vectors, colors, and references to other Unity objects. Results are ordered by asset name then full type name, list up to two matched fields for context, highlight the matched terms, and cap at 25 results. Use Up and Down to move, Enter to open the highlighted asset, Escape to dismiss.
+The **Search** box in the window header row, next to the Settings button, searches every tracked type rather than only the selected one. A space-separated query matches an asset when any one of its terms matches an asset name, a type name, an exact asset GUID, or a string field on the asset or a nested plain object; field matching is case-insensitive and skips primitives, vectors, colors, and references to other Unity objects. Results are ordered by asset name then full type name, list up to two matched fields for context, highlight the matched terms, and cap at 25 results. Use Up and Down to move, Enter to open the highlighted asset, Escape to dismiss.
 
 The filter field above the Namespace list narrows type rows by display name with case-insensitive matching; namespace headers are not filtered.
 
@@ -133,7 +133,7 @@ Derived classes override only what they need—GUID generation, cache resets, co
 
 **UI Toolkit Extensions** render custom UI alongside the default inspector. Return a `VisualElement` tree—graphs, thumbnails, validation badges, or any UI Toolkit component—from `IGUIProvider.BuildGUI` (or `BaseDataObject.BuildGUI`) and Data Visualizer slots it in below the inspector. The `DataVisualizerGUIContext` argument carries the selected asset's `SerializedObject` for writing changes back. Because the entire window runs on UI Toolkit, this approach scales to complex dashboards without leaving the unified workflow.
 
-**Processors** are plain `IDataProcessor` classes that the window discovers with no registration. `Name` labels the button, `Description` is its tooltip, `Accepts` limits the types it applies to, and `Process(Type, IEnumerable<ScriptableObject>)` receives the **ALL** or **FILTERED** object set you chose. The window instantiates processors through their public parameterless constructor, skips any that lack one, and surfaces a thrown exception in a dialog without stopping other processors.
+**Processors** are plain `IDataProcessor` classes that the window discovers with no registration. `Name` labels the button, `Description` is its tooltip, `Accepts` lists the types it applies to, and `Process(Type, IEnumerable<ScriptableObject>)` receives the **ALL** or **FILTERED** object set you chose. The window instantiates processors through their public parameterless constructor, skips any that lack one, and surfaces a thrown exception in a dialog without stopping other processors.
 
 ## Workflow Tips
 

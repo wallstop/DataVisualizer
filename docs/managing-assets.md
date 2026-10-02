@@ -6,15 +6,11 @@ for Play Mode; see [While the editor is playing](organizing.md#while-the-editor-
 
 ## Where an action lives
 
-Two places run asset operations:
+**Create** is the **+** button in the object list header; it always acts on the
+selected type.
 
-- **Buttons above the object list** act on the selected object: **Create** on the
-  left of that row, then **Clone**, **Rename**, **Move**, and **Delete** on the
-  right.
-- **Per-row buttons** on each object row do the same for that row's object
-  without selecting it first.
-
-Both paths call the same code, so they behave identically.
+**Clone**, **Rename**, **Move**, and **Delete** are the four buttons on the right
+of each object row, and they act on that row's object without selecting it first.
 
 ## Create
 

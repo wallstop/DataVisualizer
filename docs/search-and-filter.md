@@ -22,13 +22,17 @@ the fields that matched, so you can tell why an asset is in the list.
 
 ### What it matches
 
-Each space-separated term is matched on its own, and an object matches when
-every term matches somewhere. A term is checked against, in order:
+Each space-separated term is matched on its own, and an object matches when any
+one of its terms matches somewhere. A term is checked against, in order:
 
 1. the asset name,
 2. the type name,
 3. the asset GUID, as an exact match,
 4. string fields on the asset and on nested plain objects.
+
+Field matching is checked only when a term has not already matched the name, type
+name, or GUID, and it stops at the first field that matches, so a result names
+one matching field per term rather than every match.
 
 Field matching is case-insensitive. It skips primitives, `Vector2`, `Vector3`,
 `Vector4`, `Quaternion`, `Color`, `Rect`, and `Bounds`, and it does not follow
@@ -102,8 +106,8 @@ the whole section refuses to collapse while any label is configured.
 The filter narrows the list you see. It does not change what is on disk, and it
 does not change the order of the objects it keeps.
 
-When a filter hides rows, a line below the filter reports how many, in red when
-fewer than 20 are hidden and in yellow otherwise. When nothing is hidden, the
+When a filter hides rows, a line below the filter reports how many: fewer than 20
+hidden is highlighted in yellow, 20 or more in red. When nothing is hidden, the
 line disappears.
 
 The filter is stored per type and follows the persistence setting described in

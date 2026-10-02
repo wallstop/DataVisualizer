@@ -168,8 +168,9 @@ public sealed class RecalculateRarity : IDataProcessor
 
 - `Name` is the button label and sorts the list.
 - `Description` is the button tooltip.
-- `Accepts` limits the processor to the types you list. Return `null` to accept
-  every type.
+- `Accepts` limits the processor to the types you list, and the processor is
+  only offered for a selected type that appears in that list. Return `null` or an
+  empty list and the processor is never offered.
 - `Process` receives the type and the objects, which is the **ALL** or
   **FILTERED** set chosen in the window. See
   [Processors](managing-assets.md#processors) for scope, the confirmation, and
@@ -184,20 +185,6 @@ one failing processor does not stop the others.
 
 The window saves assets and refreshes after a processor runs, so call
 `EditorUtility.SetDirty` on anything you change.
-
-## Read-only fields
-
-`[ReadOnly]` on a serialized field draws it in the inspector as read-only. It
-applies to fields and properties.
-
-```csharp
-public sealed class ItemData : BaseDataObject
-{
-    [ReadOnly]
-    [SerializeField]
-    private string contentHash;
-}
-```
 
 ## Odin Inspector
 
