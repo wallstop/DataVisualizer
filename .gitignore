@@ -94,6 +94,11 @@ agents.config.json
 agents.config.json.meta
 opencode.json.meta
 
+# Documentation site build output and its virtual environment
+/site/
+/site.meta
+.docs-venv/
+
 # Unity MCP bridge artifacts (editor state, registry, captures, generated images)
 .artifacts/
 GOAL.md*

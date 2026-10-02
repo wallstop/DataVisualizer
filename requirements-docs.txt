@@ -1,0 +1,4 @@
+# Documentation build dependencies. Development only: neither this file nor
+# the built site is part of the UPM or npm package payload.
+mkdocs==1.6.1
+mkdocs-material==9.7.7

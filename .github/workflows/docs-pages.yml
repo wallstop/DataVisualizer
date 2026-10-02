@@ -1,0 +1,73 @@
+name: Documentation Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "scripts/build-docs.ps1"
+      - ".github/workflows/docs-pages.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "scripts/build-docs.ps1"
+      - ".github/workflows/docs-pages.yml"
+
+# Publication runs to completion instead of being cancelled by a later merge,
+# so a half-written deploy never replaces a good site. Pull-request builds get
+# their own group, so a merge never queues behind review feedback.
+concurrency:
+  group: docs-pages-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the documentation site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Build the site (strict)
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/build-docs.ps1
+
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  # The repository's Pages source is already GitHub Actions, so the first push
+  # to main that touches documentation publishes the site. No Unity, no
+  # credentials, and no generated content beyond the strict build.
+  deploy:
+    name: Publish to GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
