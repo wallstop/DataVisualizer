@@ -71,3 +71,10 @@ fi
 bash .llm/mcp/sync-mcp.sh "${workspace_dir}"
 
 echo "✅ Data Visualizer dev container ready."
+# The npm cache Docker volume can come up root-owned for the same reason;
+# without this every `npm` command fails with EACCES on _cacache/_logs.
+npm_cache="${HOME}/.npm"
+if [ -d "${npm_cache}" ] && [ ! -w "${npm_cache}" ]; then
+    sudo -n chown -R "$(id -u):$(id -g)" "${npm_cache}" 2>/dev/null || true
+fi
+

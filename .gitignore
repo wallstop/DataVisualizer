@@ -98,3 +98,6 @@ opencode.json.meta
 .artifacts/
 GOAL.md*
 PLAN.md*
+
+# npm writes this stub (no runtime deps); not used by the Unity package
+package-lock.json
