@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: read
+      contents: write # create and update the GitHub Release
       id-token: write # required for npm Trusted Publishing through OIDC
     steps:
       - name: Resolve the release tag
@@ -112,4 +112,62 @@ jobs:
           else
             npm publish "${PACKAGE_FILE}" --access public --tag "${NPM_TAG}"
             echo "::notice::Published ${PKG}@${VER} to dist-tag '${NPM_TAG}'."
+          fi
+
+      # The GitHub Release comes after validation and npm publication: a failed
+      # build or validation leaves no half-published release behind. The same
+      # steps also complete a partially finished rerun, since the npm publish
+      # above is skip-if-present and the release edit/upload is idempotent.
+      - name: Build the release .unitypackage
+        run: |
+          set -euo pipefail
+          node scripts/release/build-unitypackage.mjs --output dist
+          ls dist
+
+      - name: Validate the release .unitypackage
+        run: |
+          set -euo pipefail
+          archive="$(find dist -maxdepth 1 -name '*.unitypackage' | head -n1)"
+          if [ -z "${archive}" ]; then
+            echo "::error::The builder produced no .unitypackage."
+            exit 1
+          fi
+          node scripts/release/validate-unitypackage.mjs --archive "${archive}"
+
+      - name: Prepare release notes and the npm tarball checksum
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          VERSION: ${{ steps.verify.outputs.version }}
+          PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
+        run: |
+          set -euo pipefail
+          node scripts/release/extract-release-notes.mjs --version "${VERSION}" --output dist/release-notes.md
+          if [ ! -f "${PACKAGE_FILE}" ]; then
+            echo "::error::Expected the npm tarball '${PACKAGE_FILE}' in the repository root."
+            exit 1
+          fi
+          hash="$(sha256sum "${PACKAGE_FILE}" | awk '{print $1}')"
+          printf '%s  %s\n' "${hash}" "${PACKAGE_FILE}" > "${PACKAGE_FILE}.sha256"
+          cat "${PACKAGE_FILE}.sha256"
+
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          NPM_TAG: ${{ steps.verify.outputs.npm_tag }}
+          PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
+        run: |
+          set -euo pipefail
+          prerelease_args=()
+          if [ "${NPM_TAG}" = "next" ]; then
+            prerelease_args+=(--prerelease)
+          fi
+          artifacts=("${PACKAGE_FILE}" "${PACKAGE_FILE}.sha256" dist/*.unitypackage dist/*.unitypackage.sha256)
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --title "${TAG}" --notes-file dist/release-notes.md "${prerelease_args[@]}"
+            gh release upload "${TAG}" --clobber "${artifacts[@]}"
+            echo "::notice::Updated GitHub Release ${TAG}."
+          else
+            gh release create "${TAG}" --title "${TAG}" --notes-file dist/release-notes.md "${prerelease_args[@]}" "${artifacts[@]}"
+            echo "::notice::Created GitHub Release ${TAG}."
           fi

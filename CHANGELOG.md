@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial changelog. Release history before this entry is available in the
   [repository history](https://github.com/wallstop/DataVisualizer/commits/main)
   and on [npm](https://www.npmjs.com/package/com.wallstop-studios.data-visualizer).
+- Tag-driven publishing now also assembles the release `.unitypackage` with
+  `build-unitypackage.mjs`, validates it with `validate-unitypackage.mjs`, and
+  creates or updates the GitHub Release with the npm tarball, both checksum
+  sidecars, and notes from the exact CHANGELOG section (new
+  `scripts/release/extract-release-notes.mjs`).
 
 ### Changed
 
