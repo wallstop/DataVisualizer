@@ -7,6 +7,11 @@ metadata:
 
 # Skill: Bump Version / Release
 
+Owner setup for the release chain (required secrets, npm Trusted Publisher
+fields, rerun and recovery) is in
+[releasing](../../references/RELEASING.md). Read it before the first release of
+a clone or after a partial failure.
+
 ## Steps
 
 1. Edit `package.json` `version` (semver; append `-rc`/`-alpha`/`-beta`/`-preview`

@@ -41,6 +41,13 @@ repos:
         pass_filenames: false
         files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
         description: Moves `using` directives inside the namespace; file-level usings stay sanctioned for assembly-attribute preambles.
+      - id: lint-release-secrets
+        name: Enforce the release credential contract
+        entry: node scripts/lint-release-secrets.js
+        language: system
+        pass_filenames: false
+        files: ^(\.llm/references/RELEASING\.md|\.github/workflows/(release-prep|release-tag|npm-publish)\.yml)$
+        description: Fails when a release workflow reads an undocumented secret, or a documented secret is read by no release workflow.
       - id: lint-assembly-warnings
         name: Enforce assembly warning policy
         entry: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
