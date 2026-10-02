@@ -7,8 +7,10 @@ feature set, including themes, processors, and extension points.
 
 ## Requirements
 
-- Unity 2021.3 or newer. Data Visualizer declares that floor in its
-  `package.json` and is developed against Unity 6.
+- Unity 2021.3 or newer. `package.json` declares that floor, and the window is
+  developed and tested on Unity 6. The 2021.3 editor is not part of the local
+  validation yet, which
+  [#86](https://github.com/wallstop/DataVisualizer/issues/86) tracks.
 - No additional package dependencies.
 
 ## Install the package

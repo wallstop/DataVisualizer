@@ -21,7 +21,8 @@ capability described here ships in the free package.
 
 ## Requirements
 
-- Unity 2021.3 or newer.
+- Unity 2021.3 or newer, the floor declared in `package.json`. The window is
+  developed and tested on Unity 6.
 - No additional package dependencies.
 
 ## Install
