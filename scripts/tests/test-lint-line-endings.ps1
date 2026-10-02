@@ -197,12 +197,13 @@ $cases = @(
         Expect = ''
     }
     [pscustomobject]@{
-        # The repository groups extensions in one brace list; a matcher that
-        # ignored the braces would resolve those sections as unmatched and report
-        # a matching ending as a mismatch.
+        # The repository groups extensions in one brace list, so every alternative
+        # has to be compared on both sides: a matcher that ignored the braces would
+        # resolve those sections as unmatched and report a matching ending as a
+        # mismatch, and one that compared only the first would leave `*.ps1` out.
         Name = 'Passes_WhenAnEditorConfigSectionGroupsExtensionsInBraces'
         EditorConfig = "$editorConfigLf`n`n[{*.cs,*.ps1}]`nindent_size = 4`nend_of_line = crlf`n"
-        GitAttributes = "* text=auto eol=lf`n*.cs text eol=crlf`n"
+        GitAttributes = "* text=auto eol=lf`n*.cs text eol=crlf`n*.ps1 text eol=crlf`n"
         ExpectPass = $true
         Expect = ''
     }
@@ -231,14 +232,97 @@ $cases = @(
         EditorConfig = $editorConfigLf
         GitAttributes = "* text=auto eol=lf`nEditor/** text eol=crlf`n"
         ExpectPass = $false
-        Expect = "recursive glob 'Editor/\*\*'"
+        Expect = "recursive '\*\*' segment in 'Editor/\*\*'"
     }
     [pscustomobject]@{
         Name = 'Fails_WhenAnEditorConfigSectionUsesARecursiveGlob'
         EditorConfig = "$editorConfigLf`n`n[Editor/**]`nend_of_line = crlf`n"
         GitAttributes = $gitAttributesLf
         ExpectPass = $false
-        Expect = "recursive glob 'Editor/\*\*'"
+        Expect = "recursive '\*\*' segment in 'Editor/\*\*'"
+    }
+    [pscustomobject]@{
+        # Comparing only the first alternative left `*.ps1` unchecked, so a real
+        # disagreement passed. Git pins `*.md` back to the default; `*.ps1` still
+        # checks out LF while the editor asks for CRLF.
+        Name = 'Fails_WhenALaterBraceAlternativeDriftsOnTheGitSide'
+        EditorConfig = $editorConfigCrlf
+        GitAttributes = "* text=auto eol=crlf`n{*.md,*.ps1} text eol=lf`n*.md text eol=crlf`n"
+        ExpectPass = $false
+        Expect = "'sample\.ps1': git checks out lf.+requires crlf"
+    }
+    [pscustomobject]@{
+        # The mirror image: the narrowed section carries the brace group and git
+        # leaves the second extension on the broad rule.
+        Name = 'Fails_WhenALaterBraceAlternativeDriftsOnTheEditorSide'
+        EditorConfig = "$editorConfigLf`n`n[{*.md,*.ps1}]`nend_of_line = crlf`n"
+        GitAttributes = "* text=auto eol=lf`n*.md text eol=crlf`n"
+        ExpectPass = $false
+        Expect = "'sample\.ps1': git checks out lf.+requires crlf"
+    }
+    [pscustomobject]@{
+        # Every alternative of a brace group compared on both sides and every one
+        # in sync, so comparing the later ones must not start reporting the
+        # alternatives that agree.
+        Name = 'Passes_WhenEveryBraceAlternativeAgrees'
+        EditorConfig = "$editorConfigLf`n`n[{*.md,*.ps1}]`nend_of_line = crlf`n"
+        GitAttributes = "* text=auto eol=lf`n{*.md,*.ps1} text eol=crlf`n"
+        ExpectPass = $true
+        Expect = ''
+    }
+    [pscustomobject]@{
+        # `*.ps1` comes from the inner group, so a split that stops at the first
+        # `}` or that ignores nesting depth never compares it and its drift goes
+        # unreported.
+        Name = 'Fails_WhenBraceGroupsNest'
+        EditorConfig = "$editorConfigCrlf`n`n[*.{cs,{ps1,bat}}]`nend_of_line = lf`n"
+        GitAttributes = "* text=auto eol=crlf`n*.ps1 text eol=crlf`n"
+        ExpectPass = $false
+        Expect = "'sample\.ps1': git checks out crlf.+requires lf"
+    }
+    [pscustomobject]@{
+        Name = 'Passes_WhenNestedBraceGroupsAgree'
+        EditorConfig = "$editorConfigLf`n`n[*.{cs,{ps1,bat}}]`nend_of_line = crlf`n"
+        GitAttributes = "* text=auto eol=lf`n*.cs text eol=crlf`n*.ps1 text eol=crlf`n*.bat text eol=crlf`n"
+        ExpectPass = $true
+        Expect = ''
+    }
+    [pscustomobject]@{
+        # The other constructs the matcher cannot resolve exactly. Each would
+        # otherwise be read as literal text and silently stop matching.
+        Name = 'Fails_WhenAGitAttributesRuleIsAnchored'
+        EditorConfig = $editorConfigLf
+        GitAttributes = "* text=auto eol=lf`n/docs/*.md text eol=crlf`n"
+        ExpectPass = $false
+        Expect = "anchored or directory-only '/' in '/docs/\*\.md'"
+    }
+    [pscustomobject]@{
+        Name = 'Fails_WhenAGitAttributesRuleIsDirectoryOnly'
+        EditorConfig = $editorConfigLf
+        GitAttributes = "* text=auto eol=lf`nbuild/ text eol=crlf`n"
+        ExpectPass = $false
+        Expect = "anchored or directory-only '/' in 'build/'"
+    }
+    [pscustomobject]@{
+        Name = 'Fails_WhenAGitAttributesRuleUsesACharacterClass'
+        EditorConfig = $editorConfigLf
+        GitAttributes = "* text=auto eol=lf`n*[0-9].cs text eol=crlf`n"
+        ExpectPass = $false
+        Expect = "character class in '\*\[0-9\]\.cs'"
+    }
+    [pscustomobject]@{
+        Name = 'Fails_WhenAGitAttributesRuleUsesABackslashEscape'
+        EditorConfig = $editorConfigLf
+        GitAttributes = "* text=auto eol=lf`ndocs/\*.md text eol=crlf`n"
+        ExpectPass = $false
+        Expect = "backslash escape in 'docs/\\\*\.md'"
+    }
+    [pscustomobject]@{
+        Name = 'Fails_WhenAnEditorConfigSectionIsAnchored'
+        EditorConfig = "$editorConfigLf`n`n[/docs/*.md]`nend_of_line = crlf`n"
+        GitAttributes = $gitAttributesLf
+        ExpectPass = $false
+        Expect = "anchored or directory-only '/' in '/docs/\*\.md'"
     }
 )
 

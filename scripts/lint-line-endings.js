@@ -17,7 +17,9 @@
  * with a broad `.gitattributes` rule any more than a broad section can disagree
  * with a narrow rule. Resolving both directions needs one representative path
  * per `.editorconfig` section that declares an ending and one per
- * `.gitattributes` rule.
+ * `.gitattributes` rule, and one per `{a,b}` alternative of each, because a
+ * pattern whose later alternatives are never compared hides the drift behind
+ * them.
  *
  * Resolution follows git's own attribute model: each attribute takes the value
  * of the last matching rule that sets it, so a later `text` and an earlier
@@ -25,9 +27,11 @@
  * that sets `eol` without `text` is rejected because git ignores it.
  *
  * Only the glob subset the two files use is supported: `*`, `?`, and `{a,b}`
- * alternation, where a pattern without a slash matches a basename at any depth. A
- * recursive `**` is refused instead of guessed, because a matcher that reads it
- * as two `*` silently stops matching and would hide the drift behind it.
+ * alternation, where a pattern without a slash matches a basename at any depth.
+ * A recursive `**`, an anchored or directory-only `/`, a character class, and a
+ * backslash escape are refused instead of guessed, because a matcher that reads
+ * one as literal text silently stops matching and would hide the drift behind
+ * the rule.
  *
  * `--verbose` prints the resolved canonical ending and the compared paths. Exit
  * codes: 0 = in sync, 1 = drift, a malformed rule, or an unreadable input.
@@ -74,32 +78,76 @@ function displayPath(filePath) {
 }
 
 /*
-    Splits one `{a,b,c}` glob into its alternatives. Nesting is not used by
-    either file, so an inner brace stays literal instead of being expanded.
+    Splits one `{a,b,c}` glob into every alternative, including nested groups.
+    Splitting on the first `}` would leave a nested group as literal text and
+    then match nothing, so the closing brace is found by depth.
 */
-function expandBraces(glob, origin) {
+function expandBraces(glob) {
     const open = glob.indexOf("{");
-    const close = glob.indexOf("}", open + 1);
-    if (open < 0 || close < 0) {
+    if (open < 0) {
+        return [glob];
+    }
+    let depth = 0;
+    let close = -1;
+    for (let index = open; index < glob.length; index++) {
+        if (glob[index] === "{") {
+            depth++;
+        } else if (glob[index] === "}") {
+            depth--;
+            if (depth === 0) {
+                close = index;
+                break;
+            }
+        }
+    }
+    if (close < 0) {
         return [glob];
     }
     const prefix = glob.slice(0, open);
     const suffix = glob.slice(close + 1);
-    return glob
-        .slice(open + 1, close)
-        .split(",")
-        .flatMap((alternative) => expandBraces(prefix + alternative + suffix, origin));
+    const alternatives = [];
+    let start = open + 1;
+    depth = 0;
+    for (let index = open + 1; index <= close; index++) {
+        const character = glob[index];
+        if (character === "{") {
+            depth++;
+        } else if (character === "}") {
+            depth--;
+        } else if (character === "," && depth === 0) {
+            alternatives.push(glob.slice(start, index));
+            start = index + 1;
+        }
+    }
+    alternatives.push(glob.slice(start, close));
+    return alternatives.flatMap((alternative) =>
+        expandBraces(`${prefix}${alternative}${suffix}`),
+    );
+}
+
+/*
+    Glob constructs this matcher cannot resolve exactly. A pattern that uses one
+    would be read as literal text and would silently stop matching the files git
+    or `.editorconfig` will actually apply it to, so it is refused instead.
+*/
+const UNSUPPORTED_GLOBS = [
+    { label: "a recursive '**' segment", matches: (glob) => glob.includes("**") },
+    { label: "an anchored or directory-only '/'", matches: (glob) => glob.startsWith("/") || glob.endsWith("/") },
+    { label: "a character class", matches: (glob) => glob.includes("[") },
+    { label: "a backslash escape", matches: (glob) => glob.includes("\\") },
+];
+
+function refuseUnsupportedGlob(glob, origin) {
+    const unsupported = UNSUPPORTED_GLOBS.find((candidate) => candidate.matches(glob));
+    if (unsupported !== undefined) {
+        throw new Error(
+            `${origin} uses ${unsupported.label} in '${glob}', which this check cannot match.`,
+        );
+    }
 }
 
 function compileGlob(glob, origin) {
-    // A recursive `**` needs git's depth rules matched exactly, and a matcher
-    // that reads it as two `*` silently stops matching. The two files use plain
-    // `*`, so refuse the pattern rather than guess.
-    if (glob.includes("**")) {
-        throw new Error(
-            `${origin} uses the recursive glob '${glob}', which this check cannot match.`,
-        );
-    }
+    refuseUnsupportedGlob(glob, origin);
     let source = "^";
     for (const character of glob) {
         if (character === "*") {
@@ -114,7 +162,7 @@ function compileGlob(glob, origin) {
 }
 
 function globMatches(glob, filePath, origin) {
-    for (const alternative of expandBraces(glob, origin)) {
+    for (const alternative of expandBraces(glob)) {
         const expression = compileGlob(alternative, origin);
         if (expression.test(filePath)) {
             return true;
@@ -127,13 +175,17 @@ function globMatches(glob, filePath, origin) {
 }
 
 /*
-    A representative path for a glob, so each rule contributes the kind of file
-    it governs to the comparison: `*.cs` becomes `sample.cs`, a literal path
-    stays itself, and a bare `*` becomes an extensionless sample.
+    One representative path per brace alternative, so every file a glob governs
+    reaches the comparison: `*.cs` becomes `sample.cs`, `{*.md,*.ps1}` becomes
+    both `sample.md` and `sample.ps1`, a literal path stays itself, and a bare `*`
+    becomes an extensionless sample. Taking only the first alternative would leave
+    the rest uncompared and hide the drift behind them.
 */
-function samplePath(glob, origin) {
-    const widest = expandBraces(glob, origin)[0];
-    return widest.includes("*") ? widest.replace(/\*/g, SAMPLE_NAME) : widest;
+function samplePaths(glob, origin) {
+    return expandBraces(glob).map((alternative) => {
+        refuseUnsupportedGlob(alternative, origin);
+        return alternative.includes("*") ? alternative.replace(/\*/g, SAMPLE_NAME) : alternative;
+    });
 }
 
 function normalizeEnding(value, origin) {
@@ -325,11 +377,11 @@ function main() {
     const candidates = [];
     for (const section of sections) {
         if (section.properties.has("end_of_line")) {
-            candidates.push(samplePath(section.glob, editorName));
+            candidates.push(...samplePaths(section.glob, editorName));
         }
     }
     for (const rule of rules) {
-        candidates.push(samplePath(rule.pattern, `${gitName}:${rule.lineNumber}`));
+        candidates.push(...samplePaths(rule.pattern, `${gitName}:${rule.lineNumber}`));
     }
     const compared = [...new Set(candidates)];
 
