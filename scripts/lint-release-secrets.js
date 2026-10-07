@@ -4,20 +4,16 @@
  * documented, and every credential the release reference documents must be read
  * by a release workflow.
  *
- * The release chain (prepare -> tag -> publish) is driven by workflow YAML that
- * no test executes, so its credential requirements drift silently. A roadmap
- * item once named `AUTO_COMMIT_APP_ID` and `AUTO_COMMIT_APP_PRIVATE_KEY` as the
- * credentials to configure; neither exists in the repository, the workflows read
- * a single `RELEASE_TOKEN`, and the resulting failure mode is invisible because
- * a `GITHUB_TOKEN`-pushed tag never starts the publish workflow while every job
- * still reports success. This check fails closed on that class of drift.
+ * The release chain uses GitHub's built-in token and npm OIDC. No custom
+ * credential is needed. This guard detects undocumented credentials if a future
+ * workflow introduces them, and stale credential instructions in the runbook.
  *
  * The documented set is read from the `release-secrets` block in
  * `.llm/references/RELEASING.md`, so prose elsewhere in the reference is free to
  * mention credentials that are not required (for example "no NPM_TOKEN is
  * involved") without failing the scan.
  *
- * The release workflow set is the three workflows the reference documents. A
+ * The release workflow set is the single workflow the reference documents. A
  * new release workflow must be added to RELEASE_WORKFLOWS and to the reference.
  *
  * `--verbose` prints the compared sets when clean. Exit codes: 0 = in sync,
@@ -36,7 +32,7 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 
 // The workflows `.llm/references/RELEASING.md` documents. Kept explicit so the
 // scan does not demand release documentation for unrelated workflows.
-const RELEASE_WORKFLOWS = ["release-prep.yml", "release-tag.yml", "npm-publish.yml"];
+const RELEASE_WORKFLOWS = ["release.yml"];
 
 // Provided by GitHub for every run; configuring it is not an owner task, so it
 // is never part of the documented contract.
@@ -144,10 +140,10 @@ function readDocumentedSecrets(filePath) {
   for (const match of block.matchAll(DOCUMENTED_SECRET)) {
     secrets.add(match[1]);
   }
-  if (secrets.size === 0) {
+  if (secrets.size === 0 && block.trim() !== "No custom secrets are required.") {
     throw new Error(
       `'${filePath}' has an empty release-secrets block; name each secret in ` +
-        'backticks, for example `RELEASE_TOKEN`.',
+        'backticks, or state exactly: No custom secrets are required.',
     );
   }
   return secrets;

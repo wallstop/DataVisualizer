@@ -37,14 +37,12 @@ function Invoke-ReleaseLint {
     }
 }
 
-# The three release workflows the guard reads. Every fixture writes all three so
-# a case exercises the real file set rather than a reduced one.
+# Fixture blocks model credentials from preparation, tagging, and publication.
+# The scanner reads their combined credential references from one release file.
 function Write-ReleaseWorkflows {
     param([string]$Root, [string]$Prep, [string]$Tag, [string]$Publish)
 
-    Write-FixtureFile -Root $Root -RelativePath 'workflows/release-prep.yml' -Content $Prep
-    Write-FixtureFile -Root $Root -RelativePath 'workflows/release-tag.yml' -Content $Tag
-    Write-FixtureFile -Root $Root -RelativePath 'workflows/npm-publish.yml' -Content $Publish
+    Write-FixtureFile -Root $Root -RelativePath 'workflows/release.yml' -Content ($Prep + "`n" + $Tag + "`n" + $Publish)
 }
 
 # The lint resolves its overrides against the repository root, so fixtures pass
@@ -264,13 +262,30 @@ Invoke-TestCase 'Fails_WhenWorkflowIsMissing' {
     $root = New-TempRoot -Prefix 'release-secrets-'
     try {
         Write-ReleaseWorkflows -Root $root -Prep $inSyncPrep -Tag $inSyncTag -Publish $inSyncPublish
-        Remove-Item -LiteralPath (Join-Path $root 'workflows/release-tag.yml') -Force
+        Remove-Item -LiteralPath (Join-Path $root 'workflows/release.yml') -Force
         Write-FixtureFile -Root $root -RelativePath 'RELEASING.md' -Content $inSyncDocument
         $result = Invoke-FixtureLint -Root $root
         Assert-True ($result.ExitCode -eq 1) "a missing release workflow must fail closed: $($result.Output)"
         Assert-True (
-            $result.Output -match 'release-tag\.yml'
+            $result.Output -match 'release\.yml'
         ) "must name the missing workflow: $($result.Output)"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Passes_WhenNoCustomSecretsAreRequired' {
+    $root = New-TempRoot -Prefix 'release-secrets-'
+    try {
+        $workflow = "name: Built-in authentication`njobs:`n  release:`n    steps:`n      - env:`n          GH_TOKEN: `${{ github.token }}`n"
+        Write-ReleaseWorkflows -Root $root -Prep $workflow -Tag $workflow -Publish $inSyncPublish
+        $document = "<!-- release-secrets:begin -->`nNo custom secrets are required.`n<!-- release-secrets:end -->"
+        Write-FixtureFile -Root $root -RelativePath 'RELEASING.md' -Content $document
+        $result = Invoke-FixtureLint -Root $root
+        Assert-True ($result.ExitCode -eq 0) "explicit no-secret contract should pass: $($result.Output)"
+        Write-ReleaseWorkflows -Root $root -Prep $inSyncPrep -Tag $workflow -Publish $inSyncPublish
+        $result = Invoke-FixtureLint -Root $root
+        Assert-True ($result.ExitCode -eq 1) 'No-secret documentation must still reject a custom workflow secret.'
     } finally {
         Remove-TempRoot $root
     }
@@ -280,7 +295,7 @@ Invoke-TestCase 'Passes_AgainstTheRepositoryItself' {
     $result = Invoke-ReleaseLint -WorkflowDir (Join-Path $repoRoot '.github/workflows') -Document (Join-Path $repoRoot '.llm/references/RELEASING.md') -LintArguments @('--verbose')
     Assert-True ($result.ExitCode -eq 0) "the repository must satisfy its own contract: $($result.Output)"
     Assert-True (
-        $result.Output -match 'Release credential contract in sync: 1 secret'
+        $result.Output -match 'Release credential contract in sync: 0 secret'
     ) "verbose output must report the compared set: $($result.Output)"
 }
 

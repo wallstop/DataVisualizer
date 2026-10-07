@@ -201,8 +201,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 yield return OpenSplitterWindow(floating: false);
 
                 ChangePaneWidth(_outerSplitView, ChangedOuterWidth);
-                yield return null;
-                yield return null;
+                yield return WaitForPaneWidth(ChangedOuterWidth);
 
                 Assert.AreEqual(
                     TestOuterWidth,

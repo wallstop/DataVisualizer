@@ -5,7 +5,7 @@
  * Verifies that a `vX.Y.Z` tag matches the package version and that the npm
  * package payload matches the declared allowlist, fail-closed, before the
  * tag-driven publish workflow performs any irreversible publication.
- * The `.github/workflows/npm-publish.yml` workflow runs this script on the
+ * The `.github/workflows/release.yml` workflow runs this script on the
  * exact release tag (or on a manual dispatch rerun).
  *
  * Usage:

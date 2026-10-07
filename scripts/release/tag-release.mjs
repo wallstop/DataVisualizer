@@ -3,10 +3,9 @@
  * Release tagging for com.wallstop-studios.data-visualizer.
  *
  * Verifies that a merged `release/vX.Y.Z` tree is internally consistent and creates
- * exactly one annotated `vX.Y.Z` tag. The `.github/workflows/release-tag.yml`
- * workflow runs this script on the merged release pull request (or on a manual
- * dispatch) and pushes the tag so the tag event can trigger the downstream publish
- * workflow.
+ * exactly one annotated `vX.Y.Z` tag. The `.github/workflows/release.yml`
+ * workflow runs this script on the merged release pull request, pushes the tag,
+ * and continues to artifact validation and publication in the same job.
  *
  * Usage:
  *   node scripts/release/tag-release.mjs --branch release/vX.Y.Z [--commit <sha>] [--root <path>] [--dry-run]

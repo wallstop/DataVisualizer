@@ -46,7 +46,7 @@ repos:
         entry: node scripts/lint-release-secrets.js
         language: system
         pass_filenames: false
-        files: ^(\.llm/references/RELEASING\.md|\.github/workflows/(release-prep|release-tag|npm-publish)\.yml)$
+        files: ^(\.llm/references/RELEASING\.md|\.github/workflows/release\.yml)$
         description: Fails when a release workflow reads an undocumented secret, or a documented secret is read by no release workflow.
       - id: lint-line-endings
         name: Enforce the line-ending contract

@@ -4,7 +4,7 @@
  *
  * Bumps `package.json`, syncs the `**Version**:` line in `.llm/context.md`, and rotates
  * the `## [Unreleased]` changelog section into `## [X.Y.Z] - YYYY-MM-DD` (Keep a Changelog
- * 1.1.0). The dispatchable `.github/workflows/release-prep.yml` workflow runs this script
+ * 1.1.0). The dispatchable `.github/workflows/release.yml` workflow runs this script
  * and opens the `release/vX.Y.Z` pull request.
  *
  * Usage:
@@ -13,7 +13,7 @@
  *
  * Explicit versions accept bare semver with an optional prerelease suffix restricted to
  * `-rc`, `-alpha`, `-beta`, or `-preview` (optionally `.N`), matching the dist-tag rules
- * in `.github/workflows/npm-publish.yml`. A version bump applies to the numeric core and
+ * in `.github/workflows/release.yml`. A version bump applies to the numeric core and
  * drops an existing prerelease suffix; prerelease flows use `--version` instead.
  *
  * `package.json` is patched in place (raw text, validated by JSON.parse after patching),

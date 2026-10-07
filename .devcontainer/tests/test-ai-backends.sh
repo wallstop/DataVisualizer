@@ -44,6 +44,9 @@ assert_eq() {
 
 assert_exit_zero() {
     assert_eq "$1 (exit 0)" 0 "${RUN_EXIT}"
+    if [ "${RUN_EXIT}" -ne 0 ]; then
+        sed 's/^/    | /' "${SANDBOX}/stderr.txt" 2>/dev/null || true
+    fi
 }
 
 assert_exit_nonzero() {

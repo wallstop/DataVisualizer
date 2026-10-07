@@ -7,29 +7,29 @@ metadata:
 
 # Skill: Bump Version / Release
 
-Owner setup for the release chain (required secrets, npm Trusted Publisher
+Owner setup for the release chain (GitHub PR permissions, npm Trusted Publisher
 fields, rerun and recovery) is in
 [releasing](../../references/RELEASING.md). Read it before the first release of
 a clone or after a partial failure.
 
 ## Steps
 
-1. Edit `package.json` `version` (semver; append `-rc`/`-alpha`/`-beta`/`-preview`
-   for pre-releases).
-2. Sync the harness: `npm run lint:llm:fix` updates the `**Version**:` line in
-   `.llm/context.md` to match; rerun `npm run lint:llm` to confirm green.
-3. Verify the tarball: `npm pack` and inspect contents (must stay limited to the
-   `Editor` and `Runtime` payloads and their `.meta` companions per the `files`
-   whitelist).
-4. Commit with the historical subject format: `Bump version from X to Y`, including
-   `package.json` and `.llm/context.md` in the same commit. Keep the message in
-   Simplified Technical English (see `.llm/context.md`).
-5. Publish through the release chain: merge the release/vX.Y.Z pull request the
-   release-prep workflow opened; the release-tag workflow creates the annotated
-   tag, whose push triggers the tag-driven publish workflow
-   (`.github/workflows/npm-publish.yml`). It verifies the tag against the package
-   version and the packed allowlist before publishing. To rerun a partially
-   completed release, dispatch `npm-publish.yml` with the `tag` input.
+1. Add user-facing entries under `CHANGELOG.md` `## [Unreleased]`.
+2. Dispatch `.github/workflows/release.yml` on `main` with `operation=prepare`.
+   Choose `bump` or `explicit_version`; use the default `dry_run=true` first.
+3. Set `dry_run=false` to open the release PR. The workflow bumps `package.json`,
+   syncs `.llm/context.md`, dates the changelog, and validates the artifacts.
+4. Merge the validated `release/vX.Y.Z` PR. The same release workflow tags the
+   merged commit, validates both packages and notes, then publishes npm and the
+   GitHub Release. The artifacts must pass before publication.
+5. Recover a partial release by dispatching `release.yml` with
+   `operation=publish`, `tag=vX.Y.Z`, and `dry_run=false`. A dry run validates
+   that existing tag and retains artifacts without publishing.
+
+For a local version bump, edit `package.json`, run `npm run lint:llm:fix`, and
+verify `npm pack`. Commit `package.json`, `.llm/context.md`, and the dated
+changelog together with subject `Bump version from X to Y`. Do not run automated
+preparation on a version that has already been bumped locally.
 
 ## Changelog
 
