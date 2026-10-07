@@ -8,7 +8,7 @@ standard [Agent Skills](https://agentskills.io) (`SKILL.md` + frontmatter).
 ## Repository Overview
 
 - **Package**: com.wallstop-studios.data-visualizer
-- **Version**: 0.0.37
+- **Version**: 0.1.0
 - **Unity**: 2021.3+
 - **Root namespace**: `WallstopStudios.DataVisualizer` (editor: `WallstopStudios.DataVisualizer.Editor`, tests: `WallstopStudios.DataVisualizer.Tests.Editor`)
 - **License**: MIT
