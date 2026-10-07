@@ -1,14 +1,13 @@
 name: LLM Instructions Lint
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - ".llm/**"
+      - ".github/workflows/release.yml"
       - "scripts/**"
-      - ".github/workflows/release-prep.yml"
-      - ".github/workflows/release-tag.yml"
-      - ".github/workflows/npm-publish.yml"
       - "AGENTS.md"
       - "CLAUDE.md"
       - "GEMINI.md"
@@ -30,10 +29,8 @@ on:
   pull_request:
     paths:
       - ".llm/**"
+      - ".github/workflows/release.yml"
       - "scripts/**"
-      - ".github/workflows/release-prep.yml"
-      - ".github/workflows/release-tag.yml"
-      - ".github/workflows/npm-publish.yml"
       - "AGENTS.md"
       - "CLAUDE.md"
       - "GEMINI.md"

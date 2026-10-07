@@ -1,0 +1,393 @@
+name: Release
+
+# One release entrypoint: prepare a version/changelog PR, then tag and publish
+# its merged commit. npm and GitHub Release publication run in the same job;
+# no custom GitHub or npm credential is needed.
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Prepare a release PR or publish an existing tag"
+        type: choice
+        options: [prepare, publish]
+        default: prepare
+      bump:
+        description: "Semantic version bump for preparation"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      explicit_version:
+        description: "Explicit version for preparation (overrides bump)"
+        type: string
+        default: ""
+      tag:
+        description: "Existing vX.Y.Z tag for publication or recovery"
+        type: string
+        default: ""
+      dry_run:
+        description: "Validate without pushing, opening a PR, or publishing"
+        type: boolean
+        default: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare release
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'prepare'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # push the release branch
+      pull-requests: write # open the release pull request
+      actions: write # dispatch release-branch CI
+    steps:
+      - name: Require the default branch
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT}" = "workflow_dispatch" ] && [ "${REF}" != "refs/heads/main" ]; then
+            echo "::error::Only prepare releases from main."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Credentials must persist: the push step relies on the stored token, and a
+          # dropped credential would make the release-branch push fail. The runner is
+          # ephemeral, so the stored token does not outlive the job.
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Bump version and rotate the changelog
+        id: prep
+        env:
+          BUMP: ${{ inputs.bump }}
+          EXPLICIT_VERSION: ${{ inputs.explicit_version }}
+        run: |
+          set -euo pipefail
+          args=(--root .)
+          if [ -n "${EXPLICIT_VERSION}" ]; then
+            args+=(--version "${EXPLICIT_VERSION}")
+          else
+            args+=(--bump "${BUMP}")
+          fi
+          output="$(node scripts/release/prepare-release.mjs "${args[@]}")"
+          printf '%s\n' "${output}"
+          previous_version="$(printf '%s\n' "${output}" | sed -n 's/^previous-version: //p')"
+          version="$(printf '%s\n' "${output}" | sed -n 's/^next-version: //p')"
+          if [ -z "${previous_version}" ] || [ -z "${version}" ]; then
+            echo "::error::The preparation script did not report previous-version/next-version."
+            exit 1
+          fi
+          {
+            echo "previous_version=${previous_version}"
+            echo "version=${version}"
+            echo "branch=release/v${version}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Validate the release tree
+        run: |
+          set -euo pipefail
+          npm run lint:llm
+          npm pack --dry-run
+          candidate_dir="$(mktemp -d "${RUNNER_TEMP}/release-candidate.XXXXXX")"
+          node scripts/release/build-unitypackage.mjs --output "${candidate_dir}"
+          archive="${candidate_dir}/$(node -p "require('./package.json').name + '-' + require('./package.json').version + '.unitypackage'")"
+          node scripts/release/validate-unitypackage.mjs --archive "${archive}"
+          version="$(node -p "require('./package.json').version")"
+          node scripts/release/extract-release-notes.mjs --version "${version}" --output "${candidate_dir}/release-notes.md"
+
+      - name: Commit and push the release branch
+        if: ${{ inputs.dry_run == false }}
+        env:
+          BRANCH: ${{ steps.prep.outputs.branch }}
+          PREVIOUS_VERSION: ${{ steps.prep.outputs.previous_version }}
+          VERSION: ${{ steps.prep.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "${BRANCH}"
+          git add package.json CHANGELOG.md .llm/context.md
+          git commit -m "Bump version from ${PREVIOUS_VERSION} to ${VERSION}"
+          if git ls-remote --exit-code --heads origin "refs/heads/${BRANCH}" >/dev/null; then
+            git fetch origin "refs/heads/${BRANCH}"
+            if ! git diff --quiet HEAD FETCH_HEAD; then
+              echo "::error::${BRANCH} already exists with different content. Inspect it before preparing another release."
+              exit 1
+            fi
+            echo "::notice::Reusing the existing release branch ${BRANCH}."
+          else
+            git push origin "${BRANCH}"
+          fi
+
+      - name: Open the release pull request
+        if: ${{ inputs.dry_run == false }}
+        env:
+          BRANCH: ${{ steps.prep.outputs.branch }}
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_VERSION: ${{ steps.prep.outputs.previous_version }}
+          VERSION: ${{ steps.prep.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh pr view "${BRANCH}" --json state --jq .state 2>/dev/null | grep -qx OPEN; then
+            echo "::notice::The release pull request is already open."
+            exit 0
+          fi
+          body_file="${RUNNER_TEMP}/release-pr-body.md"
+          cat > "${body_file}" <<EOF
+          Release v${VERSION} prepares the package and changelog for publication.
+
+          ## Behavior
+          - Bump ${PREVIOUS_VERSION} to ${VERSION} and date the Unreleased notes.
+          - Merge to create the tag, publish npm, and attach the verified Unity package.
+
+          ## Validation
+          - Repository lint and npm payload preview passed on the prepared tree.
+          - Unity archive and release notes passed validation.
+
+          ## Risk / Rollback
+          - npm versions are permanent. Recover with a new patch version.
+          EOF
+          gh pr create --base main --head "${BRANCH}" \
+            --title "Release v${VERSION}" --body-file "${body_file}"
+
+      - name: Dispatch release branch validation
+        if: ${{ inputs.dry_run == false }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.prep.outputs.branch }}
+        run: gh workflow run llm-lint.yml --ref "${BRANCH}"
+
+      - name: Dry-run summary
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          echo "Dry run: would prepare release v${{ steps.prep.outputs.version }} (branch ${{ steps.prep.outputs.branch }}); candidate validated on the runner; no branch pushed and no PR opened."
+
+  release:
+    name: Tag and publish release
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.operation == 'publish') ||
+      github.event_name == 'push' ||
+      (github.event.pull_request.merged == true &&
+        startsWith(github.event.pull_request.head.ref, 'release/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # create the annotated tag and GitHub Release
+      id-token: write # npm Trusted Publishing
+    steps:
+      - name: Resolve the release source
+        id: resolve
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          INPUT_TAG: ${{ inputs.tag }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          create_tag=false
+          branch=""
+          if [ "${EVENT}" = "pull_request" ]; then
+            branch="${HEAD_REF}"
+            tag="${branch#release/}"
+            checkout_ref="${MERGE_SHA}"
+            create_tag=true
+            test -n "${checkout_ref}"
+          elif [ "${EVENT}" = "push" ]; then
+            tag="${REF#refs/tags/}"
+            checkout_ref="refs/tags/${tag}"
+          else
+            if [ "${REF}" != "refs/heads/main" ]; then
+              echo "::error::Only publish releases from main."
+              exit 1
+            fi
+            tag="${INPUT_TAG}"
+            checkout_ref="refs/tags/${tag}"
+          fi
+          if ! printf '%s' "${tag}" | grep -qE '^v[0-9]'; then
+            echo "::error::Publication requires an existing vX.Y.Z tag or a merged release/vX.Y.Z PR."
+            exit 1
+          fi
+          git check-ref-format "refs/tags/${tag}"
+          {
+            echo "tag=${tag}"
+            echo "branch=${branch}"
+            echo "checkout_ref=${checkout_ref}"
+            echo "create_tag=${create_tag}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout the exact release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.resolve.outputs.checkout_ref }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Tag the merged release commit
+        if: ${{ steps.resolve.outputs.create_tag == 'true' }}
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          BRANCH: ${{ steps.resolve.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            # A rerun may find its tag already pushed. Never move it.
+            test "$(git rev-parse "refs/tags/${TAG}^{commit}")" = "$(git rev-parse HEAD)" || {
+              echo "::error::Existing ${TAG} points at a different commit."
+              exit 1
+            }
+          else
+            node scripts/release/tag-release.mjs --branch "${BRANCH}"
+          fi
+          git push origin "refs/tags/${TAG}"
+
+      - name: Run non-Unity repository validation
+        run: npm run lint:llm
+
+      - name: Verify the release tag and packed payload
+        id: verify
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          output="$(node scripts/release/verify-release.mjs --tag "${TAG}")"
+          printf '%s\n' "${output}"
+          for key in pkg version npm_tag package_file entries; do
+            value="$(printf '%s\n' "${output}" | sed -n "s/^${key}: //p")"
+            if [ -z "${value}" ]; then
+              echo "::error::The verification script did not report '${key}'."
+              exit 1
+            fi
+            echo "${key}=${value}" >> "${GITHUB_OUTPUT}"
+          done
+
+      - name: Verify npm trusted publishing toolchain
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+          required_npm="11.5.1"
+          current_npm="$(npm --version)"
+          if [ "$(printf '%s\n' "${required_npm}" "${current_npm}" | sort -V | head -n1)" != "${required_npm}" ]; then
+            echo "::error::npm ${current_npm} is too old; trusted publishing requires npm >= ${required_npm}."
+            exit 1
+          fi
+
+      - name: Build the release .unitypackage
+        run: |
+          set -euo pipefail
+          node scripts/release/build-unitypackage.mjs --output dist
+          ls dist
+
+      - name: Validate the release .unitypackage
+        run: |
+          set -euo pipefail
+          archive="$(find dist -maxdepth 1 -name '*.unitypackage' | head -n1)"
+          if [ -z "${archive}" ]; then
+            echo "::error::The builder produced no .unitypackage."
+            exit 1
+          fi
+          node scripts/release/validate-unitypackage.mjs --archive "${archive}"
+
+      - name: Prepare release notes and the npm tarball checksum
+        id: artifacts
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          VERSION: ${{ steps.verify.outputs.version }}
+          PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
+        run: |
+          set -euo pipefail
+          node scripts/release/extract-release-notes.mjs --version "${VERSION}" --output dist/release-notes.md
+          if [ ! -f "${PACKAGE_FILE}" ]; then
+            echo "::error::Expected the npm tarball '${PACKAGE_FILE}' in the repository root."
+            exit 1
+          fi
+          hash="$(sha256sum "${PACKAGE_FILE}" | awk '{print $1}')"
+          printf '%s  %s\n' "${hash}" "${PACKAGE_FILE}" > "${PACKAGE_FILE}.sha256"
+          cat "${PACKAGE_FILE}.sha256"
+
+      # Every archive and the changelog notes must pass before publication.
+      # Reruns finish the GitHub Release when the npm version already exists.
+      - name: Publish to npm with trusted publishing
+        if: ${{ inputs.dry_run != true }}
+        env:
+          PKG: ${{ steps.verify.outputs.pkg }}
+          VER: ${{ steps.verify.outputs.version }}
+          NPM_TAG: ${{ steps.verify.outputs.npm_tag }}
+          PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
+        run: |
+          set -euo pipefail
+          # Re-runnable: skip if this exact name@version is already on the registry (a prior
+          # run may have published it before failing downstream). npm publish is otherwise
+          # irreversible.
+          if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
+            echo "::notice::${PKG}@${VER} is already on the registry; skipping publish."
+          else
+            npm publish "${PACKAGE_FILE}" --access public --tag "${NPM_TAG}"
+            echo "::notice::Published ${PKG}@${VER} to dist-tag '${NPM_TAG}'."
+          fi
+
+      - name: Create or update the GitHub Release
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          NPM_TAG: ${{ steps.verify.outputs.npm_tag }}
+          PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
+        run: |
+          set -euo pipefail
+          prerelease_args=()
+          if [ "${NPM_TAG}" = "next" ]; then
+            prerelease_args+=(--prerelease)
+          fi
+          artifacts=("${PACKAGE_FILE}" "${PACKAGE_FILE}.sha256" dist/*.unitypackage dist/*.unitypackage.sha256)
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --title "${TAG}" --notes-file dist/release-notes.md "${prerelease_args[@]}"
+            gh release upload "${TAG}" --clobber "${artifacts[@]}"
+            echo "::notice::Updated GitHub Release ${TAG}."
+          else
+            gh release create "${TAG}" --verify-tag --title "${TAG}" --notes-file dist/release-notes.md "${prerelease_args[@]}" "${artifacts[@]}"
+            echo "::notice::Created GitHub Release ${TAG}."
+          fi
+
+      - name: Upload validated release artifacts
+        if: ${{ always() && steps.artifacts.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-${{ steps.verify.outputs.version }}
+          path: |
+            ${{ steps.verify.outputs.package_file }}
+            ${{ steps.verify.outputs.package_file }}.sha256
+            dist/
+          if-no-files-found: error
+          retention-days: 14

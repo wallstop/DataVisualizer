@@ -473,7 +473,7 @@ launch_claude_zai() {
     export CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1
     export CLAUDE_CODE_SUBPROCESS_ENV_SCRUB="${scrub}"
     export CLAUDE_CONFIG_DIR="${config_dir}"
-    exec claude "${claude_args[@]}" "$@"
+    exec claude ${claude_args[@]+"${claude_args[@]}"} "$@"
 }
 
 launch_claude_openrouter() {
@@ -527,7 +527,7 @@ launch_claude_openrouter() {
     export CLAUDE_CODE_SUBPROCESS_ENV_SCRUB="${scrub}"
     export CLAUDE_CONFIG_DIR="${config_dir}"
     unset OPENROUTER_API_KEY OPEN_ROUTER_API_KEY
-    exec claude "${claude_args[@]}" "$@"
+    exec claude ${claude_args[@]+"${claude_args[@]}"} "$@"
 }
 
 print_help() {
