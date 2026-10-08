@@ -216,10 +216,22 @@ namespace WallstopStudios.DataVisualizer
             SetAssetPathIfAvailable();
         }
 
+        /*
+         * Fills _assetGuid only when it is empty. Id is persisted identity that
+         * consumers key saves and databases on, so validation must never
+         * rewrite it (issue #137). AfterCreate and AfterClone still assign a
+         * fresh id because their callers start from an empty id; BeforeClone
+         * clears it.
+         */
         private void SetAssetPathIfAvailable()
         {
 #if UNITY_EDITOR
             if (Application.isPlaying)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_assetGuid))
             {
                 return;
             }
@@ -232,11 +244,6 @@ namespace WallstopStudios.DataVisualizer
 
             string canonicalGuid = AssetDatabase.AssetPathToGUID(assetPath);
             if (string.IsNullOrWhiteSpace(canonicalGuid))
-            {
-                return;
-            }
-
-            if (string.Equals(_assetGuid, canonicalGuid, StringComparison.Ordinal))
             {
                 return;
             }

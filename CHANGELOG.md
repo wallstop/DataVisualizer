@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `BaseDataObject` asset ids no longer change on validation. An asset keeps
+  its authored `Id` when it is non-empty; only an empty id fills from the
+  asset's `.meta` GUID, as in 0.0.37. Created and cloned assets still get a
+  fresh id. This restores persisted identity that consumers key saves and
+  databases on (#137).
+
 ## [0.1.0] - 2026-10-07
 
 ### Added
