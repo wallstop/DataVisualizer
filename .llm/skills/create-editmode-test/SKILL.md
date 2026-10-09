@@ -66,6 +66,21 @@ Ordering, filtering, and cloning paths must have coverage before a release; add
 PlayMode coverage in a sibling `Tests/Runtime` folder for `BaseDataObject` lifecycle
 callbacks and asset-state persistence.
 
+## UI Toolkit State Assertions
+
+- `resolvedStyle` is only meaningful after the element sits in a hosted panel and
+  layout has settled; host the tree in an `EditorWindow` (the capture suite's
+  `EditorSurfaceCaptureHostWindow` pattern) and settle layout before asserting.
+- `display` is not inherited: a `display:none` ancestor removes the whole subtree
+  from layout while children still report `Flex`, so a rendered check must walk
+  ancestors. `visibility` is inherited and already resolved per element, so the
+  element's own `resolvedStyle.visibility` is the effective value (`Visibility`
+  enum, not `VisibilityStyle`).
+- A zero-area element paints nothing. Persisted user state can legitimately hide
+  content (namespace collapse persists through `PersistSettings`), so pixel or
+  region assertions must filter to rendered subtrees before measuring; the
+  precedent is `DocsImageCapture.IsRenderedForCapture`.
+
 ## Related Skills
 
 - [extend-runtime-api](./extend-runtime-api/SKILL.md) - what runtime behavior needs
