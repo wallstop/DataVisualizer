@@ -10,6 +10,11 @@ Data Visualizer is free forever. There are no subscriptions, no paid upgrades,
 and no feature-gated tiers. The full source is MIT-licensed, and every
 capability described here ships in the free package.
 
+![Data Visualizer layout with namespace, object, and inspector columns](images/data-visualizer-layout.png)
+
+*Full window overview. Regenerated from the live window by the docs capture
+pipeline.*
+
 ## What it does
 
 | Task | What the window gives you |

@@ -85,6 +85,10 @@ lives.
 
 The **Settings** popover opens from the **…** button in the header row.
 
+![Settings popover with persistence toggles and data folder field](images/data-visualizer-settings.png)
+*Settings popover. Regenerated from the live window by the docs capture
+pipeline.*
+
 - **Select Active Object** mirrors your Data Visualizer selection in Unity's own
   Inspector, for cross-referencing assets in other editor windows.
 - **Theme** picks the appearance. See [Themes](#themes).
