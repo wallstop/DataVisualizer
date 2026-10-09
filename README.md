@@ -29,8 +29,8 @@ The window uses a three-panel layout:
 
 ## Instance Management
 
-![Clone, rename, move, and delete controls on an object row](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-instance-actions.jpg)
-*Instance actions demo at 03:35.*
+![Clone, rename, move, and delete controls on the object rows](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-instance-actions.png)
+*Per-row asset management controls. Regenerated from the live window by the docs capture pipeline.*
 
 Asset management controls sit on the right of each object row:
 
@@ -46,15 +46,15 @@ Inspector edits save immediately. Your selection persists when switching between
 
 ## Creating Assets
 
-![Create button and data folder selector above object list](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-create.jpg)
-*New asset workflow at 06:45.*
+![Create popover asking for a new asset name](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-create.png)
+*Create popover over the object list. Regenerated from the live window by the docs capture pipeline.*
 
 The **Create** button asks for a name and spawns a new instance of the active type under your configured **Data Folder** (see Settings below), in a per-type folder named after the type's full namespace, such as `Assets/Data/MyGame/Items/WeaponData/`. Those folders are created for you. Clones stay beside their originals regardless of the Data Folder setting. Chain create with rename or move to place new assets exactly where you need them.
 
 ## Building Your Type Catalog
 
-![Namespace search dropdown with import controls visible](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-import.jpg)
-*Adding ScriptableObject types around 12:45.*
+![Manage-visible-types popover listing the project's ScriptableObject types](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-import.png)
+*Type search popover over the namespace panel. Regenerated from the live window by the docs capture pipeline.*
 
 Three controls above the Namespace panel populate your catalog:
 
@@ -80,8 +80,8 @@ Dragging labels from **Available** into the **AND:** or **OR:** rows filters the
 
 ## Settings
 
-![Settings dropdown showing persistence options and data folder field](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-settings.jpg)
-*State management settings at 18:20.*
+![Settings popover with persistence toggles and data folder field](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-settings.png)
+*Settings popover. Regenerated from the live window by the docs capture pipeline.*
 
 **Persist State in UserState** (the default) stores the selected namespace and type, the selected object per type, namespace, type, and object ordering, collapse state, tracked types, per-type label filters, and the per-type processor scope in a per-user JSON file instead of a shared project asset. Each developer keeps a private arrangement and version control stays free of layout churn.
 

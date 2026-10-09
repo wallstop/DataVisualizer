@@ -184,7 +184,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldExposeManifestShotNames()
         {
-            Assert.That(DocsImageCapture.ShotNames, Is.Not.Empty);
+            Assert.That(
+                DocsImageCapture.ShotNames,
+                Is.EqualTo(new[] { "layout", "instance-actions", "create", "import", "settings" }),
+                "The manifest must carry the README's documented shots."
+            );
             for (int index = 0; index < DocsImageCapture.ShotNames.Count; index++)
             {
                 Assert.That(
@@ -500,7 +504,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             EditorSurfaceCapture.SettleLayout(window);
 
             IReadOnlyList<DocsImageCapture.CaptureRegion> regions = DocsImageCapture.CollectRegions(
-                window
+                window,
+                DocsImageCapture.LayoutShotName
             );
             Assert.That(
                 regions,
@@ -530,7 +535,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             canary.style.display = DisplayStyle.None;
             EditorSurfaceCapture.SettleLayout(window);
             IReadOnlyList<DocsImageCapture.CaptureRegion> hiddenRegions =
-                DocsImageCapture.CollectRegions(window);
+                DocsImageCapture.CollectRegions(window, DocsImageCapture.LayoutShotName);
             Assert.That(hiddenRegions, Is.Empty);
 
             Color32[] uniformPixels = new Color32[16];
@@ -549,6 +554,273 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     ),
                 "Region analysis without the canary fails closed."
             );
+        }
+
+        [Test]
+        public void ShouldCollectShotSubjectRegionOnlyWhenItIsRendered()
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window =
+                ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(0f, 0f, 220f, 120f);
+            EditorSurfaceCapture.ShowPopup(window);
+
+            VisualElement subject = new() { name = "settings-popover" };
+            subject.style.width = 60f;
+            subject.style.height = 24f;
+            window.rootVisualElement.Add(subject);
+            EditorSurfaceCapture.SettleLayout(window);
+
+            IReadOnlyList<DocsImageCapture.CaptureRegion> regions = DocsImageCapture.CollectRegions(
+                window,
+                "settings"
+            );
+            DocsImageCapture.CaptureRegion subjectRegion = RegionOrNull(
+                regions,
+                "settings-popover"
+            );
+            Assert.That(
+                subjectRegion != null,
+                "The rendered popover is the region the settings shot must paint."
+            );
+            Assert.That(
+                subjectRegion.Rect,
+                Is.EqualTo(subject.worldBound),
+                "The subject region carries the settled popover bounds."
+            );
+
+            subject.style.display = DisplayStyle.None;
+            EditorSurfaceCapture.SettleLayout(window);
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                DocsImageCapture.CollectRegions(window, "settings")
+            );
+            Assert.That(
+                exception.Message,
+                Does.Contain("settings-popover"),
+                "A hidden subject must fail closed with the element named."
+            );
+        }
+
+        [Test]
+        public void ShouldFailClosedWhenAShotSubjectElementIsMissing(
+            [Values("create", "import", "settings")] string shotName
+        )
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window =
+                ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(0f, 0f, 220f, 120f);
+            EditorSurfaceCapture.ShowPopup(window);
+            EditorSurfaceCapture.SettleLayout(window);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                DocsImageCapture.CollectRegions(window, shotName)
+            );
+            Assert.That(
+                exception.Message,
+                Does.Contain("element"),
+                "The failure names the missing subject element and the shot."
+            );
+        }
+
+        [Test]
+        public void ShouldFailClosedWhenCollectRegionsIsCalledWithUnknownShot(
+            [Values(null, "", "hero")] string shotName
+        )
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window =
+                ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            Assert.Throws<ArgumentException>(
+                () => DocsImageCapture.CollectRegions(window, shotName),
+                "An unknown shot name is a driver bug, not a capturable state."
+            );
+        }
+
+        [Test]
+        public void ShouldComputeSettingsCropFromPopoverBoundsClampedToWindow()
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window =
+                ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(0f, 0f, 300f, 200f);
+            EditorSurfaceCapture.ShowPopup(window);
+            VisualElement popover = new() { name = "settings-popover" };
+            popover.style.position = Position.Absolute;
+            popover.style.left = 20f;
+            popover.style.top = 10f;
+            popover.style.width = 100f;
+            popover.style.height = 50f;
+            window.rootVisualElement.Add(popover);
+            EditorSurfaceCapture.SettleLayout(window);
+
+            bool cropped = DocsImageCapture.TryComputeCropRect(
+                window,
+                "settings",
+                out Rect cropRect
+            );
+            Assert.That(cropped, Is.True, "The settings shot crops to its popover.");
+            Assert.That(
+                cropRect,
+                Is.EqualTo(Rect.MinMaxRect(12f, 2f, 128f, 68f)),
+                "The crop pads the popover bounds by the shot's padding."
+            );
+        }
+
+        [Test]
+        public void ShouldComputeCreateCropFromTriggerAndPopoverUnionClampedToWindow()
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window =
+                ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(0f, 0f, 300f, 200f);
+            EditorSurfaceCapture.ShowPopup(window);
+            VisualElement root = window.rootVisualElement;
+
+            /*
+                The production popover is absolutely positioned while its trigger sits in
+                the laid-out header, so the synthetic arrangement models exactly that.
+            */
+            VisualElement popover = new() { name = "create-popover" };
+            popover.style.position = Position.Absolute;
+            popover.style.left = 30f;
+            popover.style.top = 20f;
+            popover.style.width = 200f;
+            popover.style.height = 100f;
+            root.Add(popover);
+
+            VisualElement trigger = new() { name = "create-object-button" };
+            trigger.style.position = Position.Absolute;
+            trigger.style.left = 250f;
+            trigger.style.top = 5f;
+            trigger.style.width = 20f;
+            trigger.style.height = 20f;
+            root.Add(trigger);
+            EditorSurfaceCapture.SettleLayout(window);
+
+            bool cropped = DocsImageCapture.TryComputeCropRect(window, "create", out Rect cropRect);
+            Assert.That(cropped, Is.True, "The create shot crops to its trigger and popover.");
+            Assert.That(
+                cropRect,
+                Is.EqualTo(Rect.MinMaxRect(22f, 0f, 278f, 128f)),
+                "The crop covers the union of trigger and popover, padded and clamped to "
+                    + "the window."
+            );
+        }
+
+        [Test]
+        public void ShouldKeepTheLayoutShotFullWindow()
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window =
+                ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(0f, 0f, 220f, 120f);
+            EditorSurfaceCapture.ShowPopup(window);
+
+            Assert.That(
+                DocsImageCapture.TryComputeCropRect(
+                    window,
+                    DocsImageCapture.LayoutShotName,
+                    out Rect _
+                ),
+                Is.False,
+                "The layout shot ships the full window and must not crop."
+            );
+        }
+
+        [Test]
+        public void ShouldFailClosedWhenCropSubjectIsMissing(
+            [Values("instance-actions", "create", "import", "settings")] string shotName
+        )
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window =
+                ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(0f, 0f, 220f, 120f);
+            EditorSurfaceCapture.ShowPopup(window);
+            EditorSurfaceCapture.SettleLayout(window);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                DocsImageCapture.TryComputeCropRect(window, shotName, out Rect _)
+            );
+            Assert.That(
+                exception.Message,
+                Does.Contain(shotName),
+                "The failure names the shot whose crop subject is missing."
+            );
+        }
+
+        [Test]
+        public void ShouldCropCapturedPngToTheSubjectRectPreservingPixels()
+        {
+            int width = 64;
+            int height = 48;
+            Color32[] pixels = new Color32[width * height];
+            FillRect(
+                pixels,
+                width,
+                height,
+                new Rect(0f, 0f, width, height),
+                new Color32(24, 24, 28, 255)
+            );
+            FillVariedRect(pixels, width, height, new Rect(10f, 12f, 30f, 18f));
+
+            string directory = Path.Combine("Temp", "DocsImageCaptureCropTests");
+            Directory.CreateDirectory(directory);
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() =>
+            {
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+            });
+
+            string capturePath = Path.Combine(directory, "crop-source.png");
+            File.WriteAllBytes(capturePath, EncodePixels(width, height, pixels));
+
+            EditorSurfaceCaptureResult cropped = DocsImageCapture.CropCapturedPng(
+                capturePath,
+                new Rect(12f, 14f, 20f, 10f),
+                new Rect(0f, 0f, width, height)
+            );
+            AssertValidPngFile(cropped);
+            Assert.AreEqual(20, cropped.Width, "The crop width comes from the subject rect.");
+            Assert.AreEqual(10, cropped.Height, "The crop height comes from the subject rect.");
+
+            Texture2D decoded = new(2, 2, TextureFormat.RGBA32, false);
+            try
+            {
+                Assert.That(
+                    decoded.LoadImage(File.ReadAllBytes(capturePath)),
+                    Is.True,
+                    "The cropped file must decode for the pixel comparison."
+                );
+                Color32[] croppedPixels = decoded.GetPixels32();
+                int firstSourceRow = height - 14 - 10;
+                for (int row = 0; row < 10; row++)
+                {
+                    for (int column = 0; column < 20; column++)
+                    {
+                        Assert.AreEqual(
+                            pixels[(firstSourceRow + row) * width + (12 + column)],
+                            croppedPixels[row * 20 + column],
+                            $"Crop pixel ({column},{row}) must match the source surface."
+                        );
+                    }
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(decoded);
+            }
         }
     }
 }
