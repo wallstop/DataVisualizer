@@ -51,8 +51,12 @@ if ! grep -qF "${env_block_end}" "${bashrc}" 2>/dev/null; then
         echo ""
         echo "${env_block_begin}"
         echo "# Sourced via .devcontainer/env-local.sh (BOM/CRLF-tolerant; fills empty vars)."
+        echo "# precedence=file lets MCP credential names in .env.local override a stale"
+        echo "# copy already exported into this session, so a rotated PAT applies without"
+        echo "# rebuilding the container. PATH and other vars keep the default rule."
         echo "if [ -f \"${workspace_dir}/.devcontainer/env-local.sh\" ]; then"
         echo "    . \"${workspace_dir}/.devcontainer/env-local.sh\""
+        echo "    DATAVIZ_ENV_LOCAL_PRECEDENCE=file"
         echo "    load_env_local \"${workspace_dir}/.env.local\""
         echo "fi"
         echo "export NANOCODER_MCPSERVERS_FILE=\"${workspace_dir}/.nanocoder/mcp.json\""
@@ -75,21 +79,47 @@ if [ -d "${npm_cache}" ] && [ ! -w "${npm_cache}" ]; then
     sudo -n chown -R "$(id -u):$(id -g)" "${npm_cache}" 2>/dev/null || true
 fi
 
+# Load .env.local with file precedence for MCP credential names BEFORE anything
+# that reads them. devcontainer remoteEnv forwards ${localEnv:VAR} once at
+# container start, and OpenCode's shared `serve --service` inherits the
+# environment of whichever client started it, so a credential rotated in
+# .env.local is otherwise invisible until the container is rebuilt. Scoped to
+# credential names by the loader; PATH and all other vars keep "non-empty
+# preexisting wins".
+if [ -f "${workspace_dir}/.devcontainer/env-local.sh" ]; then
+    # shellcheck source=./env-local.sh
+    . "${workspace_dir}/.devcontainer/env-local.sh"
+    DATAVIZ_ENV_LOCAL_PRECEDENCE=file
+    load_env_local "${workspace_dir}/.env.local"
+fi
+
+# Reconcile credential aliases BEFORE the config sync: when .env.local carries
+# both names for one credential with different values, every generated config
+# references the stale one and the hosted GitHub MCP answers 401. `--repair`
+# probes which value actually authenticates and rewrites the loser in place; it
+# never writes on an unproven guess and never prints a credential.
+if [ -f "${workspace_dir}/.env.local" ]; then
+    node .llm/mcp/mcp-doctor.mjs --repair 2>&1 |
+        grep -E '❌|divergent|Repairing|authenticates' || true
+fi
+
 bash .llm/mcp/sync-mcp.sh "${workspace_dir}"
+
+# Every opencode session attaches to ONE shared background server
+# (`serve --service`) that inherits the environment of whichever client started
+# it and keeps it for life. Repairing .env.local therefore leaves NEW sessions
+# still broken — they are fine, the singleton behind them is not. Recycle it when
+# its credential disagrees with .env.local so the next session respawns a healthy
+# one. A matching service is never touched, and a missing .env.local is a no-op.
+if command -v opencode >/dev/null 2>&1; then
+    bash "${workspace_dir}/.devcontainer/recycle-stale-opencode-service.sh" || true
+fi
 
 # OpenCode V2 runs a shared background server (serve --service) that lazy-loads
 # project config on first attach: the very first `opencode mcp list` after a
 # service restart can briefly report "No MCP servers configured". Warm the
 # service at startup so that race never surfaces in a user's first command.
-# The service inherits the env of the first client that triggers it, so source
-# .env.local first — otherwise MCP servers would connect with empty credentials
-# for the service's whole lifetime.
 if command -v opencode >/dev/null 2>&1; then
-    if [ -f "${workspace_dir}/.devcontainer/env-local.sh" ]; then
-        # shellcheck source=./env-local.sh
-        . "${workspace_dir}/.devcontainer/env-local.sh"
-        load_env_local "${workspace_dir}/.env.local"
-    fi
     opencode mcp list >/dev/null 2>&1 || true
     sleep 1
     opencode mcp list >/dev/null 2>&1 || true

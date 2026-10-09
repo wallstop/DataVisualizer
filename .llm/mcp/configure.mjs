@@ -14,9 +14,9 @@
 //
 // Unity uses the official Unity CLI MCP server (`unity mcp`, ~140 tools on a
 // typical project). Container frontends reach it through the host HTTP bridge
-// (npm run unity:mcp:host → http://host.docker.internal:9020/mcp); host-side
-// GUI clients (Cursor/Windsurf/Claude Desktop) should use the CLI directly via
-// `unity mcp configure <client>` on the host.
+// (npm run unity:mcp:host → http://host.docker.internal:<port>/mcp, port from
+// UNITY_MCP_HTTP_PORT); host-side GUI clients (Cursor/Windsurf/Claude Desktop)
+// should use the CLI directly via `unity mcp configure <client>` on the host.
 
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -79,11 +79,17 @@ function isContainer() {
 
 function hasCommand(command) {
     try {
-        execFileSync(
-            "/bin/bash",
-            ["-c", `command -v ${(command)} >/dev/null 2>&1`],
-            { stdio: "ignore" },
-        );
+        if (process.platform === "win32") {
+            // Git Bash is not guaranteed on Windows hosts; `where` resolves
+            // PATH + PATHEXT the same way cmd does.
+            execFileSync("where", [command], { stdio: "ignore" });
+        } else {
+            execFileSync(
+                "/bin/bash",
+                ["-c", `command -v ${(command)} >/dev/null 2>&1`],
+                { stdio: "ignore" },
+            );
+        }
         return true;
     } catch {
         return false;
@@ -113,15 +119,7 @@ function ensureUnityMcpToken() {
 // devcontainer remoteEnv forward use ZAI_API_KEY, while the official
 // @z_ai/mcp-server reads Z_AI_API_KEY first. Mirror whichever one exists into
 // the other (in .env.local) so every harness and server sees the key.
-function ensureZaiKeyAlias() {
-    const canonical = env("ZAI_API_KEY");
-    const alternate = env("Z_AI_API_KEY");
-    if (!canonical && !alternate) return "missing";
-    if (canonical && alternate) return "configured";
-    if (CHECK_ONLY) return "alias-pending";
-    const [missingKey, value] = canonical
-        ? ["Z_AI_API_KEY", canonical]
-        : ["ZAI_API_KEY", alternate];
+function appendEnvLocalAlias(key, value) {
     const envLocalPath = path.join(WORKSPACE_ROOT, ".env.local");
     let content = "";
     try {
@@ -130,9 +128,51 @@ function ensureZaiKeyAlias() {
         content = "# Machine-local credentials (gitignored).\n";
     }
     if (content.length > 0 && !content.endsWith("\n")) content += "\n";
-    content += `\n# Auto-generated alias by configure.mjs on ${new Date().toISOString()}\n${missingKey}=${value}\n`;
+    content += `\n# Auto-generated alias by configure.mjs on ${new Date().toISOString()}\n${key}=${value}\n`;
     fs.mkdirSync(path.dirname(envLocalPath), { recursive: true });
     fs.writeFileSync(envLocalPath, content, { mode: 0o600 });
+}
+
+function ensureZaiKeyAlias() {
+    const canonical = env("ZAI_API_KEY");
+    const alternate = env("Z_AI_API_KEY");
+    if (!canonical && !alternate) return "missing";
+    // Both names set to DIFFERENT values is the broken state, not success: one
+    // consumer reads ZAI_API_KEY and another Z_AI_API_KEY, so they silently
+    // disagree. Detecting it here is what stopped the GitHub 401 (same shape)
+    // from recurring on the Z.ai key pair.
+    if (canonical && alternate && canonical !== alternate) return "divergent";
+    if (canonical && alternate) return "configured";
+    if (CHECK_ONLY) return "alias-pending";
+    const [missingKey, value] = canonical
+        ? ["Z_AI_API_KEY", canonical]
+        : ["ZAI_API_KEY", alternate];
+    appendEnvLocalAlias(missingKey, value);
+    return "aliased";
+}
+
+// The GitHub credential has the same two-name problem: on-create.sh's template
+// and every generated config reference GITHUB_PERSONAL_ACCESS_TOKEN, while
+// some machines only define GITHUB_MCP_PAT. An empty reference makes the
+// hosted GitHub MCP return 401 in the devcontainer even though the PAT is
+// valid — mirror whichever name exists into the other (in .env.local).
+function ensureGithubPatAlias() {
+    const canonical = env("GITHUB_PERSONAL_ACCESS_TOKEN");
+    const alternate = env("GITHUB_MCP_PAT");
+    if (!canonical && !alternate) return "missing";
+    // Both names set to DIFFERENT values is precisely the incident this
+    // function exists to prevent: every generated config references the
+    // canonical name, so a stale canonical value shadows a valid GITHUB_MCP_PAT
+    // and the hosted GitHub MCP answers 401. "Both set" is therefore NOT
+    // success — only "both set and equal" is. `npm run mcp:doctor --repair`
+    // reconciles a divergent pair by probing which value actually authenticates.
+    if (canonical && alternate && canonical !== alternate) return "divergent";
+    if (canonical && alternate) return "configured";
+    if (CHECK_ONLY) return "alias-pending";
+    const [missingKey, value] = canonical
+        ? ["GITHUB_MCP_PAT", canonical]
+        : ["GITHUB_PERSONAL_ACCESS_TOKEN", alternate];
+    appendEnvLocalAlias(missingKey, value);
     return "aliased";
 }
 
@@ -144,10 +184,32 @@ const ZAI_IMAGE_SCRIPT = path.join(WORKSPACE_ROOT, ".llm", "mcp", "zai-image-mcp
 const NODE_BIN = process.execPath;
 const HAS_UVX = hasCommand("uvx");
 // Container agents reach the host HTTP bridge via host.docker.internal; when
-// the configurator runs on the host itself, the bridge is plain loopback.
+// the configurator runs on the host itself, the bridge is plain loopback. The
+// port is configurable (UNITY_MCP_HTTP_PORT, process env or .env.local) and is
+// dynamically chosen + persisted by unity-mcp-host.mjs when 9020 is busy.
+const UNITY_MCP_PORT = Number(env("UNITY_MCP_HTTP_PORT")) || 9020;
+// The bridge host must be reachable from BOTH host-side and container-side
+// clients reading the same shared machine-local configs. `host.docker.internal`
+// resolves on the host itself under Docker Desktop (verified) and inside
+// containers, while 127.0.0.1 only works host-side and silently breaks
+// container agents — so it is never the default. Override the whole URL with
+// UNITY_MCP_HTTP_URL for exotic topologies.
 const UNITY_MCP_URL =
     process.env.UNITY_MCP_HTTP_URL ||
-    `http://${isContainer() ? "host.docker.internal" : "127.0.0.1"}:9020/mcp`;
+    `http://host.docker.internal:${UNITY_MCP_PORT}/mcp`;
+
+// VS Code spawns MCP servers from the extension host, whose environment is
+// fixed at server start: devcontainer remoteEnv forwards ${localEnv:VAR}
+// entries that are EMPTY when the host shell never exported the variable, and
+// the interactive-shell .env.local loader never runs for the server. These
+// wrappers source .env.local at spawn time instead (cwd = workspace root, the
+// directory containing .vscode/mcp.json), making credential servers
+// independent of whatever environment VS Code was launched from.
+const VSCODE_ENV_WRAPPER_PREFIX =
+    "set -a; . .devcontainer/env-local.sh 2>/dev/null; load_env_local .env.local 2>/dev/null; set +a";
+function vscodeEnvWrapper(command) {
+    return ["bash", "-c", `${VSCODE_ENV_WRAPPER_PREFIX}; exec ${command}`];
+}
 
 function buildCatalog() {
     const servers = new Map();
@@ -182,11 +244,12 @@ function buildCatalog() {
             },
         },
         vscode: {
-            type: "http",
-            url: UNITY_MCP_URL,
-            headers: {
-                Authorization: "Bearer ${env:UNITY_MCP_TOKEN}",
-            },
+            // stdio wrapper (mcp-remote) instead of native remote HTTP: the
+            // extension host's frozen environment cannot provide
+            // ${env:UNITY_MCP_TOKEN}, but the wrapper sources .env.local.
+            command: vscodeEnvWrapper(
+                `npx -y mcp-remote ${UNITY_MCP_URL} --header "Authorization:\${UNITY_MCP_TOKEN}"`,
+            ),
         },
         // Cursor runs on the host, so it can launch the CLI directly (stdio)
         // without going through the HTTP bridge. `unity mcp configure cursor`
@@ -228,12 +291,9 @@ function buildCatalog() {
             },
         },
         vscode: {
-            type: "http",
-            url: "https://api.githubcopilot.com/mcp/",
-            headers: {
-                Authorization: "Bearer ${env:GITHUB_PERSONAL_ACCESS_TOKEN}",
-                "X-MCP-Toolsets": "all",
-            },
+            command: vscodeEnvWrapper(
+                `npx -y mcp-remote https://api.githubcopilot.com/mcp/ --header "Authorization:\${GITHUB_PERSONAL_ACCESS_TOKEN}" --header "X-MCP-Toolsets: all"`,
+            ),
         },
         cursor: {
             url: "https://api.githubcopilot.com/mcp/",
@@ -339,9 +399,11 @@ function buildCatalog() {
             env: { ZAI_API_KEY: "${ZAI_API_KEY:-}", Z_AI_MODE: "ZAI" },
         },
         vscode: {
-            command: "npx",
-            args: ["-y", "@z_ai/mcp-server"],
-            env: { ZAI_API_KEY: "${env:ZAI_API_KEY}", Z_AI_MODE: "ZAI" },
+            // Wrapper: the extension host cannot provide ${env:ZAI_API_KEY}
+            // (remoteEnv forwards are empty), so source .env.local at spawn.
+            command: vscodeEnvWrapper(
+                'Z_AI_MODE="${Z_AI_MODE:-ZAI}"; exec npx -y @z_ai/mcp-server',
+            ),
         },
         cursor: {
             command: "npx",
@@ -373,21 +435,26 @@ function buildCatalog() {
             headers: { Authorization: "Bearer ${ZAI_API_KEY:-}" },
         },
         vscode: {
-            type: "http",
-            url: "https://api.z.ai/api/mcp/web_search_prime/mcp",
-            headers: { Authorization: "Bearer ${env:ZAI_API_KEY}" },
+            command: vscodeEnvWrapper(
+                `npx -y mcp-remote https://api.z.ai/api/mcp/web_search_prime/mcp --header "Authorization:\${ZAI_API_KEY}"`,
+            ),
         },
         cursor: {
             url: "https://api.z.ai/api/mcp/web_search_prime/mcp",
             headers: { Authorization: "Bearer ${env:ZAI_API_KEY}" },
         },
     });
+    // zai-image runs from the shared workspace: PATH-resolved `node` plus a
+    // workspace-relative script path keep the entry valid on the host AND in
+    // containers (frontends spawn MCP servers with cwd = workspace/project
+    // root). Codex keeps the absolute form — its config is HOME-separated per
+    // environment, so there is no sharing to break.
     servers.set("zai-image", {
         summary: "Z.ai image generation (glm-image) wrapped as local MCP",
         claude: {
             type: "stdio",
-            command: NODE_BIN,
-            args: [ZAI_IMAGE_SCRIPT],
+            command: "node",
+            args: [".llm/mcp/zai-image-mcp.mjs"],
             env: { ZAI_API_KEY: "${ZAI_API_KEY:-}" },
         },
         codex: {
@@ -397,21 +464,19 @@ function buildCatalog() {
         },
         opencode: {
             type: "local",
-            command: [NODE_BIN, ZAI_IMAGE_SCRIPT],
+            command: ["node", ".llm/mcp/zai-image-mcp.mjs"],
             enabled: true,
             timeout: 300000,
             environment: { ZAI_API_KEY: "{env:ZAI_API_KEY}" },
         },
         nanocoder: {
             transport: "stdio",
-            command: NODE_BIN,
-            args: [ZAI_IMAGE_SCRIPT],
+            command: "node",
+            args: [".llm/mcp/zai-image-mcp.mjs"],
             env: { ZAI_API_KEY: "${ZAI_API_KEY:-}" },
         },
         vscode: {
-            command: NODE_BIN,
-            args: [ZAI_IMAGE_SCRIPT],
-            env: { ZAI_API_KEY: "${env:ZAI_API_KEY}" },
+            command: vscodeEnvWrapper("exec node .llm/mcp/zai-image-mcp.mjs"),
         },
     });
     return servers;
@@ -709,6 +774,7 @@ function writeNanocoderProviders() {
 function main() {
     const unityToken = ensureUnityMcpToken();
     const zaiKeyStatus = ensureZaiKeyAlias();
+    const githubPatStatus = ensureGithubPatAlias();
     const catalog = buildCatalog();
 
     const managedClaude = {};
@@ -857,10 +923,32 @@ function main() {
     console.log(
         `  UNITY_MCP_TOKEN: ${unityToken && unityToken !== "(generated)" ? "configured" : "OPEN (no token)"}`,
     );
+    const describeZai = (status) => {
+        if (status === "missing") return "MISSING (zai-* servers will fail auth)";
+        if (status === "divergent") {
+            return (
+                "DIVERGENT (ZAI_API_KEY != Z_AI_API_KEY — consumers read different " +
+                "values; run `npm run mcp:doctor --repair`)"
+            );
+        }
+        return status;
+    };
+    const describeGithub = (status) => {
+        if (status === "missing") return "MISSING (github MCP will fail auth with 401)";
+        if (status === "divergent") {
+            return (
+                "DIVERGENT (GITHUB_PERSONAL_ACCESS_TOKEN != GITHUB_MCP_PAT — configs use " +
+                "GITHUB_PERSONAL_ACCESS_TOKEN, so a stale value there makes github MCP " +
+                "return 401; run `npm run mcp:doctor --repair`)"
+            );
+        }
+        return status;
+    };
+    console.log(`  ZAI_API_KEY: ${describeZai(zaiKeyStatus)}`);
+    console.log(`  GITHUB_PERSONAL_ACCESS_TOKEN: ${describeGithub(githubPatStatus)}`);
     console.log(
-        `  ZAI_API_KEY: ${zaiKeyStatus === "missing" ? "MISSING (zai-* servers will fail auth)" : zaiKeyStatus}`,
+        `  Environment: ${container ? "devcontainer" : "host"} (shared configs use environment-agnostic URLs; bridge: ${UNITY_MCP_URL})`,
     );
-    console.log(`  Environment: ${container ? "devcontainer" : "host"} (unity bridge host: ${container ? "host.docker.internal" : "127.0.0.1"})`);
     console.log(
         `  Unity MCP: official Unity CLI (~140 tools) via ${UNITY_MCP_URL} — start the bridge with \`npm run unity:mcp:host\` on the host.`,
     );
