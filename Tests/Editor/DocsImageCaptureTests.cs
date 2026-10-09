@@ -6,6 +6,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.Reflection;
     using NUnit.Framework;
     using UnityEngine;
+    using UnityEngine.UIElements;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
     using Object = UnityEngine.Object;
 
@@ -162,6 +163,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             byte[] png = texture.EncodeToPNG();
             Object.DestroyImmediate(texture);
             return png;
+        }
+
+        private static DocsImageCapture.CaptureRegion RegionOrNull(
+            IReadOnlyList<DocsImageCapture.CaptureRegion> regions,
+            string regionName
+        )
+        {
+            foreach (DocsImageCapture.CaptureRegion region in regions)
+            {
+                if (region.Name == regionName)
+                {
+                    return region;
+                }
+            }
+
+            return null;
         }
 
         [Test]
@@ -391,6 +408,147 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     "A blank regression in a region that paints even on gap hosts must fail."
                 );
             }
+        }
+
+        [Test]
+        public void ShouldTreatHiddenSubtreesAndZeroAreaElementsAsNotRendered()
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window =
+                ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(0f, 0f, 200f, 200f);
+            EditorSurfaceCapture.ShowPopup(window);
+            VisualElement root = window.rootVisualElement;
+
+            VisualElement visible = new() { name = "visible-leaf" };
+            visible.style.width = 20f;
+            visible.style.height = 10f;
+            root.Add(visible);
+
+            VisualElement collapsedContainer = new();
+            collapsedContainer.style.display = DisplayStyle.None;
+            root.Add(collapsedContainer);
+            VisualElement collapsedChild = new() { name = "collapsed-child" };
+            collapsedChild.style.width = 20f;
+            collapsedChild.style.height = 10f;
+            collapsedContainer.Add(collapsedChild);
+
+            VisualElement invisibleParent = new();
+            invisibleParent.style.visibility = VisibilityStyle.Hidden;
+            root.Add(invisibleParent);
+            VisualElement invisibleChild = new() { name = "invisible-child" };
+            invisibleChild.style.width = 20f;
+            invisibleChild.style.height = 10f;
+            invisibleParent.Add(invisibleChild);
+
+            VisualElement zeroArea = new() { name = "zero-area" };
+            zeroArea.style.width = 0f;
+            zeroArea.style.height = 10f;
+            root.Add(zeroArea);
+
+            EditorSurfaceCapture.SettleLayout(window);
+
+            Assert.That(
+                DocsImageCapture.IsRenderedForCapture(visible),
+                Is.True,
+                "A laid-out visible element is expected to paint."
+            );
+            Assert.That(
+                DocsImageCapture.IsRenderedForCapture(collapsedChild),
+                Is.False,
+                "A subtree under a display:none container is not rendered, whatever its own "
+                    + "styles say."
+            );
+            Assert.That(
+                DocsImageCapture.IsRenderedForCapture(invisibleChild),
+                Is.False,
+                "Visibility resolves per element, so an inherited hidden value means the "
+                    + "element paints nothing."
+            );
+            Assert.That(
+                DocsImageCapture.IsRenderedForCapture(zeroArea),
+                Is.False,
+                "A zero-area element has nothing to paint."
+            );
+        }
+
+        [Test]
+        public void ShouldCollectOnlyRenderedRegionsFromTheWindowTree()
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window =
+                ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(0f, 0f, 220f, 120f);
+            EditorSurfaceCapture.ShowPopup(window);
+            VisualElement root = window.rootVisualElement;
+
+            VisualElement canary = new() { name = DocsImageCapture.CanaryRegionName };
+            canary.style.width = 40f;
+            canary.style.height = 12f;
+            root.Add(canary);
+
+            VisualElement collapsedContainer = new();
+            collapsedContainer.style.display = DisplayStyle.None;
+            root.Add(collapsedContainer);
+            VisualElement hiddenSection = new() { name = "inspector-labels-section" };
+            hiddenSection.style.width = 40f;
+            hiddenSection.style.height = 12f;
+            collapsedContainer.Add(hiddenSection);
+
+            EditorSurfaceCapture.SettleLayout(window);
+
+            IReadOnlyList<DocsImageCapture.CaptureRegion> regions = DocsImageCapture.CollectRegions(
+                window
+            );
+            Assert.That(
+                regions,
+                Has.Count.EqualTo(1),
+                "Only the rendered canary is a region the capture must paint; the collapsed "
+                    + "section has no pixels to verify."
+            );
+            DocsImageCapture.CaptureRegion collected = RegionOrNull(
+                regions,
+                DocsImageCapture.CanaryRegionName
+            );
+            Assert.That(
+                collected != null,
+                "The rendered canary is recorded with the region name the analyzer keys on."
+            );
+            Assert.That(
+                collected.Rect,
+                Is.EqualTo(canary.worldBound),
+                "The recorded region carries the laid-out bounds the measurement maps into "
+                    + "the PNG."
+            );
+
+            /*
+                With every candidate hidden, the collection yields no canary and the
+                analysis fails closed instead of asserting against an unarranged window.
+            */
+            canary.style.display = DisplayStyle.None;
+            EditorSurfaceCapture.SettleLayout(window);
+            IReadOnlyList<DocsImageCapture.CaptureRegion> hiddenRegions =
+                DocsImageCapture.CollectRegions(window);
+            Assert.That(hiddenRegions, Is.Empty);
+
+            Color32[] uniformPixels = new Color32[16];
+            Color32 uniform = new(24, 24, 28, 255);
+            for (int index = 0; index < uniformPixels.Length; index++)
+            {
+                uniformPixels[index] = uniform;
+            }
+
+            Assert.Throws<InvalidOperationException>(
+                () =>
+                    DocsImageCapture.Analyze(
+                        EncodePixels(4, 4, uniformPixels),
+                        new Rect(0f, 0f, 4f, 4f),
+                        hiddenRegions
+                    ),
+                "Region analysis without the canary fails closed."
+            );
         }
     }
 }

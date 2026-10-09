@@ -59,6 +59,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         when it is blank the host has the recorded UIR gap and validation asserts only
         regions that painted even on such a host, keeping that host's known output
         reviewable while a capable host's hero is enforced pixel-faithful.
+
+        Validation measures only rendered subtrees. The saved settings persist namespace
+        collapse state, so a host can legitimately hide type rows behind display:none
+        containers; those regions have no pixels to paint and are excluded from the
+        guarded set instead of failing every capture on such a host.
     */
     internal static class DocsImageCapture
     {
@@ -393,6 +398,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             selection state (selected rows painted even on the macOS gap host); the asset
             name field, labels section, script row, and IMGUI-backed read-only drawer did
             not paint there, while the title and description fields and the object list did.
+
+            Only rendered subtrees are recorded: a persisted collapsed namespace hides its
+            type rows behind a display:none container, and a region that cannot paint would
+            otherwise clamp to a one-pixel sample that always fails the painted check.
         */
         internal static IReadOnlyList<CaptureRegion> CollectRegions(EditorWindow window)
         {
@@ -406,12 +415,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     .ToList()
             )
             {
-                regions.Add(
-                    new CaptureRegion(
-                        group.name,
-                        group.worldBound,
-                        group.ClassListContains(StyleConstants.SelectedClass)
-                    )
+                AddRenderedRegion(
+                    regions,
+                    group.name,
+                    group,
+                    group.ClassListContains(StyleConstants.SelectedClass)
                 );
             }
 
@@ -420,12 +428,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     .ToList()
             )
             {
-                regions.Add(
-                    new CaptureRegion(
-                        item.name,
-                        item.worldBound,
-                        item.ClassListContains(StyleConstants.SelectedClass)
-                    )
+                AddRenderedRegion(
+                    regions,
+                    item.name,
+                    item,
+                    item.ClassListContains(StyleConstants.SelectedClass)
                 );
             }
 
@@ -440,15 +447,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     string bindingPath = bindable.bindingPath;
                     if (bindingPath == "m_Script")
                     {
-                        regions.Add(
-                            new CaptureRegion("bindable:m_Script", bindable.worldBound, false)
-                        );
+                        AddRenderedRegion(regions, "bindable:m_Script", bindable, false);
                     }
                     else if (bindingPath == "_title" || bindingPath == "_description")
                     {
-                        regions.Add(
-                            new CaptureRegion("bindable:" + bindingPath, bindable.worldBound, true)
-                        );
+                        AddRenderedRegion(regions, "bindable:" + bindingPath, bindable, true);
                     }
                 }
             }
@@ -456,18 +459,65 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             List<IMGUIContainer> imguiContainers = root.Query<IMGUIContainer>().ToList();
             for (int index = 0; index < imguiContainers.Count; index++)
             {
-                regions.Add(
-                    new CaptureRegion("imgui:" + index, imguiContainers[index].worldBound, false)
-                );
+                AddRenderedRegion(regions, "imgui:" + index, imguiContainers[index], false);
             }
 
             ListView listView = root.Q<ListView>();
             if (listView != null)
             {
-                regions.Add(new CaptureRegion("listview", listView.worldBound, true));
+                AddRenderedRegion(regions, "listview", listView, true);
             }
 
             return regions;
+        }
+
+        /*
+            A region is only expected to paint when it is actually rendered. UI Toolkit
+            removes a display:none subtree from layout entirely and resolves visibility
+            per element (inherited values are already baked into resolvedStyle), while a
+            zero-area element has nothing to paint. Namespace collapse state persists in
+            the saved settings, so hidden rows are a normal host state, not a broken one.
+        */
+        internal static bool IsRenderedForCapture(VisualElement element)
+        {
+            if (element == null)
+            {
+                return false;
+            }
+
+            Rect worldBound = element.worldBound;
+            if (worldBound.width < 1f || worldBound.height < 1f)
+            {
+                return false;
+            }
+
+            if (element.resolvedStyle.visibility == VisibilityStyle.Hidden)
+            {
+                return false;
+            }
+
+            for (VisualElement current = element; current != null; current = current.parent)
+            {
+                if (current.resolvedStyle.display == DisplayStyle.None)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static void AddRenderedRegion(
+            List<CaptureRegion> regions,
+            string regionName,
+            VisualElement element,
+            bool paintedOnGapHosts
+        )
+        {
+            if (IsRenderedForCapture(element))
+            {
+                regions.Add(new CaptureRegion(regionName, element.worldBound, paintedOnGapHosts));
+            }
         }
 
         private static void AddRegion(
@@ -480,7 +530,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             VisualElement element = root.Q(elementName);
             if (element != null)
             {
-                regions.Add(new CaptureRegion(elementName, element.worldBound, paintedOnGapHosts));
+                AddRenderedRegion(regions, elementName, element, paintedOnGapHosts);
             }
         }
 
