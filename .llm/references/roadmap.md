@@ -227,8 +227,8 @@ Delivered: MkDocs Material foundation with strict build and Pages publishing
 workflow (#130), guide pages for search/filtering, asset management,
 organizing, and extending (#134).
 
-- [ ] README hero imagery from the capture pipeline (blocked on T10 render
-      gap); README stays concise and links into the site.
+- [x] README hero imagery from the capture pipeline (#140, #143); README
+      stays concise and links into the site.
 - [ ] Troubleshooting page (incomplete indexing, stale metadata, missing
       scripts, small windows, capture limits, host/container paths).
 - [ ] Measured performance section once T01 produces numbers; captures embedded

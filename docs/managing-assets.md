@@ -12,6 +12,10 @@ selected type.
 **Clone**, **Rename**, **Move**, and **Delete** are the four buttons on the right
 of each object row, and they act on that row's object without selecting it first.
 
+![Clone, rename, move, and delete controls on the object rows](images/data-visualizer-instance-actions.png)
+*Per-row asset management controls. Regenerated from the live window by the docs
+capture pipeline.*
+
 ## Create
 
 **Create** asks for a name, prefilled with the type's display name, and refuses a

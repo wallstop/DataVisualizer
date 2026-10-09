@@ -47,6 +47,11 @@ Three controls above the namespace panel fill the catalog:
 Removing a type or namespace only stops Data Visualizer from tracking it. Your
 assets stay on disk.
 
+![Manage-visible-types popover listing the project's ScriptableObject types](images/data-visualizer-import.png)
+
+*Type search popover over the namespace panel. Regenerated from the live window
+by the docs capture pipeline.*
+
 ## Edit your first asset
 
 1. Select a type in the left panel.
@@ -64,6 +69,10 @@ after you confirm.
 Select **Create** to add a new instance of the active type. The asset lands in
 your **Data Folder**, which you set under **Settings**. Clones always stay
 beside their original, whatever the Data Folder is.
+
+![Create popover asking for a new asset name](images/data-visualizer-create.png)
+*Create popover over the object list. Regenerated from the live window by the
+docs capture pipeline.*
 
 ## Filter and search
 
