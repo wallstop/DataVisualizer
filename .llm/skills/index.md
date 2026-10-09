@@ -8,7 +8,7 @@
 | Skill | When to Use |
 | --- | --- |
 | [manage-skills](./manage-skills/SKILL.md) | Create, edit, split, or remove agent skills in .llm/skills using the standard SKILL.md format (agentskills.io). Use when adding a new skill, updating any skill's frontmatter or body, regenerating the skills index, or when a .llm markdown file approaches the 300-line limit. |
-| [ship-changes](./ship-changes/SKILL.md) | Validate and ship changes in the Data Visualizer package - CSharpier formatting, .llm harness linters, npm pack, Unity EditMode/PlayMode suites, commit subjects, and PR handoff requirements. Use before committing, pushing, or opening a pull request. |
+| [ship-changes](./ship-changes/SKILL.md) | Validate and ship changes in the DxVisualizer package - CSharpier formatting, .llm harness linters, npm pack, Unity EditMode/PlayMode suites, commit subjects, and PR handoff requirements. Use before committing, pushing, or opening a pull request. |
 
 ## Workflow Skills
 
@@ -20,8 +20,8 @@
 
 | Skill | When to Use |
 | --- | --- |
-| [create-editmode-test](./create-editmode-test/SKILL.md) | Write EditMode tests in Tests/Editor for the Data Visualizer package following repo conventions - assembly references, Should_When_ naming, TestCaseData-driven cases, and public-helper access rules. Use when adding or modifying Unity tests. |
-| [create-editor-window](./create-editor-window/SKILL.md) | Build or extend UI Toolkit editor windows (EditorWindow + UIElements) in the Data Visualizer package following repo patterns - menu wiring with nameof, USS class constants, pane layout, EditorPrefs persistence, and Odin-compatible SerializedObject handling. Use when adding editor windows, panes, popovers, or controls. |
+| [create-editmode-test](./create-editmode-test/SKILL.md) | Write EditMode tests in Tests/Editor for the DxVisualizer package following repo conventions - assembly references, Should_When_ naming, TestCaseData-driven cases, and public-helper access rules. Use when adding or modifying Unity tests. |
+| [create-editor-window](./create-editor-window/SKILL.md) | Build or extend UI Toolkit editor windows (EditorWindow + UIElements) in the DxVisualizer package following repo patterns - menu wiring with nameof, USS class constants, pane layout, EditorPrefs persistence, and Odin-compatible SerializedObject handling. Use when adding editor windows, panes, popovers, or controls. |
 | [extend-runtime-api](./extend-runtime-api/SKILL.md) | Add or modify runtime APIs in Runtime/ - BaseDataObject subclasses, lifecycle interfaces (clone, create, rename, delete), display attributes, and UI Toolkit customization hooks. Use when extending the package's public runtime surface or integrating third-party ScriptableObjects. |
-| [modify-data-visualizer](./modify-data-visualizer/SKILL.md) | Navigate and modify the Data Visualizer window codebase safely - file responsibility map, persistence models, async batch loading, search, and styling. Use when changing window behavior, fixing bugs, or refactoring editor code. |
+| [modify-data-visualizer](./modify-data-visualizer/SKILL.md) | Navigate and modify the DxVisualizer window codebase safely - file responsibility map, persistence models, async batch loading, search, and styling. Use when changing window behavior, fixing bugs, or refactoring editor code. |
 

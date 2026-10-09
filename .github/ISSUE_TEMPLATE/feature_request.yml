@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest a Data Visualizer capability or improvement
+description: Suggest a DxVisualizer capability or improvement
 title: "[Feature]: "
 labels:
   - enhancement
@@ -24,7 +24,7 @@ body:
     attributes:
       label: Proposed behavior
       description: Describe the observable outcome rather than only an implementation.
-      placeholder: Data Visualizer should ...
+      placeholder: DxVisualizer should ...
     validations:
       required: true
 
@@ -57,7 +57,7 @@ body:
   - type: input
     id: package-version
     attributes:
-      label: Data Visualizer version or revision
+      label: DxVisualizer version or revision
       placeholder: 0.0.37 or b9266ec
 
   - type: checkboxes

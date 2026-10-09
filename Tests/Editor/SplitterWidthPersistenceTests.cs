@@ -244,14 +244,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             if (floating)
             {
-                _window = EditorWindow.GetWindow<DataVisualizerWindow>("Data Visualizer", false);
+                _window = EditorWindow.GetWindow<DataVisualizerWindow>("DxVisualizer", false);
                 _window.position = FloatingWindowRect;
             }
             else
             {
-                EditorWindow.GetWindow<LayoutTestWindow>("Data Visualizer Test Anchor");
+                EditorWindow.GetWindow<LayoutTestWindow>("DxVisualizer Test Anchor");
                 _window = EditorWindow.GetWindow<DataVisualizerWindow>(
-                    "Data Visualizer",
+                    "DxVisualizer",
                     false,
                     typeof(LayoutTestWindow)
                 );

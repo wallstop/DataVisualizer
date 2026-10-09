@@ -1,6 +1,6 @@
 ---
 name: create-editmode-test
-description: Write EditMode tests in Tests/Editor for the Data Visualizer package following repo conventions - assembly references, Should_When_ naming, TestCaseData-driven cases, and public-helper access rules. Use when adding or modifying Unity tests.
+description: Write EditMode tests in Tests/Editor for the DxVisualizer package following repo conventions - assembly references, Should_When_ naming, TestCaseData-driven cases, and public-helper access rules. Use when adding or modifying Unity tests.
 metadata:
   category: Feature
 ---

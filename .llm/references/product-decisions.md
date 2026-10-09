@@ -1,6 +1,6 @@
 # Standing Product Decisions
 
-Long-lived constraints for every Data Visualizer task. Recorded decisions stay
+Long-lived constraints for every DxVisualizer task. Recorded decisions stay
 here instead of `PLAN.md`; revisit only by explicit owner decision.
 
 ## Compatibility

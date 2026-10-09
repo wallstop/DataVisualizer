@@ -455,11 +455,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             _namespaceController = new NamespaceController(_scriptableObjectTypes, _namespaceOrder);
         }
 
-        [MenuItem("Tools/Wallstop Studios/Data Visualizer")]
+        [MenuItem("Tools/Wallstop Studios/DxVisualizer")]
         public static void ShowWindow()
         {
-            DataVisualizer window = GetWindow<DataVisualizer>("Data Visualizer");
-            window.titleContent = new GUIContent("Data Visualizer");
+            DataVisualizer window = GetWindow<DataVisualizer>("DxVisualizer");
+            window.titleContent = new GUIContent("DxVisualizer");
 
             bool initialSizeApplied = EditorPrefs.GetBool(PrefsInitialSizeAppliedKey, false);
             if (!MonitorUtility.ShouldApplyInitialPlacement(initialSizeApplied, window.docked))
@@ -1044,7 +1044,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                                 if (styleSheet == null)
                                 {
                                     Debug.LogError(
-                                        $"Failed to load Data Visualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
+                                        $"Failed to load DxVisualizer style sheet (package root: '{packageRoot}'), relative path '{unityRelativeStyleSheetPath}'."
                                     );
                                 }
                             }
@@ -1107,7 +1107,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             else
             {
                 Debug.LogError(
-                    $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
+                    $"Failed to find DxVisualizer style sheet (package root: '{packageRoot}')."
                 );
             }
 
@@ -1118,7 +1118,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             else
             {
                 Debug.LogError(
-                    $"Failed to find Data Visualizer style sheet (package root: '{packageRoot}')."
+                    $"Failed to find DxVisualizer style sheet (package root: '{packageRoot}')."
                 );
             }
 
@@ -1129,7 +1129,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             else
             {
                 Debug.LogError(
-                    $"Failed to find Data Visualizer font (package root: '{packageRoot}')."
+                    $"Failed to find DxVisualizer font (package root: '{packageRoot}')."
                 );
             }
         }
@@ -7875,7 +7875,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _confirmNamespaceAddPopover.style.paddingRight = 10;
 
             string message =
-                $"Add {countToAdd} type{(1 < countToAdd ? "s" : "")} from namespace '<color=yellow><i>{namespaceKey}</i></color>' to Data Visualizer?";
+                $"Add {countToAdd} type{(1 < countToAdd ? "s" : "")} from namespace '<color=yellow><i>{namespaceKey}</i></color>' to DxVisualizer?";
             Label messageLabel = new(message)
             {
                 style = { whiteSpace = WhiteSpace.Normal, marginBottom = 15 },

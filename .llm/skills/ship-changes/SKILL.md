@@ -1,6 +1,6 @@
 ---
 name: ship-changes
-description: Validate and ship changes in the Data Visualizer package - CSharpier formatting, .llm harness linters, npm pack, Unity EditMode/PlayMode suites, commit subjects, and PR handoff requirements. Use before committing, pushing, or opening a pull request.
+description: Validate and ship changes in the DxVisualizer package - CSharpier formatting, .llm harness linters, npm pack, Unity EditMode/PlayMode suites, commit subjects, and PR handoff requirements. Use before committing, pushing, or opening a pull request.
 metadata:
   category: Core
 ---

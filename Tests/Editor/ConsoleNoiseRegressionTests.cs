@@ -186,7 +186,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldSilentlyIgnoreForeignDropOnLabelDropTarget()
         {
             LayoutTestWindow host = EditorWindow.GetWindow<LayoutTestWindow>(
-                "Data Visualizer Console Noise Anchor",
+                "DxVisualizer Console Noise Anchor",
                 false
             );
             using (TestCleanupScope cleanup = new())
@@ -223,7 +223,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldApplyPackageLabelDropWithoutLogging()
         {
             LayoutTestWindow host = EditorWindow.GetWindow<LayoutTestWindow>(
-                "Data Visualizer Console Noise Anchor",
+                "DxVisualizer Console Noise Anchor",
                 false
             );
             using (TestCleanupScope cleanup = new())

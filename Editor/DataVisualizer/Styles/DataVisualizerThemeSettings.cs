@@ -5,7 +5,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
 
     [CreateAssetMenu(
         fileName = "DataVisualizerThemeSettings",
-        menuName = "Wallstop Studios/DataVisualizer/Data Visualizer Theme",
+        menuName = "Wallstop Studios/DxVisualizer/DxVisualizer Theme",
         order = 2
     )]
     public sealed class DataVisualizerThemeSettings : ScriptableObject

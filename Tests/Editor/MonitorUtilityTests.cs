@@ -444,9 +444,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 CloseLayoutTestWindows();
                 yield return null;
 
-                EditorWindow.GetWindow<LayoutTestWindow>("Data Visualizer Test Anchor");
+                EditorWindow.GetWindow<LayoutTestWindow>("DxVisualizer Test Anchor");
                 DataVisualizerWindow window = EditorWindow.GetWindow<DataVisualizerWindow>(
-                    "Data Visualizer",
+                    "DxVisualizer",
                     false,
                     typeof(LayoutTestWindow)
                 );
