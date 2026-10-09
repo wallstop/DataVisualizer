@@ -893,7 +893,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         typeRemoveButton = new Button(() =>
                         {
                             dataVisualizer.BuildAndOpenConfirmationPopover(
-                                $"Remove type '<color=yellow><i>{type.Name}</i></color>' from Data Visualizer?",
+                                $"Remove type '<color=yellow><i>{type.Name}</i></color>' from DxVisualizer?",
                                 "Remove",
                                 () =>
                                 {

@@ -1,5 +1,5 @@
 name: Bug report
-description: Report broken or unexpected Data Visualizer behavior
+description: Report broken or unexpected DxVisualizer behavior
 title: "[Bug]: "
 labels:
   - bug
@@ -73,7 +73,7 @@ body:
   - type: input
     id: package-version
     attributes:
-      label: Data Visualizer version or revision
+      label: DxVisualizer version or revision
       description: Provide the package version, Git tag, branch, or commit SHA.
       placeholder: 0.0.37 or b9266ec
     validations:
@@ -83,7 +83,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Include the editor OS, installation source, relevant packages, and Data Visualizer persistence mode.
+      description: Include the editor OS, installation source, relevant packages, and DxVisualizer persistence mode.
       placeholder: |
         Editor OS: Windows 11
         Installation source: Git URL

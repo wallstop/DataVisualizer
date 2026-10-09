@@ -1,11 +1,11 @@
 ---
 name: modify-data-visualizer
-description: Navigate and modify the Data Visualizer window codebase safely - file responsibility map, persistence models, async batch loading, search, and styling. Use when changing window behavior, fixing bugs, or refactoring editor code.
+description: Navigate and modify the DxVisualizer window codebase safely - file responsibility map, persistence models, async batch loading, search, and styling. Use when changing window behavior, fixing bugs, or refactoring editor code.
 metadata:
   category: Feature
 ---
 
-# Skill: Modify Data Visualizer
+# Skill: Modify DxVisualizer
 
 ## Navigation Map
 

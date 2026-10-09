@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed to DxVisualizer. The display name, window title, and menu item
+  (**Tools → Wallstop Studios → DxVisualizer**) and the settings and theme
+  asset menus (**Assets → Create → Wallstop Studios → DxVisualizer**) use the
+  new name. The package name, C# namespaces, public types, saved state, and
+  `--dataviz-*` theme tokens are unchanged, so projects upgrade without edits
+  (#147).
+
 ### Fixed
 
 - `BaseDataObject` asset ids no longer change on validation. An asset keeps

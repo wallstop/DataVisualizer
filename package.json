@@ -1,29 +1,33 @@
 {
   "name": "com.wallstop-studios.data-visualizer",
   "version": "0.1.0",
-  "displayName": "Data Visualizer",
-  "description": "Data Management UI for Unity's Scriptable Objects",
+  "displayName": "DxVisualizer",
+  "description": "Your game data, one window. Find, inspect, organize, and edit ScriptableObject data in one Unity editor window.",
   "dependencies": {},
   "unity": "2021.3",
   "keywords": [
+    "DxVisualizer",
+    "Dx",
     "Scriptable Object",
     "Scriptable Objects",
     "SO",
     "data",
+    "editor window",
     "UI",
     "management"
   ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wallstop/DataVisualizer.git"
+    "url": "git+https://github.com/Ambiguous-Interactive/DxVisualizer.git"
   },
   "bugs": {
-    "url": "https://github.com/wallstop/DataVisualizer/issues"
+    "url": "https://github.com/Ambiguous-Interactive/DxVisualizer/issues"
   },
   "author": "wallstop studios <wallstop@wallstopstudios.com> (https://wallstopstudios.com)",
-  "homepage": "https://github.com/wallstop/DataVisualizer#readme",
-  "changelogUrl": "https://github.com/wallstop/DataVisualizer/blob/main/CHANGELOG.md",
+  "homepage": "https://ambiguous-interactive.github.io/DxVisualizer/",
+  "documentationUrl": "https://ambiguous-interactive.github.io/DxVisualizer/",
+  "changelogUrl": "https://github.com/Ambiguous-Interactive/DxVisualizer/blob/main/CHANGELOG.md",
   "main": "README.md",
   "files": [
     "Editor",

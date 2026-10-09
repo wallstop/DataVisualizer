@@ -273,7 +273,7 @@ function Test-AnalyzerSet {
 
     $analyzerDirectory = Join-Path $ProjectRoot $Set.RelativeDirectory
     if (Test-PathWithin -Candidate $analyzerDirectory -Parent $script:repositoryRoot) {
-        throw 'Analyzer destination must be outside the Data Visualizer package repository.'
+        throw 'Analyzer destination must be outside the DxVisualizer package repository.'
     }
     Assert-ExactText `
         "$analyzerDirectory.meta" `
@@ -297,7 +297,7 @@ function Install-AnalyzerSet {
 
     $analyzerDirectory = Join-Path $ProjectRoot $Set.RelativeDirectory
     if (Test-PathWithin -Candidate $analyzerDirectory -Parent $script:repositoryRoot) {
-        throw 'Analyzer destination must be outside the Data Visualizer package repository.'
+        throw 'Analyzer destination must be outside the DxVisualizer package repository.'
     }
 
     $resolvedPackage = Resolve-AnalyzerPackage -Set $Set

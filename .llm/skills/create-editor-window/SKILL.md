@@ -1,6 +1,6 @@
 ---
 name: create-editor-window
-description: Build or extend UI Toolkit editor windows (EditorWindow + UIElements) in the Data Visualizer package following repo patterns - menu wiring with nameof, USS class constants, pane layout, EditorPrefs persistence, and Odin-compatible SerializedObject handling. Use when adding editor windows, panes, popovers, or controls.
+description: Build or extend UI Toolkit editor windows (EditorWindow + UIElements) in the DxVisualizer package following repo patterns - menu wiring with nameof, USS class constants, pane layout, EditorPrefs persistence, and Odin-compatible SerializedObject handling. Use when adding editor windows, panes, popovers, or controls.
 metadata:
   category: Feature
 ---
@@ -12,7 +12,7 @@ metadata:
 - Editor-only code lives under `Editor/` (asmdef `includePlatforms: ["Editor"]`);
   no `#if UNITY_EDITOR` wrapper is needed there.
 - Menu wiring uses `nameof`-built labels:
-  `[MenuItem("Tools/Wallstop Studios/Data Visualizer")]` - keep the company segment
+  `[MenuItem("Tools/Wallstop Studios/DxVisualizer")]` - keep the company segment
   literal, derive the feature segment from a const/`nameof` where practical.
 - USS class names and `EditorPrefs` keys are `private const string` fields; prefs
   keys share a prefix (`PrefsPrefix = "WallstopStudios.Editor.DataVisualizer."`).

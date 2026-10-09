@@ -10,7 +10,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
     [CreateAssetMenu(
         fileName = "DataVisualizerSettings",
-        menuName = "Wallstop Studios/DataVisualizer/Data Visualizer Settings",
+        menuName = "Wallstop Studios/DxVisualizer/DxVisualizer Settings",
         order = 1
     )]
     public sealed class DataVisualizerSettings : ScriptableObject
