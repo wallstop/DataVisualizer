@@ -52,6 +52,8 @@ Open the window with **Tools → Wallstop Studios → Data Visualizer**.
 - [Managing assets](managing-assets.md) — create, clone, rename, move, delete, and run processors.
 - [Organizing your data](organizing.md) — ordering, layout, themes, persistence, and Play Mode.
 - [Extending the window](extending.md) — attributes, `BaseDataObject`, processors, and custom inspector content.
+- [Troubleshooting](troubleshooting.md) — slow loading, stale views, missing assets, window size limits, and capture regeneration.
+- [Troubleshooting](troubleshooting.md) — what slow loading, stale views, missing assets, and small windows mean, plus the capture pipeline's limits.
 - [README](https://github.com/wallstop/DataVisualizer#readme) — the repository README, which links the video walkthrough.
 - [Video walkthrough](https://youtu.be/3oUxUSKNyhw) — a visual tour of the window.
 - [Issues](https://github.com/wallstop/DataVisualizer/issues) — known problems and feature requests.
