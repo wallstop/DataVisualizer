@@ -3741,109 +3741,123 @@ namespace WallstopStudios.DataVisualizer.Editor
                         return;
                     }
 
-                    Rect triggerBounds = triggerElement.worldBound;
-                    Vector2 triggerPosInRoot = rootVisualElement.WorldToLocal(
-                        triggerBounds.position
-                    );
-
-                    float popoverWidth = popover.resolvedStyle.width;
-                    float popoverHeight = popover.resolvedStyle.height;
-
-                    if (float.IsNaN(popoverWidth) || popoverWidth <= 0)
-                    {
-                        popoverWidth =
-                            popover.style.width.keyword == StyleKeyword.Auto
-                            || popover.style.width.value.value <= 0
-                                ? 350f
-                                : popover.style.width.value.value;
-                    }
-                    if (float.IsNaN(popoverHeight) || popoverHeight <= 0)
-                    {
-                        popoverHeight =
-                            popover.style.height.keyword == StyleKeyword.Auto
-                            || popover.style.height.value.value <= 0
-                                ? 150f
-                                : popover.style.height.value.value;
-                    }
-
-                    popoverWidth = Mathf.Min(
-                        popoverWidth,
-                        0 < popover.resolvedStyle.maxWidth.value
-                            ? popover.resolvedStyle.maxWidth.value
-                            : float.MaxValue
-                    );
-                    popoverHeight = Mathf.Min(
-                        popoverHeight,
-                        0 < popover.resolvedStyle.maxHeight.value
-                            ? popover.resolvedStyle.maxHeight.value
-                            : float.MaxValue
-                    );
-                    popoverWidth = Mathf.Max(
-                        popoverWidth,
-                        0 < popover.resolvedStyle.minWidth.value
-                            ? popover.resolvedStyle.minWidth.value
-                            : 50f
-                    );
-                    popoverHeight = Mathf.Max(
-                        popoverHeight,
-                        0 < popover.resolvedStyle.minHeight.value
-                            ? popover.resolvedStyle.minHeight.value
-                            : 30f
-                    );
-
-                    float targetX = triggerPosInRoot.x;
-                    float targetY = triggerPosInRoot.y + triggerBounds.height + 2;
-                    float windowWidth = rootVisualElement.resolvedStyle.width;
-                    float windowHeight = rootVisualElement.resolvedStyle.height;
-
-                    if (
-                        float.IsNaN(windowWidth)
-                        || float.IsNaN(windowHeight)
-                        || windowWidth <= 0
-                        || windowHeight <= 0
-                    )
-                    {
-                        popover.style.left = targetX;
-                        popover.style.top = targetY;
-                    }
-                    else
-                    {
-                        float clampedX = Mathf.Max(0, targetX);
-                        clampedX = Mathf.Min(clampedX, windowWidth - popoverWidth);
-                        clampedX = Mathf.Max(0, clampedX);
-                        float clampedY = Mathf.Max(0, targetY);
-                        clampedY = Mathf.Min(clampedY, windowHeight - popoverHeight);
-                        clampedY = Mathf.Max(0, clampedY);
-
-                        popover.style.left = clampedX;
-                        popover.style.top = clampedY;
-                    }
-                    popover.style.display = DisplayStyle.Flex;
-                    if (!isNested)
-                    {
-                        rootVisualElement
-                            .schedule.Execute(() =>
-                            {
-                                if (_activePopover == popover)
-                                {
-                                    if (shouldFocus)
-                                    {
-                                        popover.Focus();
-                                    }
-                                    rootVisualElement.RegisterCallback<PointerDownEvent>(
-                                        HandleClickOutsidePopover,
-                                        TrickleDown.TrickleDown
-                                    );
-                                }
-                            })
-                            .ExecuteLater(10);
-                    }
-                    else if (_activeNestedPopover == popover && shouldFocus)
-                    {
-                        popover.Focus();
-                    }
+                    PositionAndDisplayPopover(popover, triggerElement, isNested, shouldFocus);
                 })
                 .ExecuteLater(1);
+        }
+
+        /*
+            Positions the popover below its trigger, clamps it to the window, and reveals
+            it. OpenPopover runs this from a scheduled callback so real interactions land
+            on a laid-out frame; tests that arrange an offscreen capture call it directly
+            because the capture's layout and render passes never tick the panel scheduler.
+        */
+        private void PositionAndDisplayPopover(
+            VisualElement popover,
+            VisualElement triggerElement,
+            bool isNested,
+            bool shouldFocus
+        )
+        {
+            Rect triggerBounds = triggerElement.worldBound;
+            Vector2 triggerPosInRoot = rootVisualElement.WorldToLocal(triggerBounds.position);
+
+            float popoverWidth = popover.resolvedStyle.width;
+            float popoverHeight = popover.resolvedStyle.height;
+
+            if (float.IsNaN(popoverWidth) || popoverWidth <= 0)
+            {
+                popoverWidth =
+                    popover.style.width.keyword == StyleKeyword.Auto
+                    || popover.style.width.value.value <= 0
+                        ? 350f
+                        : popover.style.width.value.value;
+            }
+            if (float.IsNaN(popoverHeight) || popoverHeight <= 0)
+            {
+                popoverHeight =
+                    popover.style.height.keyword == StyleKeyword.Auto
+                    || popover.style.height.value.value <= 0
+                        ? 150f
+                        : popover.style.height.value.value;
+            }
+
+            popoverWidth = Mathf.Min(
+                popoverWidth,
+                0 < popover.resolvedStyle.maxWidth.value
+                    ? popover.resolvedStyle.maxWidth.value
+                    : float.MaxValue
+            );
+            popoverHeight = Mathf.Min(
+                popoverHeight,
+                0 < popover.resolvedStyle.maxHeight.value
+                    ? popover.resolvedStyle.maxHeight.value
+                    : float.MaxValue
+            );
+            popoverWidth = Mathf.Max(
+                popoverWidth,
+                0 < popover.resolvedStyle.minWidth.value
+                    ? popover.resolvedStyle.minWidth.value
+                    : 50f
+            );
+            popoverHeight = Mathf.Max(
+                popoverHeight,
+                0 < popover.resolvedStyle.minHeight.value
+                    ? popover.resolvedStyle.minHeight.value
+                    : 30f
+            );
+
+            float targetX = triggerPosInRoot.x;
+            float targetY = triggerPosInRoot.y + triggerBounds.height + 2;
+            float windowWidth = rootVisualElement.resolvedStyle.width;
+            float windowHeight = rootVisualElement.resolvedStyle.height;
+
+            if (
+                float.IsNaN(windowWidth)
+                || float.IsNaN(windowHeight)
+                || windowWidth <= 0
+                || windowHeight <= 0
+            )
+            {
+                popover.style.left = targetX;
+                popover.style.top = targetY;
+            }
+            else
+            {
+                float clampedX = Mathf.Max(0, targetX);
+                clampedX = Mathf.Min(clampedX, windowWidth - popoverWidth);
+                clampedX = Mathf.Max(0, clampedX);
+                float clampedY = Mathf.Max(0, targetY);
+                clampedY = Mathf.Min(clampedY, windowHeight - popoverHeight);
+                clampedY = Mathf.Max(0, clampedY);
+
+                popover.style.left = clampedX;
+                popover.style.top = clampedY;
+            }
+            popover.style.display = DisplayStyle.Flex;
+            if (!isNested)
+            {
+                rootVisualElement
+                    .schedule.Execute(() =>
+                    {
+                        if (_activePopover == popover)
+                        {
+                            if (shouldFocus)
+                            {
+                                popover.Focus();
+                            }
+                            rootVisualElement.RegisterCallback<PointerDownEvent>(
+                                HandleClickOutsidePopover,
+                                TrickleDown.TrickleDown
+                            );
+                        }
+                    })
+                    .ExecuteLater(10);
+            }
+            else if (_activeNestedPopover == popover && shouldFocus)
+            {
+                popover.Focus();
+            }
         }
 
         private void CloseActivePopover()
@@ -5045,6 +5059,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             })
             {
                 text = "+",
+                name = "add-type-button",
                 tooltip = "Manage Visible Types",
             };
             _addTypeButton.AddToClassList("create-button");
