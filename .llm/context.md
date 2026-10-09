@@ -98,13 +98,13 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
     for collection shapes used by production callers.
 17. Unity generates `.meta` files for every non-dot path; commit them alongside new
     files. Dot-folders (`.llm`, `.github`) never get `.meta` files.
-18. Keep tests and agent/dev files out of the npm tarball: `package.json` `files`
-    whitelists only `Editor`, `Runtime`, `docs`, and their `.meta` companions. Static
+18. Keep tests, docs imagery, and agent/dev files out of the npm tarball:
+    `package.json` `files` whitelists only `Editor`, `Runtime`, and their `.meta`
+    companions (docs imagery ships via GitHub, not npm). Static
     analyzer binaries, Unity metadata/labels, notices, and `-analyzer` response-file
     arguments must not exist in this package repository; install development-only
     analyzers in the host Unity project instead. Install or verify the pinned
-    analyzer sets with
-    `scripts/install-host-errorprone-analyzers.ps1 -HostProject <path>`
+    analyzer sets with `scripts/install-host-errorprone-analyzers.ps1 -HostProject <path>`
     (`-AnalyzerSet SonarAnalyzer|All` selects sets; add `-VerifyOnly` for an
     offline integrity check).
 19. Write explicit ordered comparisons with `<` or `<=`, reversing operands instead
