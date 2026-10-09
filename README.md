@@ -16,8 +16,8 @@ Open **Tools → Wallstop Studios → Data Visualizer** and dock it alongside th
 
 ## Window Layout
 
-![Data Visualizer layout with namespace, object, and inspector columns](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-layout.jpg)
-*Full window overview at 00:27 in the walkthrough video.*
+![Data Visualizer layout with namespace, object, and inspector columns](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-layout.png)
+*Full window overview. Regenerated from the live window by the docs capture pipeline.*
 
 The window uses a three-panel layout:
 
