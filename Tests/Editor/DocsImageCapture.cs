@@ -491,7 +491,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 return false;
             }
 
-            if (element.resolvedStyle.visibility == VisibilityStyle.Hidden)
+            if (element.resolvedStyle.visibility == Visibility.Hidden)
             {
                 return false;
             }

@@ -435,7 +435,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             collapsedContainer.Add(collapsedChild);
 
             VisualElement invisibleParent = new();
-            invisibleParent.style.visibility = VisibilityStyle.Hidden;
+            invisibleParent.style.visibility = Visibility.Hidden;
             root.Add(invisibleParent);
             VisualElement invisibleChild = new() { name = "invisible-child" };
             invisibleChild.style.width = 20f;
