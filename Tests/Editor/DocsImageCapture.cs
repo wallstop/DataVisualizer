@@ -23,19 +23,36 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         documented shots through EditorSurfaceCapture, so imagery is regenerated from code
         instead of hand-staged screen captures.
 
+        The manifest carries five shots. The layout shot is the full window. The other
+        four serve the README sections that the hand-taken video-frame JPGs used to
+        illustrate: instance-actions focuses the objects pane whose rows carry the
+        clone/rename/move/delete controls, create opens the create popover that asks for
+        a new asset name, import opens the manage-visible-types popover (the namespace
+        search dropdown with the project's types), and settings opens the settings
+        popover with its persistence toggles and data folder field. The three popovers
+        are in-panel VisualElements, so the offscreen panel render composites them; each
+        is opened through the window's own popover flow, then cropped shots cut the
+        captured PNG down to the subject bounds recorded from the live window, so a
+        section image shows the state it documents instead of duplicating the hero.
+
         The driver never writes into docs/ by default; callers name an output directory and
         review the results before committing them. Fixture assets are created under
         Assets/DataVisualizerDocsCapture and deleted on every exit path, and the window
         preferences the arrangement touches are snapshotted and restored, mirroring the
         hygiene of EditorSurfaceCaptureTests.
 
-        The window's Instance field, namespace-controller field, Cleanup, LoadInitialContent,
-        SelectObject, and PersistSettings members are private or internal with no public
-        equivalent, and Unity's compilation does not honor InternalsVisibleTo for the
-        editor-to-tests assembly pair (see ObjectIdExtensions). They are reached
-        reflectively, exactly like the merged EditorSurfaceCaptureTests do; a Unity upgrade
-        that removes one fails closed here with an exception instead of silently capturing
-        the wrong state.
+        The window's Instance field, popover fields, Cleanup, LoadInitialContent,
+        SelectObject, the popover content builders, and PositionAndDisplayPopover
+        members are private or internal with no public equivalent, and Unity's
+        compilation does not honor InternalsVisibleTo for the editor-to-tests
+        assembly pair (see ObjectIdExtensions). They are reached reflectively,
+        exactly like the merged EditorSurfaceCaptureTests do; a Unity upgrade that
+        removes one fails closed here with an exception instead of silently
+        capturing the wrong state. Popovers open through the window's own content
+        builders plus the extracted production positioning step
+        PositionAndDisplayPopover, invoked synchronously: the capture's layout and
+        render passes never tick the panel scheduler, so a capture that waited for
+        OpenPopover's scheduled reveal would leave the popover hidden.
 
         CreateGUI defers its content load to a scheduled tick, and SelectType returns
         silently when the type is missing from the tree, so the driver invokes the initial
@@ -58,7 +75,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         Windows 6000.5 host painted every region, so the asset-name field is the canary:
         when it is blank the host has the recorded UIR gap and validation asserts only
         regions that painted even on such a host, keeping that host's known output
-        reviewable while a capable host's hero is enforced pixel-faithful.
+        reviewable while a capable host's hero is enforced pixel-faithful. Each shot's
+        subject region (its open popover or the row action bar) joins the guarded set,
+        so a capable host fails closed on a capture that omitted the state the shot
+        exists to document.
 
         Validation measures only rendered subtrees. The saved settings persist namespace
         collapse state, so a host can legitimately hide type rows behind display:none
@@ -74,6 +94,31 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             and ceiling separate those shapes with margin on both measured hosts.
         */
         internal const string CanaryRegionName = "inspector-asset-name-field";
+
+        internal const string LayoutShotName = "layout";
+
+        private const string InstanceActionsShotName = "instance-actions";
+        private const string CreateShotName = "create";
+        private const string ImportShotName = "import";
+        private const string SettingsShotName = "settings";
+
+        private const string SettingsPopoverFieldName = "_settingsPopover";
+        private const string SettingsButtonFieldName = "_settingsButton";
+        private const string TypeAddPopoverFieldName = "_typeAddPopover";
+        private const string TypeAddButtonFieldName = "_addTypeButton";
+        private const string CreatePopoverFieldName = "_createPopover";
+        private const string CreateButtonFieldName = "_createObjectButton";
+
+        private const string SettingsPopoverElementName = "settings-popover";
+        private const string TypeAddPopoverElementName = "type-add-popover";
+        private const string CreatePopoverElementName = "create-popover";
+        private const string CreateButtonElementName = "create-object-button";
+        private const string TypeAddButtonElementName = "add-type-button";
+        private const string ObjectColumnElementName = "object-column";
+        private const string ObjectItemActionsClass = "object-item-actions";
+
+        private const float CropPadding = 8f;
+        private const int PngSignatureLength = 8;
 
         private const string FixtureFolder = "Assets/DataVisualizerDocsCapture";
         private const float WindowWidth = 1180f;
@@ -110,7 +155,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "Damage Table",
         };
 
-        private static readonly IReadOnlyList<string> ManifestShotNames = new[] { "layout" };
+        private static readonly IReadOnlyList<string> ManifestShotNames = new[]
+        {
+            LayoutShotName,
+            InstanceActionsShotName,
+            CreateShotName,
+            ImportShotName,
+            SettingsShotName,
+        };
 
         private static readonly BindingFlags ReflectedInstanceMembers =
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -215,13 +267,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 VerifySelectedType(controller);
                 SelectObject(window, LoadFirstFixtureAsset());
                 VerifySelectedObject(window);
+                ArrangeShotState(window, shotName);
 
                 EditorSurfaceCaptureResult result = EditorSurfaceCapture.Capture(
                     window,
                     capturePath
                 );
-                ValidateCapturedRegions(window, capturePath);
-                return result;
+                ValidateCapturedRegions(window, capturePath, shotName);
+                return CropCapturedShot(window, shotName, capturePath, result);
             }
             finally
             {
@@ -272,12 +325,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Region rects are recorded from the live window before teardown, measured against
             the written file, and every region a capable host must paint is asserted; on a
             host with the recorded UIR gap only the regions that host painted are asserted.
+            The shot name selects the subject regions (the open popover or the row action
+            bar) that join the guarded set for that shot.
         */
-        internal static void ValidateCapturedRegions(EditorWindow window, string capturePath)
+        internal static void ValidateCapturedRegions(
+            EditorWindow window,
+            string capturePath,
+            string shotName
+        )
         {
             Rect rootBounds = window.rootVisualElement.worldBound;
             ValidateRegionAnalysis(
-                Analyze(File.ReadAllBytes(capturePath), rootBounds, CollectRegions(window))
+                Analyze(
+                    File.ReadAllBytes(capturePath),
+                    rootBounds,
+                    CollectRegions(window, shotName)
+                )
             );
         }
 
@@ -315,21 +378,77 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         /*
+            The layout shot ships the full window; every other shot crops the captured PNG
+            down to its subject so a section image documents its state instead of
+            duplicating the hero. The rect comes from the live window's settled bounds and
+            stays inside the window, so the mapping into the captured pixels is exact.
+        */
+        internal static bool TryComputeCropRect(
+            EditorWindow window,
+            string shotName,
+            out Rect cropRect
+        )
+        {
+            VisualElement root = window.rootVisualElement;
+            switch (shotName)
+            {
+                case LayoutShotName:
+                    cropRect = default;
+                    return false;
+                case InstanceActionsShotName:
+                    cropRect = PaddedToRootBounds(
+                        root,
+                        RequiredElementBounds(root, ObjectColumnElementName, shotName)
+                    );
+                    return true;
+                case CreateShotName:
+                    cropRect = PaddedToRootBounds(
+                        root,
+                        Union(
+                            RequiredElementBounds(root, CreatePopoverElementName, shotName),
+                            RequiredElementBounds(root, CreateButtonElementName, shotName)
+                        )
+                    );
+                    return true;
+                case ImportShotName:
+                    cropRect = PaddedToRootBounds(
+                        root,
+                        Union(
+                            RequiredElementBounds(root, TypeAddPopoverElementName, shotName),
+                            RequiredElementBounds(root, TypeAddButtonElementName, shotName)
+                        )
+                    );
+                    return true;
+                case SettingsShotName:
+                    cropRect = PaddedToRootBounds(
+                        root,
+                        RequiredElementBounds(root, SettingsPopoverElementName, shotName)
+                    );
+                    return true;
+                default:
+                    throw new ArgumentException(
+                        $"Unknown shot '{shotName}'. Known shots: {string.Join(", ", ManifestShotNames)}.",
+                        nameof(shotName)
+                    );
+            }
+        }
+
+        /*
             Measures every region against the captured PNG. Region rects are recorded in
-            panel point space and mapped into image space with the root's laid-out size, the
-            same mapping the issue #114 RCA used; UI Toolkit measures from the top while the
-            pixel array starts at the bottom row.
+            panel point space and mapped into image space with the bounds of the captured
+            surface, the same mapping the issue #114 RCA used; UI Toolkit measures from the
+            top while the pixel array starts at the bottom row.
         */
         internal static CaptureRegionAnalysis Analyze(
             byte[] pngBytes,
-            Rect rootBounds,
+            Rect sourceBounds,
             IReadOnlyList<CaptureRegion> regions
         )
         {
-            if (rootBounds.width < 1f || rootBounds.height < 1f)
+            if (sourceBounds.width < 1f || sourceBounds.height < 1f)
             {
                 throw new InvalidOperationException(
-                    $"The window root laid out to {rootBounds.width}x{rootBounds.height}; "
+                    $"The captured surface laid out to {sourceBounds.width}x{sourceBounds.height}; "
                         + "region analysis has no surface to measure."
                 );
             }
@@ -345,18 +464,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
 
                 Color32[] pixels = readback.GetPixels32();
-                float scaleX = readback.width / rootBounds.width;
-                float scaleY = readback.height / rootBounds.height;
                 List<CaptureRegionMetric> metrics = new(regions.Count);
                 bool canaryFound = false;
                 bool canaryPainted = false;
                 foreach (CaptureRegion region in regions)
                 {
-                    Rect pngRect = new(
-                        (region.Rect.x - rootBounds.x) * scaleX,
-                        (region.Rect.y - rootBounds.y) * scaleY,
-                        region.Rect.width * scaleX,
-                        region.Rect.height * scaleY
+                    Rect pngRect = PixelRectForUiRect(
+                        region.Rect,
+                        sourceBounds,
+                        readback.width,
+                        readback.height
                     );
                     int distinctColors = MeasureRegionColors(
                         pixels,
@@ -393,18 +510,128 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         /*
+            Cuts the captured PNG down to the crop rect and writes it over capturePath.
+            The crop copies the exact decoded pixels, so the shipped file stays the
+            validated surface minus everything outside the subject; byte identity across
+            runs is preserved because both the decode and the encode are deterministic.
+        */
+        internal static EditorSurfaceCaptureResult CropCapturedPng(
+            string capturePath,
+            Rect uiCropRect,
+            Rect sourceBounds
+        )
+        {
+            byte[] fullPng = File.ReadAllBytes(capturePath);
+            Texture2D source = new(2, 2, TextureFormat.RGBA32, false);
+            try
+            {
+                if (!source.LoadImage(fullPng))
+                {
+                    throw new InvalidOperationException(
+                        "The captured file is not a decodable PNG; the crop cannot run."
+                    );
+                }
+
+                Rect pixelRect = PixelRectForUiRect(
+                    uiCropRect,
+                    sourceBounds,
+                    source.width,
+                    source.height
+                );
+                int x0 = Mathf.Clamp(Mathf.RoundToInt(pixelRect.x), 0, source.width - 1);
+                int y0 = Mathf.Clamp(Mathf.RoundToInt(pixelRect.y), 0, source.height - 1);
+                int croppedWidth = Mathf.Clamp(
+                    Mathf.RoundToInt(pixelRect.width),
+                    1,
+                    source.width - x0
+                );
+                int croppedHeight = Mathf.Clamp(
+                    Mathf.RoundToInt(pixelRect.height),
+                    1,
+                    source.height - y0
+                );
+
+                Color32[] sourcePixels = source.GetPixels32();
+                Color32[] croppedPixels = new Color32[croppedWidth * croppedHeight];
+                int firstSourceRow = source.height - y0 - croppedHeight;
+                for (int row = 0; row < croppedHeight; row++)
+                {
+                    int sourceRow = firstSourceRow + row;
+                    for (int column = 0; column < croppedWidth; column++)
+                    {
+                        croppedPixels[row * croppedWidth + column] = sourcePixels[
+                            sourceRow * source.width + x0 + column
+                        ];
+                    }
+                }
+
+                Texture2D cropped = new(
+                    croppedWidth,
+                    croppedHeight,
+                    TextureFormat.RGB24,
+                    false,
+                    true
+                );
+                try
+                {
+                    cropped.SetPixels32(croppedPixels);
+                    cropped.Apply(false, false);
+                    byte[] png = cropped.EncodeToPNG();
+                    if (png == null || png.Length <= PngSignatureLength)
+                    {
+                        throw new InvalidOperationException(
+                            "PNG encoding of the cropped capture produced no usable bytes."
+                        );
+                    }
+
+                    File.WriteAllBytes(capturePath, png);
+                    return new EditorSurfaceCaptureResult(
+                        capturePath,
+                        croppedWidth,
+                        croppedHeight,
+                        png.Length,
+                        EditorSurfaceCapture.CountDistinctColors(cropped)
+                    );
+                }
+                finally
+                {
+                    Object.DestroyImmediate(cropped);
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(source);
+            }
+        }
+
+        /*
             Regions come from the live window tree, so the guarded set follows whatever the
             window actually built. Namespace/type rows are recorded per element with their
             selection state (selected rows painted even on the macOS gap host); the asset
             name field, labels section, script row, and IMGUI-backed read-only drawer did
             not paint there, while the title and description fields and the object list did.
 
-            Only rendered subtrees are recorded: a persisted collapsed namespace hides its
-            type rows behind a display:none container, and a region that cannot paint would
-            otherwise clamp to a one-pixel sample that always fails the painted check.
+            The shot name adds that shot's subject region: the open popover or the row
+            action bar the shot exists to document. Subject regions fail closed when their
+            element is missing or unrendered, because a shot captured without its subject
+            is exactly the misleading image the validation exists to block. Only rendered
+            subtrees are recorded for the common set: a persisted collapsed namespace hides
+            its type rows behind a display:none container, and a region that cannot paint
+            would otherwise clamp to a one-pixel sample that always fails the painted check.
         */
-        internal static IReadOnlyList<CaptureRegion> CollectRegions(EditorWindow window)
+        internal static IReadOnlyList<CaptureRegion> CollectRegions(
+            EditorWindow window,
+            string shotName
+        )
         {
+            if (!IsKnownShot(shotName))
+            {
+                throw new ArgumentException(
+                    $"Unknown shot '{shotName}'. Known shots: {string.Join(", ", ManifestShotNames)}.",
+                    nameof(shotName)
+                );
+            }
+
             VisualElement root = window.rootVisualElement;
             List<CaptureRegion> regions = new();
             foreach (
@@ -468,6 +695,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AddRenderedRegion(regions, "listview", listView, true);
             }
 
+            AddSubjectRegion(root, regions, shotName);
+
             return regions;
         }
 
@@ -507,6 +736,99 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return true;
         }
 
+        /*
+            Maps a panel-space rect into the pixel space of a PNG that captured the given
+            source bounds: UI Toolkit measures from the top-left while the pixel array starts
+            at the bottom row.
+        */
+        private static Rect PixelRectForUiRect(
+            Rect uiRect,
+            Rect sourceBounds,
+            int pixelWidth,
+            int pixelHeight
+        )
+        {
+            float scaleX = pixelWidth / sourceBounds.width;
+            float scaleY = pixelHeight / sourceBounds.height;
+            return new Rect(
+                (uiRect.x - sourceBounds.x) * scaleX,
+                (uiRect.y - sourceBounds.y) * scaleY,
+                uiRect.width * scaleX,
+                uiRect.height * scaleY
+            );
+        }
+
+        /*
+            Rewrites the validated capture in place as the shot's cropped image when the
+            shot defines a crop; full-window shots return the capture untouched.
+        */
+        private static EditorSurfaceCaptureResult CropCapturedShot(
+            EditorWindow window,
+            string shotName,
+            string capturePath,
+            EditorSurfaceCaptureResult result
+        )
+        {
+            if (!TryComputeCropRect(window, shotName, out Rect cropRect))
+            {
+                return result;
+            }
+
+            return CropCapturedPng(capturePath, cropRect, window.rootVisualElement.worldBound);
+        }
+
+        /*
+            Bounds of a named element the crop or the guarded region set depends on. A
+            missing or unrendered element means the arrangement broke, so the shot fails
+            closed instead of cropping or guarding against a stale rect.
+        */
+        private static Rect RequiredElementBounds(
+            VisualElement root,
+            string elementName,
+            string shotName
+        )
+        {
+            VisualElement element = root.Q(elementName);
+            if (element == null)
+            {
+                throw new InvalidOperationException(
+                    $"The window exposes no '{elementName}' element; the '{shotName}' shot "
+                        + "cannot prove its subject was arranged."
+                );
+            }
+
+            if (!IsRenderedForCapture(element))
+            {
+                throw new InvalidOperationException(
+                    $"The '{elementName}' element is not rendered; the '{shotName}' shot "
+                        + "would document a state that is not on screen."
+                );
+            }
+
+            return element.worldBound;
+        }
+
+        private static Rect PaddedToRootBounds(VisualElement root, Rect bounds)
+        {
+            Rect rootBounds = root.worldBound;
+            return Rect.MinMaxRect(
+                Mathf.Max(rootBounds.xMin, bounds.xMin - CropPadding),
+                Mathf.Max(rootBounds.yMin, bounds.yMin - CropPadding),
+                Mathf.Min(rootBounds.xMax, bounds.xMax + CropPadding),
+                Mathf.Min(rootBounds.yMax, bounds.yMax + CropPadding)
+            );
+        }
+
+        private static Rect Union(Rect first, Rect second)
+        {
+            return Rect.MinMaxRect(
+                Mathf.Min(first.xMin, second.xMin),
+                Mathf.Min(first.yMin, second.yMin),
+                Mathf.Max(first.xMax, second.xMax),
+                Mathf.Max(first.yMax, second.yMax)
+            );
+        }
+
         private static void AddRenderedRegion(
             List<CaptureRegion> regions,
             string regionName,
@@ -532,6 +854,77 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 AddRenderedRegion(regions, elementName, element, paintedOnGapHosts);
             }
+        }
+
+        /*
+            Adds the region the shot exists to document: the open popover for the popover
+            shots and the row action bar for instance-actions. Unlike the common regions,
+            a missing or unrendered subject fails closed, because a capture without its
+            subject is the misleading image the validation exists to block.
+        */
+        private static void AddSubjectRegion(
+            VisualElement root,
+            List<CaptureRegion> regions,
+            string shotName
+        )
+        {
+            switch (shotName)
+            {
+                case InstanceActionsShotName:
+                    AddFirstRenderedRowActions(root, regions, shotName);
+                    break;
+                case CreateShotName:
+                    AddRequiredRegion(root, regions, CreatePopoverElementName, shotName);
+                    break;
+                case ImportShotName:
+                    AddRequiredRegion(root, regions, TypeAddPopoverElementName, shotName);
+                    break;
+                case SettingsShotName:
+                    AddRequiredRegion(root, regions, SettingsPopoverElementName, shotName);
+                    break;
+            }
+        }
+
+        private static void AddRequiredRegion(
+            VisualElement root,
+            List<CaptureRegion> regions,
+            string elementName,
+            string shotName
+        )
+        {
+            regions.Add(
+                new CaptureRegion(
+                    elementName,
+                    RequiredElementBounds(root, elementName, shotName),
+                    false
+                )
+            );
+        }
+
+        private static void AddFirstRenderedRowActions(
+            VisualElement root,
+            List<CaptureRegion> regions,
+            string shotName
+        )
+        {
+            foreach (
+                VisualElement actions in root.Query<VisualElement>(null, ObjectItemActionsClass)
+                    .ToList()
+            )
+            {
+                if (!IsRenderedForCapture(actions))
+                {
+                    continue;
+                }
+
+                regions.Add(new CaptureRegion("object-row-actions", actions.worldBound, false));
+                return;
+            }
+
+            throw new InvalidOperationException(
+                $"The window exposes no rendered '{ObjectItemActionsClass}' row; the "
+                    + $"'{shotName}' shot cannot prove the row actions painted."
+            );
         }
 
         private static int MeasureRegionColors(
@@ -738,6 +1131,133 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             selectObject.Invoke(window, new object[] { asset });
+        }
+
+        /*
+            Opens the state each non-layout shot documents. The popovers open through the
+            window's own content builders and the production positioning step; the reveal
+            happens synchronously because the capture's layout and render passes never
+            tick the panel scheduler, so waiting for the scheduled reveal would leave the
+            popover hidden.
+        */
+        private static void ArrangeShotState(DataVisualizerWindow window, string shotName)
+        {
+            switch (shotName)
+            {
+                case CreateShotName:
+                    InvokeWindowMethod(
+                        window,
+                        "BuildCreatePopoverContent",
+                        new[] { typeof(Type) },
+                        new object[] { typeof(PlayModeDataObject) }
+                    );
+                    StagePopoverForCapture(window, CreatePopoverFieldName, CreateButtonFieldName);
+                    break;
+                case ImportShotName:
+                    InvokeWindowMethod(
+                        window,
+                        "BuildTypeAddList",
+                        new[] { typeof(string) },
+                        new object[] { null }
+                    );
+                    StagePopoverForCapture(window, TypeAddPopoverFieldName, TypeAddButtonFieldName);
+                    break;
+                case SettingsShotName:
+                    InvokeWindowMethod(
+                        window,
+                        "BuildSettingsPopoverContent",
+                        Type.EmptyTypes,
+                        Array.Empty<object>()
+                    );
+                    StagePopoverForCapture(
+                        window,
+                        SettingsPopoverFieldName,
+                        SettingsButtonFieldName
+                    );
+                    break;
+            }
+        }
+
+        /*
+            Reveals a popover through the extracted production step OpenPopover schedules,
+            so the shot shows the same placement and visibility a user gets.
+        */
+        private static void StagePopoverForCapture(
+            DataVisualizerWindow window,
+            string popoverFieldName,
+            string triggerFieldName
+        )
+        {
+            VisualElement popover = ReadWindowElement(window, popoverFieldName);
+            VisualElement trigger = ReadWindowElement(window, triggerFieldName);
+            MethodInfo positionAndDisplay = typeof(DataVisualizerWindow).GetMethod(
+                "PositionAndDisplayPopover",
+                ReflectedInstanceMembers,
+                binder: null,
+                types: new[]
+                {
+                    typeof(VisualElement),
+                    typeof(VisualElement),
+                    typeof(bool),
+                    typeof(bool),
+                },
+                modifiers: null
+            );
+            if (positionAndDisplay == null)
+            {
+                throw new InvalidOperationException(
+                    "The DataVisualizer window exposes no PositionAndDisplayPopover member; "
+                        + "the capture driver cannot stage the popover states."
+                );
+            }
+
+            positionAndDisplay.Invoke(window, new object[] { popover, trigger, false, true });
+        }
+
+        private static void InvokeWindowMethod(
+            DataVisualizerWindow window,
+            string methodName,
+            Type[] parameterTypes,
+            object[] arguments
+        )
+        {
+            MethodInfo method = typeof(DataVisualizerWindow).GetMethod(
+                methodName,
+                ReflectedInstanceMembers,
+                binder: null,
+                types: parameterTypes,
+                modifiers: null
+            );
+            if (method == null)
+            {
+                throw new InvalidOperationException(
+                    $"The DataVisualizer window exposes no {methodName} member; the capture "
+                        + "driver cannot arrange the popover states."
+                );
+            }
+
+            method.Invoke(window, arguments);
+        }
+
+        private static VisualElement ReadWindowElement(
+            DataVisualizerWindow window,
+            string fieldName
+        )
+        {
+            FieldInfo field = typeof(DataVisualizerWindow).GetField(
+                fieldName,
+                ReflectedInstanceMembers
+            );
+            object value = field?.GetValue(window);
+            if (value is not VisualElement element)
+            {
+                throw new InvalidOperationException(
+                    $"The DataVisualizer window exposes no '{fieldName}' visual element; the "
+                        + "capture driver cannot arrange the popover states."
+                );
+            }
+
+            return element;
         }
 
         private static void InvokeCleanup(DataVisualizerWindow window)

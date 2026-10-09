@@ -272,6 +272,23 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             method.Invoke(panel, arguments);
         }
 
+        /*
+            A cleared target and a rendered frame are both valid PNGs, so callers need a cheap
+            way to prove the panel actually drew. Distinct-color count is that proof: a blank
+            frame has exactly one.
+        */
+        internal static int CountDistinctColors(Texture2D texture)
+        {
+            Color32[] pixels = texture.GetPixels32();
+            HashSet<int> distinct = new();
+            foreach (Color32 pixel in pixels)
+            {
+                distinct.Add((pixel.r << 16) | (pixel.g << 8) | pixel.b);
+            }
+
+            return distinct.Count;
+        }
+
         private static string DescribeLayout(VisualElement root)
         {
             StringBuilder description = new();
@@ -290,23 +307,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             return description.ToString();
-        }
-
-        /*
-            A cleared target and a rendered frame are both valid PNGs, so callers need a cheap
-            way to prove the panel actually drew. Distinct-color count is that proof: a blank
-            frame has exactly one.
-        */
-        private static int CountDistinctColors(Texture2D texture)
-        {
-            Color32[] pixels = texture.GetPixels32();
-            HashSet<int> distinct = new();
-            foreach (Color32 pixel in pixels)
-            {
-                distinct.Add((pixel.r << 16) | (pixel.g << 8) | pixel.b);
-            }
-
-            return distinct.Count;
         }
     }
 }
