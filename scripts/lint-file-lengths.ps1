@@ -52,13 +52,14 @@ try {
         }
     } else {
         if (-not (Test-Path -LiteralPath $llmPath)) {
-            Write-Host '[file-length] no .llm directory found; nothing to check'
-            exit 0
+            Write-Host '[file-length] no .llm directory found; checking planning docs only'
+            $targets = @()
+        } else {
+            $targets = @(
+                Get-ChildItem -Path $llmPath -Recurse -Filter '*.md' -File |
+                ForEach-Object { $_.FullName }
+            )
         }
-        $targets = @(
-            Get-ChildItem -Path $llmPath -Recurse -Filter '*.md' -File |
-            ForEach-Object { $_.FullName }
-        )
     }
 
     $generatedIndexPath = Join-Path $llmPath (
@@ -94,19 +95,43 @@ try {
         }
     }
 
+    foreach ($planDoc in $PlanningDocPaths) {
+        $planPath = Join-Path $repoRoot $planDoc
+        if (-not (Test-Path -LiteralPath $planPath -PathType Leaf)) {
+            continue
+        }
+        $count = Get-FileLineCount $planPath
+        if ($count -gt $MaxPlanningDocLines) {
+            Write-Host (
+                "[file-length] ERROR: $planDoc has $count lines and exceeds the " +
+                "$MaxPlanningDocLines-line planning-doc hard limit; keep only current and " +
+                'future work here and relocate history to progress/ and context to .llm/'
+            )
+            $errors++
+        } elseif ($count -ge $WarnPlanningDocLines) {
+            if ($VerboseOutput) {
+                Write-Host (
+                    "[file-length] WARNING: $planDoc has $count lines and is near the " +
+                    "$MaxPlanningDocLines-line planning-doc hard limit; consider splitting"
+                )
+            }
+            $warnings++
+        }
+    }
+
     if ($errors -gt 0) {
         Write-Host (
-            "[file-length] FAILED: $errors file(s) exceed the $MaxFileLines-line hard limit"
+            "[file-length] FAILED: $errors file(s) exceed the line-length hard limit"
         )
         exit 1
     }
     if ($VerboseOutput -and $warnings -gt 0) {
         Write-Host (
-            "[file-length] OK: all checked files are within the $MaxFileLines-line hard limit " +
-            "($warnings file(s) near the limit)"
+            "[file-length] OK: all checked files are within the line-length hard limits " +
+            "($warnings file(s) near a limit)"
         )
     } else {
-        Write-Host "[file-length] OK: all checked files are within the $MaxFileLines-line hard limit"
+        Write-Host '[file-length] OK: all checked files are within the line-length hard limits'
     }
     exit 0
 } catch {

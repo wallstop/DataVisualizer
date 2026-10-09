@@ -6,6 +6,9 @@ $AllowedSkillCategories = @('Core', 'Workflow', 'Feature')
 $DefaultSkillCategory = 'Feature'
 $MaxFileLines = 300
 $WarnFileLines = 280
+$MaxPlanningDocLines = 150
+$WarnPlanningDocLines = 120
+$PlanningDocPaths = @('PLAN.md', 'GOAL.md')
 $SkillNamePattern = '^[a-z0-9]+(?:-[a-z0-9]+)*$'
 $AsciiPattern = '^[\x20-\x7E]*$'
 $SkillsIndexFileName = 'index.md'
@@ -233,6 +236,9 @@ Export-ModuleMember -Variable @(
     'DefaultSkillCategory',
     'MaxFileLines',
     'WarnFileLines',
+    'MaxPlanningDocLines',
+    'WarnPlanningDocLines',
+    'PlanningDocPaths',
     'SkillNamePattern',
     'AsciiPattern',
     'SkillsIndexFileName',
