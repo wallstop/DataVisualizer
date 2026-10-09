@@ -5,11 +5,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.IO;
     using System.Reflection;
     using UnityEditor;
+    using UnityEditor.UIElements;
     using UnityEngine;
+    using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.Editor;
     using WallstopStudios.DataVisualizer.Editor.Data;
+    using WallstopStudios.DataVisualizer.Editor.Styles;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
+    using Object = UnityEngine.Object;
     using PlayModeDataObject = WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject;
 
     /*
@@ -43,9 +47,29 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         EditorSurfaceCapture.Capture give it time to populate on the capture host. With
         many thousands of assets a shot may show the list mid-load, which is visible in the
         result and acceptable for a driver whose output a human reviews before committing.
+
+        Every capture is validated against the laid-out panel: subtrees Unity's offscreen
+        renderer should have painted are measured in the PNG, and a capture that omits
+        them fails closed. A uniform region is the signature of a subtree Unity skipped;
+        the RCA recorded on issue #114 measured this exactly (a blanked subtree contributes
+        zero pixels, so its region is one background color). On the macOS 6000.4 host the
+        asset-name field, the labels section, InspectorElement internals, unselected
+        namespace rows, and the IMGUI-backed read-only drawer were omitted while the
+        Windows 6000.5 host painted every region, so the asset-name field is the canary:
+        when it is blank the host has the recorded UIR gap and validation asserts only
+        regions that painted even on such a host, keeping that host's known output
+        reviewable while a capable host's hero is enforced pixel-faithful.
     */
     internal static class DocsImageCapture
     {
+        /*
+            The asset-name field is the canary for the host UIR gap recorded on issue #114.
+            A blanked subtree contributes zero pixels, so its region reads as one uniform
+            background color; painted rows carry borders and text antialiasing. The floor
+            and ceiling separate those shapes with margin on both measured hosts.
+        */
+        internal const string CanaryRegionName = "inspector-asset-name-field";
+
         private const string FixtureFolder = "Assets/DataVisualizerDocsCapture";
         private const float WindowWidth = 1180f;
         private const float WindowHeight = 780f;
@@ -63,6 +87,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
         private const string PrefsTemporaryWindowClampSizeKey =
             "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
+
+        private const int PaintedDistinctColorFloor = 12;
+        private const float PaintedModalFractionCeiling = 0.97f;
 
         internal static IReadOnlyList<string> ShotNames => ManifestShotNames;
 
@@ -184,7 +211,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 SelectObject(window, LoadFirstFixtureAsset());
                 VerifySelectedObject(window);
 
-                return EditorSurfaceCapture.Capture(window, capturePath);
+                EditorSurfaceCaptureResult result = EditorSurfaceCapture.Capture(
+                    window,
+                    capturePath
+                );
+                ValidateCapturedRegions(window, capturePath);
+                return result;
             }
             finally
             {
@@ -228,6 +260,266 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             return DefaultOutputDirectory;
+        }
+
+        /*
+            Fails closed when the captured PNG omits subtrees the settled panel laid out.
+            Region rects are recorded from the live window before teardown, measured against
+            the written file, and every region a capable host must paint is asserted; on a
+            host with the recorded UIR gap only the regions that host painted are asserted.
+        */
+        internal static void ValidateCapturedRegions(EditorWindow window, string capturePath)
+        {
+            Rect rootBounds = window.rootVisualElement.worldBound;
+            ValidateRegionAnalysis(
+                Analyze(File.ReadAllBytes(capturePath), rootBounds, CollectRegions(window))
+            );
+        }
+
+        /*
+            Pure decision over measured regions, so the gap-host skip and the fail-closed
+            paths stay unit-testable without a live window. A blanked canary means the host
+            exhibits the recorded gap: log it and require only regions that painted even
+            there, so a future total-blank regression still fails on every host.
+        */
+        internal static void ValidateRegionAnalysis(CaptureRegionAnalysis analysis)
+        {
+            if (!analysis.CanaryPainted)
+            {
+                Debug.LogWarning(
+                    "[DocsImageCapture] Host offscreen render omits '"
+                        + CanaryRegionName
+                        + "' (Unity UI Toolkit renderer gap recorded on issue #114); asserting "
+                        + "only regions that paint on such hosts."
+                );
+            }
+
+            foreach (CaptureRegionMetric metric in analysis.Metrics)
+            {
+                bool required = analysis.CanaryPainted || metric.Region.PaintedOnGapHosts;
+                if (required && !metric.Painted)
+                {
+                    throw new InvalidOperationException(
+                        $"Captured region '{metric.Region.Name}' did not paint (distinct colors: "
+                            + $"{metric.DistinctColors}, modal fraction: "
+                            + $"{metric.ModalColorFraction:0.###}); the capture would mislead "
+                            + "documentation readers."
+                    );
+                }
+            }
+        }
+
+        /*
+            Measures every region against the captured PNG. Region rects are recorded in
+            panel point space and mapped into image space with the root's laid-out size, the
+            same mapping the issue #114 RCA used; UI Toolkit measures from the top while the
+            pixel array starts at the bottom row.
+        */
+        internal static CaptureRegionAnalysis Analyze(
+            byte[] pngBytes,
+            Rect rootBounds,
+            IReadOnlyList<CaptureRegion> regions
+        )
+        {
+            if (rootBounds.width < 1f || rootBounds.height < 1f)
+            {
+                throw new InvalidOperationException(
+                    $"The window root laid out to {rootBounds.width}x{rootBounds.height}; "
+                        + "region analysis has no surface to measure."
+                );
+            }
+
+            Texture2D readback = new(2, 2, TextureFormat.RGBA32, false);
+            try
+            {
+                if (!readback.LoadImage(pngBytes))
+                {
+                    throw new InvalidOperationException(
+                        "The captured file is not a decodable PNG; region analysis cannot run."
+                    );
+                }
+
+                Color32[] pixels = readback.GetPixels32();
+                float scaleX = readback.width / rootBounds.width;
+                float scaleY = readback.height / rootBounds.height;
+                List<CaptureRegionMetric> metrics = new(regions.Count);
+                bool canaryFound = false;
+                bool canaryPainted = false;
+                foreach (CaptureRegion region in regions)
+                {
+                    Rect pngRect = new(
+                        (region.Rect.x - rootBounds.x) * scaleX,
+                        (region.Rect.y - rootBounds.y) * scaleY,
+                        region.Rect.width * scaleX,
+                        region.Rect.height * scaleY
+                    );
+                    int distinctColors = MeasureRegionColors(
+                        pixels,
+                        readback.width,
+                        readback.height,
+                        pngRect,
+                        out float modalColorFraction
+                    );
+                    metrics.Add(
+                        new CaptureRegionMetric(region, distinctColors, modalColorFraction)
+                    );
+                    if (region.Name == CanaryRegionName)
+                    {
+                        canaryFound = true;
+                        canaryPainted = metrics[metrics.Count - 1].Painted;
+                    }
+                }
+
+                if (!canaryFound)
+                {
+                    throw new InvalidOperationException(
+                        $"The captured window exposes no '{CanaryRegionName}' region; the "
+                            + "arrangement is not the documented state, so region validation "
+                            + "cannot decide whether the capture is faithful."
+                    );
+                }
+
+                return new CaptureRegionAnalysis(metrics, canaryPainted);
+            }
+            finally
+            {
+                Object.DestroyImmediate(readback);
+            }
+        }
+
+        /*
+            Regions come from the live window tree, so the guarded set follows whatever the
+            window actually built. Namespace/type rows are recorded per element with their
+            selection state (selected rows painted even on the macOS gap host); the asset
+            name field, labels section, script row, and IMGUI-backed read-only drawer did
+            not paint there, while the title and description fields and the object list did.
+        */
+        internal static IReadOnlyList<CaptureRegion> CollectRegions(EditorWindow window)
+        {
+            VisualElement root = window.rootVisualElement;
+            List<CaptureRegion> regions = new();
+            foreach (
+                VisualElement group in root.Query<VisualElement>(
+                        null,
+                        StyleConstants.NamespaceItemClass
+                    )
+                    .ToList()
+            )
+            {
+                regions.Add(
+                    new CaptureRegion(
+                        group.name,
+                        group.worldBound,
+                        group.ClassListContains(StyleConstants.SelectedClass)
+                    )
+                );
+            }
+
+            foreach (
+                VisualElement item in root.Query<VisualElement>(null, StyleConstants.TypeItemClass)
+                    .ToList()
+            )
+            {
+                regions.Add(
+                    new CaptureRegion(
+                        item.name,
+                        item.worldBound,
+                        item.ClassListContains(StyleConstants.SelectedClass)
+                    )
+                );
+            }
+
+            AddRegion(root, regions, CanaryRegionName, false);
+            AddRegion(root, regions, "inspector-labels-section", false);
+
+            InspectorElement inspector = root.Q<InspectorElement>();
+            if (inspector != null)
+            {
+                foreach (BindableElement bindable in inspector.Query<BindableElement>().ToList())
+                {
+                    string bindingPath = bindable.bindingPath;
+                    if (bindingPath == "m_Script")
+                    {
+                        regions.Add(
+                            new CaptureRegion("bindable:m_Script", bindable.worldBound, false)
+                        );
+                    }
+                    else if (bindingPath == "_title" || bindingPath == "_description")
+                    {
+                        regions.Add(
+                            new CaptureRegion("bindable:" + bindingPath, bindable.worldBound, true)
+                        );
+                    }
+                }
+            }
+
+            List<IMGUIContainer> imguiContainers = root.Query<IMGUIContainer>().ToList();
+            for (int index = 0; index < imguiContainers.Count; index++)
+            {
+                regions.Add(
+                    new CaptureRegion("imgui:" + index, imguiContainers[index].worldBound, false)
+                );
+            }
+
+            ListView listView = root.Q<ListView>();
+            if (listView != null)
+            {
+                regions.Add(new CaptureRegion("listview", listView.worldBound, true));
+            }
+
+            return regions;
+        }
+
+        private static void AddRegion(
+            VisualElement root,
+            List<CaptureRegion> regions,
+            string elementName,
+            bool paintedOnGapHosts
+        )
+        {
+            VisualElement element = root.Q(elementName);
+            if (element != null)
+            {
+                regions.Add(new CaptureRegion(elementName, element.worldBound, paintedOnGapHosts));
+            }
+        }
+
+        private static int MeasureRegionColors(
+            Color32[] pixels,
+            int width,
+            int height,
+            Rect pngRect,
+            out float modalColorFraction
+        )
+        {
+            int x0 = Mathf.Clamp(Mathf.RoundToInt(pngRect.x), 0, width - 1);
+            int y0 = Mathf.Clamp(Mathf.RoundToInt(pngRect.y), 0, height - 1);
+            int regionWidth = Mathf.Clamp(Mathf.RoundToInt(pngRect.width), 1, width - x0);
+            int regionHeight = Mathf.Clamp(Mathf.RoundToInt(pngRect.height), 1, height - y0);
+            Dictionary<int, int> counts = new();
+            int total = 0;
+            int stepX = Mathf.Max(1, regionWidth / 100);
+            int stepY = Mathf.Max(1, regionHeight / 100);
+            for (int row = 0; row < regionHeight; row += stepY)
+            {
+                int pixelRow = height - 1 - (y0 + row);
+                for (int column = 0; column < regionWidth; column += stepX)
+                {
+                    Color32 pixel = pixels[pixelRow * width + (x0 + column)];
+                    int key = (pixel.r << 16) | (pixel.g << 8) | pixel.b;
+                    counts[key] = counts.TryGetValue(key, out int count) ? count + 1 : 1;
+                    total++;
+                }
+            }
+
+            int modalCount = 0;
+            foreach (int count in counts.Values)
+            {
+                modalCount = Mathf.Max(modalCount, count);
+            }
+
+            modalColorFraction = total == 0 ? 1f : (float)modalCount / total;
+            return counts.Count;
         }
 
         private static bool IsKnownShot(string shotName)
@@ -405,6 +697,71 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 ReflectedInstanceMembers
             );
             cleanup?.Invoke(window, null);
+        }
+
+        /*
+            One subtree the capture must paint, recorded in panel point space. Regions the
+            macOS gap host painted anyway are marked, so validation can still assert them
+            while skipping the rest on such a host.
+        */
+        internal sealed class CaptureRegion
+        {
+            internal string Name { get; }
+
+            internal Rect Rect { get; }
+
+            internal bool PaintedOnGapHosts { get; }
+
+            internal CaptureRegion(string name, Rect rect, bool paintedOnGapHosts)
+            {
+                Name = name;
+                Rect = rect;
+                PaintedOnGapHosts = paintedOnGapHosts;
+            }
+        }
+
+        internal sealed class CaptureRegionMetric
+        {
+            /*
+                A uniform region is one background color; painted rows carry borders and text
+                antialiasing, which yields dozens of distinct colors on both measured hosts.
+            */
+            internal bool Painted =>
+                DistinctColors >= PaintedDistinctColorFloor
+                && ModalColorFraction <= PaintedModalFractionCeiling;
+
+            internal CaptureRegion Region { get; }
+
+            internal int DistinctColors { get; }
+
+            internal float ModalColorFraction { get; }
+
+            internal CaptureRegionMetric(
+                CaptureRegion region,
+                int distinctColors,
+                float modalColorFraction
+            )
+            {
+                Region = region;
+                DistinctColors = distinctColors;
+                ModalColorFraction = modalColorFraction;
+            }
+        }
+
+        internal sealed class CaptureRegionAnalysis
+        {
+            internal IReadOnlyList<CaptureRegionMetric> Metrics { get; }
+
+            internal bool CanaryPainted { get; }
+
+            internal CaptureRegionAnalysis(
+                IReadOnlyList<CaptureRegionMetric> metrics,
+                bool canaryPainted
+            )
+            {
+                Metrics = metrics;
+                CanaryPainted = canaryPainted;
+            }
         }
 
         /*

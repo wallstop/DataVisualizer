@@ -7,6 +7,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using NUnit.Framework;
     using UnityEngine;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
+    using Object = UnityEngine.Object;
 
     internal sealed class DocsImageCaptureTests
     {
@@ -53,6 +54,114 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "The captured window must be non-blank; a single distinct color means the "
                     + "panel never painted and the capture is useless for documentation."
             );
+        }
+
+        private static void AssertRegionPainted(
+            DocsImageCapture.CaptureRegionAnalysis analysis,
+            string regionName,
+            bool expected
+        )
+        {
+            foreach (DocsImageCapture.CaptureRegionMetric metric in analysis.Metrics)
+            {
+                if (metric.Region.Name == regionName)
+                {
+                    Assert.That(
+                        metric.Painted,
+                        Is.EqualTo(expected),
+                        $"Region '{regionName}' measured distinct={metric.DistinctColors}, "
+                            + $"modalFraction={metric.ModalColorFraction:0.###}."
+                    );
+                    return;
+                }
+            }
+
+            Assert.Fail($"The analysis carries no region named '{regionName}'.");
+        }
+
+        private static DocsImageCapture.CaptureRegionAnalysis BuildAnalysis(
+            bool canaryPainted,
+            bool gapHostRegionPainted,
+            bool blankableRegionPainted
+        )
+        {
+            return new DocsImageCapture.CaptureRegionAnalysis(
+                new[]
+                {
+                    Metric(DocsImageCapture.CanaryRegionName, canaryPainted, false),
+                    Metric("listview", gapHostRegionPainted, true),
+                    Metric("bindable:m_Script", blankableRegionPainted, false),
+                },
+                canaryPainted
+            );
+        }
+
+        private static DocsImageCapture.CaptureRegionMetric Metric(
+            string regionName,
+            bool painted,
+            bool paintedOnGapHosts
+        )
+        {
+            return new DocsImageCapture.CaptureRegionMetric(
+                new DocsImageCapture.CaptureRegion(
+                    regionName,
+                    new Rect(0f, 0f, 10f, 10f),
+                    paintedOnGapHosts
+                ),
+                painted ? 100 : 2,
+                painted ? 0.5f : 1f
+            );
+        }
+
+        private static void FillRect(
+            Color32[] pixels,
+            int width,
+            int height,
+            Rect uiRect,
+            Color32 color
+        )
+        {
+            int yStart = height - Mathf.RoundToInt(uiRect.yMax);
+            int yEnd = height - Mathf.RoundToInt(uiRect.y);
+            int xStart = Mathf.RoundToInt(uiRect.x);
+            int xEnd = Mathf.RoundToInt(uiRect.xMax);
+            for (int y = yStart; y < yEnd; y++)
+            {
+                for (int x = xStart; x < xEnd; x++)
+                {
+                    pixels[y * width + x] = color;
+                }
+            }
+        }
+
+        private static void FillVariedRect(Color32[] pixels, int width, int height, Rect uiRect)
+        {
+            int yStart = height - Mathf.RoundToInt(uiRect.yMax);
+            int yEnd = height - Mathf.RoundToInt(uiRect.y);
+            int xStart = Mathf.RoundToInt(uiRect.x);
+            int xEnd = Mathf.RoundToInt(uiRect.xMax);
+            for (int y = yStart; y < yEnd; y++)
+            {
+                for (int x = xStart; x < xEnd; x++)
+                {
+                    pixels[y * width + x] = new Color32(
+                        (byte)(x * 7 % 256),
+                        (byte)(y * 13 % 256),
+                        (byte)((x + y) % 256),
+                        255
+                    );
+                }
+            }
+        }
+
+        private static byte[] EncodePixels(int width, int height, Color32[] pixels)
+        {
+            Texture2D texture = new(width, height, TextureFormat.RGBA32, false);
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            byte[] png = texture.EncodeToPNG();
+            Object.DestroyImmediate(texture);
+            return png;
         }
 
         [Test]
@@ -188,6 +297,99 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             finally
             {
                 instanceField.SetValue(null, previousInstance);
+            }
+        }
+
+        [Test]
+        public void ShouldClassifyUniformRegionAsUnpaintedAndVariedRegionAsPainted()
+        {
+            int width = 64;
+            int height = 48;
+            Color32[] pixels = new Color32[width * height];
+            FillRect(
+                pixels,
+                width,
+                height,
+                new Rect(0f, 0f, width, height),
+                new Color32(24, 24, 28, 255)
+            );
+            FillRect(
+                pixels,
+                width,
+                height,
+                new Rect(4f, 4f, 20f, 16f),
+                new Color32(40, 40, 44, 255)
+            );
+            FillVariedRect(pixels, width, height, new Rect(30f, 4f, 24f, 16f));
+            byte[] png = EncodePixels(width, height, pixels);
+
+            List<DocsImageCapture.CaptureRegion> regions = new()
+            {
+                new("uniform", new Rect(4f, 4f, 20f, 16f), false),
+                new("varied", new Rect(30f, 4f, 24f, 16f), false),
+                new(DocsImageCapture.CanaryRegionName, new Rect(30f, 4f, 24f, 16f), false),
+            };
+
+            DocsImageCapture.CaptureRegionAnalysis analysis = DocsImageCapture.Analyze(
+                png,
+                new Rect(0f, 0f, width, height),
+                regions
+            );
+
+            Assert.That(
+                analysis.CanaryPainted,
+                Is.True,
+                "The canary region sits on varied pixels and must read as painted."
+            );
+            AssertRegionPainted(analysis, "uniform", false);
+            AssertRegionPainted(analysis, "varied", true);
+            AssertRegionPainted(analysis, DocsImageCapture.CanaryRegionName, true);
+        }
+
+        [Test]
+        public void ShouldFailValidationWhenCapableHostLeavesExpectedRegionUnpainted()
+        {
+            DocsImageCapture.CaptureRegionAnalysis analysis = BuildAnalysis(
+                canaryPainted: true,
+                gapHostRegionPainted: true,
+                blankableRegionPainted: false
+            );
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                DocsImageCapture.ValidateRegionAnalysis(analysis)
+            );
+            Assert.That(
+                exception.Message,
+                Does.Contain("bindable:m_Script"),
+                "The failure must name the region that did not paint."
+            );
+        }
+
+        [Test]
+        public void ShouldAssertOnlyGapHostPaintedRegionsWhenCanaryIsBlank(
+            [Values(true, false)] bool gapHostRegionPainted
+        )
+        {
+            DocsImageCapture.CaptureRegionAnalysis analysis = BuildAnalysis(
+                canaryPainted: false,
+                gapHostRegionPainted: gapHostRegionPainted,
+                blankableRegionPainted: false
+            );
+
+            TestDelegate validate = () => DocsImageCapture.ValidateRegionAnalysis(analysis);
+            if (gapHostRegionPainted)
+            {
+                Assert.DoesNotThrow(
+                    validate,
+                    "A gap host's known output stays reviewable when its painted regions hold."
+                );
+            }
+            else
+            {
+                Assert.Throws<InvalidOperationException>(
+                    validate,
+                    "A blank regression in a region that paints even on gap hosts must fail."
+                );
             }
         }
     }
