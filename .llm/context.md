@@ -295,6 +295,6 @@ pre-commit config on staged `.cs` files.
   config files reference env vars instead of embedding credentials.
 - Unity MCP: the **official Unity CLI** MCP server (`unity mcp`, ~140 tools).
   Container agents reach it through the host HTTP bridge
-  (`npm run unity:mcp:host` → `host.docker.internal:9020`); host GUI clients
-  use `unity mcp configure <client>` directly. See
-  [mcp/README.md](./mcp/README.md).
+  (`npm run unity:mcp:host` → `host.docker.internal:<port>`, default 9020 via
+  `UNITY_MCP_HTTP_PORT`); host GUI clients use `unity mcp configure <client>`
+  directly. See [mcp/README.md](./mcp/README.md).

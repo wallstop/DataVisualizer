@@ -142,6 +142,42 @@ Invoke-TestCase 'Counts_Lines_WithCrlfEndings' {
     }
 }
 
+Invoke-TestCase 'Fails_When_PlanningDocExceedsPlanningLimit' {
+    $root = New-TempRoot
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'PLAN.md' -Content (Get-FixtureLines 151)
+        $output = & $lintScript -Root $root *>&1 | Out-String
+        Assert-ExitCode 1 'oversize planning doc should fail'
+        Assert-True ($output -match 'PLAN\.md') "output should name the planning doc, got: $output"
+        Assert-True ($output -match 'planning-doc') "output should name the limit kind, got: $output"
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Passes_When_PlanningDocAtPlanningLimit' {
+    $root = New-TempRoot
+    try {
+        Write-FixtureFile -Root $root -RelativePath 'PLAN.md' -Content (Get-FixtureLines 150)
+        Write-FixtureFile -Root $root -RelativePath 'GOAL.md' -Content (Get-FixtureLines 82)
+        & $lintScript -Root $root *> $null
+        Assert-ExitCode 0 'planning docs at or under the limit should pass'
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
+Invoke-TestCase 'Skips_MissingPlanningDocs' {
+    $root = New-TempRoot
+    try {
+        Write-FixtureFile -Root $root -RelativePath '.llm/context.md' -Content (Get-FixtureLines 10)
+        & $lintScript -Root $root *> $null
+        Assert-ExitCode 0 'absent planning docs should be skipped (they are gitignored)'
+    } finally {
+        Remove-TempRoot $root
+    }
+}
+
 Write-Host "== lint-file-lengths: $script:TestFailureCount failure(s) =="
 if ($script:TestFailureCount -gt 0) {
     exit 1

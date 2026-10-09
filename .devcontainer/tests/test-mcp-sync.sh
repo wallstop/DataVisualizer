@@ -24,6 +24,12 @@ PASS=0
 FAIL=0
 SANDBOX=""
 
+# The unity bridge URL port is configurable: unity-mcp-host.mjs binds a dynamic
+# port when 9020 is busy and persists UNITY_MCP_HTTP_PORT to .env.local. Export
+# it so the sandboxed configure.mjs run and these assertions stay in lockstep.
+UNITY_MCP_HTTP_PORT="${UNITY_MCP_HTTP_PORT:-9020}"
+export UNITY_MCP_HTTP_PORT
+
 pass() {
     PASS=$((PASS + 1))
     printf 'PASS: %s\n' "$1"
@@ -180,7 +186,7 @@ JSON
         "$(jq -r '.mcp.servers["my-tools"].url' "${SANDBOX}/opencode.json")"
     assert_eq \
         "stale legacy entry replaced by the catalog definition" \
-        "http://host.docker.internal:9020/mcp" \
+        "http://host.docker.internal:${UNITY_MCP_HTTP_PORT}/mcp" \
         "$(jq -r '.mcp.servers.unity.url' "${SANDBOX}/opencode.json")"
     assert_eq \
         "no v2 entry keeps the v1 enabled field" \
@@ -251,7 +257,7 @@ test_generated_configs_contain_no_literal_secrets() {
     assert_file_contains \
         "claude unity uses the official CLI HTTP bridge" \
         "${SANDBOX}/.mcp.json" \
-        '"url": "http://host.docker.internal:9020/mcp"'
+        "\"url\": \"http://host.docker.internal:${UNITY_MCP_HTTP_PORT}/mcp\""
     assert_file_contains \
         "claude github enables all toolsets" \
         "${SANDBOX}/.mcp.json" \

@@ -13,18 +13,33 @@
 // Linux Docker cannot reach a host-loopback bind through host.docker.internal,
 // so the bridge listens on all interfaces; UNITY_MCP_TOKEN gates access.
 //
+// Startup is idempotent and conflict-free: if a healthy unity-mcp bridge
+// already owns the preferred port, re-running exits 0 without a second
+// instance; if something else owns it, the next free port is bound, the choice
+// is persisted to .env.local (UNITY_MCP_HTTP_PORT) and the MCP client configs
+// for every agentic frontend are re-synced automatically.
+//
 // The bridge is transparent: JSON-RPC requests are forwarded verbatim to the
 // CLI process (request ids are remapped so concurrent HTTP requests cannot
 // collide), and responses/notifications stream back untouched.
 //
-// Environment:
+// Environment (precedence: process env > .env.local):
 //   UNITY_CLI            Path to the Unity CLI binary (default: `unity`)
 //   UNITY_MCP_CLI_ARGS   Extra args appended to `unity mcp` (space-split)
-//   UNITY_MCP_PROJECT    Project path passed as --project-path (falls back to
-//                        UNITY_PROJECT_PATH when set)
-//   UNITY_MCP_HTTP_PORT  Port (default 9020)
+//   UNITY_MCP_PROJECT    Project path passed as --project-path (UNITY_PROJECT_PATH
+//                        is honored as an alias in both process env and .env.local)
+//   UNITY_MCP_HTTP_PORT  Preferred port (default 9020); busy port → dynamic
+//                        pick + persisted back to .env.local
+//   UNITY_MCP_AUTO_SYNC  Set to 0 to skip the automatic `mcp:sync` after a
+//                        dynamic port change
 //   UNITY_MCP_TOKEN      Optional bearer token (also read from .env.local)
 //   UNITY_MCP_TIMEOUT_MS Per-request timeout (default 180000)
+//
+// The project pin must be a Unity project root (contains
+// ProjectSettings/ProjectVersion.txt). A configured value that is not one
+// (e.g. `<project>/Packages`) self-heals to the enclosing Unity project: an
+// unpinned `unity mcp` attaches to whichever Editor happens to be running,
+// which silently drives the wrong project.
 
 import net from "node:net";
 import http from "node:http";
@@ -32,12 +47,11 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKSPACE_ROOT = path.resolve(SCRIPT_DIR, "..", "..");
-const DEFAULT_PORT = Number(process.env.UNITY_MCP_HTTP_PORT || 9020);
 const REQUEST_TIMEOUT_MS = Number(process.env.UNITY_MCP_TIMEOUT_MS || 180000);
 
 function readEnvLocal(filePath) {
@@ -71,6 +85,14 @@ const envLocal = {
     ...readEnvLocal(path.join(os.homedir(), ".unity-mcp", ".env.local")),
 };
 
+// Preferred HTTP port: process env wins, then .env.local, then the historical
+// default of 9020. When the preferred port is busy the bridge binds the next
+// free port instead (see main), persists the chosen value back to .env.local,
+// and re-syncs the MCP client configs so every frontend follows the new port.
+const CONFIGURED_PORT = Number(
+    process.env.UNITY_MCP_HTTP_PORT || envLocal.UNITY_MCP_HTTP_PORT || 9020,
+);
+
 function resolveToken() {
     return process.env.UNITY_MCP_TOKEN || envLocal.UNITY_MCP_TOKEN || "";
 }
@@ -88,7 +110,74 @@ function timingSafeEqual(a, b) {
 
 const cliCommand = process.env.UNITY_CLI || "unity";
 const cliArgs = ["mcp"];
-const projectPath = process.env.UNITY_MCP_PROJECT || envLocal.UNITY_PROJECT_PATH || "";
+
+function isUnityProjectRoot(dir) {
+    try {
+        return fs
+            .statSync(path.join(dir, "ProjectSettings", "ProjectVersion.txt"))
+            .isFile();
+    } catch {
+        return false;
+    }
+}
+
+// Walk up from `start` (inclusive) to find the enclosing Unity project root.
+function findEnclosingUnityProject(start) {
+    let dir = path.resolve(start);
+    for (let i = 0; i < 32; i++) {
+        if (isUnityProjectRoot(dir)) return dir;
+        const parent = path.dirname(dir);
+        if (parent === dir) return null;
+        dir = parent;
+    }
+    return null;
+}
+
+// Project pin precedence: process env (UNITY_MCP_PROJECT, then the Unity CLI's
+// own UNITY_PROJECT_PATH alias) > .env.local (same two keys). A configured
+// value that is not a project root self-heals to the enclosing Unity project
+// so a stale or half-path config (e.g. `<project>/Packages`) cannot silently
+// unpick the pin — an unpinned `unity mcp` attaches to whichever Editor
+// happens to be running, which drives the wrong project.
+const configuredProject =
+    process.env.UNITY_MCP_PROJECT ||
+    process.env.UNITY_PROJECT_PATH ||
+    envLocal.UNITY_MCP_PROJECT ||
+    envLocal.UNITY_PROJECT_PATH ||
+    "";
+
+let projectPath = "";
+if (configuredProject) {
+    projectPath = path.resolve(configuredProject);
+    if (!isUnityProjectRoot(projectPath)) {
+        const enclosing = findEnclosingUnityProject(projectPath);
+        if (enclosing) {
+            process.stderr.write(
+                `[unity-mcp] WARNING: UNITY_MCP_PROJECT '${configuredProject}' is not a Unity ` +
+                    `project root (no ProjectSettings/ProjectVersion.txt); using enclosing ` +
+                    `project '${enclosing}' instead.\n`,
+            );
+            projectPath = enclosing;
+        } else {
+            process.stderr.write(
+                `[unity-mcp] WARNING: UNITY_MCP_PROJECT '${configuredProject}' is not a Unity ` +
+                    `project root and no enclosing Unity project was found; starting WITHOUT ` +
+                    `a project pin — the MCP server may attach to the wrong running Editor.\n`,
+            );
+            projectPath = "";
+        }
+    }
+}
+if (!projectPath) {
+    const enclosing = findEnclosingUnityProject(WORKSPACE_ROOT);
+    if (enclosing) {
+        process.stderr.write(
+            `[unity-mcp] No project pin configured; using the enclosing Unity project of ` +
+                `this workspace: '${enclosing}'.\n`,
+        );
+        projectPath = enclosing;
+    }
+}
 if (projectPath) cliArgs.push("--project-path", projectPath);
 if (process.env.UNITY_MCP_CLI_ARGS) {
     cliArgs.push(...process.env.UNITY_MCP_CLI_ARGS.split(" ").filter(Boolean));
@@ -253,7 +342,7 @@ function handleRpcMessage(message) {
     return forwardRequest(message);
 }
 
-function startHttpServer(port, host) {
+function startHttpServer(port, host, onListening) {
     const token = resolveToken();
     const server = http.createServer((request, response) => {
         const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
@@ -335,6 +424,7 @@ function startHttpServer(port, host) {
         console.log(`[unity-mcp] HTTP MCP server listening on http://${displayedHost}:${port}/mcp`);
         console.log(`[unity-mcp] Health: http://${displayedHost}:${port}/healthz`);
         console.log(`[unity-mcp] Auth: ${token ? "bearer token required" : "OPEN (no UNITY_MCP_TOKEN configured)"}`);
+        if (onListening) onListening();
     });
     const shutdown = () => {
         try {
@@ -349,30 +439,160 @@ function startHttpServer(port, host) {
     process.on("SIGTERM", shutdown);
 }
 
-const argv = process.argv.slice(2);
-if (argv.includes("--help") || argv.includes("-h")) {
-    console.log(`Usage:
+// ---------------------------------------------------------------------------
+// Startup: idempotent start, dynamic port fallback, persistence, client sync
+// ---------------------------------------------------------------------------
+
+function isPortFree(port, host) {
+    return new Promise((resolve) => {
+        const probe = net.createServer();
+        probe.once("error", () => resolve(false));
+        probe.once("listening", () => probe.close(() => resolve(true)));
+        probe.listen(port, host);
+    });
+}
+
+// Detect an already-running unity-mcp bridge (ours) so re-running the npm
+// script is a no-op instead of a second instance or an EADDRINUSE crash.
+async function probeExistingBridge(port) {
+    try {
+        const response = await fetch(`http://127.0.0.1:${port}/healthz`, {
+            signal: AbortSignal.timeout(1500),
+        });
+        if (!response.ok) return false;
+        const body = await response.json();
+        return typeof body?.cli === "string" && body.cli.startsWith("unity mcp");
+    } catch {
+        return false;
+    }
+}
+
+// Persist the bound port to .env.local so configure.mjs (`npm run mcp:sync`)
+// and every generated frontend config follow it. Idempotent; a no-op when the
+// recorded value already matches or when the port is the 9020 default and no
+// override exists.
+function persistPort(port) {
+    const envLocalPath = path.join(WORKSPACE_ROOT, ".env.local");
+    const line = `UNITY_MCP_HTTP_PORT=${port}`;
+    let content = "";
+    try {
+        content = fs.readFileSync(envLocalPath, "utf8");
+    } catch {
+        content = "# Machine-local credentials (gitignored).\n";
+    }
+    const existing = content.match(/^UNITY_MCP_HTTP_PORT=.*$/m);
+    if (existing) {
+        if (existing[0].trim() === line) return false;
+        content = content.replace(/^UNITY_MCP_HTTP_PORT=.*$/m, line);
+    } else {
+        if (port === 9020) return false;
+        if (content.length > 0 && !content.endsWith("\n")) content += "\n";
+        content += `\n# Auto-persisted by unity-mcp-host.mjs (dynamic port) on ${new Date().toISOString()}\n${line}\n`;
+    }
+    try {
+        fs.writeFileSync(envLocalPath, content, "utf8");
+    } catch (error) {
+        process.stderr.write(
+            `[unity-mcp] Could not persist port to .env.local: ${error.message}\n`,
+        );
+        return false;
+    }
+    return true;
+}
+
+// Re-run the universal configurator so every agentic frontend config picks up
+// the new unity bridge port. Cross-platform: runs configure.mjs directly.
+function syncClientConfigs() {
+    const result = spawnSync(process.execPath, [path.join(SCRIPT_DIR, "configure.mjs")], {
+        cwd: WORKSPACE_ROOT,
+        stdio: "inherit",
+    });
+    return !result.error && result.status === 0;
+}
+
+async function main() {
+    const argv = process.argv.slice(2);
+    if (argv.includes("--help") || argv.includes("-h")) {
+        console.log(`Usage:
   node .llm/mcp/unity-mcp-host.mjs [--port N] [--host H]
 
-Bridges the official Unity CLI MCP server (\`unity mcp\`) to HTTP on :9020 for
-MCP clients that cannot run host binaries (devcontainer agents).
+Bridges the official Unity CLI MCP server (\`unity mcp\`) to HTTP for MCP
+clients that cannot run host binaries (devcontainer agents).
+
+Startup semantics:
+  - If a healthy unity-mcp bridge already serves the preferred port, exit 0
+    (idempotent — safe to re-run).
+  - If another process owns the port, bind the next free port, persist
+    UNITY_MCP_HTTP_PORT to .env.local, and re-sync MCP client configs
+    (disable with UNITY_MCP_AUTO_SYNC=0).
 
 Environment:
   UNITY_CLI             Unity CLI binary (default: unity)
   UNITY_MCP_CLI_ARGS    Extra args appended after \`mcp\`
-  UNITY_MCP_PROJECT     --project-path value (falls back to UNITY_PROJECT_PATH)
-  UNITY_MCP_HTTP_PORT   Port (default 9020)
+  UNITY_MCP_PROJECT     --project-path value (UNITY_PROJECT_PATH alias honored;
+                        non-root values self-heal to the enclosing project)
+  UNITY_MCP_HTTP_PORT   Preferred port (default 9020; dynamic fallback applies)
+  UNITY_MCP_AUTO_SYNC   0 disables automatic client config re-sync
   UNITY_MCP_TOKEN       Optional bearer token (.env.local is honored)
   UNITY_MCP_TIMEOUT_MS  Per-request timeout (default 180000)`);
-} else {
+        return;
+    }
     const portFlag = argv.indexOf("--port");
     const hostFlag = argv.indexOf("--host");
-    const port =
-        portFlag !== -1 && argv[portFlag + 1] ? Number(argv[portFlag + 1]) : DEFAULT_PORT;
     const host = hostFlag !== -1 && argv[hostFlag + 1] ? argv[hostFlag + 1] : "0.0.0.0";
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    let preferred = CONFIGURED_PORT;
+    if (portFlag !== -1 && argv[portFlag + 1]) preferred = Number(argv[portFlag + 1]);
+    if (!Number.isInteger(preferred) || preferred < 1 || preferred > 65535) {
         console.error("❌ --port must be an integer between 1 and 65535.");
         process.exit(1);
     }
-    startHttpServer(port, host);
+
+    if (await probeExistingBridge(preferred)) {
+        console.log(
+            `[unity-mcp] A healthy unity-mcp bridge is already running on port ${preferred}; nothing to do.`,
+        );
+        return;
+    }
+
+    let port = preferred;
+    if (!(await isPortFree(port, host))) {
+        let allocated = 0;
+        for (let candidate = port + 1; candidate < port + 101; candidate++) {
+            if (await isPortFree(candidate, host)) {
+                allocated = candidate;
+                break;
+            }
+        }
+        if (!allocated) {
+            console.error(
+                `❌ Port ${preferred} is busy and no free port was found in ` +
+                    `${preferred + 1}-${preferred + 100}. Free the port or pass ` +
+                    "--port <n> / set UNITY_MCP_HTTP_PORT.",
+            );
+            process.exit(1);
+        }
+        console.log(
+            `[unity-mcp] Port ${preferred} is busy; dynamically selected port ${allocated}.`,
+        );
+        port = allocated;
+    }
+
+    startHttpServer(port, host, () => {
+        if (!persistPort(port)) return;
+        console.log(
+            `[unity-mcp] Persisted UNITY_MCP_HTTP_PORT=${port} to .env.local so client configs follow.`,
+        );
+        if (process.env.UNITY_MCP_AUTO_SYNC === "0") {
+            console.log("[unity-mcp] AUTO_SYNC disabled; run `npm run mcp:sync` to update MCP clients.");
+            return;
+        }
+        console.log("[unity-mcp] Syncing MCP client configs across agentic frontends…");
+        if (syncClientConfigs()) {
+            console.log("[unity-mcp] MCP client configs updated (unity URL follows the new port).");
+        } else {
+            console.log("[unity-mcp] ⚠️ Config sync failed; run `npm run mcp:sync` manually.");
+        }
+    });
 }
+
+main();

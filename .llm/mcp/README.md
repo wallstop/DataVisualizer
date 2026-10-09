@@ -10,7 +10,7 @@ OpenAI Codex, OpenCode, Nanocoder, VS Code, Cursor).
 | Name | Kind | Purpose | Auth |
 | --- | --- | --- | --- |
 | `unity` | HTTP (host bridge → official `unity mcp`) | ~140 Unity editor tools: scenes, GameObjects, prefabs, materials, animation, packages, tests, builds, C# eval | `UNITY_MCP_TOKEN` (bearer) |
-| `github` | remote HTTP | GitHub platform: repos, PRs, issues, actions, security (hosted MCP, **all toolsets** ≈ 93 tools) | `GITHUB_PERSONAL_ACCESS_TOKEN` |
+| `github` | remote HTTP | GitHub platform: repos, PRs, issues, actions, security (hosted MCP, **all toolsets** ≈ 95 tools) | `GITHUB_PERSONAL_ACCESS_TOKEN` (`GITHUB_MCP_PAT` is reconciled into it — see [Credential pairs](#credential-pairs-github_personal_access_token--github_mcp_pat)) |
 | `context7` | stdio (npx) | Up-to-date library documentation | `CONTEXT7_API_KEY` (optional) |
 | `fetch` | stdio (uvx) | Fetch web pages as markdown | none |
 | `git` | stdio (uvx) | Local git operations | none |
@@ -21,6 +21,60 @@ OpenAI Codex, OpenCode, Nanocoder, VS Code, Cursor).
 All credentials come from the environment with a gitignored `.env.local`
 fallback (preferred). Config files contain env-var *references* — no secrets
 on disk outside `.env.local`.
+
+## Credential pairs (`GITHUB_PERSONAL_ACCESS_TOKEN` / `GITHUB_MCP_PAT`)
+
+One GitHub PAT circulates under two names: generated configs reference
+`GITHUB_PERSONAL_ACCESS_TOKEN`, while some machines only define
+`GITHUB_MCP_PAT`. `ZAI_API_KEY` / `Z_AI_API_KEY` is the same shape.
+
+The incident this section exists for: `.env.local` ended up with **both** names
+set to **different** values — a revoked PAT under the canonical name and a valid
+one under the alternate. Every generated config referenced the stale name, so the
+hosted GitHub MCP returned `401` while a perfectly good token sat unused one line
+away. Both `configure.mjs` and `mcp-doctor.mjs` reported success because they
+only ever checked *presence*, never *agreement*.
+
+Current behavior:
+
+- Both set and **equal** → `configured`. Both set and **different** →
+  `divergent`, reported by `mcp:sync --check` and as a failure by
+  `mcp:doctor`. Only one set → still mirrored into the other as before.
+- `npm run mcp:repair` reconciles a divergent pair: it probes each name against
+  the real endpoint and copies the one that authenticates over the other, in
+  place (never appending a duplicate key). It **refuses to write** when neither
+  name authenticates rather than guessing, and never prints a credential.
+- `post-start.sh` runs the repair automatically on container start, before
+  `mcp:sync`, so a divergence is resolved on the next start instead of
+  producing an opaque 401.
+
+A credential rotated in `.env.local` also has to reach already-running agents.
+Two separate layers cache the old value, and both need handling:
+
+1. **Your shell.** `{env:VAR}` expands once at agent startup.
+   `env-local.sh` is sourced with `DATAVIZ_ENV_LOCAL_PRECEDENCE=file`, which
+   lets credential names take the `.env.local` value over a stale exported copy.
+   A new shell picks the change up with no rebuild.
+2. **OpenCode's background service.** Every `opencode` session attaches to ONE
+   shared server (`opencode serve --service`), discovered via
+   `~/.local/state/opencode/service.json`. It inherits the environment of
+   whichever client happened to start it and holds it for its entire life, so
+   **new sessions stay broken too** — the session is fine, the singleton behind
+   it is not. `.devcontainer/recycle-stale-opencode-service.sh` compares the
+   running service's credentials against `.env.local` and, on a mismatch,
+   recycles it so the next session respawns a healthy one. It is a no-op when
+   the service matches, when there is no `.env.local`, or when no service is
+   running. `post-start.sh` runs it on every container start.
+
+```bash
+bash .devcontainer/recycle-stale-opencode-service.sh --dry-run   # report only
+bash .devcontainer/recycle-stale-opencode-service.sh             # recycle
+```
+
+Contract tests: `.devcontainer/tests/test-mcp-credentials.sh` (credential
+aliasing, divergence detection, repair),
+`.devcontainer/tests/test-env-local-precedence.sh` (loader precedence), and
+`.devcontainer/tests/test-opencode-service-recycle.sh` (service recycling).
 
 ## One command to wire everything
 
@@ -113,8 +167,8 @@ Environment (prefer a gitignored `.env.local` at the workspace root):
 | --- | --- |
 | `UNITY_CLI` | Unity CLI binary path (default `unity`) |
 | `UNITY_MCP_CLI_ARGS` | Extra args appended after `mcp` (e.g. `--instance host:port`) |
-| `UNITY_MCP_PROJECT` | `--project-path` value (falls back to `UNITY_PROJECT_PATH`) |
-| `UNITY_MCP_HTTP_PORT` | Bridge port (default 9020) |
+| `UNITY_MCP_PROJECT` | `--project-path` value; must be the project **root** (`UNITY_PROJECT_PATH` alias honored; non-root values self-heal to the enclosing project) |
+| `UNITY_MCP_HTTP_PORT` | Bridge port (default 9020). When busy, the bridge binds the next free port, persists the choice here, and re-syncs client configs (`UNITY_MCP_AUTO_SYNC=0` disables) |
 | `UNITY_MCP_TOKEN` | Optional bearer token required by the bridge when set |
 | `UNITY_MCP_TIMEOUT_MS` | Per-request timeout (default 180000) |
 
@@ -123,6 +177,54 @@ reach a host-loopback bind via `host.docker.internal`); pass `--host 127.0.0.1`
 to restrict it. `UNITY_MCP_TOKEN` (`.env.local`) gates HTTP access when set.
 Only set `UNITY_MCP_TOKEN` if you accept managing bearer headers in every
 frontend config.
+
+### Troubleshooting
+
+- **`unity run unity:mcp:host` fails with "Not a Unity project".** That invoked
+  the Unity CLI, not the npm script: `unity run <project>` expects a project
+  path, so it treats `unity:mcp:host` as one. The bridge is an npm script —
+  start it with `npm run unity:mcp:host`.
+- **Port already in use / dynamic ports.** Re-running the bridge is a no-op
+  while a healthy instance holds the port; if something else owns it, the
+  bridge binds the next free port, persists `UNITY_MCP_HTTP_PORT` to
+  `.env.local`, and re-syncs every frontend config automatically. No fixed
+  port is required anywhere: `configure.mjs`, the devcontainer health check,
+  and the doctors all read the persisted value.
+- **`npm run mcp:sync` on the host.** It runs `configure.mjs` directly (pure
+  node, cross-platform); the bash wrapper `sync-mcp.sh` remains for container
+  hooks. `hasCommand` uses `where` on Windows so `uvx`-gated servers register
+  on the host too.
+- **Shared configs are environment-agnostic.** Sync produces identical files
+  from the host and the container (verified by hash): the unity bridge URL
+  always uses `host.docker.internal` (resolves on the host under Docker
+  Desktop too), and zai-image uses PATH-resolved `node` with a
+  workspace-relative script. Never reintroduce `127.0.0.1` or absolute
+  binaries into shared entries — they silently break the other environment.
+- **MCP auth fails in the container after editing `.env.local`.** `{env:VAR}`
+  references expand at AGENT STARTUP: restart the agent from a fresh shell
+  (interactive shells source `.env.local` via the bashrc loader, which now runs
+  with `DATAVIZ_ENV_LOCAL_PRECEDENCE=file` so a rotated credential wins over a
+  stale value already exported into the session — no container rebuild needed).
+  VS Code is special: its extension host inherits the server's frozen
+  environment, and `remoteEnv` forwards (`${localEnv:VAR}`) are empty unless the
+  host shell exported the variable — so VS Code entries for credential servers
+  are generated as wrappers that source `.env.local` at spawn time.
+- **GitHub MCP 401 in the devcontainer.** See
+  [Credential pairs](#credential-pairs-github_personal_access_token--github_mcp_pat).
+- **Health check:** `npm run mcp:doctor` verifies credentials, config flavor,
+  endpoint auth (github, zai-web-search), stdio spawn paths (zai-vision,
+  zai-image), and unity bridge reachability — from the host or the container.
+  `npm run unity:mcp:doctor` goes deeper on the unity bridge (project pin,
+  pipeline package, tools roundtrip, wrong-editor canary). Exit code 1 means
+  action required.
+- **Tools drive the wrong project.** An unpinned `unity mcp` attaches to
+  whichever Editor happens to be running. `UNITY_MCP_PROJECT` must be the
+  project **root** (contains `ProjectSettings/ProjectVersion.txt`); pointing it
+  at `<project>/Packages` or the package repo silently unpins. The bridge now
+  self-heals to the enclosing project with a warning, and the `/healthz` `cli`
+  line shows the exact spawned command.
+- **Editor must be running.** Editor-dependent tools fail until an Editor is
+  open for the pinned project: `unity open <project>`.
 
 ### Removing the legacy custom bridge
 

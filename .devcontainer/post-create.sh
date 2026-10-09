@@ -109,9 +109,13 @@ printf "   %-18s %s\n" "uvx (fetch/git MCP):" "$(uvx --version 2>&1 || echo NOT-
 
 echo ""
 echo "📌 Unity MCP (official Unity CLI, ~140 tools):"
-UNITY_MCP_HEALTH="$(curl -s -m 3 http://host.docker.internal:9020/healthz 2>/dev/null || true)"
+# The bridge picks a dynamic port when 9020 is busy and persists it to
+# .env.local; follow the same precedence here.
+UNITY_MCP_PORT="${UNITY_MCP_HTTP_PORT:-$(grep -m1 -E '^UNITY_MCP_HTTP_PORT=' .env.local 2>/dev/null | cut -d= -f2 | tr -d '"'"'"'')}"
+UNITY_MCP_PORT="${UNITY_MCP_PORT:-9020}"
+UNITY_MCP_HEALTH="$(curl -s -m 3 "http://host.docker.internal:${UNITY_MCP_PORT}/healthz" 2>/dev/null || true)"
 if printf '%s' "${UNITY_MCP_HEALTH}" | grep -q '"ok":true'; then
-    echo "   Host bridge ready on host.docker.internal:9020."
+    echo "   Host bridge ready on host.docker.internal:${UNITY_MCP_PORT}."
 else
     echo "   Host bridge not reachable yet."
     echo "   On the host: npm run unity:mcp:host (and unity pipeline install once)."
