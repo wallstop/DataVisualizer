@@ -4158,7 +4158,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return true;
                 }
             );
-            ApplyThemeToWindow(theme);
+            /*
+                Applying the resolved selection, not the raw argument, is what
+                makes a cleared selection land on the default theme: SelectTheme
+                persists the empty GUID first, then GetSelectedTheme resolves it
+                to the default asset.
+            */
+            ApplyThemeToWindow(GetSelectedTheme());
         }
 
         private void ApplyThemeToWindow(DataVisualizerThemeSettings theme)
@@ -4291,7 +4297,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 name = "theme-field",
                 text = selectedTheme != null ? selectedTheme.name : "Classic",
                 tooltip =
-                    "Search available themes. Choose Classic (Default / Reset) to restore the default style.",
+                    "Search available themes. Choose Dx (Default / Reset) to restore the default style.",
                 style =
                 {
                     overflow = Overflow.Hidden,
@@ -4328,7 +4334,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 name = StyleConstants.ThemeResetButtonClass,
                 text = "Reset Theme",
-                tooltip = "Restore the Classic appearance and clear the saved theme selection.",
+                tooltip = "Restore the Dx appearance and clear the saved theme selection.",
             };
             resetThemeButton.AddToClassList(StyleConstants.ThemeResetButtonClass);
             resetThemeButton.AddToClassList(StyleConstants.ClickableClass);

@@ -127,7 +127,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             );
             List<ThemeDropdownItem> items = new(themes.Count + 1)
             {
-                new(null, string.Empty, "Classic (Default / Reset)"),
+                new(null, string.Empty, "Dx (Default / Reset)"),
             };
             foreach (DataVisualizerThemeSettings theme in themes)
             {
@@ -172,7 +172,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 {
                     name = "theme-search-result",
                     text = item.DisplayName,
-                    tooltip = item.IsDefault ? "Restore the Classic appearance." : item.Path,
+                    tooltip = item.IsDefault ? "Restore the Dx appearance." : item.Path,
                     style =
                     {
                         flexShrink = 0,
