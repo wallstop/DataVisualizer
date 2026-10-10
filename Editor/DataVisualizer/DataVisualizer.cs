@@ -39,6 +39,15 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string PrefsPreferredWindowSizeKey = PrefsPrefix + "PreferredWindowSize";
         private const string PrefsTemporaryWindowClampSizeKey = PrefsPrefix + "TemporaryWindowClampSize";
 
+        /*
+            Grace period after a window is shown or placed during which geometry changes count as
+            system settling, not user input: a freshly shown window receives several geometry
+            changes while it settles (Unity's initial layout size, then OS work-area adjustments,
+            measured up to ~1 s apart on Windows), and those system-chosen sizes must never
+            overwrite the saved preferred size.
+        */
+        private const float WindowGeometrySettleSeconds = 2f;
+
         private const string SettingsDefaultPath = "Assets/Editor/DataVisualizerSettings.asset";
         private const string UserStateFileName = "DataVisualizerUserState.json";
 
@@ -415,6 +424,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Label _dataFolderPathDisplay;
         private bool _hasObservedInitialWindowGeometry;
         private bool _packagePlacementPending;
+        private float _windowSettleDeadline;
         private Vector2 _pendingPackagePreferredSize;
         private Vector2 _temporaryClampedWindowSize;
         private IVisualElementScheduledItem _packagePlacementCompletionTask;
@@ -1519,6 +1529,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             _hasObservedInitialWindowGeometry = false;
             _packagePlacementPending = false;
+            _windowSettleDeadline = EditorApplication.timeSinceStartup + WindowGeometrySettleSeconds;
             RestoreWindowMinimumSizeFromPersistedClamp();
             _nextColorIndex = 0;
             Instance = this;
@@ -1639,6 +1650,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             _hasObservedInitialWindowGeometry = true;
             _temporaryClampedWindowSize = position.size;
             bool temporaryClampIsActive = !MonitorUtility.IsSameSize(_temporaryClampedWindowSize, _pendingPackagePreferredSize);
+            /*
+                The placed rectangle can still be adjusted by the OS after the assignment
+                (work-area clamping on Windows). Reopen the settle window so any follow-up
+                geometry change is treated as system geometry, not a user resize.
+            */
+            _windowSettleDeadline = EditorApplication.timeSinceStartup + WindowGeometrySettleSeconds;
             _pendingPackagePreferredSize = default;
             if (temporaryClampIsActive)
             {
@@ -1680,8 +1697,27 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            bool shouldCapturePreferredSize = MonitorUtility.ShouldCapturePreferredSize(_packagePlacementPending, _hasObservedInitialWindowGeometry, docked);
             _hasObservedInitialWindowGeometry = true;
+
+            /*
+                While the settle window is open, every geometry change is system settling (Unity's
+                initial layout size, OS work-area adjustments) and never a user resize, so the
+                saved preferred size survives opening and placement. A temporary clamp follows
+                the actual size so the relaxed minimum stays valid while it is active.
+            */
+            if (EditorApplication.timeSinceStartup < _windowSettleDeadline)
+            {
+                if (!docked && EditorPrefs.HasKey(PrefsTemporaryWindowClampSizeKey) && !MonitorUtility.IsSameSize(position.size, _temporaryClampedWindowSize))
+                {
+                    _temporaryClampedWindowSize = position.size;
+                    WriteWindowSize(PrefsTemporaryWindowClampSizeKey, _temporaryClampedWindowSize);
+                    ApplyWindowMinimumSize(true);
+                }
+
+                return;
+            }
+
+            bool shouldCapturePreferredSize = MonitorUtility.ShouldCapturePreferredSize(_packagePlacementPending, _hasObservedInitialWindowGeometry, docked);
             if (shouldCapturePreferredSize)
             {
                 Vector2 preferredSize = MonitorUtility.NormalizePreferredSize(position.size, new Vector2(MinWindowWidth, MinWindowHeight));
