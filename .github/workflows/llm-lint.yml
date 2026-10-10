@@ -87,12 +87,13 @@ jobs:
           persist-credentials: false
 
       # The lint job only installs prettier; caching the npm download skips
-      # most of the install on every run on both operating systems.
+      # most of the install on every run on both operating systems. The lock
+      # file is intentionally ignored, so the key hashes package.json.
       - name: Cache npm packages
         uses: actions/cache@v6
         with:
           path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: npm-${{ runner.os }}-
 
       - name: Install npm dependencies

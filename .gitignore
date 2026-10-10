@@ -107,3 +107,5 @@ PLAN.md*
 # npm writes this stub (no runtime deps); not used by the Unity package
 package-lock.json
 node_modules/
+node_modules.meta
+package-lock.json.meta
