@@ -138,7 +138,9 @@ See the generated [Skills Index](./skills/index.md). Regenerate it after adding 
 ### Validation Ladder (Run After Each Change)
 
 Per-iteration speed: run `npm run check:fast` first (formats and lints only the files changed since `origin/main`, and skips harness self-tests when their surface is unchanged).
-The full ladder below gates review.
+When a Unity MCP host is connected (host bridge: `npm run unity:mcp:host`), run Unity suites through it instead of launching batchmode: `tools.unity.run_tests` with a fixture-name
+`filter` returns per-test results in seconds (measured 7s for 65 `MonitorUtilityTests` on the 6000.5 host), and `tools.unity.eval` can invoke `Tests/Editor/DocsImageCapture` entry
+points for docs captures. Keep eval return values simple strings; the eval wrapper mis-handles heavier reflective results. The full ladder below gates review.
 
 ```bash
 dotnet tool restore
