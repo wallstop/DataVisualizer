@@ -2,27 +2,25 @@
 title: DxVisualizer
 template: home.html
 hide:
-  - navigation
-  - toc
+    - navigation
+    - toc
 ---
 
 ## What it does
 
-| Task | What the window gives you |
-| --- | --- |
-| Find | Search your ScriptableObject types by name, add a whole namespace at once, or scan a folder for assets you already have. |
-| Inspect | Edit the selected asset in the inspector you already know, including custom editors and Odin Inspector integration. |
-| Organize | Reorder namespaces, types, and instances, filter by label, and keep the arrangement across sessions. |
-| Edit | Clone, rename, move, delete, and create assets in place, then run processors over one type or all of its instances. |
+| Task     | What the window gives you                                                                                                |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Find     | Search your ScriptableObject types by name, add a whole namespace at once, or scan a folder for assets you already have. |
+| Inspect  | Edit the selected asset in the inspector you already know, including custom editors and Odin Inspector integration.      |
+| Organize | Reorder namespaces, types, and instances, filter by label, and keep the arrangement across sessions.                     |
+| Edit     | Clone, rename, move, delete, and create assets in place, then run processors over one type or all of its instances.      |
 
-DxVisualizer is free forever. There are no subscriptions, no paid upgrades,
-and no feature-gated tiers. The full source is MIT-licensed, and every
-capability described here ships in the free package.
+DxVisualizer is free forever. There are no subscriptions, no paid upgrades, and no feature-gated tiers. The full source is MIT-licensed, and every capability described here ships
+in the free package.
 
 ## Requirements
 
-- Unity 2021.3 or newer, the floor declared in `package.json`. The window is
-  developed and tested on Unity 6.
+- Unity 2021.3 or newer, the floor declared in `package.json`. The window is developed and tested on Unity 6.
 - No additional package dependencies.
 
 ## Install
@@ -31,8 +29,7 @@ capability described here ships in the free package.
 2. Select **+**, then **Add package from git URL**.
 3. Enter `https://github.com/wallstop/DataVisualizer.git` and select **Add**.
 
-Open the window with **Tools → Wallstop Studios → DxVisualizer**.
-[Getting started](getting-started.md) walks through the first session.
+Open the window with **Tools → Wallstop Studios → DxVisualizer**. [Getting started](getting-started.md) walks through the first session.
 
 !!! note "Alpha"
 
