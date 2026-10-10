@@ -114,12 +114,41 @@ try {
         Invoke-FastCheckStep -Name 'csharp format + lints' -Action {
             & dotnet tool run csharpier -- format @($plan.CSharp)
             Assert-NativeExit -Description 'csharpier format'
-            & node scripts/lint-csharp-member-order.js
-            Assert-NativeExit -Description 'member-order lint'
-            & node scripts/lint-csharp-null-assertions.js
-            Assert-NativeExit -Description 'null-assertions lint'
-            & node scripts/lint-csharp-usings.js
-            Assert-NativeExit -Description 'usings lint'
+            # The three source lints are independent read-only scans of the same C# tree,
+            # so they run side by side; output is replayed in a fixed order below.
+            $lintScripts = @(
+                @{ Name = 'member-order lint'; File = 'scripts/lint-csharp-member-order.js' },
+                @{ Name = 'null-assertions lint'; File = 'scripts/lint-csharp-null-assertions.js' },
+                @{ Name = 'usings lint'; File = 'scripts/lint-csharp-usings.js' }
+            )
+            if ($PSVersionTable.PSVersion.Major -ge 7) {
+                $lintResults = $lintScripts | ForEach-Object -Parallel {
+                    $lint = $_
+                    $root = $using:RepoRoot
+                    Set-Location $root
+                    $output = (& node (Join-Path $root $lint.File) 2>&1 | Out-String).TrimEnd()
+                    [pscustomobject]@{
+                        Name = $lint.Name
+                        ExitCode = $LASTEXITCODE
+                        Output = $output
+                    }
+                } | Sort-Object -Property Name
+                foreach ($lintResult in $lintResults) {
+                    if ($lintResult.Output) {
+                        Write-Host $lintResult.Output
+                    }
+                    if ($lintResult.ExitCode -ne 0) {
+                        throw "$($lintResult.Name) exited $($lintResult.ExitCode)"
+                    }
+                }
+            } else {
+                foreach ($lint in $lintScripts) {
+                    & node (Join-Path (Get-Location) $lint.File)
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "$($lint.Name) exited $LASTEXITCODE"
+                    }
+                }
+            }
         }
     }
 

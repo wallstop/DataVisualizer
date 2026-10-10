@@ -26,8 +26,9 @@ $script:SelfTestSurfaceFiles = @(
 # Which self-test files verify which tooling subject. A change outside every
 # subject (shared manifests, the suite's own helpers, or anything unmapped)
 # selects every test file, so a subject without a mapping still gets coverage.
-# CI keeps running the full suite on every surface change, which catches
-# mapping drift; the local fast check runs only the selection.
+# Both the CI lint workflow and the local fast check run the selection; an
+# unmapped path, a stale name, or an unresolvable base fails safe to the full
+# suite, so mapping drift can never silently skip coverage.
 $script:SelfTestSubjectsByPath = @{
     'scripts/fast-check.ps1'                        = @('test-fast-check.ps1')
     'scripts/harness-scope.psm1'                    = @('test-fast-check.ps1', 'test-harness-scope.ps1')
@@ -119,9 +120,34 @@ function Get-CommittedChangedFiles {
 function Get-WorkingTreeChangedFiles {
     param([string]$RepoRoot)
 
-    $tracked = & git -C $RepoRoot diff --name-only HEAD 2>$null
-    $untracked = & git -C $RepoRoot ls-files --others --exclude-standard 2>$null
-    return @((@($tracked) + @($untracked)) | Where-Object { $_ })
+    <#
+        git status --porcelain covers staged, unstaged, and untracked paths in one scan, and
+        -uall lists untracked files individually instead of collapsing them into their
+        untracked parent directory like ls-files never did. --no-optional-locks keeps git
+        from writing the refreshed index back, which dominates the scan on bind-mounted
+        working trees (measured ~13 s there with the write vs ~2 s without) and turns every
+        fast-check invocation into a slow one.
+    #>
+    $output = & git -C $RepoRoot --no-optional-locks status --porcelain -uall 2>$null
+    $paths = @()
+    foreach ($line in @($output)) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        $path = $line.Substring(3)
+        if ($path -match '^(.*) -> (.*)$') {
+            # A staged rename reports both sides; the old side is kept for group
+            # triggering and filtered out later by the existence check.
+            $paths += $Matches[1]
+            $paths += $Matches[2]
+            continue
+        }
+
+        $paths += $path
+    }
+
+    return @($paths | Where-Object { $_ })
 }
 
 function Test-HarnessSurfaceChanged {

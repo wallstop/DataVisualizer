@@ -137,15 +137,25 @@ jobs:
             git fetch --depth=1 origin "${BASE_SHA}" || true
           fi
           verdict="$(pwsh -NoProfile -File scripts/should-run-self-tests.ps1 -BaseSha "${BASE_SHA:-}")"
+          selection="$(pwsh -NoProfile -File scripts/should-run-self-tests.ps1 -BaseSha "${BASE_SHA:-}" -Selection)"
           echo "self-tests=${verdict}" >> "${GITHUB_OUTPUT}"
+          echo "selection=${selection}" >> "${GITHUB_OUTPUT}"
 
       # The self-tests only verify the harness surface (scripts, .llm, CI and
-      # devcontainer wiring, package manifests). Skip them when that surface
-      # is untouched; every surface change still runs the full suite on both
-      # operating systems.
+      # devcontainer wiring, package manifests). Skip them when that surface is
+      # untouched; otherwise run the same scoped selection the local fast check
+      # runs. The selection fails safe: unmapped or shared surface paths resolve
+      # to 'all', which runs the full suite.
       - name: Run harness self-tests
         if: steps.self-test-scope.outputs.self-tests != 'skip'
-        run: pwsh -NoProfile -File scripts/tests/run-all.ps1
+        shell: bash
+        run: |
+          selection="${{ steps.self-test-scope.outputs.selection }}"
+          if [ "${selection}" = "all" ] || [ -z "${selection}" ]; then
+            pwsh -NoProfile -File scripts/tests/run-all.ps1
+          else
+            pwsh -NoProfile -File scripts/tests/run-all.ps1 -Names "${selection}"
+          fi
 
       - name: Enforce .llm file length limit
         run: pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -VerboseOutput

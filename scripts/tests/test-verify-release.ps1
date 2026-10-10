@@ -66,7 +66,15 @@ function New-HandTarball {
         Write-FixtureFile -Root $staging -RelativePath "package/$relative" -Content 'extra'
     }
     $tarball = Join-Path $Root $Name
-    tar -czf $tarball -C $staging package
+    # GNU tar parses the first colon in the -f archive name as a remote host spec, so a
+    # Windows drive path fails with 'Cannot connect to C: resolve failed'; pack from the
+    # tarball's directory under its leaf name, mirroring runTar in the validator.
+    Push-Location -LiteralPath (Split-Path -Parent $tarball)
+    try {
+        tar -czf (Split-Path -Leaf $tarball) -C $staging package
+    } finally {
+        Pop-Location
+    }
     if ($LASTEXITCODE -ne 0) { throw 'tar failed for handcrafted fixture tarball' }
     return $tarball
 }

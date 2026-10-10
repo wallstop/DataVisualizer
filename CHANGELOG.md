@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Window placement no longer overwrites your saved preferred window size with the size the operating system clamps the window to, so reopening keeps the size you chose (#39, #42).
 - Fix the docs copy to match the window: a processor without an `Accepts` list is never offered, pane widths always save in editor preferences, and persistence docs use the
   on-screen **Persist State in Settings Asset** label. The settings tooltip now names the correct save location. (#153, #149)
 - `BaseDataObject` asset ids no longer change on validation: an asset keeps its authored id, and only an empty id fills from the asset GUID. Created and cloned assets still get a

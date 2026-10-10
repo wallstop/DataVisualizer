@@ -211,6 +211,34 @@ Invoke-TestCase 'Selection_AcceptsTheAvailableNames' {
         'the selection must keep the mapped name only')
 }
 
+# The -Selection output feeds CI's scoped self-test run: a mapped subject
+# prints its test file names, everything else prints 'all'.
+Invoke-TestCase 'SelectionOutput_NamesTheSubjectForAMappedCommit' {
+    $repo = New-ScopeRepo
+    try {
+        $base = (& git -C $repo rev-parse HEAD)
+        Invoke-ScopeCommit -Repo $repo -Files @{ 'scripts/fast-check.ps1' = "# changed`n" }
+        $output = (& pwsh -NoProfile -File $wrapperPath -RepoRoot $repo -BaseSha $base -Selection 2>&1 | Out-String).Trim()
+        Assert-True ($LASTEXITCODE -eq 0) "the wrapper must exit 0 (got $LASTEXITCODE): $output"
+        Assert-True ($output -eq 'test-fast-check.ps1') "the selection must name the subject test, got: $output"
+    } finally {
+        Remove-TempRoot -Path $repo
+    }
+}
+
+Invoke-TestCase 'SelectionOutput_FallsBackToAllForAnUnmappedCommit' {
+    $repo = New-ScopeRepo
+    try {
+        $base = (& git -C $repo rev-parse HEAD)
+        Invoke-ScopeCommit -Repo $repo -Files @{ 'scripts/build-docs.ps1' = "# changed`n" }
+        $output = (& pwsh -NoProfile -File $wrapperPath -RepoRoot $repo -BaseSha $base -Selection 2>&1 | Out-String).Trim()
+        Assert-True ($LASTEXITCODE -eq 0) "the wrapper must exit 0 (got $LASTEXITCODE): $output"
+        Assert-True ($output -eq 'all') "an unmapped subject must select the full suite, got: $output"
+    } finally {
+        Remove-TempRoot -Path $repo
+    }
+}
+
 if ($script:TestFailureCount -gt 0) {
     Write-Host "harness-scope self-tests: $($script:TestFailureCount) failed"
     exit 1
