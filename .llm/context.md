@@ -254,20 +254,20 @@ pre-commit config on staged `.cs` files.
 
 - Write all agent-to-user copy (PR titles and bodies, commit messages, code
   comments, handoffs, CHANGELOG entries) in Simplified Technical English:
-  short, plain, active sentences, no filler. PR descriptions lead with why
-  and how, and stay brief.
-- CHANGELOG.md lists user-facing changes only: new features, fixes, and
-  visible behavior changes. Never record tests, CI, tooling, refactors, or
-  internal release mechanics there; those belong in commits, issues, and the
-  PR body.
-- Short imperative subjects with the subsystem up front (for example
-  "Fix settings persistence dirty state"); reference related issue IDs in the body.
-- Lead PR bodies with the problem: `**Why:**` states the defect or need in user
-  terms, `**What:**` lists one-line change bullets, then `Fixes`/`Refs` lines
-  (template in `ship-changes`). Cap 15 lines; no headers beyond Why/What, no
-  validation transcripts or risk essays; details live in commits, tests, issues.
-- Confirm CSharpier formatting, `npm pack`, and both Unity test suites before
-  requesting review.
+  short, plain, active sentences answering why, how, and what, in that order.
+- Agent-written PR and issue bodies start with `DISCLOSURE: LLM-GENERATED
+  TEXT`. CHANGELOG entries: one or two sentences, 300 rendered characters max
+  (issue links do not count), verb-first, user effect first, no mechanism or
+  narration; never modify released sections. CHANGELOG.md stays user-facing
+  only (tests, CI, tooling, and release mechanics belong elsewhere).
+- PR titles: 50 characters max, imperative, the user-visible effect. PR
+  bodies: `**Why:**` one sentence naming the problem, `**What:**` two to five
+  one-line bullets of at most 12 words each, then `Fixes`/`Refs`. Validation
+  evidence lives in commits, tests, and issues, never in the body.
+- Commit subjects: imperative, 72 characters max, subsystem up front ("Fix
+  settings persistence dirty state"); the body explains why first and
+  references related issue IDs. Confirm CSharpier, `npm pack`, and both Unity
+  test suites before requesting review.
 - Version bumps: change `package.json`, then run `npm run lint:llm:fix` so the
   version line above is synced, and commit both together
   (see [bump-version-release](./skills/bump-version-release/SKILL.md)).

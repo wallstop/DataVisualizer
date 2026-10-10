@@ -44,11 +44,20 @@ Run the narrowest sufficient layer; escalate on failure:
   Match history style: "Fix settings persistence dirty state", "Bump version from
   0.0.36 to 0.0.37".
 - Reference related issue IDs in the body.
+- Keep subjects at most 72 characters and make the body explain why first; each
+  commit compiles and carries one logical change.
 - Never commit generated `.llm/skills/index.md` without its source skills, and never
   commit a stale index.
 - CHANGELOG entries are user-facing only (features, fixes, visible behavior).
   Tests, CI, tooling, and release mechanics go in commits and PR bodies, never
-  in `CHANGELOG.md`. Write them in Simplified Technical English.
+  in `CHANGELOG.md`. Entries are one or two sentences, at most 300 rendered
+  characters (issue references and link targets do not count), starting with
+  the verb its section names (`Add`, `Fix`), user-visible effect first. No
+  root-cause narration, mechanism, file paths, or "verified on" notes; the
+  long version lives in the commit body or a docs guide. Never modify released
+  sections; edit `[Unreleased]` entries in place. A fix for a defect that was
+  never in a release is not a `Fixed` entry: fold what the user gets into that
+  feature's entry.
 
 ## Pull Requests
 
@@ -56,26 +65,38 @@ GitHub pre-fills the body from `.github/pull_request_template.md` (Why/What +
 Type of Change + Checklist); keep that shape. Confirm CSharpier, `npm pack`,
 and both Unity test suites before handoff.
 
+Start agent-written bodies with the disclosure line; the template then reads:
+
 ```markdown
-**Why:** <The problem this PR solves. One or two plain sentences. Name what was
-broken or missing and for whom. No implementation detail.>
+DISCLOSURE: LLM-GENERATED TEXT
+
+**Why:** <the problem, in one sentence>
 
 **What:**
 
-- <One-line bullet of an actual change.>
-- <One-line bullet.>
+- <one change, one line>
+- <two to five bullets>
 
 Fixes #<issue>
 ```
 
-Rules (see `.llm/context.md`):
+| Limit            | Value         |
+| ---------------- | ------------- |
+| Title            | 50 characters |
+| `**Why:**`       | 1 sentence    |
+| `**What:**`      | 2 to 5 lines  |
+| Words per bullet | 12            |
 
-- Body narrative stays under 15 lines; every bullet is one line.
-- No Behavior/Validation/Risk headers, no validation transcripts, no risk or
-  rollback essays, no history, no diff narration, no "this PR". The template's
-  Type of Change and Checklist sections are the only allowed headers.
-- Validation evidence, limitations, and risk go in the commit body, tests, and
-  issues; link to them, do not paste them.
+Count the title (`printf '%s' "$TITLE" | wc -c`) instead of judging. Name the
+effect the user sees, not the mechanism, and do not join two changes with
+"and"; let the body carry the rest.
+
+- The disclosure line is not part of any limit.
+- No validation transcripts, measurements, run IDs, session numbers, CI
+  results, risk or rollback essays, history, diff narration, or file lists;
+  they live in the commit body, tests, and linked issues.
+- The template's Type of Change and Checklist sections are the only allowed
+  headers beyond Why/What.
 - UI tweaks add one screenshot or GIF after the bullets.
 
 Never explicitly request a review from a person, team, bot, or automation. Do not

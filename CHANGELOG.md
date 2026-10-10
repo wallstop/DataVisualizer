@@ -15,20 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Renamed to DxVisualizer. The display name, window title, and menu item
-  (**Tools → Wallstop Studios → DxVisualizer**) and the settings and theme
-  asset menus (**Assets → Create → Wallstop Studios → DxVisualizer**) use the
-  new name. The package name, C# namespaces, public types, saved state, and
-  `--dataviz-*` theme tokens are unchanged, so projects upgrade without edits
-  (#147).
+- Renamed to DxVisualizer: display name, window title, and menu paths
+  (**Tools → Wallstop Studios → DxVisualizer**). Namespaces, types, package
+  name, saved state, and theme tokens are unchanged, so projects upgrade
+  without edits (#147).
 
 ### Fixed
 
-- `BaseDataObject` asset ids no longer change on validation. An asset keeps
-  its authored `Id` when it is non-empty; only an empty id fills from the
-  asset's `.meta` GUID, as in 0.0.37. Created and cloned assets still get a
-  fresh id. This restores persisted identity that consumers key saves and
-  databases on (#137).
+- `BaseDataObject` asset ids no longer change on validation: an asset keeps
+  its authored id, and only an empty id fills from the asset GUID. Created
+  and cloned assets still get a fresh id (#137).
 
 ## [0.1.0] - 2026-10-07
 
