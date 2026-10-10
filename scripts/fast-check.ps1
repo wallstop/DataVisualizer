@@ -41,11 +41,16 @@ function Get-FastCheckPlan {
     $changed = @(Get-CommittedChangedFiles -RepoRoot $RepoRoot -BaseSha $BaseSha)
     $changed += @(Get-WorkingTreeChangedFiles -RepoRoot $RepoRoot)
     $changed = @($changed | Sort-Object -Unique)
+    # Deletions and rename old-paths appear in a git diff but not on disk.
+    # Group triggers below still see every changed path - deleting a harness
+    # file must keep running the self-tests - but the formatter lists feed
+    # file-argument tools (csharpier, prettier), which fail on missing paths.
+    $existing = @($changed | Where-Object { Test-Path -LiteralPath (Join-Path $RepoRoot $_) })
 
     return [pscustomobject]@{
         BaseSha = $BaseSha
-        CSharp = @($changed | Where-Object { $_ -match '\.cs$' })
-        Markdown = @($changed | Where-Object { $_ -match '\.md$' })
+        CSharp = @($existing | Where-Object { $_ -match '\.cs$' })
+        Markdown = @($existing | Where-Object { $_ -match '\.md$' })
         Harness = @($changed | Where-Object { Test-SurfacePath -Path $_ }).Count -gt 0
         Packaging = @($changed | Where-Object { $_ -match '^(Editor|Runtime)/' -or $_ -eq 'package.json' }).Count -gt 0
         AssemblyConfig = @($changed | Where-Object { $_ -match '\.(asmdef|ruleset|rsp)$' -or $_ -match '\.dll\.meta$' }).Count -gt 0

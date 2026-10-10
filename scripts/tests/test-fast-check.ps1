@@ -21,9 +21,13 @@ function New-PlanRepo {
 }
 
 function Invoke-PlanOnly {
-    param([string]$Repo)
+    param([string]$Repo, [string]$Base = '')
 
-    $output = (& pwsh -NoProfile -File $fastCheckPath -RepoRoot $Repo -PlanOnly 2>&1 | Out-String)
+    if ($Base) {
+        $output = (& pwsh -NoProfile -File $fastCheckPath -RepoRoot $Repo -Base $Base -PlanOnly 2>&1 | Out-String)
+    } else {
+        $output = (& pwsh -NoProfile -File $fastCheckPath -RepoRoot $Repo -PlanOnly 2>&1 | Out-String)
+    }
     Assert-True ($LASTEXITCODE -eq 0) "the plan must exit 0 (got $LASTEXITCODE): $output"
     return $output
 }
@@ -80,6 +84,61 @@ Invoke-TestCase 'Plan_FallsBackToHeadWhenNoBaseExists' {
         Write-FixtureFile -Root $repo -RelativePath 'CHANGELOG.md' -Content "## [Unreleased]`n`n### Added`n`n- Something. (#1)`n"
         $output = Invoke-PlanOnly -Repo $repo
         Assert-True ($output -match 'markdown: CHANGELOG\.md') 'a fixture without origin/main must still plan the working tree'
+    } finally {
+        Remove-TempRoot -Path $repo
+    }
+}
+
+# Deletions and rename old-paths show up in a git diff but no longer exist on
+# disk; the plan must hand formatters only files that are actually there.
+Invoke-TestCase 'Plan_ExcludesWorkingTreeDeletionsFromFormatGroups' {
+    $repo = New-PlanRepo
+    try {
+        Write-FixtureFile -Root $repo -RelativePath 'Editor/Foo.cs' -Content "class Foo { }`n"
+        Write-FixtureFile -Root $repo -RelativePath 'docs/guide.md' -Content "guide`n"
+        & git -C $repo add -A 2>&1 | Out-Null
+        & git -C $repo commit -q -m 'add fixtures' 2>&1 | Out-Null
+        Remove-Item -LiteralPath (Join-Path $repo 'Editor/Foo.cs')
+        Remove-Item -LiteralPath (Join-Path $repo 'docs/guide.md')
+        $output = Invoke-PlanOnly -Repo $repo
+        Assert-True ($output -match 'csharp: \r?\n') 'a deleted C# file must not be a format target'
+        Assert-True ($output -match 'markdown: \r?\n') 'a deleted Markdown file must not be a format target'
+        Assert-True ($output -match 'Packaging : True') 'a deleted Editor file must still plan packaging'
+    } finally {
+        Remove-TempRoot -Path $repo
+    }
+}
+
+Invoke-TestCase 'Plan_ExcludesCommittedDeletionsFromFormatGroups' {
+    $repo = New-PlanRepo
+    try {
+        Write-FixtureFile -Root $repo -RelativePath 'Editor/Foo.cs' -Content "class Foo { }`n"
+        Write-FixtureFile -Root $repo -RelativePath 'docs/guide.md' -Content "guide`n"
+        & git -C $repo add -A 2>&1 | Out-Null
+        & git -C $repo commit -q -m 'add fixtures' 2>&1 | Out-Null
+        Remove-Item -LiteralPath (Join-Path $repo 'Editor/Foo.cs')
+        Remove-Item -LiteralPath (Join-Path $repo 'docs/guide.md')
+        & git -C $repo add -A 2>&1 | Out-Null
+        & git -C $repo commit -q -m 'delete fixtures' 2>&1 | Out-Null
+        $output = Invoke-PlanOnly -Repo $repo -Base (& git -C $repo rev-parse HEAD~1)
+        Assert-True ($output -match 'csharp: \r?\n') 'a committed C# deletion must not be a format target'
+        Assert-True ($output -match 'markdown: \r?\n') 'a committed Markdown deletion must not be a format target'
+        Assert-True ($output -match 'Packaging : True') 'a committed Editor deletion must still plan packaging'
+    } finally {
+        Remove-TempRoot -Path $repo
+    }
+}
+
+Invoke-TestCase 'Plan_FormatsOnlyTheExistingSideOfARename' {
+    $repo = New-PlanRepo
+    try {
+        Write-FixtureFile -Root $repo -RelativePath 'docs/old.md' -Content "guide`n"
+        & git -C $repo add -A 2>&1 | Out-Null
+        & git -C $repo commit -q -m 'add doc' 2>&1 | Out-Null
+        & git -C $repo mv docs/old.md docs/new.md 2>&1 | Out-Null
+        $output = Invoke-PlanOnly -Repo $repo
+        Assert-True ($output -match 'markdown: docs/new\.md') 'the new path of a rename must be a format target'
+        Assert-True ($output -notmatch 'docs/old\.md') 'the old path of a rename must not be a format target'
     } finally {
         Remove-TempRoot -Path $repo
     }
