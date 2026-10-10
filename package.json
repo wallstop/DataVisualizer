@@ -42,6 +42,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint:llm": "pwsh -NoProfile -File scripts/lint-llm-instructions.ps1",
+    "check:fast": "pwsh -NoProfile -File scripts/fast-check.ps1",
     "lint:llm:fix": "pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -Fix",
     "lint:assembly-warnings": "pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1",
     "lint:csharp-member-order": "node scripts/lint-csharp-member-order.js",
