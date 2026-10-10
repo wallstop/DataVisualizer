@@ -1,0 +1,176 @@
+/*
+    Dx theme for the docs site, translated from the window's palette in
+    Editor/DataVisualizer/Styles/Dx.uss: ink surfaces, azure accent, and the
+    family hues for warnings and positive actions. The light scheme is paper
+    (#f4f1ea) with #2a64c4 links, which meets 4.5:1 at 5.0:1.
+*/
+
+:root {
+    --dx-ink: #14171c;
+    --dx-pane: #101318;
+    --dx-namespace: #191d23;
+    --dx-border: #2a2f38;
+    --dx-text: #e9eef4;
+    --dx-muted: #8a929e;
+    --dx-accent: #5b9dff;
+    --dx-positive: #7fb88a;
+    --dx-warning: #f4a836;
+    --dx-danger: #ec4661;
+    --dx-paper: #f4f1ea;
+    --dx-paper-border: #d9d2c4;
+    --dx-paper-ink: #26292e;
+    --dx-paper-muted: #5d6167;
+    --dx-paper-link: #2a64c4;
+}
+
+[data-md-color-scheme="slate"] {
+    --md-default-bg-color: var(--dx-pane);
+    --md-default-fg-color: var(--dx-text);
+    --md-typeset-color: var(--dx-text);
+    --md-typeset-a-color: var(--dx-accent);
+    --md-accent-fg-color: var(--dx-accent);
+    --md-primary-fg-color: var(--dx-pane);
+    --md-primary-bg-color: var(--dx-text);
+    --md-header-fg-color: var(--dx-text);
+    --md-footer-bg-color: var(--dx-pane);
+    --md-footer-fg-color: var(--dx-muted);
+    --md-code-bg-color: var(--dx-ink);
+    --md-admonition-bg-color: var(--dx-namespace);
+    --md-table-row-stripe-bg: var(--dx-namespace);
+}
+
+[data-md-color-scheme="default"] {
+    --md-default-bg-color: var(--dx-paper);
+    --md-default-fg-color: var(--dx-paper-ink);
+    --md-typeset-color: var(--dx-paper-ink);
+    --md-typeset-a-color: var(--dx-paper-link);
+    --md-accent-fg-color: var(--dx-paper-link);
+    --md-primary-fg-color: var(--dx-paper);
+    --md-primary-bg-color: var(--dx-paper-ink);
+    --md-header-fg-color: var(--dx-paper-ink);
+    --md-footer-bg-color: var(--dx-paper-border);
+    --md-footer-fg-color: var(--dx-paper-ink);
+    --md-code-bg-color: #eae5d9;
+    --md-admonition-bg-color: #ece8dd;
+}
+
+/* Header and footer take the pane ground so the chrome reads as ink. */
+.md-header {
+    box-shadow: 0 1px 0 var(--dx-border);
+}
+
+[data-md-color-scheme="default"] .md-header {
+    box-shadow: 0 1px 0 var(--dx-paper-border);
+}
+
+/* The active nav entry sits in a contained pill instead of plain bold text. */
+.md-nav__link--active {
+    border-radius: 8px;
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+    background: color-mix(in srgb, var(--dx-accent) 14%, transparent);
+}
+
+[data-md-color-scheme="default"] .md-nav__link--active {
+    background: color-mix(in srgb, var(--dx-paper-link) 12%, transparent);
+}
+
+/* Admonitions lose the Material left accent bar; they carry a full border. */
+.md-typeset .admonition,
+.md-typeset details.admonition {
+    border: 1px solid var(--dx-border);
+    border-left: 1px solid var(--dx-border);
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+[data-md-color-scheme="default"] .md-typeset .admonition,
+[data-md-color-scheme="default"] .md-typeset details.admonition {
+    border-color: var(--dx-paper-border);
+}
+
+/* Homepage landing: hero capture, trust strip, then three cards. */
+.dx-hero {
+    margin: 0 0 1.2rem;
+}
+
+.dx-hero img {
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--dx-border);
+    border-radius: 10px;
+    background: var(--dx-ink);
+}
+
+[data-md-color-scheme="default"] .dx-hero img {
+    border-color: var(--dx-paper-border);
+}
+
+.dx-hero-caption {
+    margin: 0.4rem 0 0;
+    color: var(--dx-muted);
+    font-size: 0.72rem;
+}
+
+[data-md-color-scheme="default"] .dx-hero-caption {
+    color: var(--dx-paper-muted);
+}
+
+.dx-trust {
+    margin: 0 0 1.2rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--dx-border);
+    border-radius: 8px;
+    color: var(--dx-text);
+    font-weight: 700;
+}
+
+[data-md-color-scheme="default"] .dx-trust {
+    border-color: var(--dx-paper-border);
+    color: var(--dx-paper-ink);
+}
+
+.dx-cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin: 0 0 1.6rem;
+}
+
+.dx-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.8rem;
+    border: 1px solid var(--dx-border);
+    border-radius: 10px;
+    color: var(--md-typeset-color);
+    background: var(--dx-namespace);
+}
+
+.dx-card:hover {
+    border-color: var(--dx-accent);
+}
+
+[data-md-color-scheme="default"] .dx-card {
+    border-color: var(--dx-paper-border);
+    background: #ece8dd;
+}
+
+[data-md-color-scheme="default"] .dx-card:hover {
+    border-color: var(--dx-paper-link);
+}
+
+.dx-card strong {
+    color: var(--dx-accent);
+}
+
+[data-md-color-scheme="default"] .dx-card strong {
+    color: var(--dx-paper-link);
+}
+
+@media screen and (max-width: 40rem) {
+    .dx-cards {
+        grid-template-columns: 1fr;
+    }
+}

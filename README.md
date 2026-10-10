@@ -22,7 +22,7 @@ back into your workflow immediately.
 
 ## Window Layout
 
-![Data Visualizer layout with namespace, object, and inspector columns](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-layout.png) _Full
+![DxVisualizer layout with namespace, object, and inspector columns](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-layout.png) _Full
 window overview. Regenerated from the live window by the docs capture pipeline._
 
 The window uses a three-panel layout:
@@ -65,7 +65,7 @@ Chain create with rename or move to place new assets exactly where you need them
 
 ## Building Your Type Catalog
 
-![Manage-visible-types popover listing the project's ScriptableObject types](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-import.png)
+![Manage-visible-types popover listing the project's namespaces and their types](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-import.png)
 _Type search popover over the namespace panel. Regenerated from the live window by the docs capture pipeline._
 
 Three controls above the Namespace panel populate your catalog:
@@ -115,21 +115,22 @@ DxVisualizer creates one at `Assets/Editor/DataVisualizerSettings.asset` on firs
 
 ### Themes
 
-**Classic**, **Nord**, **Dracula**, **Compact**, and **Minimal** ship under `Editor/DataVisualizer/Styles` in the package. In **Settings → Theme**, click the current theme to open
-a searchable dropdown. Search by name or asset path, use Up/Down and Enter to select, or press Escape to cancel. Themes in both Assets and Packages are listed; duplicate names show
-their paths. Classic uses the original palette, Nord uses blue-gray surfaces and cyan accents, and Dracula uses dark surfaces and purple accents. Compact and Minimal keep the
-Classic palette and shrink the density: window typography, action buttons, and control chrome. Compact uses 13px type with 20px action buttons and 4px control radii; Minimal uses
-12px type with 16px action buttons and square control corners. These editor-only assets and their stylesheets are included in the package, not an optional sample.
+**Dx**, **Classic**, **Nord**, **Dracula**, **Compact**, and **Minimal** ship under `Editor/DataVisualizer/Styles` in the package. In **Settings → Theme**, click the current theme
+to open a searchable dropdown. Search by name or asset path, use Up/Down and Enter to select, or press Escape to cancel. Themes in both Assets and Packages are listed; duplicate
+names show their paths. Dx is the default and uses ink-dark surfaces with an azure accent, Classic uses the original palette, Nord uses blue-gray surfaces and cyan accents, and
+Dracula uses dark surfaces and purple accents. Compact and Minimal keep the Classic palette and shrink the density: window typography, action buttons, and control chrome. Compact
+uses 13px type with 20px action buttons and 4px control radii; Minimal uses 12px type with 16px action buttons and square control corners. These editor-only assets and their
+stylesheets are included in the package, not an optional sample.
 
 The palettes style the window background and text, lists, search results, popovers, label and processor panels, dividers, and standard UI Toolkit inputs, buttons, foldouts,
 toggles, scrollers, and inspector surfaces. Action colors remain distinct: danger for delete, positive for create/clone/confirm, secondary for rename/script-folder loading, warning
-for cancel/move, and emphasis for alternate toggle modes. **Reset Theme** keeps the compact Data Folder button sizing, clears the saved selection, and restores Classic. Selecting
-the Classic asset gives the same appearance but keeps an explicit selection.
+for cancel/move, and emphasis for alternate toggle modes. **Reset Theme** keeps the compact Data Folder button sizing, clears the saved selection, and restores Dx. Selecting the Dx
+asset gives the same appearance but keeps an explicit selection.
 
 Create a theme with **Assets → Create → Wallstop Studios → DxVisualizer → DxVisualizer Theme**. Assign a `.uss` asset to its **Style Sheet** field, then choose the theme in the
 window's **Settings → Theme** field. Keep your theme and stylesheet under an `Editor` folder; they are editor-only assets.
 
-The selected theme follows the existing project/user persistence setting. Switching that setting copies the current selection. Choose **Classic (Default / Reset)** or use **Reset
+The selected theme follows the existing project/user persistence setting. Switching that setting copies the current selection. Choose **Dx (Default / Reset)** or use **Reset
 Theme** to restore the package style. A missing theme falls back to the package style without discarding its saved GUID; reset clears that reference too.
 
 For example, this stylesheet changes the accent, standard button states, window font size, and action-button size:

@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Renamed to DxVisualizer: display name, window title, and menu paths (**Tools → Wallstop Studios → DxVisualizer**). Namespaces, types, package name, saved state, and theme tokens
   are unchanged, so projects upgrade without edits (#147).
+- The documentation site ships the Dx palette with ink dark as the default, a landing hero, and screenshots recaptured from the live window in the Dx theme (#149, #152).
 
 ### Fixed
 
