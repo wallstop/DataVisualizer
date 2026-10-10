@@ -52,10 +52,9 @@ Run the narrowest sufficient layer; escalate on failure:
 
 ## Pull Requests
 
-Lead the body with the problem the PR solves, then the changes. Use the shape
-of Ambiguous-Interactive/unity-helpers PRs: a short `Why`, `What` bullets, and
-issue references. Confirm CSharpier, `npm pack`, and both Unity test suites
-before handoff.
+GitHub pre-fills the body from `.github/pull_request_template.md` (Why/What +
+Type of Change + Checklist); keep that shape. Confirm CSharpier, `npm pack`,
+and both Unity test suites before handoff.
 
 ```markdown
 **Why:** <The problem this PR solves. One or two plain sentences. Name what was
@@ -71,9 +70,10 @@ Fixes #<issue>
 
 Rules (see `.llm/context.md`):
 
-- Body stays under 15 lines. Every bullet is one line.
+- Body narrative stays under 15 lines; every bullet is one line.
 - No Behavior/Validation/Risk headers, no validation transcripts, no risk or
-  rollback essays, no history, no diff narration, no "this PR".
+  rollback essays, no history, no diff narration, no "this PR". The template's
+  Type of Change and Checklist sections are the only allowed headers.
 - Validation evidence, limitations, and risk go in the commit body, tests, and
   issues; link to them, do not paste them.
 - UI tweaks add one screenshot or GIF after the bullets.
