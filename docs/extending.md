@@ -1,7 +1,7 @@
 # Extending the window
 
 The runtime assembly is part of the package and carries the extension surface, so your types compile against it in both the editor and a player build. Everything on this page is
-public API.
+public API. Code identifiers keep the `DataVisualizer` name — namespaces, types, and assemblies are unchanged by the rebrand, so your code needs no edits.
 
 ## Display attributes
 
