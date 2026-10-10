@@ -8,14 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Add the Dx theme and make it the default: a fresh window opens in Dx and Reset Theme returns to it. Explicit selections survive, and a missing Dx asset falls back to the package
-  style (#148).
+- Add the Migration and Roadmap pages, and move the repository branding in-repo: the DxVisualizer mark, favicon, and banner from the rebrand kit now live under `docs/images/` and
+  the site and README use them (#149, #150).
 
 ### Changed
 
 - Renamed to DxVisualizer: display name, window title, and menu paths (**Tools → Wallstop Studios → DxVisualizer**). Namespaces, types, package name, saved state, and theme tokens
   are unchanged, so projects upgrade without edits (#147).
-- The documentation site ships the Dx palette with ink dark as the default, a landing hero, and screenshots recaptured from the live window in the Dx theme (#149, #152).
+- The documentation site ships the designed Dx theme: ink dark as the default, nav tabs, the homepage hero, and screenshots recaptured from the live window in the Dx theme (#149,
+  #152).
+- The README leads with the banner and links into the site instead of repeating it (#149).
 
 ### Fixed
 
