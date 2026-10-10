@@ -152,10 +152,14 @@ Invoke-TestCase 'Builds_DeterministicArchive_WithStandardGuidEntries' {
 
         $extract = Join-Path $root 'extract'
         New-Item -ItemType Directory -Path $extract -Force | Out-Null
-        # Same GNU tar -f colon caveat as Get-ArchiveMembers above.
-        Push-Location -LiteralPath (Split-Path -Parent $archive)
+        # PowerShell-spawned tar cannot take Windows absolute paths: the -f name hits the
+        # 'C:' remote-host parse and a -C path arrives mangled by the MSYS argument
+        # conversion. Extract from inside the target directory and pass the archive by a
+        # colon-free relative path, mirroring the cwd pattern of Get-ArchiveMembers.
+        Push-Location -LiteralPath $extract
         try {
-            tar -xzf (Split-Path -Leaf $archive) -C $extract
+            $relativeArchive = (Resolve-Path -LiteralPath $archive -Relative) -replace '\\', '/'
+            tar -xzf $relativeArchive
         } finally {
             Pop-Location
         }
