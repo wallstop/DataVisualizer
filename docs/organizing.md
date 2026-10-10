@@ -73,14 +73,15 @@ pipeline._
 
 ## Themes
 
-Five themes ship in the package: **Classic**, **Nord**, **Dracula**, **Compact**, and **Minimal**. Compact and Minimal keep the Classic palette and shrink the density: Compact uses
-13px type, 20px action buttons, and 4px control corners; Minimal uses 12px type, 16px action buttons, and square corners.
+Six themes ship in the package: **Dx**, Classic, Nord, Dracula, Compact, and Minimal. Dx is the default: ink-dark surfaces with an azure accent, and the family hues for actions.
+Compact and Minimal keep the Classic palette and shrink the density: Compact uses 13px type, 20px action buttons, and 4px control corners; Minimal uses 12px type, 16px action
+buttons, and square corners.
 
 Click the theme field to open a searchable dropdown. Search by name or asset path, use Up and Down to move, Enter to select, Escape to cancel. Themes from both `Assets` and
 `Packages` are listed, and a duplicate name shows its path so you can tell them apart.
 
-**Reset Theme** restores the Classic appearance and clears the saved theme selection, keeping the compact Data Folder button sizing. Selecting the Classic asset gives the same
-appearance but keeps an explicit selection.
+**Reset Theme** restores the Dx appearance and clears the saved theme selection, keeping the compact Data Folder button sizing. Selecting the Dx asset gives the same appearance but
+keeps an explicit selection.
 
 ### Your own theme
 
@@ -104,7 +105,7 @@ Override the tokens you need rather than restyling controls:
 }
 ```
 
-Use `Nord.uss` or `Dracula.uss` as palette references. Copy them under your project's `Editor` folder before customizing rather than editing installed package files.
+Use `Dx.uss`, `Nord.uss`, or `Dracula.uss` as palette references. Copy them under your project's `Editor` folder before customizing rather than editing installed package files.
 
 Theme changes apply to the open window without reselecting or reopening it. Editing the applied theme's stylesheet, changing its Style Sheet reference, and renaming or moving
 either asset all update immediately. Deleting the applied theme falls back to the package style without discarding the saved GUID; reset clears that reference too.

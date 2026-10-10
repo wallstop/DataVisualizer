@@ -1,3 +1,7 @@
+---
+template: home.html
+---
+
 # DxVisualizer
 
 DxVisualizer is a Unity editor window for ScriptableObject-heavy projects. It gathers your data in one place: a catalog of your ScriptableObject types organized by namespace, a
@@ -6,10 +10,6 @@ Inspector.
 
 DxVisualizer is free forever. There are no subscriptions, no paid upgrades, and no feature-gated tiers. The full source is MIT-licensed, and every capability described here ships
 in the free package.
-
-![Data Visualizer layout with namespace, object, and inspector columns](images/data-visualizer-layout.png)
-
-_Full window overview. Regenerated from the live window by the docs capture pipeline._
 
 ## What it does
 

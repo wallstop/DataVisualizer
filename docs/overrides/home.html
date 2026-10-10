@@ -1,0 +1,31 @@
+{#-
+    Homepage landing for the Dx theme: hero capture, trust strip, three cards,
+    then the index.md content. docs/index.md selects this template through its
+    `template: home.html` front matter; exclude_docs keeps the file itself out
+    of the built site.
+-#}
+{% extends "base.html" %}
+{% block content %}
+<section class="dx-hero">
+    <img src="{{ 'images/data-visualizer-layout.png' | url }}" width="1180" height="780"
+        alt="DxVisualizer layout with namespace, object, and inspector columns" loading="eager" />
+    <p class="dx-hero-caption">The full window: the namespace catalog, the instance list, and the inspector. Captured
+        from the live window by the docs capture pipeline.</p>
+</section>
+<p class="dx-trust">Free forever — no subscriptions, no paid upgrades, no feature-gated tiers. MIT-licensed.</p>
+<section class="dx-cards">
+    <a class="dx-card" href="{{ 'search-and-filter/' | url }}">
+        <strong>Find</strong>
+        <span>Search types, add a namespace, or scan a folder.</span>
+    </a>
+    <a class="dx-card" href="{{ 'getting-started/' | url }}">
+        <strong>Inspect</strong>
+        <span>Edit assets in the inspector you already know.</span>
+    </a>
+    <a class="dx-card" href="{{ 'managing-assets/' | url }}">
+        <strong>Edit</strong>
+        <span>Clone, rename, move, delete, and run processors.</span>
+    </a>
+</section>
+{{ super() }}
+{% endblock %}
