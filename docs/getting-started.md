@@ -35,7 +35,7 @@ Three controls above the namespace panel fill the catalog:
 
 Removing a type or namespace only stops DxVisualizer from tracking it. Your assets stay on disk.
 
-![Manage-visible-types popover listing the project's ScriptableObject types](images/data-visualizer-import.png)
+![Manage-visible-types popover listing the project's namespaces and their types](images/data-visualizer-import.png)
 
 _Type search popover over the namespace panel. Regenerated from the live window by the docs capture pipeline._
 
