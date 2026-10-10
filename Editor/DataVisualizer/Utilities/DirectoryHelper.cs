@@ -21,24 +21,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
             if (!relativeDirectoryPath.StartsWith("Assets/", StringComparison.Ordinal))
             {
-                if (
-                    string.Equals(
-                        relativeDirectoryPath,
-                        "Assets",
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
+                if (string.Equals(relativeDirectoryPath, "Assets", StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }
 
-                Debug.LogError(
-                    $"Attempted to create directory outside of Assets: '{relativeDirectoryPath}'"
-                );
-                throw new ArgumentException(
-                    "Cannot create directories outside the Assets folder using AssetDatabase.",
-                    nameof(relativeDirectoryPath)
-                );
+                Debug.LogError($"Attempted to create directory outside of Assets: '{relativeDirectoryPath}'");
+                throw new ArgumentException("Cannot create directories outside the Assets folder using AssetDatabase.", nameof(relativeDirectoryPath));
             }
 
             if (AssetDatabase.IsValidFolder(relativeDirectoryPath))
@@ -47,16 +36,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             string parentPath = Path.GetDirectoryName(relativeDirectoryPath).SanitizePath();
-            if (
-                string.IsNullOrWhiteSpace(parentPath)
-                || string.Equals(parentPath, "Assets", StringComparison.OrdinalIgnoreCase)
-            )
+            if (string.IsNullOrWhiteSpace(parentPath) || string.Equals(parentPath, "Assets", StringComparison.OrdinalIgnoreCase))
             {
                 string folderNameToCreate = Path.GetFileName(relativeDirectoryPath);
-                if (
-                    !string.IsNullOrWhiteSpace(folderNameToCreate)
-                    && !AssetDatabase.IsValidFolder(relativeDirectoryPath)
-                )
+                if (!string.IsNullOrWhiteSpace(folderNameToCreate) && !AssetDatabase.IsValidFolder(relativeDirectoryPath))
                 {
                     AssetDatabase.CreateFolder("Assets", folderNameToCreate);
                 }
@@ -65,10 +48,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
             EnsureDirectoryExists(parentPath);
             string currentFolderName = Path.GetFileName(relativeDirectoryPath);
-            if (
-                !string.IsNullOrWhiteSpace(currentFolderName)
-                && !AssetDatabase.IsValidFolder(relativeDirectoryPath)
-            )
+            if (!string.IsNullOrWhiteSpace(currentFolderName) && !AssetDatabase.IsValidFolder(relativeDirectoryPath))
             {
                 AssetDatabase.CreateFolder(parentPath, currentFolderName);
             }
@@ -76,23 +56,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public static string GetCallerScriptDirectory([CallerFilePath] string sourceFilePath = "")
         {
-            return string.IsNullOrWhiteSpace(sourceFilePath)
-                ? string.Empty
-                : Path.GetDirectoryName(sourceFilePath);
+            return string.IsNullOrWhiteSpace(sourceFilePath) ? string.Empty : Path.GetDirectoryName(sourceFilePath);
         }
 
         public static string FindPackageRootPath(string startDirectory)
         {
-            return FindRootPath(
-                startDirectory,
-                static path => File.Exists(Path.Combine(path, "package.json"))
-            );
+            return FindRootPath(startDirectory, static path => File.Exists(Path.Combine(path, "package.json")));
         }
 
-        public static string FindRootPath(
-            string startDirectory,
-            Func<string, bool> terminalCondition
-        )
+        public static string FindRootPath(string startDirectory, Func<string, bool> terminalCondition)
         {
             string currentPath = startDirectory;
             while (!string.IsNullOrWhiteSpace(currentPath))
@@ -150,10 +122,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 return string.Empty;
             }
 
-            string targetPathAbsolute = Path.Combine(
-                packageRootAbsolute,
-                directory.Replace('/', Path.DirectorySeparatorChar)
-            );
+            string targetPathAbsolute = Path.Combine(packageRootAbsolute, directory.Replace('/', Path.DirectorySeparatorChar));
 
             return AbsoluteToUnityRelativePath(targetPathAbsolute);
         }
@@ -183,11 +152,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 projectRoot = projectRoot[..^1];
             }
 
-            if (
-                !absolutePath.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase)
-                || absolutePath.Length <= projectRoot.Length
-                || absolutePath[projectRoot.Length] != '/'
-            )
+            if (!absolutePath.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase) || absolutePath.Length <= projectRoot.Length || absolutePath[projectRoot.Length] != '/')
             {
                 return string.Empty;
             }

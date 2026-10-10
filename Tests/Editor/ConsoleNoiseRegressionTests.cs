@@ -25,20 +25,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string SourceSectionKey = "SourceSection";
         private const string StaleSentinelTypeName = "Stale.Sentinel.FakeType";
 
-        private static DataVisualizerWindow CreateWindowWithController(
-            TestCleanupScope cleanup,
-            object controller
-        )
+        private static DataVisualizerWindow CreateWindowWithController(TestCleanupScope cleanup, object controller)
         {
-            DataVisualizerSettings settings =
-                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
             cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
             settings.persistStateInSettingsAsset = true;
-            SetPrivateField(
-                settings,
-                "managedTypeNames",
-                new List<string> { StaleSentinelTypeName }
-            );
+            SetPrivateField(settings, "managedTypeNames", new List<string> { StaleSentinelTypeName });
 
             DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
             cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
@@ -62,18 +54,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 types.Add(managedType);
             }
 
-            return Activator.CreateInstance(
-                NamespaceControllerType(),
-                managedTypeLists,
-                new Dictionary<string, int>()
-            );
+            return Activator.CreateInstance(NamespaceControllerType(), managedTypeLists, new Dictionary<string, int>());
         }
 
         private static int CountManagedTypes(object controller)
         {
-            Dictionary<string, List<Type>> managedTypeLists = ReadPrivateField<
-                Dictionary<string, List<Type>>
-            >(controller, "_managedTypes");
+            Dictionary<string, List<Type>> managedTypeLists = ReadPrivateField<Dictionary<string, List<Type>>>(controller, "_managedTypes");
             int count = 0;
             foreach (List<Type> types in managedTypeLists.Values)
             {
@@ -85,53 +71,33 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static string GetNamespaceKey(Type type)
         {
-            MethodInfo method = NamespaceControllerType()
-                .GetMethod(
-                    "GetNamespaceKey",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
-                );
+            MethodInfo method = NamespaceControllerType().GetMethod("GetNamespaceKey", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
             Assert.That(method != null, "The GetNamespaceKey method must exist.");
             return (string)method.Invoke(null, new object[] { type });
         }
 
-        private static void InvokeControllerPrivate(
-            object controller,
-            string methodName,
-            params object[] arguments
-        )
+        private static void InvokeControllerPrivate(object controller, string methodName, params object[] arguments)
         {
-            MethodInfo method = controller
-                .GetType()
-                .GetMethod(
-                    methodName,
-                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-                );
+            MethodInfo method = controller.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(method != null, $"The {methodName} method must exist.");
             method.Invoke(controller, arguments);
         }
 
         private static object LabelFilterSectionValue(string name)
         {
-            Type sectionType = typeof(DataVisualizerWindow).Assembly.GetType(
-                "WallstopStudios.DataVisualizer.Editor.LabelFilterSection"
-            );
+            Type sectionType = typeof(DataVisualizerWindow).Assembly.GetType("WallstopStudios.DataVisualizer.Editor.LabelFilterSection");
             Assert.That(sectionType != null, "The LabelFilterSection type must exist.");
             return Enum.Parse(sectionType, name);
         }
 
         private static Type NamespaceControllerType()
         {
-            Type controllerType = typeof(DataVisualizerWindow).Assembly.GetType(
-                "WallstopStudios.DataVisualizer.Editor.NamespaceController"
-            );
+            Type controllerType = typeof(DataVisualizerWindow).Assembly.GetType("WallstopStudios.DataVisualizer.Editor.NamespaceController");
             Assert.That(controllerType != null, "The NamespaceController type must exist.");
             return controllerType;
         }
 
-        private static VisualElement CreateAndAttachDropTarget(
-            LayoutTestWindow host,
-            TestCleanupScope cleanup
-        )
+        private static VisualElement CreateAndAttachDropTarget(LayoutTestWindow host, TestCleanupScope cleanup)
         {
             VisualElement dropTarget = new() { name = "console-noise-drop-target" };
             host.rootVisualElement.Add(dropTarget);
@@ -146,38 +112,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static T ReadPrivateField<T>(object target, string fieldName)
         {
-            FieldInfo field = target
-                .GetType()
-                .GetField(
-                    fieldName,
-                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-                );
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(field != null, $"The {fieldName} field must exist.");
             return (T)field.GetValue(target);
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)
         {
-            FieldInfo field = target
-                .GetType()
-                .GetField(
-                    fieldName,
-                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-                );
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(field != null, $"The {fieldName} field must exist.");
             field.SetValue(target, value);
         }
 
-        private static void InvokePrivate(
-            DataVisualizerWindow window,
-            string methodName,
-            params object[] arguments
-        )
+        private static void InvokePrivate(DataVisualizerWindow window, string methodName, params object[] arguments)
         {
-            MethodInfo method = typeof(DataVisualizerWindow).GetMethod(
-                methodName,
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-            );
+            MethodInfo method = typeof(DataVisualizerWindow).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(method != null, $"The {methodName} method must exist.");
             method.Invoke(window, arguments);
         }
@@ -185,25 +134,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldSilentlyIgnoreForeignDropOnLabelDropTarget()
         {
-            LayoutTestWindow host = EditorWindow.GetWindow<LayoutTestWindow>(
-                "DxVisualizer Console Noise Anchor",
-                false
-            );
+            LayoutTestWindow host = EditorWindow.GetWindow<LayoutTestWindow>("DxVisualizer Console Noise Anchor", false);
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(() => host.Close());
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
 
                 VisualElement dropTarget = CreateAndAttachDropTarget(host, cleanup);
-                InvokePrivate(
-                    window,
-                    "SetupDropTarget",
-                    dropTarget,
-                    LabelFilterSectionValue("AND")
-                );
+                InvokePrivate(window, "SetupDropTarget", dropTarget, LabelFilterSectionValue("AND"));
 
                 DragAndDrop.PrepareStartDrag();
                 using (ConsoleCapture capture = new())
@@ -211,10 +151,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 {
                     dragPerformEvent.target = dropTarget;
                     dropTarget.SendEvent(dragPerformEvent);
-                    Assert.IsFalse(
-                        capture.Contains(ForeignDropWarningFragment),
-                        "a foreign drop over a label drop target must not log a warning"
-                    );
+                    Assert.IsFalse(capture.Contains(ForeignDropWarningFragment), "a foreign drop over a label drop target must not log a warning");
                 }
             }
         }
@@ -222,36 +159,23 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldApplyPackageLabelDropWithoutLogging()
         {
-            LayoutTestWindow host = EditorWindow.GetWindow<LayoutTestWindow>(
-                "DxVisualizer Console Noise Anchor",
-                false
-            );
+            LayoutTestWindow host = EditorWindow.GetWindow<LayoutTestWindow>("DxVisualizer Console Noise Anchor", false);
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(() => host.Close());
                 cleanup.Defer(() => DragAndDrop.PrepareStartDrag());
 
-                DataVisualizerSettings settings =
-                    ScriptableObject.CreateInstance<DataVisualizerSettings>();
+                DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
                 settings.persistStateInSettingsAsset = true;
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
 
                 Type selectedType = typeof(EditorOnlyCreationData);
                 SetPrivateField(window, "_settings", settings);
-                SetPrivateField(
-                    window,
-                    "_namespaceController",
-                    CreateControllerWithManagedTypes(selectedType)
-                );
-                SetPrivateField(
-                    ReadPrivateField<object>(window, "_namespaceController"),
-                    "_selectedType",
-                    selectedType
-                );
+                SetPrivateField(window, "_namespaceController", CreateControllerWithManagedTypes(selectedType));
+                SetPrivateField(ReadPrivateField<object>(window, "_namespaceController"), "_selectedType", selectedType);
 
                 const string labelText = "ConsoleNoiseLabel";
                 DragAndDrop.PrepareStartDrag();
@@ -259,22 +183,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 DragAndDrop.SetGenericData(SourceSectionKey, "Available");
 
                 VisualElement dropTarget = CreateAndAttachDropTarget(host, cleanup);
-                InvokePrivate(
-                    window,
-                    "SetupDropTarget",
-                    dropTarget,
-                    LabelFilterSectionValue("AND")
-                );
+                InvokePrivate(window, "SetupDropTarget", dropTarget, LabelFilterSectionValue("AND"));
 
                 using (ConsoleCapture capture = new())
                 using (DragPerformEvent dragPerformEvent = DragPerformEvent.GetPooled())
                 {
                     dragPerformEvent.target = dropTarget;
                     dropTarget.SendEvent(dragPerformEvent);
-                    Assert.IsFalse(
-                        capture.Contains(ForeignDropWarningFragment),
-                        "a package label drop must not log a warning"
-                    );
+                    Assert.IsFalse(capture.Contains(ForeignDropWarningFragment), "a package label drop must not log a warning");
                 }
 
                 IList configs = ReadPrivateField<IList>(ReadSettings(window), "labelFilterConfigs");
@@ -282,27 +198,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 foreach (object candidate in configs)
                 {
                     string typeFullName = ReadPrivateField<string>(candidate, "typeFullName");
-                    if (
-                        string.Equals(typeFullName, selectedType.FullName, StringComparison.Ordinal)
-                    )
+                    if (string.Equals(typeFullName, selectedType.FullName, StringComparison.Ordinal))
                     {
                         matchingConfig = candidate;
                         break;
                     }
                 }
 
-                Assert.That(
-                    matchingConfig != null,
-                    "the label filter config must exist after the drop"
-                );
-                List<string> andLabels = ReadPrivateField<List<string>>(
-                    matchingConfig,
-                    "andLabels"
-                );
-                Assert.IsTrue(
-                    andLabels.Contains(labelText),
-                    "dropping the label onto the AND section must add it to the AND filter"
-                );
+                Assert.That(matchingConfig != null, "the label filter config must exist after the drop");
+                List<string> andLabels = ReadPrivateField<List<string>>(matchingConfig, "andLabels");
+                Assert.IsTrue(andLabels.Contains(labelText), "dropping the label onto the AND section must add it to the AND filter");
             }
         }
 
@@ -312,10 +217,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string namespaceKey = GetNamespaceKey(typeof(EditorOnlyCreationData));
             using (TestCleanupScope cleanup = new())
             {
-                DataVisualizerWindow window = CreateWindowWithController(
-                    cleanup,
-                    CreateControllerWithManagedTypes(typeof(EditorOnlyCreationData))
-                );
+                DataVisualizerWindow window = CreateWindowWithController(cleanup, CreateControllerWithManagedTypes(typeof(EditorOnlyCreationData)));
 
                 using (ConsoleCapture capture = new())
                 {
@@ -327,31 +229,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         new List<Type> { typeof(DerivedEditorOnlyCreationData) }
                     );
 
-                    Assert.IsFalse(
-                        capture.Contains(NamespaceRemovalWarningFragment),
-                        "a stale namespace removal confirm must not log a warning"
-                    );
+                    Assert.IsFalse(capture.Contains(NamespaceRemovalWarningFragment), "a stale namespace removal confirm must not log a warning");
                 }
 
-                Assert.AreEqual(
-                    1,
-                    CountManagedTypes(ReadPrivateField<object>(window, "_namespaceController")),
-                    "a stale removal confirm must leave the managed list unchanged"
-                );
-                List<string> untouchedManagedTypes = ReadPrivateField<List<string>>(
-                    ReadSettings(window),
-                    "managedTypeNames"
-                );
-                Assert.AreEqual(
-                    1,
-                    untouchedManagedTypes.Count,
-                    "a stale removal confirm must not persist a managed list"
-                );
-                Assert.AreEqual(
-                    StaleSentinelTypeName,
-                    untouchedManagedTypes[0],
-                    "a stale removal confirm must leave the persisted list unchanged"
-                );
+                Assert.AreEqual(1, CountManagedTypes(ReadPrivateField<object>(window, "_namespaceController")), "a stale removal confirm must leave the managed list unchanged");
+                List<string> untouchedManagedTypes = ReadPrivateField<List<string>>(ReadSettings(window), "managedTypeNames");
+                Assert.AreEqual(1, untouchedManagedTypes.Count, "a stale removal confirm must not persist a managed list");
+                Assert.AreEqual(StaleSentinelTypeName, untouchedManagedTypes[0], "a stale removal confirm must leave the persisted list unchanged");
             }
         }
 
@@ -361,10 +245,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string namespaceKey = GetNamespaceKey(typeof(EditorOnlyCreationData));
             using (TestCleanupScope cleanup = new())
             {
-                DataVisualizerWindow window = CreateWindowWithController(
-                    cleanup,
-                    CreateControllerWithManagedTypes(typeof(EditorOnlyCreationData))
-                );
+                DataVisualizerWindow window = CreateWindowWithController(cleanup, CreateControllerWithManagedTypes(typeof(EditorOnlyCreationData)));
 
                 using (ConsoleCapture capture = new())
                 {
@@ -376,21 +257,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         new List<Type> { typeof(EditorOnlyCreationData) }
                     );
 
-                    Assert.IsFalse(
-                        capture.Contains(NamespaceRemovalWarningFragment),
-                        "an active removal confirm must not log a warning"
-                    );
+                    Assert.IsFalse(capture.Contains(NamespaceRemovalWarningFragment), "an active removal confirm must not log a warning");
                 }
 
-                List<string> persistedManagedTypes = ReadPrivateField<List<string>>(
-                    ReadSettings(window),
-                    "managedTypeNames"
-                );
+                List<string> persistedManagedTypes = ReadPrivateField<List<string>>(ReadSettings(window), "managedTypeNames");
                 Assert.That(persistedManagedTypes != null, "the active removal must persist");
-                Assert.IsEmpty(
-                    persistedManagedTypes,
-                    "the active removal confirm must remove the type from the persisted list"
-                );
+                Assert.IsEmpty(persistedManagedTypes, "the active removal confirm must remove the type from the persisted list");
             }
         }
 
@@ -399,40 +271,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             using (TestCleanupScope cleanup = new())
             {
-                DataVisualizerWindow window = CreateWindowWithController(
-                    cleanup,
-                    CreateControllerWithManagedTypes()
-                );
+                DataVisualizerWindow window = CreateWindowWithController(cleanup, CreateControllerWithManagedTypes());
 
                 using (ConsoleCapture capture = new())
                 {
-                    InvokeControllerPrivate(
-                        ReadPrivateField<object>(window, "_namespaceController"),
-                        "HandleRemoveTypeConfirmed",
-                        window,
-                        typeof(EditorOnlyCreationData)
-                    );
+                    InvokeControllerPrivate(ReadPrivateField<object>(window, "_namespaceController"), "HandleRemoveTypeConfirmed", window, typeof(EditorOnlyCreationData));
 
-                    Assert.IsFalse(
-                        capture.Contains(TypeRemovalWarningFragment),
-                        "a stale type removal confirm must not log a warning"
-                    );
+                    Assert.IsFalse(capture.Contains(TypeRemovalWarningFragment), "a stale type removal confirm must not log a warning");
                 }
 
-                List<string> untouchedManagedTypes = ReadPrivateField<List<string>>(
-                    ReadSettings(window),
-                    "managedTypeNames"
-                );
-                Assert.AreEqual(
-                    1,
-                    untouchedManagedTypes.Count,
-                    "a stale type removal confirm must not persist a managed list"
-                );
-                Assert.AreEqual(
-                    StaleSentinelTypeName,
-                    untouchedManagedTypes[0],
-                    "a stale type removal confirm must leave the persisted list unchanged"
-                );
+                List<string> untouchedManagedTypes = ReadPrivateField<List<string>>(ReadSettings(window), "managedTypeNames");
+                Assert.AreEqual(1, untouchedManagedTypes.Count, "a stale type removal confirm must not persist a managed list");
+                Assert.AreEqual(StaleSentinelTypeName, untouchedManagedTypes[0], "a stale type removal confirm must leave the persisted list unchanged");
             }
         }
 
@@ -441,35 +291,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             using (TestCleanupScope cleanup = new())
             {
-                DataVisualizerWindow window = CreateWindowWithController(
-                    cleanup,
-                    CreateControllerWithManagedTypes(typeof(EditorOnlyCreationData))
-                );
+                DataVisualizerWindow window = CreateWindowWithController(cleanup, CreateControllerWithManagedTypes(typeof(EditorOnlyCreationData)));
 
                 using (ConsoleCapture capture = new())
                 {
-                    InvokeControllerPrivate(
-                        ReadPrivateField<object>(window, "_namespaceController"),
-                        "HandleRemoveTypeConfirmed",
-                        window,
-                        typeof(EditorOnlyCreationData)
-                    );
+                    InvokeControllerPrivate(ReadPrivateField<object>(window, "_namespaceController"), "HandleRemoveTypeConfirmed", window, typeof(EditorOnlyCreationData));
 
-                    Assert.IsFalse(
-                        capture.Contains(TypeRemovalWarningFragment),
-                        "an active removal confirm must not log a warning"
-                    );
+                    Assert.IsFalse(capture.Contains(TypeRemovalWarningFragment), "an active removal confirm must not log a warning");
                 }
 
-                List<string> persistedManagedTypes = ReadPrivateField<List<string>>(
-                    ReadSettings(window),
-                    "managedTypeNames"
-                );
+                List<string> persistedManagedTypes = ReadPrivateField<List<string>>(ReadSettings(window), "managedTypeNames");
                 Assert.That(persistedManagedTypes != null, "the active removal must persist");
-                Assert.IsEmpty(
-                    persistedManagedTypes,
-                    "the active removal confirm must remove the type from the persisted list"
-                );
+                Assert.IsEmpty(persistedManagedTypes, "the active removal confirm must remove the type from the persisted list");
             }
         }
 

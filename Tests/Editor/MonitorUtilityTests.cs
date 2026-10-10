@@ -11,12 +11,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class MonitorUtilityTests
     {
-        private const string InitialSizeAppliedKey =
-            "WallstopStudios.Editor.DataVisualizer.InitialSizeApplied";
-        private const string PreferredWindowSizeKey =
-            "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
-        private const string TemporaryWindowClampSizeKey =
-            "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
+        private const string InitialSizeAppliedKey = "WallstopStudios.Editor.DataVisualizer.InitialSizeApplied";
+        private const string PreferredWindowSizeKey = "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
+        private const string TemporaryWindowClampSizeKey = "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
 
         private static readonly bool[] WaitForScheduledCompletion = { false, true };
 
@@ -27,10 +24,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void ExpectProviderException()
         {
-            LogAssert.Expect(
-                LogType.Exception,
-                "InvalidOperationException: Expected test provider failure."
-            );
+            LogAssert.Expect(LogType.Exception, "InvalidOperationException: Expected test provider failure.");
         }
 
         private static Rect ThrowUnexpectedProviderCall()
@@ -40,9 +34,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void CloseDataVisualizerWindows()
         {
-            foreach (
-                DataVisualizerWindow window in Resources.FindObjectsOfTypeAll<DataVisualizerWindow>()
-            )
+            foreach (DataVisualizerWindow window in Resources.FindObjectsOfTypeAll<DataVisualizerWindow>())
             {
                 window.Close();
             }
@@ -83,11 +75,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldCenterRectWhenPlacementAreaHasNonzeroOrigin()
         {
-            Rect actual = MonitorUtility.CalculateCenteredRect(
-                new Rect(1920, 100, 1600, 900),
-                800,
-                600
-            );
+            Rect actual = MonitorUtility.CalculateCenteredRect(new Rect(1920, 100, 1600, 900), 800, 600);
 
             Assert.That(actual, Is.EqualTo(new Rect(2320, 250, 800, 600)));
         }
@@ -95,11 +83,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldCenterRectWhenPlacementAreaHasNegativeOrigin()
         {
-            Rect actual = MonitorUtility.CalculateCenteredRect(
-                new Rect(-1920, -200, 1920, 1080),
-                1000,
-                700
-            );
+            Rect actual = MonitorUtility.CalculateCenteredRect(new Rect(-1920, -200, 1920, 1080), 1000, 700);
 
             Assert.That(actual, Is.EqualTo(new Rect(-1460, -10, 1000, 700)));
         }
@@ -114,54 +98,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             float logicalWidth = physicalWidth / displayScale;
             float logicalHeight = physicalHeight / displayScale;
 
-            Rect actual = MonitorUtility.CalculateCenteredRect(
-                new Rect(-logicalWidth, 0f, logicalWidth, logicalHeight),
-                860f,
-                480f
-            );
+            Rect actual = MonitorUtility.CalculateCenteredRect(new Rect(-logicalWidth, 0f, logicalWidth, logicalHeight), 860f, 480f);
 
             Assert.That(actual.size, Is.EqualTo(new Vector2(860f, 480f)));
         }
 
-        [TestCase(
-            100f,
-            50f,
-            800f,
-            600f,
-            1200f,
-            900f,
-            100f,
-            50f,
-            800f,
-            600f,
-            TestName = "Oversized on every edge"
-        )]
-        [TestCase(
-            -1600f,
-            -100f,
-            1000f,
-            700f,
-            1600f,
-            500f,
-            -1600f,
-            0f,
-            1000f,
-            500f,
-            TestName = "Negative origin and oversized width"
-        )]
-        [TestCase(
-            80f,
-            40f,
-            1760f,
-            960f,
-            1600f,
-            1200f,
-            160f,
-            40f,
-            1600f,
-            960f,
-            TestName = "Inset reserved edges and oversized height"
-        )]
+        [TestCase(100f, 50f, 800f, 600f, 1200f, 900f, 100f, 50f, 800f, 600f, TestName = "Oversized on every edge")]
+        [TestCase(-1600f, -100f, 1000f, 700f, 1600f, 500f, -1600f, 0f, 1000f, 500f, TestName = "Negative origin and oversized width")]
+        [TestCase(80f, 40f, 1760f, 960f, 1600f, 1200f, 160f, 40f, 1600f, 960f, TestName = "Inset reserved edges and oversized height")]
         public void ShouldConstrainCenteredRectWhenPreferredSizeExceedsPlacementArea(
             float areaX,
             float areaY,
@@ -175,16 +119,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             float expectedHeight
         )
         {
-            Rect actual = MonitorUtility.CalculateCenteredRect(
-                new Rect(areaX, areaY, areaWidth, areaHeight),
-                preferredWidth,
-                preferredHeight
-            );
+            Rect actual = MonitorUtility.CalculateCenteredRect(new Rect(areaX, areaY, areaWidth, areaHeight), preferredWidth, preferredHeight);
 
-            Assert.That(
-                actual,
-                Is.EqualTo(new Rect(expectedX, expectedY, expectedWidth, expectedHeight))
-            );
+            Assert.That(actual, Is.EqualTo(new Rect(expectedX, expectedY, expectedWidth, expectedHeight)));
         }
 
         [TestCase(false, 400f, 300f, 860f, 480f, TestName = "Normal floating window")]
@@ -200,11 +137,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             float expectedHeight
         )
         {
-            Vector2 actual = MonitorUtility.CalculateWindowMinimumSize(
-                new Vector2(860f, 480f),
-                new Vector2(temporaryWidth, temporaryHeight),
-                temporaryClampIsActive
-            );
+            Vector2 actual = MonitorUtility.CalculateWindowMinimumSize(new Vector2(860f, 480f), new Vector2(temporaryWidth, temporaryHeight), temporaryClampIsActive);
 
             Assert.That(actual, Is.EqualTo(new Vector2(expectedWidth, expectedHeight)));
         }
@@ -213,26 +146,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldSelectExactPreferredPairsAcrossClampAndUserResizes()
         {
             Vector2 minimumSize = new(860f, 480f);
-            Vector2 initialLarge = MonitorUtility.SelectPreferredSize(
-                default,
-                false,
-                new Vector2(1200f, 900f),
-                minimumSize
-            );
-            Vector2 temporarilyClamped = MonitorUtility.SelectPreferredSize(
-                initialLarge,
-                true,
-                new Vector2(700f, 480f),
-                minimumSize
-            );
-            Vector2 intentionallyShrunk = MonitorUtility.NormalizePreferredSize(
-                new Vector2(1000f, 700f),
-                minimumSize
-            );
-            Vector2 resizedLarger = MonitorUtility.NormalizePreferredSize(
-                new Vector2(1600f, 1000f),
-                minimumSize
-            );
+            Vector2 initialLarge = MonitorUtility.SelectPreferredSize(default, false, new Vector2(1200f, 900f), minimumSize);
+            Vector2 temporarilyClamped = MonitorUtility.SelectPreferredSize(initialLarge, true, new Vector2(700f, 480f), minimumSize);
+            Vector2 intentionallyShrunk = MonitorUtility.NormalizePreferredSize(new Vector2(1000f, 700f), minimumSize);
+            Vector2 resizedLarger = MonitorUtility.NormalizePreferredSize(new Vector2(1600f, 1000f), minimumSize);
 
             Assert.That(initialLarge, Is.EqualTo(new Vector2(1200f, 900f)));
             Assert.That(temporarilyClamped, Is.EqualTo(initialLarge));
@@ -243,22 +160,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldPreserveInitialPreferredSizeWhenPlacementIsConstrained()
         {
-            Vector2 preferredSize = MonitorUtility.SelectPreferredSize(
-                default,
-                false,
-                new Vector2(1200f, 900f),
-                new Vector2(860f, 480f)
-            );
-            Rect constrainedRect = MonitorUtility.CalculateCenteredRect(
-                new Rect(100f, 50f, 700f, 500f),
-                preferredSize.x,
-                preferredSize.y
-            );
+            Vector2 preferredSize = MonitorUtility.SelectPreferredSize(default, false, new Vector2(1200f, 900f), new Vector2(860f, 480f));
+            Rect constrainedRect = MonitorUtility.CalculateCenteredRect(new Rect(100f, 50f, 700f, 500f), preferredSize.x, preferredSize.y);
             string serializedPreferredSize = MonitorUtility.SerializeSize(preferredSize);
-            bool parsed = MonitorUtility.TryParseSize(
-                serializedPreferredSize,
-                out Vector2 restoredPreferredSize
-            );
+            bool parsed = MonitorUtility.TryParseSize(serializedPreferredSize, out Vector2 restoredPreferredSize);
 
             Assert.That(constrainedRect.size, Is.EqualTo(new Vector2(700f, 500f)));
             Assert.That(parsed, Is.True);
@@ -266,9 +171,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
-        public IEnumerator ShouldPreservePreferredSizeThroughActualPlacementAndWindowRecreation(
-            [ValueSource(nameof(WaitForScheduledCompletion))] bool waitForScheduledCompletion
-        )
+        public IEnumerator ShouldPreservePreferredSizeThroughActualPlacementAndWindowRecreation([ValueSource(nameof(WaitForScheduledCompletion))] bool waitForScheduledCompletion)
         {
             bool hadInitialSizeApplied = EditorPrefs.HasKey(InitialSizeAppliedKey);
             bool initialSizeApplied = EditorPrefs.GetBool(InitialSizeAppliedKey);
@@ -277,30 +180,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             bool hadTemporaryClampSize = EditorPrefs.HasKey(TemporaryWindowClampSizeKey);
             string temporaryClampSize = EditorPrefs.GetString(TemporaryWindowClampSizeKey);
             Vector2 oversizedPreference = new(10000f, 9000f);
-            string serializedOversizedPreference = MonitorUtility.SerializeSize(
-                oversizedPreference
-            );
+            string serializedOversizedPreference = MonitorUtility.SerializeSize(oversizedPreference);
 
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(() =>
                 {
                     CloseDataVisualizerWindows();
-                    RestoreBoolPreference(
-                        InitialSizeAppliedKey,
-                        hadInitialSizeApplied,
-                        initialSizeApplied
-                    );
-                    RestoreStringPreference(
-                        PreferredWindowSizeKey,
-                        hadPreferredSize,
-                        preferredSize
-                    );
-                    RestoreStringPreference(
-                        TemporaryWindowClampSizeKey,
-                        hadTemporaryClampSize,
-                        temporaryClampSize
-                    );
+                    RestoreBoolPreference(InitialSizeAppliedKey, hadInitialSizeApplied, initialSizeApplied);
+                    RestoreStringPreference(PreferredWindowSizeKey, hadPreferredSize, preferredSize);
+                    RestoreStringPreference(TemporaryWindowClampSizeKey, hadTemporaryClampSize, temporaryClampSize);
                 });
                 CloseDataVisualizerWindows();
                 yield return null;
@@ -309,8 +198,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 EditorPrefs.DeleteKey(TemporaryWindowClampSizeKey);
 
                 Rect placementArea = EditorGUIUtility.GetMainWindowPosition();
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 window.ShowUtility();
                 yield return null;
                 Assert.That(window.docked, Is.False);
@@ -318,68 +206,34 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 if (waitForScheduledCompletion)
                 {
                     double deadline = EditorApplication.timeSinceStartup + 5d;
-                    while (
-                        EditorApplication.timeSinceStartup < deadline
-                        && !EditorPrefs.HasKey(TemporaryWindowClampSizeKey)
-                    )
+                    while (EditorApplication.timeSinceStartup < deadline && !EditorPrefs.HasKey(TemporaryWindowClampSizeKey))
                     {
                         yield return null;
                     }
                 }
 
-                Assert.That(
-                    EditorPrefs.GetString(PreferredWindowSizeKey),
-                    Is.EqualTo(serializedOversizedPreference)
-                );
+                Assert.That(EditorPrefs.GetString(PreferredWindowSizeKey), Is.EqualTo(serializedOversizedPreference));
                 Rect actualPosition = window.position;
                 Assert.That(actualPosition.width, Is.LessThanOrEqualTo(placementArea.width));
                 Assert.That(actualPosition.height, Is.LessThanOrEqualTo(placementArea.height));
                 if (waitForScheduledCompletion)
                 {
                     Assert.That(
-                        MonitorUtility.TryParseSize(
-                            EditorPrefs.GetString(TemporaryWindowClampSizeKey),
-                            out Vector2 completedClampSize
-                        ),
+                        MonitorUtility.TryParseSize(EditorPrefs.GetString(TemporaryWindowClampSizeKey), out Vector2 completedClampSize),
                         Is.True,
                         "Scheduled placement must persist the clamp before the window closes."
                     );
-                    Assert.That(
-                        MonitorUtility.IsSameSize(completedClampSize, actualPosition.size),
-                        Is.True
-                    );
+                    Assert.That(MonitorUtility.IsSameSize(completedClampSize, actualPosition.size), Is.True);
                 }
 
                 window.Close();
-                Assert.That(
-                    MonitorUtility.TryParseSize(
-                        EditorPrefs.GetString(TemporaryWindowClampSizeKey),
-                        out Vector2 persistedClampSize
-                    ),
-                    Is.True
-                );
-                Assert.That(
-                    MonitorUtility.IsSameSize(persistedClampSize, actualPosition.size),
-                    Is.True
-                );
-                Assert.That(
-                    window.minSize,
-                    Is.EqualTo(
-                        MonitorUtility.CalculateWindowMinimumSize(
-                            new Vector2(860f, 480f),
-                            actualPosition.size,
-                            true
-                        )
-                    )
-                );
-                Assert.That(
-                    EditorPrefs.GetString(PreferredWindowSizeKey),
-                    Is.EqualTo(serializedOversizedPreference)
-                );
+                Assert.That(MonitorUtility.TryParseSize(EditorPrefs.GetString(TemporaryWindowClampSizeKey), out Vector2 persistedClampSize), Is.True);
+                Assert.That(MonitorUtility.IsSameSize(persistedClampSize, actualPosition.size), Is.True);
+                Assert.That(window.minSize, Is.EqualTo(MonitorUtility.CalculateWindowMinimumSize(new Vector2(860f, 480f), actualPosition.size, true)));
+                Assert.That(EditorPrefs.GetString(PreferredWindowSizeKey), Is.EqualTo(serializedOversizedPreference));
 
                 yield return null;
-                DataVisualizerWindow restoredWindow =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow restoredWindow = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 restoredWindow.position = actualPosition;
                 restoredWindow.ShowUtility();
                 for (int frame = 0; frame < 20; frame++)
@@ -387,31 +241,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     yield return null;
                 }
 
-                Assert.That(
-                    EditorPrefs.GetString(PreferredWindowSizeKey),
-                    Is.EqualTo(serializedOversizedPreference)
-                );
-                Assert.That(
-                    MonitorUtility.TryParseSize(
-                        EditorPrefs.GetString(TemporaryWindowClampSizeKey),
-                        out Vector2 restoredClampSize
-                    ),
-                    Is.True
-                );
-                Assert.That(
-                    MonitorUtility.IsSameSize(restoredClampSize, restoredWindow.position.size),
-                    Is.True
-                );
-                Assert.That(
-                    restoredWindow.minSize,
-                    Is.EqualTo(
-                        MonitorUtility.CalculateWindowMinimumSize(
-                            new Vector2(860f, 480f),
-                            restoredClampSize,
-                            true
-                        )
-                    )
-                );
+                Assert.That(EditorPrefs.GetString(PreferredWindowSizeKey), Is.EqualTo(serializedOversizedPreference));
+                Assert.That(MonitorUtility.TryParseSize(EditorPrefs.GetString(TemporaryWindowClampSizeKey), out Vector2 restoredClampSize), Is.True);
+                Assert.That(MonitorUtility.IsSameSize(restoredClampSize, restoredWindow.position.size), Is.True);
+                Assert.That(restoredWindow.minSize, Is.EqualTo(MonitorUtility.CalculateWindowMinimumSize(new Vector2(860f, 480f), restoredClampSize, true)));
             }
         }
 
@@ -429,27 +262,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 {
                     CloseDataVisualizerWindows();
                     CloseLayoutTestWindows();
-                    RestoreBoolPreference(
-                        InitialSizeAppliedKey,
-                        hadInitialSizeApplied,
-                        initialSizeApplied
-                    );
-                    RestoreStringPreference(
-                        TemporaryWindowClampSizeKey,
-                        hadTemporaryClampSize,
-                        temporaryClampSize
-                    );
+                    RestoreBoolPreference(InitialSizeAppliedKey, hadInitialSizeApplied, initialSizeApplied);
+                    RestoreStringPreference(TemporaryWindowClampSizeKey, hadTemporaryClampSize, temporaryClampSize);
                 });
                 CloseDataVisualizerWindows();
                 CloseLayoutTestWindows();
                 yield return null;
 
                 EditorWindow.GetWindow<LayoutTestWindow>("DxVisualizer Test Anchor");
-                DataVisualizerWindow window = EditorWindow.GetWindow<DataVisualizerWindow>(
-                    "DxVisualizer",
-                    false,
-                    typeof(LayoutTestWindow)
-                );
+                DataVisualizerWindow window = EditorWindow.GetWindow<DataVisualizerWindow>("DxVisualizer", false, typeof(LayoutTestWindow));
                 yield return null;
 
                 Assert.That(window.docked, Is.True, "The test window must be genuinely docked.");
@@ -458,8 +279,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 DataVisualizerWindow.ShowWindow();
                 yield return null;
 
-                DataVisualizerWindow[] windows =
-                    Resources.FindObjectsOfTypeAll<DataVisualizerWindow>();
+                DataVisualizerWindow[] windows = Resources.FindObjectsOfTypeAll<DataVisualizerWindow>();
                 Assert.That(windows, Has.Length.EqualTo(1));
                 Assert.That(windows[0], Is.SameAs(window));
                 Assert.That(window.docked, Is.True);
@@ -470,16 +290,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldNeverSynthesizePreferredSizeFromDifferentPairs()
         {
-            Vector2 selected = MonitorUtility.SelectPreferredSize(
-                new Vector2(1600f, 600f),
-                true,
-                new Vector2(1000f, 900f),
-                new Vector2(860f, 480f)
-            );
-            Vector2 captured = MonitorUtility.NormalizePreferredSize(
-                new Vector2(1000f, 900f),
-                new Vector2(860f, 480f)
-            );
+            Vector2 selected = MonitorUtility.SelectPreferredSize(new Vector2(1600f, 600f), true, new Vector2(1000f, 900f), new Vector2(860f, 480f));
+            Vector2 captured = MonitorUtility.NormalizePreferredSize(new Vector2(1000f, 900f), new Vector2(860f, 480f));
 
             Assert.That(selected, Is.EqualTo(new Vector2(1600f, 600f)));
             Assert.That(captured, Is.EqualTo(new Vector2(1000f, 900f)));
@@ -488,17 +300,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase(800f, 450f, 860f, 480f, TestName = "Both dimensions below minimum")]
         [TestCase(1000f, 450f, 1000f, 480f, TestName = "Height below minimum")]
         [TestCase(800f, 700f, 860f, 700f, TestName = "Width below minimum")]
-        public void ShouldNormalizeCapturedPreferredSizeToOrdinaryMinimum(
-            float width,
-            float height,
-            float expectedWidth,
-            float expectedHeight
-        )
+        public void ShouldNormalizeCapturedPreferredSizeToOrdinaryMinimum(float width, float height, float expectedWidth, float expectedHeight)
         {
-            Vector2 actual = MonitorUtility.NormalizePreferredSize(
-                new Vector2(width, height),
-                new Vector2(860f, 480f)
-            );
+            Vector2 actual = MonitorUtility.NormalizePreferredSize(new Vector2(width, height), new Vector2(860f, 480f));
 
             Assert.That(actual, Is.EqualTo(new Vector2(expectedWidth, expectedHeight)));
         }
@@ -507,17 +311,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase(1200f, float.PositiveInfinity, TestName = "Infinite saved height")]
         [TestCase(-100f, 900f, TestName = "Negative saved width")]
         [TestCase(1200f, 0f, TestName = "Zero saved height")]
-        public void ShouldRejectInvalidSavedPreferredSizeAsOnePair(
-            float savedWidth,
-            float savedHeight
-        )
+        public void ShouldRejectInvalidSavedPreferredSizeAsOnePair(float savedWidth, float savedHeight)
         {
-            Vector2 actual = MonitorUtility.SelectPreferredSize(
-                new Vector2(savedWidth, savedHeight),
-                true,
-                new Vector2(1100f, 700f),
-                new Vector2(860f, 480f)
-            );
+            Vector2 actual = MonitorUtility.SelectPreferredSize(new Vector2(savedWidth, savedHeight), true, new Vector2(1100f, 700f), new Vector2(860f, 480f));
 
             Assert.That(actual, Is.EqualTo(new Vector2(1100f, 700f)));
         }
@@ -526,18 +322,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase(false, false, false, false, TestName = "Initial enable layout")]
         [TestCase(false, true, true, false, TestName = "Docked resize")]
         [TestCase(false, true, false, true, TestName = "User floating resize")]
-        public void ShouldCapturePreferredSizeOnlyFromUserFloatingGeometry(
-            bool packagePlacementPending,
-            bool hasObservedInitialGeometry,
-            bool isDocked,
-            bool expected
-        )
+        public void ShouldCapturePreferredSizeOnlyFromUserFloatingGeometry(bool packagePlacementPending, bool hasObservedInitialGeometry, bool isDocked, bool expected)
         {
-            bool actual = MonitorUtility.ShouldCapturePreferredSize(
-                packagePlacementPending,
-                hasObservedInitialGeometry,
-                isDocked
-            );
+            bool actual = MonitorUtility.ShouldCapturePreferredSize(packagePlacementPending, hasObservedInitialGeometry, isDocked);
 
             Assert.That(actual, Is.EqualTo(expected));
         }
@@ -572,16 +359,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase(700f, 480f, true, TestName = "Unchanged temporary clamp")]
         [TestCase(701f, 480f, false, TestName = "User-resized width")]
         [TestCase(700f, 481f, false, TestName = "User-resized height")]
-        public void ShouldRecognizeOnlyMatchingTemporaryClampSize(
-            float currentWidth,
-            float currentHeight,
-            bool expected
-        )
+        public void ShouldRecognizeOnlyMatchingTemporaryClampSize(float currentWidth, float currentHeight, bool expected)
         {
-            bool actual = MonitorUtility.IsSameSize(
-                new Vector2(currentWidth, currentHeight),
-                new Vector2(700f, 480f)
-            );
+            bool actual = MonitorUtility.IsSameSize(new Vector2(currentWidth, currentHeight), new Vector2(700f, 480f));
 
             Assert.That(actual, Is.EqualTo(expected));
         }
@@ -590,11 +370,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase(true, false, false, TestName = "Previously placed floating window")]
         [TestCase(false, true, false, TestName = "Restored docked window")]
         [TestCase(true, true, false, TestName = "Previously placed docked window")]
-        public void ShouldApplyInitialPlacementOnlyForNewFloatingWindow(
-            bool initialSizeApplied,
-            bool isDocked,
-            bool expected
-        )
+        public void ShouldApplyInitialPlacementOnlyForNewFloatingWindow(bool initialSizeApplied, bool isDocked, bool expected)
         {
             bool actual = MonitorUtility.ShouldApplyInitialPlacement(initialSizeApplied, isDocked);
 
@@ -606,10 +382,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             Rect expected = new(-1720f, 80f, 1600f, 900f);
 
-            bool result = MonitorUtility.TryResolveEditorPlacementRect(
-                () => expected,
-                out Rect actual
-            );
+            bool result = MonitorUtility.TryResolveEditorPlacementRect(() => expected, out Rect actual);
 
             Assert.That(result, Is.True);
             Assert.That(actual, Is.EqualTo(expected));
@@ -618,17 +391,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase(0f, 0f, 0f, 1080f, TestName = "Zero width")]
         [TestCase(float.NaN, 0f, 1920f, 1080f, TestName = "NaN origin")]
         [TestCase(0f, 0f, 1920f, float.PositiveInfinity, TestName = "Infinite height")]
-        public void ShouldRejectInvalidUnityEditorPointRect(
-            float x,
-            float y,
-            float width,
-            float height
-        )
+        public void ShouldRejectInvalidUnityEditorPointRect(float x, float y, float width, float height)
         {
-            bool result = MonitorUtility.TryResolveEditorPlacementRect(
-                () => new Rect(x, y, width, height),
-                out Rect actual
-            );
+            bool result = MonitorUtility.TryResolveEditorPlacementRect(() => new Rect(x, y, width, height), out Rect actual);
 
             Assert.That(result, Is.False);
             Assert.That(actual, Is.EqualTo(default(Rect)));
@@ -639,10 +404,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             ExpectProviderException();
 
-            bool result = MonitorUtility.TryResolveEditorPlacementRect(
-                ThrowProviderException,
-                out Rect actual
-            );
+            bool result = MonitorUtility.TryResolveEditorPlacementRect(ThrowProviderException, out Rect actual);
 
             Assert.That(result, Is.False);
             Assert.That(actual, Is.EqualTo(default(Rect)));
@@ -653,11 +415,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             Rect expected = new(-1720, 80, 1600, 900);
 
-            bool result = MonitorUtility.TryResolveMonitorRect(
-                () => expected,
-                ThrowUnexpectedProviderCall,
-                out Rect actual
-            );
+            bool result = MonitorUtility.TryResolveMonitorRect(() => expected, ThrowUnexpectedProviderCall, out Rect actual);
 
             Assert.That(result, Is.True);
             Assert.That(actual, Is.EqualTo(expected));
@@ -669,11 +427,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Rect expected = new(0, 0, 2560, 1440);
             ExpectProviderException();
 
-            bool result = MonitorUtility.TryResolveMonitorRect(
-                ThrowProviderException,
-                () => expected,
-                out Rect actual
-            );
+            bool result = MonitorUtility.TryResolveMonitorRect(ThrowProviderException, () => expected, out Rect actual);
 
             Assert.That(result, Is.True);
             Assert.That(actual, Is.EqualTo(expected));
@@ -684,11 +438,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             ExpectProviderException();
 
-            bool result = MonitorUtility.TryResolveMonitorRect(
-                () => Rect.zero,
-                ThrowProviderException,
-                out Rect actual
-            );
+            bool result = MonitorUtility.TryResolveMonitorRect(() => Rect.zero, ThrowProviderException, out Rect actual);
 
             Assert.That(result, Is.False);
             Assert.That(actual, Is.EqualTo(default(Rect)));
@@ -706,20 +456,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase(0f, float.NegativeInfinity, 1920f, 1080f, TestName = "Infinite y")]
         [TestCase(0f, 0f, float.PositiveInfinity, 1080f, TestName = "Infinite width")]
         [TestCase(0f, 0f, 1920f, float.NegativeInfinity, TestName = "Infinite height")]
-        public void ShouldReturnFallbackRectWhenPreferredRectIsInvalid(
-            float x,
-            float y,
-            float width,
-            float height
-        )
+        public void ShouldReturnFallbackRectWhenPreferredRectIsInvalid(float x, float y, float width, float height)
         {
             Rect expected = new(40, 50, 1600, 900);
 
-            bool result = MonitorUtility.TryResolveMonitorRect(
-                () => new Rect(x, y, width, height),
-                () => expected,
-                out Rect actual
-            );
+            bool result = MonitorUtility.TryResolveMonitorRect(() => new Rect(x, y, width, height), () => expected, out Rect actual);
 
             Assert.That(result, Is.True);
             Assert.That(actual, Is.EqualTo(expected));
@@ -731,11 +472,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Rect expected = new(40, 50, 1600, 900);
             ExpectProviderException();
 
-            bool result = MonitorUtility.TryResolveMonitorRect(
-                ThrowProviderException,
-                () => expected,
-                out Rect actual
-            );
+            bool result = MonitorUtility.TryResolveMonitorRect(ThrowProviderException, () => expected, out Rect actual);
 
             Assert.That(result, Is.True);
             Assert.That(actual, Is.EqualTo(expected));

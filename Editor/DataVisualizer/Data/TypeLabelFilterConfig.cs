@@ -30,10 +30,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 isCollapsed = isCollapsed,
                 isAdvancedCollapsed = isAdvancedCollapsed,
 #pragma warning disable CS0618 // Type or member is obsolete
-                combinationType =
-                    combinationType == LabelCombinationType.None
-                        ? LabelCombinationType.And
-                        : combinationType,
+                combinationType = combinationType == LabelCombinationType.None ? LabelCombinationType.And : combinationType,
 #pragma warning restore CS0618 // Type or member is obsolete
                 typeFullName = typeFullName ?? string.Empty,
                 andLabels = PersistedStateCopy.CloneStrings(andLabels),

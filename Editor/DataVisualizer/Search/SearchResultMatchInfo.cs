@@ -10,21 +10,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             get
             {
                 return matchedFields.Exists(f =>
-                    string.Equals(
-                        f.fieldName,
-                        MatchSource.ObjectName,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                    || string.Equals(
-                        f.fieldName,
-                        MatchSource.TypeName,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                    || string.Equals(
-                        f.fieldName,
-                        MatchSource.Guid,
-                        StringComparison.OrdinalIgnoreCase
-                    )
+                    string.Equals(f.fieldName, MatchSource.ObjectName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(f.fieldName, MatchSource.TypeName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(f.fieldName, MatchSource.Guid, StringComparison.OrdinalIgnoreCase)
                 );
             }
         }
@@ -74,19 +62,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             {
                 IReadOnlyList<string> terms = matchedFields[previousFieldIndex].MatchedTerms;
                 int termsToCheck = previousFieldIndex == fieldIndex ? termIndex : terms.Count;
-                for (
-                    int previousTermIndex = 0;
-                    previousTermIndex < termsToCheck;
-                    previousTermIndex++
-                )
+                for (int previousTermIndex = 0; previousTermIndex < termsToCheck; previousTermIndex++)
                 {
-                    if (
-                        string.Equals(
-                            terms[previousTermIndex],
-                            term,
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                    )
+                    if (string.Equals(terms[previousTermIndex], term, StringComparison.OrdinalIgnoreCase))
                     {
                         return false;
                     }

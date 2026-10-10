@@ -9,9 +9,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return source == null ? new List<string>() : new List<string>(source);
         }
 
-        internal static List<NamespaceTypeOrder> CloneNamespaceTypeOrders(
-            List<NamespaceTypeOrder> source
-        )
+        internal static List<NamespaceTypeOrder> CloneNamespaceTypeOrders(List<NamespaceTypeOrder> source)
         {
             List<NamespaceTypeOrder> clones = new(source?.Count ?? 0);
             if (source == null)
@@ -27,9 +25,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return clones;
         }
 
-        internal static List<LastObjectSelectionEntry> CloneLastObjectSelections(
-            List<LastObjectSelectionEntry> source
-        )
+        internal static List<LastObjectSelectionEntry> CloneLastObjectSelections(List<LastObjectSelectionEntry> source)
         {
             List<LastObjectSelectionEntry> clones = new(source?.Count ?? 0);
             if (source == null)
@@ -45,9 +41,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return clones;
         }
 
-        internal static List<NamespaceCollapseState> CloneNamespaceCollapseStates(
-            List<NamespaceCollapseState> source
-        )
+        internal static List<NamespaceCollapseState> CloneNamespaceCollapseStates(List<NamespaceCollapseState> source)
         {
             List<NamespaceCollapseState> clones = new(source?.Count ?? 0);
             if (source == null)
@@ -79,9 +73,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             return clones;
         }
 
-        internal static List<TypeLabelFilterConfig> CloneTypeLabelFilterConfigs(
-            List<TypeLabelFilterConfig> source
-        )
+        internal static List<TypeLabelFilterConfig> CloneTypeLabelFilterConfigs(List<TypeLabelFilterConfig> source)
         {
             List<TypeLabelFilterConfig> clones = new(source?.Count ?? 0);
             if (source == null)

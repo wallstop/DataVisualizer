@@ -9,29 +9,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         public string namespaceKey = string.Empty;
         public bool isCollapsed;
 
-        public static bool SetCollapsed(
-            List<NamespaceCollapseState> states,
-            string namespaceKey,
-            bool isCollapsed
-        )
+        public static bool SetCollapsed(List<NamespaceCollapseState> states, string namespaceKey, bool isCollapsed)
         {
             if (states == null || string.IsNullOrWhiteSpace(namespaceKey))
             {
                 return false;
             }
 
-            NamespaceCollapseState entry = states.Find(state =>
-                string.Equals(state?.namespaceKey, namespaceKey, StringComparison.Ordinal)
-            );
+            NamespaceCollapseState entry = states.Find(state => string.Equals(state?.namespaceKey, namespaceKey, StringComparison.Ordinal));
             if (entry == null)
             {
-                states.Add(
-                    new NamespaceCollapseState
-                    {
-                        namespaceKey = namespaceKey,
-                        isCollapsed = isCollapsed,
-                    }
-                );
+                states.Add(new NamespaceCollapseState { namespaceKey = namespaceKey, isCollapsed = isCollapsed });
                 return true;
             }
 
@@ -51,19 +39,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 return false;
             }
 
-            return 0
-                < states.RemoveAll(state =>
-                    string.Equals(state?.namespaceKey, namespaceKey, StringComparison.Ordinal)
-                );
+            return 0 < states.RemoveAll(state => string.Equals(state?.namespaceKey, namespaceKey, StringComparison.Ordinal));
         }
 
         public NamespaceCollapseState Clone()
         {
-            return new NamespaceCollapseState
-            {
-                namespaceKey = namespaceKey ?? string.Empty,
-                isCollapsed = isCollapsed,
-            };
+            return new NamespaceCollapseState { namespaceKey = namespaceKey ?? string.Empty, isCollapsed = isCollapsed };
         }
     }
 }

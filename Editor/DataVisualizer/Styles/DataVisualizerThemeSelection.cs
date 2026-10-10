@@ -18,8 +18,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
         */
         public const string DefaultThemeGuid = "b3a7d91e0c5f4e62a8d4f17c2e6b9a05";
 
-        private const string DefaultThemePackagePath =
-            "Packages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/Styles/Dx.asset";
+        private const string DefaultThemePackagePath = "Packages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/Styles/Dx.asset";
 
         /*
             Sheets this class added, per root, so a later Apply through any
@@ -34,10 +33,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
             Sheets that predate Apply, such as the base stylesheet a theme
             references, are never registered, so reset preserves them.
         */
-        private static readonly ConditionalWeakTable<
-            VisualElement,
-            HashSet<StyleSheet>
-        > OwnedSheetsByRoot = new();
+        private static readonly ConditionalWeakTable<VisualElement, HashSet<StyleSheet>> OwnedSheetsByRoot = new();
 
         private StyleSheet _appliedSheet;
         private VisualElement _root;
@@ -46,11 +42,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
 
         public static DataVisualizerThemeSettings Resolve(string guid)
         {
-            return string.IsNullOrEmpty(guid)
-                ? ResolveDefault()
-                : AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
-                    AssetDatabase.GUIDToAssetPath(guid)
-                );
+            return string.IsNullOrEmpty(guid) ? ResolveDefault() : AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(AssetDatabase.GUIDToAssetPath(guid));
         }
 
         /*
@@ -61,15 +53,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
         */
         public static DataVisualizerThemeSettings ResolveDefault()
         {
-            DataVisualizerThemeSettings theme =
-                AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
-                    AssetDatabase.GUIDToAssetPath(DefaultThemeGuid)
-                );
-            return theme != null
-                ? theme
-                : AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
-                    DefaultThemePackagePath
-                );
+            DataVisualizerThemeSettings theme = AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(AssetDatabase.GUIDToAssetPath(DefaultThemeGuid));
+            return theme != null ? theme : AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(DefaultThemePackagePath);
         }
 
         private static string GetAssetPathOrNull(UnityEngine.Object asset)
@@ -126,10 +111,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
                     Apply keep their previous behavior: never tracked, never
                     removed.
                 */
-                if (
-                    OwnedSheetsByRoot.TryGetValue(root, out HashSet<StyleSheet> owned)
-                    && owned.Contains(sheet)
-                )
+                if (OwnedSheetsByRoot.TryGetValue(root, out HashSet<StyleSheet> owned) && owned.Contains(sheet))
                 {
                     _appliedSheet = sheet;
                 }
@@ -148,11 +130,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
             _appliedSheet = sheet;
         }
 
-        public bool IsAffectedByAssetChanges(
-            string[] importedAssets,
-            string[] deletedAssets,
-            string[] movedFromAssetPaths
-        )
+        public bool IsAffectedByAssetChanges(string[] importedAssets, string[] deletedAssets, string[] movedFromAssetPaths)
         {
             return ContainsPath(importedAssets, _appliedThemePath)
                 || ContainsPath(deletedAssets, _appliedThemePath)

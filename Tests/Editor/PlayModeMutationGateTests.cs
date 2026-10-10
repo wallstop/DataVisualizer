@@ -34,8 +34,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static string CreateFixtureFolder()
         {
-            string folder =
-                "Assets/DataVisualizerMutationGateTests_" + Guid.NewGuid().ToString("N");
+            string folder = "Assets/DataVisualizerMutationGateTests_" + Guid.NewGuid().ToString("N");
             EnsureFolderExists(folder);
             return folder;
         }
@@ -52,10 +51,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             if (_instanceField == null)
             {
-                _instanceField = typeof(DataVisualizerWindow).GetField(
-                    "Instance",
-                    BindingFlags.Static | BindingFlags.NonPublic
-                );
+                _instanceField = typeof(DataVisualizerWindow).GetField("Instance", BindingFlags.Static | BindingFlags.NonPublic);
             }
 
             return _instanceField?.GetValue(null);
@@ -68,50 +64,28 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static T ReadPrivateField<T>(DataVisualizerWindow window, string fieldName)
         {
-            FieldInfo field = typeof(DataVisualizerWindow).GetField(
-                fieldName,
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-            );
+            FieldInfo field = typeof(DataVisualizerWindow).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(field != null, $"The {fieldName} field must exist.");
             return (T)field.GetValue(window);
         }
 
-        private static void SetPrivateField(
-            DataVisualizerWindow window,
-            string fieldName,
-            object value
-        )
+        private static void SetPrivateField(DataVisualizerWindow window, string fieldName, object value)
         {
-            FieldInfo field = typeof(DataVisualizerWindow).GetField(
-                fieldName,
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-            );
+            FieldInfo field = typeof(DataVisualizerWindow).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(field != null, $"The {fieldName} field must exist.");
             field.SetValue(window, value);
         }
 
-        private static object InvokePrivate(
-            DataVisualizerWindow window,
-            string methodName,
-            params object[] arguments
-        )
+        private static object InvokePrivate(DataVisualizerWindow window, string methodName, params object[] arguments)
         {
-            MethodInfo method = typeof(DataVisualizerWindow).GetMethod(
-                methodName,
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-            );
+            MethodInfo method = typeof(DataVisualizerWindow).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(method != null, $"The {methodName} method must exist.");
             return method.Invoke(window, arguments);
         }
 
         private static T ReadControllerField<T>(object controller, string fieldName)
         {
-            FieldInfo field = controller
-                .GetType()
-                .GetField(
-                    fieldName,
-                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-                );
+            FieldInfo field = controller.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(field != null, $"The {fieldName} field must exist.");
             return (T)field.GetValue(controller);
         }
@@ -141,8 +115,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
 
                 ScriptableObject asset = CreateFixtureAsset(folder, "First.asset");
@@ -150,19 +123,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 SuspendForPlayMode(window);
                 InvokePrivate(window, "HandleDeleteConfirmed");
-                Assert.That(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset")
-                        != null,
-                    "a delete confirmed while suspended must not delete the asset"
-                );
+                Assert.That(AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset") != null, "a delete confirmed while suspended must not delete the asset");
 
                 ResumeFromPlayMode(window);
                 InvokePrivate(window, "HandleDeleteConfirmed");
-                Assert.That(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset")
-                        == null,
-                    "the same delete after resume must delete the asset"
-                );
+                Assert.That(AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset") == null, "the same delete after resume must delete the asset");
             }
         }
 
@@ -181,27 +146,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
 
                 ScriptableObject asset = CreateFixtureAsset(folder, "First.asset");
 
                 SuspendForPlayMode(window);
                 InvokePrivate(window, "CloneObject", asset);
-                Assert.That(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First (Clone).asset")
-                        == null,
-                    "cloning must not create an asset while suspended"
-                );
+                Assert.That(AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First (Clone).asset") == null, "cloning must not create an asset while suspended");
 
                 ResumeFromPlayMode(window);
                 InvokePrivate(window, "CloneObject", asset);
-                Assert.That(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First (Clone).asset")
-                        != null,
-                    "cloning after resume must create the clone"
-                );
+                Assert.That(AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First (Clone).asset") != null, "cloning after resume must create the clone");
             }
         }
 
@@ -220,45 +176,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
 
                 CreateFixtureAsset(folder, "First.asset");
                 SetPrivateField(window, "_popoverContext", folder + "/First.asset");
 
                 SuspendForPlayMode(window);
-                InvokePrivate(
-                    window,
-                    "HandleRenameConfirmed",
-                    new Label(),
-                    new TextField { value = "Renamed" },
-                    new Label()
-                );
-                Assert.That(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset")
-                        != null,
-                    "a rename confirmed while suspended must not rename the asset"
-                );
+                InvokePrivate(window, "HandleRenameConfirmed", new Label(), new TextField { value = "Renamed" }, new Label());
+                Assert.That(AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset") != null, "a rename confirmed while suspended must not rename the asset");
 
                 ResumeFromPlayMode(window);
-                InvokePrivate(
-                    window,
-                    "HandleRenameConfirmed",
-                    new Label(),
-                    new TextField { value = "Renamed" },
-                    new Label()
-                );
-                Assert.That(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset")
-                        == null,
-                    "the same rename after resume must rename the asset"
-                );
-                Assert.That(
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/Renamed.asset")
-                        != null,
-                    "the rename after resume must land at the new path"
-                );
+                InvokePrivate(window, "HandleRenameConfirmed", new Label(), new TextField { value = "Renamed" }, new Label());
+                Assert.That(AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/First.asset") == null, "the same rename after resume must rename the asset");
+                Assert.That(AssetDatabase.LoadAssetAtPath<ScriptableObject>(folder + "/Renamed.asset") != null, "the rename after resume must land at the new path");
             }
         }
 
@@ -277,8 +208,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
 
                 ScriptableObject asset = CreateFixtureAsset(folder, "First.asset");
@@ -287,19 +217,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 SuspendForPlayMode(window);
                 InvokePrivate(window, "RemoveLabelFromSelectedAsset", "GateProbe");
-                CollectionAssert.Contains(
-                    AssetDatabase.GetLabels(asset),
-                    "GateProbe",
-                    "a label removal while suspended must not change the asset labels"
-                );
+                CollectionAssert.Contains(AssetDatabase.GetLabels(asset), "GateProbe", "a label removal while suspended must not change the asset labels");
 
                 ResumeFromPlayMode(window);
                 InvokePrivate(window, "RemoveLabelFromSelectedAsset", "GateProbe");
-                CollectionAssert.DoesNotContain(
-                    AssetDatabase.GetLabels(asset),
-                    "GateProbe",
-                    "the same label removal after resume must remove the label"
-                );
+                CollectionAssert.DoesNotContain(AssetDatabase.GetLabels(asset), "GateProbe", "the same label removal after resume must remove the label");
             }
         }
 
@@ -312,29 +234,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
 
-                Dictionary<string, List<Type>> managedTypes = ReadPrivateField<
-                    Dictionary<string, List<Type>>
-                >(window, "_scriptableObjectTypes");
+                Dictionary<string, List<Type>> managedTypes = ReadPrivateField<Dictionary<string, List<Type>>>(window, "_scriptableObjectTypes");
                 Assert.AreEqual(0, managedTypes.Count);
 
                 List<Type> typesToAdd = new() { typeof(TestDataObject) };
 
                 SuspendForPlayMode(window);
-                Assert.IsFalse(
-                    (bool)InvokePrivate(window, "AddManagedTypes", typesToAdd),
-                    "a managed-type add while suspended must not change the catalog"
-                );
+                Assert.IsFalse((bool)InvokePrivate(window, "AddManagedTypes", typesToAdd), "a managed-type add while suspended must not change the catalog");
                 Assert.AreEqual(0, managedTypes.Count);
 
                 ResumeFromPlayMode(window);
-                Assert.IsTrue(
-                    (bool)InvokePrivate(window, "AddManagedTypes", typesToAdd),
-                    "the same managed-type add after resume must change the catalog"
-                );
+                Assert.IsTrue((bool)InvokePrivate(window, "AddManagedTypes", typesToAdd), "the same managed-type add after resume must change the catalog");
                 Assert.AreEqual(1, managedTypes.Count);
             }
         }
@@ -354,44 +267,27 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
 
                 CreateFixtureAsset(folder, "First.asset");
-                NamespaceController controller = ReadPrivateField<NamespaceController>(
-                    window,
-                    "_namespaceController"
-                );
+                NamespaceController controller = ReadPrivateField<NamespaceController>(window, "_namespaceController");
 
                 /*
                     SelectType resolves the type's view element before selecting, so the resume
                     control needs the namespace view built; AddManagedTypes seeds the catalog and
                     BuildNamespaceView populates the type-element cache.
                 */
-                Assert.IsTrue(
-                    (bool)InvokePrivate(
-                        window,
-                        "AddManagedTypes",
-                        new List<Type> { typeof(TestDataObject) }
-                    )
-                );
+                Assert.IsTrue((bool)InvokePrivate(window, "AddManagedTypes", new List<Type> { typeof(TestDataObject) }));
                 InvokePrivate(window, "BuildNamespaceView");
 
                 SuspendForPlayMode(window);
                 controller.SelectType(window, typeof(TestDataObject));
-                Assert.That(
-                    controller.SelectedType == null,
-                    "a type switch while suspended must not select the type"
-                );
+                Assert.That(controller.SelectedType == null, "a type switch while suspended must not select the type");
 
                 ResumeFromPlayMode(window);
                 controller.SelectType(window, typeof(TestDataObject));
-                Assert.AreEqual(
-                    typeof(TestDataObject),
-                    controller.SelectedType,
-                    "the same type switch after resume must select the type"
-                );
+                Assert.AreEqual(typeof(TestDataObject), controller.SelectedType, "the same type switch after resume must select the type");
             }
         }
 
@@ -410,24 +306,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
 
                 CreateFixtureAsset(folder, "First.asset");
 
                 SuspendForPlayMode(window);
                 InvokePrivate(window, "LoadObjectTypesAsync", typeof(TestDataObject), false);
-                Assert.IsFalse(
-                    ReadPrivateField<bool>(window, "_isLoadingObjectsAsync"),
-                    "a manual type load while suspended must not start the load chain"
-                );
+                Assert.IsFalse(ReadPrivateField<bool>(window, "_isLoadingObjectsAsync"), "a manual type load while suspended must not start the load chain");
                 Assert.That(ReadPrivateField<Type>(window, "_asyncLoadTargetType") == null);
-                Assert.AreEqual(
-                    0,
-                    ReadPrivateField<List<ScriptableObject>>(window, "_selectedObjects").Count,
-                    "a manual type load while suspended must not load any objects"
-                );
+                Assert.AreEqual(0, ReadPrivateField<List<ScriptableObject>>(window, "_selectedObjects").Count, "a manual type load while suspended must not load any objects");
 
                 ResumeFromPlayMode(window);
                 InvokePrivate(window, "LoadObjectTypesAsync", typeof(TestDataObject), false);
@@ -448,22 +336,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
                 window.CreateGUI();
 
                 Label pausedIndicator = ReadPrivateField<Label>(window, "_pausedIndicator");
                 Button createButton = ReadPrivateField<Button>(window, "_createObjectButton");
                 Button addTypeButton = ReadPrivateField<Button>(window, "_addTypeButton");
-                Button loadDataFolderButton = ReadPrivateField<Button>(
-                    window,
-                    "_addTypesFromDataFolderButton"
-                );
-                Button loadScriptFolderButton = ReadPrivateField<Button>(
-                    window,
-                    "_addTypesFromScriptFolderButton"
-                );
+                Button loadDataFolderButton = ReadPrivateField<Button>(window, "_addTypesFromDataFolderButton");
+                Button loadScriptFolderButton = ReadPrivateField<Button>(window, "_addTypesFromScriptFolderButton");
 
                 Assert.AreEqual(DisplayStyle.None, pausedIndicator.style.display.value);
                 Assert.IsTrue(createButton.enabledSelf);
@@ -496,25 +377,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
                 window.CreateGUI();
 
                 int confirmCount = 0;
-                InvokePrivate(
-                    window,
-                    "BuildAndOpenConfirmationPopover",
-                    "Test confirm",
-                    "Run",
-                    (Action)(() => confirmCount++),
-                    new VisualElement()
-                );
+                InvokePrivate(window, "BuildAndOpenConfirmationPopover", "Test confirm", "Run", (Action)(() => confirmCount++), new VisualElement());
 
-                VisualElement confirmPopover = ReadPrivateField<VisualElement>(
-                    window,
-                    "_confirmActionPopover"
-                );
+                VisualElement confirmPopover = ReadPrivateField<VisualElement>(window, "_confirmActionPopover");
                 Button confirmButton = confirmPopover.Q<Button>(className: "popover-delete-button");
                 Assert.That(confirmButton != null, "the confirm button must carry the action");
                 Action confirmAction = (Action)confirmButton.userData;
@@ -522,11 +392,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 SuspendForPlayMode(window);
                 confirmAction();
-                Assert.AreEqual(
-                    0,
-                    confirmCount,
-                    "a confirmation popover that was already open when play started must not run while suspended"
-                );
+                Assert.AreEqual(0, confirmCount, "a confirmation popover that was already open when play started must not run while suspended");
 
                 ResumeFromPlayMode(window);
                 confirmAction();
@@ -549,8 +415,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
                 window.CreateGUI();
 
@@ -560,53 +425,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     call no-ops.
                 */
                 CreateFixtureAsset(folder, "First.asset");
-                Assert.IsTrue(
-                    (bool)InvokePrivate(
-                        window,
-                        "AddManagedTypes",
-                        new List<Type>
-                        {
-                            typeof(TestDataObject),
-                            typeof(SelectionPersistenceGuidData),
-                        }
-                    )
-                );
+                Assert.IsTrue((bool)InvokePrivate(window, "AddManagedTypes", new List<Type> { typeof(TestDataObject), typeof(SelectionPersistenceGuidData) }));
                 InvokePrivate(window, "BuildNamespaceView");
 
-                NamespaceController controller = ReadPrivateField<NamespaceController>(
-                    window,
-                    "_namespaceController"
-                );
+                NamespaceController controller = ReadPrivateField<NamespaceController>(window, "_namespaceController");
                 controller.SelectType(window, typeof(TestDataObject));
-                Dictionary<Type, VisualElement> typeCache = ReadControllerField<
-                    Dictionary<Type, VisualElement>
-                >(controller, "_namespaceCache");
+                Dictionary<Type, VisualElement> typeCache = ReadControllerField<Dictionary<Type, VisualElement>>(controller, "_namespaceCache");
                 VisualElement selectedRow = typeCache[typeof(TestDataObject)];
                 VisualElement unselectedRow = typeCache[typeof(SelectionPersistenceGuidData)];
 
                 SuspendForPlayMode(window);
                 controller.IncrementTypeSelection(window);
-                Assert.AreEqual(
-                    typeof(TestDataObject),
-                    controller.SelectedType,
-                    "arrow-key browsing while suspended must not change the selection"
-                );
-                Assert.IsTrue(
-                    selectedRow.ClassListContains(StyleConstants.SelectedClass),
-                    "arrow-key browsing while suspended must not strip the selected row's highlight"
-                );
-                Assert.IsFalse(
-                    unselectedRow.ClassListContains(StyleConstants.SelectedClass),
-                    "arrow-key browsing while suspended must not highlight another row"
-                );
+                Assert.AreEqual(typeof(TestDataObject), controller.SelectedType, "arrow-key browsing while suspended must not change the selection");
+                Assert.IsTrue(selectedRow.ClassListContains(StyleConstants.SelectedClass), "arrow-key browsing while suspended must not strip the selected row's highlight");
+                Assert.IsFalse(unselectedRow.ClassListContains(StyleConstants.SelectedClass), "arrow-key browsing while suspended must not highlight another row");
 
                 ResumeFromPlayMode(window);
                 controller.IncrementTypeSelection(window);
-                Assert.AreEqual(
-                    typeof(SelectionPersistenceGuidData),
-                    controller.SelectedType,
-                    "arrow-key browsing after resume must move the selection"
-                );
+                Assert.AreEqual(typeof(SelectionPersistenceGuidData), controller.SelectedType, "arrow-key browsing after resume must move the selection");
             }
         }
 
@@ -619,30 +455,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
                 cleanup.Defer(() => RestoreSharedInstance(previousInstance));
 
-                DataVisualizerWindow window =
-                    ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
                 window.CreateGUI();
 
-                VisualElement inspectorContainer = ReadPrivateField<VisualElement>(
-                    window,
-                    "_inspectorContainer"
-                );
+                VisualElement inspectorContainer = ReadPrivateField<VisualElement>(window, "_inspectorContainer");
                 Assert.IsTrue(inspectorContainer.enabledSelf);
 
                 SuspendForPlayMode(window);
                 InvokePrivate(window, "BuildInspectorView");
-                Assert.IsFalse(
-                    inspectorContainer.enabledSelf,
-                    "inspector content built while suspended must stay disabled"
-                );
+                Assert.IsFalse(inspectorContainer.enabledSelf, "inspector content built while suspended must stay disabled");
 
                 ResumeFromPlayMode(window);
                 InvokePrivate(window, "BuildInspectorView");
-                Assert.IsTrue(
-                    inspectorContainer.enabledSelf,
-                    "inspector content built after resume must be enabled"
-                );
+                Assert.IsTrue(inspectorContainer.enabledSelf, "inspector content built after resume must be enabled");
             }
         }
     }

@@ -12,13 +12,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         internal int DistinctColorCount { get; }
 
-        internal EditorSurfaceCaptureResult(
-            string outputPath,
-            int width,
-            int height,
-            int byteCount,
-            int distinctColorCount
-        )
+        internal EditorSurfaceCaptureResult(string outputPath, int width, int height, int byteCount, int distinctColorCount)
         {
             OutputPath = outputPath;
             Width = width;
@@ -29,8 +23,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         public override string ToString()
         {
-            return $"{OutputPath} {Width}x{Height} bytes={ByteCount} "
-                + $"distinctColors={DistinctColorCount}";
+            return $"{OutputPath} {Width}x{Height} bytes={ByteCount} " + $"distinctColors={DistinctColorCount}";
         }
     }
 }

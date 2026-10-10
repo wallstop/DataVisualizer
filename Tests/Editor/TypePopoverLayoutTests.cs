@@ -11,16 +11,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class TypePopoverLayoutTests
     {
-        private const string DataVisualizerStyleSheetPath =
-            "Packages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss";
+        private const string DataVisualizerStyleSheetPath = "Packages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss";
         private const string PlaceholderClass = "unity-text-field__placeholder";
         private const float LayoutTolerance = 0.01f;
 
-        private static readonly string[] SearchFieldClassNames =
-        {
-            "type-add-search-field",
-            "type-search-field",
-        };
+        private static readonly string[] SearchFieldClassNames = { "type-add-search-field", "type-search-field" };
 
         private static Label CreateTypeRow(string text)
         {
@@ -29,11 +24,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return row;
         }
 
-        private static LayoutTestWindow CreateWindow(
-            StyleSheet styleSheet,
-            float width,
-            float height
-        )
+        private static LayoutTestWindow CreateWindow(StyleSheet styleSheet, float width, float height)
         {
             LayoutTestWindow window = EditorWindow.CreateWindow<LayoutTestWindow>();
             window.titleContent = new GUIContent(nameof(TypePopoverLayoutTests));
@@ -47,9 +38,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static StyleSheet LoadStyleSheet()
         {
-            StyleSheet styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                DataVisualizerStyleSheetPath
-            );
+            StyleSheet styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(DataVisualizerStyleSheetPath);
             if (styleSheet != null)
             {
                 return styleSheet;
@@ -58,12 +47,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return AssetDatabase
                 .FindAssets("DataVisualizerStyles t:StyleSheet")
                 .Select(AssetDatabase.GUIDToAssetPath)
-                .Where(path =>
-                    path.EndsWith(
-                        "/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss",
-                        System.StringComparison.Ordinal
-                    )
-                )
+                .Where(path => path.EndsWith("/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss", System.StringComparison.Ordinal))
                 .Select(AssetDatabase.LoadAssetAtPath<StyleSheet>)
                 .FirstOrDefault(sheet => sheet != null);
         }
@@ -75,29 +59,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 yield return null;
 
-                bool allReady = System.Array.TrueForAll(
-                    elements,
-                    element =>
-                        element?.panel != null && IsPositiveFinite(element.resolvedStyle.height)
-                );
+                bool allReady = System.Array.TrueForAll(elements, element => element?.panel != null && IsPositiveFinite(element.resolvedStyle.height));
                 if (!allReady)
                 {
                     previousHeights = null;
                     continue;
                 }
 
-                float[] currentHeights = elements
-                    .Select(element => element.resolvedStyle.height)
-                    .ToArray();
-                if (
-                    previousHeights != null
-                    && currentHeights
-                        .Zip(
-                            previousHeights,
-                            (current, previous) => Mathf.Abs(current - previous) <= LayoutTolerance
-                        )
-                        .All(stable => stable)
-                )
+                float[] currentHeights = elements.Select(element => element.resolvedStyle.height).ToArray();
+                if (previousHeights != null && currentHeights.Zip(previousHeights, (current, previous) => Mathf.Abs(current - previous) <= LayoutTolerance).All(stable => stable))
                 {
                     yield break;
                 }
@@ -107,11 +77,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             string heightSummary = string.Join(
                 ", ",
-                elements.Select(element =>
-                    element == null
-                        ? "<null>"
-                        : $"{element.name}:{element.resolvedStyle.height} panel={element.panel != null}"
-                )
+                elements.Select(element => element == null ? "<null>" : $"{element.name}:{element.resolvedStyle.height} panel={element.panel != null}")
             );
             Assert.Fail($"Timed out waiting for stable positive layout heights: {heightSummary}");
         }
@@ -176,11 +142,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(window.Close);
-                VisualElement container = new()
-                {
-                    name = "type-add-list-content",
-                    style = { height = 120 },
-                };
+                VisualElement container = new() { name = "type-add-list-content", style = { height = 120 } };
                 container.AddToClassList("type-add-list-container");
                 window.rootVisualElement.Add(container);
 
@@ -189,9 +151,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 header.style.width = 180;
                 Label indicator = new(StyleConstants.ArrowExpanded);
                 indicator.AddToClassList("popover-namespace-indicator");
-                Label namespaceLabel = new(
-                    "WallstopStudios.DataVisualizer.Tests.Editor.Generated.Namespace"
-                );
+                Label namespaceLabel = new("WallstopStudios.DataVisualizer.Tests.Editor.Generated.Namespace");
                 namespaceLabel.AddToClassList("type-selection-list-namespace");
                 namespaceLabel.AddToClassList("type-selection-list-namespace--not-empty");
                 header.Add(indicator);
@@ -208,32 +168,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 float unfilteredHeaderHeight = header.resolvedStyle.height;
                 float unfilteredNamespaceHeight = namespaceLabel.resolvedStyle.height;
                 float unfilteredHeight = firstRow.resolvedStyle.height;
-                Assert.That(
-                    namespaceLabel.resolvedStyle.width,
-                    Is.LessThanOrEqualTo(header.resolvedStyle.width)
-                );
+                Assert.That(namespaceLabel.resolvedStyle.width, Is.LessThanOrEqualTo(header.resolvedStyle.width));
 
                 container.Remove(secondRow);
                 namespaceLabel.enableRichText = true;
-                namespaceLabel.text =
-                    "WallstopStudios.<color=yellow><b>DataVisualizer</b></color>.Tests.Editor.Generated.Namespace";
+                namespaceLabel.text = "WallstopStudios.<color=yellow><b>DataVisualizer</b></color>.Tests.Editor.Generated.Namespace";
                 firstRow.enableRichText = true;
                 firstRow.text = "<color=yellow><b>Base</b></color>Data";
 
                 yield return WaitForResolvedHeights(header, namespaceLabel, firstRow);
 
-                Assert.That(
-                    header.resolvedStyle.height,
-                    Is.EqualTo(unfilteredHeaderHeight).Within(LayoutTolerance)
-                );
-                Assert.That(
-                    namespaceLabel.resolvedStyle.height,
-                    Is.EqualTo(unfilteredNamespaceHeight).Within(LayoutTolerance)
-                );
-                Assert.That(
-                    firstRow.resolvedStyle.height,
-                    Is.EqualTo(unfilteredHeight).Within(LayoutTolerance)
-                );
+                Assert.That(header.resolvedStyle.height, Is.EqualTo(unfilteredHeaderHeight).Within(LayoutTolerance));
+                Assert.That(namespaceLabel.resolvedStyle.height, Is.EqualTo(unfilteredNamespaceHeight).Within(LayoutTolerance));
+                Assert.That(firstRow.resolvedStyle.height, Is.EqualTo(unfilteredHeight).Within(LayoutTolerance));
             }
         }
     }

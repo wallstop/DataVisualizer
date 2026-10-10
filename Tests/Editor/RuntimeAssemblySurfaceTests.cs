@@ -20,10 +20,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "WallstopStudios.DataVisualizer.IRenamable",
         };
 
-        private static readonly string[] InternalRuntimeTypeFullNames =
-        {
-            "WallstopStudios.DataVisualizer.ReadOnlyAttribute",
-        };
+        private static readonly string[] InternalRuntimeTypeFullNames = { "WallstopStudios.DataVisualizer.ReadOnlyAttribute" };
 
         private static List<string> CollectRuntimeTypeFullNames(Func<Type, bool> predicate)
         {
@@ -40,11 +37,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return typeFullNames;
         }
 
-        private static void AssertTypeSurface(
-            List<string> actualTypeFullNames,
-            IReadOnlyList<string> expectedTypeFullNames,
-            string surfaceName
-        )
+        private static void AssertTypeSurface(List<string> actualTypeFullNames, IReadOnlyList<string> expectedTypeFullNames, string surfaceName)
         {
             HashSet<string> actual = new(actualTypeFullNames, StringComparer.Ordinal);
             HashSet<string> expected = new(expectedTypeFullNames, StringComparer.Ordinal);
@@ -81,37 +74,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldPreserveRuntimeAssemblyIdentityWhenPackageCompiles()
         {
-            Assert.AreEqual(
-                "WallstopStudios.DataVisualizer",
-                typeof(BaseDataObject).Assembly.GetName().Name
-            );
+            Assert.AreEqual("WallstopStudios.DataVisualizer", typeof(BaseDataObject).Assembly.GetName().Name);
         }
 
         [Test]
         public void ShouldExposeOnlyCompatibilityTypesWhenPublicSurfaceIsEnumerated()
         {
-            AssertTypeSurface(
-                CollectRuntimeTypeFullNames(type => type.IsVisible),
-                PublicCompatibilityTypeFullNames,
-                "public"
-            );
+            AssertTypeSurface(CollectRuntimeTypeFullNames(type => type.IsVisible), PublicCompatibilityTypeFullNames, "public");
         }
 
         [Test]
         public void ShouldShipOnlyDeclaredTypesWhenRuntimeAssemblyIsEnumerated()
         {
-            List<string> expectedDeclaredTypeFullNames = new(
-                PublicCompatibilityTypeFullNames.Length + InternalRuntimeTypeFullNames.Length
-            );
+            List<string> expectedDeclaredTypeFullNames = new(PublicCompatibilityTypeFullNames.Length + InternalRuntimeTypeFullNames.Length);
             expectedDeclaredTypeFullNames.AddRange(PublicCompatibilityTypeFullNames);
             expectedDeclaredTypeFullNames.AddRange(InternalRuntimeTypeFullNames);
             expectedDeclaredTypeFullNames.Sort(StringComparer.Ordinal);
 
-            AssertTypeSurface(
-                CollectRuntimeTypeFullNames(type => !string.IsNullOrEmpty(type.Namespace)),
-                expectedDeclaredTypeFullNames,
-                "declared"
-            );
+            AssertTypeSurface(CollectRuntimeTypeFullNames(type => !string.IsNullOrEmpty(type.Namespace)), expectedDeclaredTypeFullNames, "declared");
         }
     }
 }

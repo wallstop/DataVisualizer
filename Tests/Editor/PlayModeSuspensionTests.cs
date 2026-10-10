@@ -30,8 +30,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static string CreateFixtureFolder()
         {
-            string folder =
-                "Assets/DataVisualizerPlayModeSuspensionTests_" + Guid.NewGuid().ToString("N");
+            string folder = "Assets/DataVisualizerPlayModeSuspensionTests_" + Guid.NewGuid().ToString("N");
             EnsureFolderExists(folder);
             return folder;
         }
@@ -46,10 +45,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             if (_instanceField == null)
             {
-                _instanceField = typeof(DataVisualizerWindow).GetField(
-                    "Instance",
-                    BindingFlags.Static | BindingFlags.NonPublic
-                );
+                _instanceField = typeof(DataVisualizerWindow).GetField("Instance", BindingFlags.Static | BindingFlags.NonPublic);
             }
 
             return _instanceField?.GetValue(null);
@@ -67,10 +63,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static T ReadPrivateField<T>(DataVisualizerWindow window, string fieldName)
         {
-            FieldInfo field = typeof(DataVisualizerWindow).GetField(
-                fieldName,
-                BindingFlags.Instance | BindingFlags.NonPublic
-            );
+            FieldInfo field = typeof(DataVisualizerWindow).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field != null, $"The {fieldName} field must exist.");
             return (T)field.GetValue(window);
         }
@@ -80,15 +73,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             InvokePrivateParameterless(window, "ScheduleRefresh");
         }
 
-        private static void InvokePrivateParameterless(
-            DataVisualizerWindow window,
-            string methodName
-        )
+        private static void InvokePrivateParameterless(DataVisualizerWindow window, string methodName)
         {
-            MethodInfo method = typeof(DataVisualizerWindow).GetMethod(
-                methodName,
-                BindingFlags.Instance | BindingFlags.NonPublic
-            );
+            MethodInfo method = typeof(DataVisualizerWindow).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(method != null, $"The {methodName} method must exist.");
             method.Invoke(window, null);
         }
@@ -99,18 +86,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string folder = CreateFixtureFolder();
             try
             {
-                string firstGuid = CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    folder + "/First.asset"
-                );
-                string secondGuid = CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    folder + "/Second.asset"
-                );
-                string thirdGuid = CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    folder + "/Third.asset"
-                );
+                string firstGuid = CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), folder + "/First.asset");
+                string secondGuid = CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), folder + "/Second.asset");
+                string thirdGuid = CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), folder + "/Third.asset");
                 AssetDatabase.SaveAssets();
 
                 AssetGuidTypeIndex index = new();
@@ -124,10 +102,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.IsTrue(index.IsSuspended);
                 Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
                 Assert.IsFalse(index.IsComplete);
-                Assert.AreEqual(
-                    knownBeforeSuspend,
-                    index.GetKnownGuids(typeof(TestDataObject)).Length
-                );
+                Assert.AreEqual(knownBeforeSuspend, index.GetKnownGuids(typeof(TestDataObject)).Length);
 
                 int completedCount = 0;
                 index.IndexCompleted += () => completedCount++;
@@ -156,10 +131,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string folder = CreateFixtureFolder();
             try
             {
-                string firstGuid = CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    folder + "/First.asset"
-                );
+                string firstGuid = CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), folder + "/First.asset");
                 AssetDatabase.SaveAssets();
 
                 AssetGuidTypeIndex index = new();
@@ -169,25 +141,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 CollectionAssert.Contains(index.GetKnownGuids(typeof(TestDataObject)), firstGuid);
 
                 string importedPath = folder + "/ImportedWhileSuspended.asset";
-                string importedGuid = CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    importedPath
-                );
+                string importedGuid = CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), importedPath);
                 AssetDatabase.SaveAssets();
 
                 index.Suspend();
-                Assert.IsFalse(
-                    index.ApplyAssetChanges(
-                        new[] { importedPath },
-                        Array.Empty<string>(),
-                        Array.Empty<string>(),
-                        Array.Empty<string>()
-                    )
-                );
-                CollectionAssert.DoesNotContain(
-                    index.GetKnownGuids(typeof(TestDataObject)),
-                    importedGuid
-                );
+                Assert.IsFalse(index.ApplyAssetChanges(new[] { importedPath }, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+                CollectionAssert.DoesNotContain(index.GetKnownGuids(typeof(TestDataObject)), importedGuid);
 
                 int completedCount = 0;
                 index.IndexCompleted += () => completedCount++;
@@ -212,14 +171,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string folder = CreateFixtureFolder();
             try
             {
-                string firstGuid = CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    folder + "/First.asset"
-                );
-                string secondGuid = CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    folder + "/Second.asset"
-                );
+                string firstGuid = CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), folder + "/First.asset");
+                string secondGuid = CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), folder + "/Second.asset");
                 AssetDatabase.SaveAssets();
 
                 AssetGuidTypeIndex index = new();
@@ -232,14 +185,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 string secondPath = folder + "/Second.asset";
                 index.Suspend();
                 AssetDatabase.DeleteAsset(secondPath);
-                Assert.IsFalse(
-                    index.ApplyAssetChanges(
-                        Array.Empty<string>(),
-                        new[] { secondPath },
-                        Array.Empty<string>(),
-                        Array.Empty<string>()
-                    )
-                );
+                Assert.IsFalse(index.ApplyAssetChanges(Array.Empty<string>(), new[] { secondPath }, Array.Empty<string>(), Array.Empty<string>()));
                 CollectionAssert.Contains(index.GetKnownGuids(typeof(TestDataObject)), secondGuid);
 
                 int completedCount = 0;
@@ -265,10 +211,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string folder = CreateFixtureFolder();
             try
             {
-                CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    folder + "/First.asset"
-                );
+                CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), folder + "/First.asset");
                 AssetDatabase.SaveAssets();
 
                 AssetGuidTypeIndex index = new();

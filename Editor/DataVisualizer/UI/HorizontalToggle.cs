@@ -18,13 +18,11 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
 
         public static readonly string ussClassName = "horizontal-toggle";
         public static readonly string containerUssClassName = ussClassName + "__container";
-        public static readonly string labelContainerUssClassName =
-            ussClassName + "__label-container";
+        public static readonly string labelContainerUssClassName = ussClassName + "__label-container";
         public static readonly string leftLabelUssClassName = ussClassName + "__left-label";
         public static readonly string rightLabelUssClassName = ussClassName + "__right-label";
         public static readonly string indicatorUssClassName = ussClassName + "__indicator";
-        public static readonly string indicatorSelectedUssClassName =
-            indicatorUssClassName + "--selected";
+        public static readonly string indicatorSelectedUssClassName = indicatorUssClassName + "--selected";
         public string LeftText
         {
             get => _leftText;
@@ -74,9 +72,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
         }
         public Color SelectedTextColor
         {
-            get =>
-                _selectedTextColor
-                ?? (_isLeftSelected ? _leftLabel : _rightLabel).resolvedStyle.color;
+            get => _selectedTextColor ?? (_isLeftSelected ? _leftLabel : _rightLabel).resolvedStyle.color;
             set
             {
                 _selectedTextColor = value;
@@ -85,9 +81,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
         }
         public Color UnselectedTextColor
         {
-            get =>
-                _unselectedTextColor
-                ?? (_isLeftSelected ? _rightLabel : _leftLabel).resolvedStyle.color;
+            get => _unselectedTextColor ?? (_isLeftSelected ? _rightLabel : _leftLabel).resolvedStyle.color;
             set
             {
                 _unselectedTextColor = value;
@@ -205,14 +199,8 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
 
             RegisterCallback<GeometryChangedEvent>(OnGeometryChange);
 
-            _leftLabel.RegisterCallback<ClickEvent, HorizontalToggle>(
-                static (_, context) => context.SelectLeft(),
-                this
-            );
-            _rightLabel.RegisterCallback<ClickEvent, HorizontalToggle>(
-                static (_, context) => context.SelectRight(),
-                this
-            );
+            _leftLabel.RegisterCallback<ClickEvent, HorizontalToggle>(static (_, context) => context.SelectLeft(), this);
+            _rightLabel.RegisterCallback<ClickEvent, HorizontalToggle>(static (_, context) => context.SelectRight(), this);
 
             UpdateColors();
             UpdateIndicatorPosition(false);
@@ -242,33 +230,19 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             _leftLabel.EnableInClassList("unselected", !_isLeftSelected);
             _rightLabel.EnableInClassList("unselected", _isLeftSelected);
 
-            _container.style.backgroundColor = _unselectedBackgroundColor.HasValue
-                ? new StyleColor(_unselectedBackgroundColor.Value)
-                : new StyleColor(StyleKeyword.Null);
+            _container.style.backgroundColor = _unselectedBackgroundColor.HasValue ? new StyleColor(_unselectedBackgroundColor.Value) : new StyleColor(StyleKeyword.Null);
             Color? indicatorColor = _indicatorColor ?? _selectedBackgroundColor;
-            _indicator.style.backgroundColor = indicatorColor.HasValue
-                ? new StyleColor(indicatorColor.Value)
-                : new StyleColor(StyleKeyword.Null);
+            _indicator.style.backgroundColor = indicatorColor.HasValue ? new StyleColor(indicatorColor.Value) : new StyleColor(StyleKeyword.Null);
 
-            StyleColor selectedTextColor = _selectedTextColor.HasValue
-                ? new StyleColor(_selectedTextColor.Value)
-                : new StyleColor(StyleKeyword.Null);
-            StyleColor unselectedTextColor = _unselectedTextColor.HasValue
-                ? new StyleColor(_unselectedTextColor.Value)
-                : new StyleColor(StyleKeyword.Null);
+            StyleColor selectedTextColor = _selectedTextColor.HasValue ? new StyleColor(_selectedTextColor.Value) : new StyleColor(StyleKeyword.Null);
+            StyleColor unselectedTextColor = _unselectedTextColor.HasValue ? new StyleColor(_unselectedTextColor.Value) : new StyleColor(StyleKeyword.Null);
             _leftLabel.style.color = _isLeftSelected ? selectedTextColor : unselectedTextColor;
             _rightLabel.style.color = _isLeftSelected ? unselectedTextColor : selectedTextColor;
         }
 
         private void UpdateIndicatorPosition(bool animate)
         {
-            if (
-                _indicator == null
-                || _leftLabel == null
-                || _rightLabel == null
-                || float.IsNaN(_leftLabel.resolvedStyle.width)
-                || float.IsNaN(_rightLabel.resolvedStyle.width)
-            )
+            if (_indicator == null || _leftLabel == null || _rightLabel == null || float.IsNaN(_leftLabel.resolvedStyle.width) || float.IsNaN(_rightLabel.resolvedStyle.width))
             {
                 schedule.Execute(() => UpdateIndicatorPosition(animate)).StartingIn(0);
                 return;
@@ -276,19 +250,14 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             _isAnimating = true;
 
             float targetX = _isLeftSelected ? 0 : _leftLabel.resolvedStyle.width;
-            float targetWidth = _isLeftSelected
-                ? _leftLabel.resolvedStyle.width
-                : _rightLabel.resolvedStyle.width;
+            float targetWidth = _isLeftSelected ? _leftLabel.resolvedStyle.width : _rightLabel.resolvedStyle.width;
 
             if (animate && 0 < resolvedStyle.width)
             {
                 _indicator.RemoveFromClassList(indicatorSelectedUssClassName);
 
                 _indicator
-                    .experimental.animation.Start(
-                        new StyleValues { left = targetX, width = targetWidth },
-                        (int)AnimationDurationMs
-                    )
+                    .experimental.animation.Start(new StyleValues { left = targetX, width = targetWidth }, (int)AnimationDurationMs)
                     .Ease(Easing.OutQuad)
                     .OnCompleted(() =>
                     {

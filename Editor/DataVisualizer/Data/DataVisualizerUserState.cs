@@ -34,19 +34,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
             try
             {
-                DataVisualizerUserState userState = JsonUtility.FromJson<DataVisualizerUserState>(
-                    json
-                );
+                DataVisualizerUserState userState = JsonUtility.FromJson<DataVisualizerUserState>(json);
                 if (userState == null)
                 {
                     return userState;
                 }
 
                 LegacyUserState legacyUserState = JsonUtility.FromJson<LegacyUserState>(json);
-                if (
-                    string.IsNullOrWhiteSpace(userState.lastSelectedTypeFullName)
-                    && !string.IsNullOrWhiteSpace(legacyUserState?.lastSelectedTypeName)
-                )
+                if (string.IsNullOrWhiteSpace(userState.lastSelectedTypeFullName) && !string.IsNullOrWhiteSpace(legacyUserState?.lastSelectedTypeName))
                 {
                     userState.lastSelectedTypeFullName = legacyUserState.lastSelectedTypeName;
                 }
@@ -71,25 +66,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             lastSelectedTypeFullName = settings.lastSelectedTypeFullName;
             namespaceOrder = PersistedStateCopy.CloneStrings(settings.namespaceOrder);
             typeOrders = PersistedStateCopy.CloneNamespaceTypeOrders(settings.typeOrders);
-            lastObjectSelections = PersistedStateCopy.CloneLastObjectSelections(
-                settings.lastObjectSelections
-            );
-            namespaceCollapseStates = PersistedStateCopy.CloneNamespaceCollapseStates(
-                settings.namespaceCollapseStates
-            );
+            lastObjectSelections = PersistedStateCopy.CloneLastObjectSelections(settings.lastObjectSelections);
+            namespaceCollapseStates = PersistedStateCopy.CloneNamespaceCollapseStates(settings.namespaceCollapseStates);
             objectOrders = PersistedStateCopy.CloneTypeObjectOrders(settings.objectOrders);
             managedTypeNames = PersistedStateCopy.CloneStrings(settings.managedTypeNames);
-            labelFilterConfigs = PersistedStateCopy.CloneTypeLabelFilterConfigs(
-                settings.labelFilterConfigs
-            );
+            labelFilterConfigs = PersistedStateCopy.CloneTypeLabelFilterConfigs(settings.labelFilterConfigs);
             processorStates = PersistedStateCopy.CloneProcessorStates(settings.processorStates);
         }
 
         public List<string> GetOrCreateObjectOrderList(string typeFullName)
         {
-            TypeObjectOrder entry = objectOrders.Find(o =>
-                string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal)
-            );
+            TypeObjectOrder entry = objectOrders.Find(o => string.Equals(o.TypeFullName, typeFullName, StringComparison.Ordinal));
             if (entry != null)
             {
                 return entry.ObjectGuids;
@@ -108,9 +95,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
 
             lastObjectSelections ??= new List<LastObjectSelectionEntry>();
-            int existingIndex = lastObjectSelections.FindIndex(e =>
-                string.Equals(e.typeFullName, typeFullName, StringComparison.Ordinal)
-            );
+            int existingIndex = lastObjectSelections.FindIndex(e => string.Equals(e.typeFullName, typeFullName, StringComparison.Ordinal));
             if (string.IsNullOrWhiteSpace(guid))
             {
                 if (existingIndex < 0)
@@ -122,14 +107,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 return true;
             }
 
-            if (
-                0 <= existingIndex
-                && string.Equals(
-                    lastObjectSelections[existingIndex].objectGuid,
-                    guid,
-                    StringComparison.Ordinal
-                )
-            )
+            if (0 <= existingIndex && string.Equals(lastObjectSelections[existingIndex].objectGuid, guid, StringComparison.Ordinal))
             {
                 return false;
             }
@@ -140,9 +118,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
             else
             {
-                lastObjectSelections.Add(
-                    new LastObjectSelectionEntry { typeFullName = typeFullName, objectGuid = guid }
-                );
+                lastObjectSelections.Add(new LastObjectSelectionEntry { typeFullName = typeFullName, objectGuid = guid });
             }
 
             return true;
@@ -155,16 +131,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                 return null;
             }
 
-            return lastObjectSelections
-                ?.Find(e => string.Equals(e.typeFullName, typeFullName, StringComparison.Ordinal))
-                ?.objectGuid;
+            return lastObjectSelections?.Find(e => string.Equals(e.typeFullName, typeFullName, StringComparison.Ordinal))?.objectGuid;
         }
 
         public List<string> GetOrCreateTypeOrderList(string namespaceKey)
         {
-            NamespaceTypeOrder entry = typeOrders.Find(o =>
-                string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
-            );
+            NamespaceTypeOrder entry = typeOrders.Find(o => string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal));
             if (entry != null)
             {
                 return entry.typeNames;
@@ -177,9 +149,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
         public bool HasCollapseState(string namespaceKey)
         {
-            NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
-                string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
-            );
+            NamespaceCollapseState entry = namespaceCollapseStates.Find(o => string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal));
             return entry != null;
         }
 
@@ -191,11 +161,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             }
 
             namespaceCollapseStates ??= new List<NamespaceCollapseState>();
-            return NamespaceCollapseState.SetCollapsed(
-                namespaceCollapseStates,
-                namespaceKey,
-                isCollapsed
-            );
+            return NamespaceCollapseState.SetCollapsed(namespaceCollapseStates, namespaceKey, isCollapsed);
         }
 
         public bool RemoveNamespaceCollapseState(string namespaceKey)
@@ -205,9 +171,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
         public NamespaceCollapseState GetOrCreateCollapseState(string namespaceKey)
         {
-            NamespaceCollapseState entry = namespaceCollapseStates.Find(o =>
-                string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal)
-            );
+            NamespaceCollapseState entry = namespaceCollapseStates.Find(o => string.Equals(o.namespaceKey, namespaceKey, StringComparison.Ordinal));
             if (entry != null)
             {
                 return entry;

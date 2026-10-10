@@ -40,11 +40,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             -nographics cannot rasterize anything, so capture throws fail-closed and tests
             skip rather than assert against that device.
         */
-        internal static bool IsSupported =>
-            GraphicsDeviceType.Null != SystemInfo.graphicsDeviceType;
+        internal static bool IsSupported => GraphicsDeviceType.Null != SystemInfo.graphicsDeviceType;
 
-        private static readonly BindingFlags InheritedInstanceMembers =
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        private static readonly BindingFlags InheritedInstanceMembers = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
         /*
             Renders the window's root visual tree into an offscreen render target sized from
@@ -67,18 +65,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             if (!IsSupported)
             {
                 throw new InvalidOperationException(
-                    "EditorSurfaceCapture needs a graphics device; this editor is running "
-                        + "without one, so capture refuses to write a blank image."
+                    "EditorSurfaceCapture needs a graphics device; this editor is running " + "without one, so capture refuses to write a blank image."
                 );
             }
 
             IPanel panel = window.rootVisualElement.panel;
             if (panel == null)
             {
-                throw new InvalidOperationException(
-                    $"Window '{window.name}' has no panel; show it with {nameof(ShowPopup)} "
-                        + "before capturing."
-                );
+                throw new InvalidOperationException($"Window '{window.name}' has no panel; show it with {nameof(ShowPopup)} " + "before capturing.");
             }
 
             RenderTexture previousTarget = RenderTexture.active;
@@ -93,24 +87,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 int height = Mathf.RoundToInt(rootBounds.height);
                 if (width < 1 || height < 1)
                 {
-                    throw new InvalidOperationException(
-                        $"The window root laid out to {rootBounds.width}x{rootBounds.height}; "
-                            + "there is nothing to capture."
-                    );
+                    throw new InvalidOperationException($"The window root laid out to {rootBounds.width}x{rootBounds.height}; " + "there is nothing to capture.");
                 }
 
-                target = new RenderTexture(
-                    width,
-                    height,
-                    24,
-                    RenderTextureFormat.ARGB32,
-                    RenderTextureReadWrite.Linear
-                );
+                target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
                 if (!target.Create())
                 {
-                    throw new InvalidOperationException(
-                        $"Could not create a {width}x{height} capture canvas."
-                    );
+                    throw new InvalidOperationException($"Could not create a {width}x{height} capture canvas.");
                 }
 
                 GL.sRGBWrite = false;
@@ -130,12 +113,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     InvokePanelMethod(panel, "Render", Array.Empty<object>());
                 }
 
-                RectInt crop = new(
-                    Mathf.RoundToInt(rootBounds.x),
-                    Mathf.RoundToInt(height - rootBounds.yMax),
-                    width,
-                    height
-                );
+                RectInt crop = new(Mathf.RoundToInt(rootBounds.x), Mathf.RoundToInt(height - rootBounds.yMax), width, height);
                 readback = new Texture2D(crop.width, crop.height, TextureFormat.RGB24, false, true);
                 readback.ReadPixels(new Rect(crop.x, crop.y, crop.width, crop.height), 0, 0, false);
                 readback.Apply(false, false);
@@ -153,13 +131,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
 
                 File.WriteAllBytes(outputPath, png);
-                return new EditorSurfaceCaptureResult(
-                    outputPath,
-                    crop.width,
-                    crop.height,
-                    png.Length,
-                    CountDistinctColors(readback)
-                );
+                return new EditorSurfaceCaptureResult(outputPath, crop.width, crop.height, png.Length, CountDistinctColors(readback));
             }
             finally
             {
@@ -229,11 +201,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string previous = null;
             for (int pass = 0; pass < MaxLayoutPasses; pass++)
             {
-                InvokePanelMethod(
-                    window.rootVisualElement.panel,
-                    "ValidateLayout",
-                    Array.Empty<object>()
-                );
+                InvokePanelMethod(window.rootVisualElement.panel, "ValidateLayout", Array.Empty<object>());
                 string current = DescribeLayout(window.rootVisualElement);
                 if (string.Equals(current, previous, StringComparison.Ordinal))
                 {
@@ -253,13 +221,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 argumentTypes[index] = arguments[index].GetType();
             }
 
-            MethodInfo method = panelType.GetMethod(
-                methodName,
-                InheritedInstanceMembers,
-                binder: null,
-                types: argumentTypes,
-                modifiers: null
-            );
+            MethodInfo method = panelType.GetMethod(methodName, InheritedInstanceMembers, binder: null, types: argumentTypes, modifiers: null);
             if (method == null)
             {
                 throw new InvalidOperationException(
@@ -295,15 +257,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             foreach (VisualElement element in root.Query<VisualElement>().ToList())
             {
                 Rect layout = element.layout;
-                description
-                    .Append(layout.x)
-                    .Append(',')
-                    .Append(layout.y)
-                    .Append(',')
-                    .Append(layout.width)
-                    .Append(',')
-                    .Append(layout.height)
-                    .Append(';');
+                description.Append(layout.x).Append(',').Append(layout.y).Append(',').Append(layout.width).Append(',').Append(layout.height).Append(';');
             }
 
             return description.ToString();

@@ -31,26 +31,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             return so is DataVisualizerSettings || relevantTypes.Contains(so.GetType());
         }
 
-        private static void OnPostprocessAllAssets(
-            string[] importedAssets,
-            string[] deletedAssets,
-            string[] movedAssets,
-            string[] movedFromAssetPaths
-        )
+        private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
-            AssetGuidTypeIndex.Shared.ApplyAssetChanges(
-                importedAssets,
-                deletedAssets,
-                movedAssets,
-                movedFromAssetPaths
-            );
+            AssetGuidTypeIndex.Shared.ApplyAssetChanges(importedAssets, deletedAssets, movedAssets, movedFromAssetPaths);
 
-            if (
-                importedAssets.Length <= 0
-                && deletedAssets.Length <= 0
-                && movedAssets.Length <= 0
-                && movedFromAssetPaths.Length <= 0
-            )
+            if (importedAssets.Length <= 0 && deletedAssets.Length <= 0 && movedAssets.Length <= 0 && movedFromAssetPaths.Length <= 0)
             {
                 return;
             }
@@ -75,9 +60,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
             }
         }
 
-        private static HashSet<Type> CollectRelevantTypes(
-            Dictionary<string, List<Type>> managedTypes
-        )
+        private static HashSet<Type> CollectRelevantTypes(Dictionary<string, List<Type>> managedTypes)
         {
             HashSet<Type> relevantTypes = new();
             foreach (List<Type> types in managedTypes.Values)

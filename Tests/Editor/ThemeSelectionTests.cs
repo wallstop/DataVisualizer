@@ -19,51 +19,28 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     {
         private static T ReadPrivateField<T>(object target, string fieldName)
         {
-            FieldInfo field = target
-                .GetType()
-                .GetField(
-                    fieldName,
-                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-                );
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(field != null, $"The {fieldName} field must exist.");
             return (T)field.GetValue(target);
         }
 
-        private static void InvokePrivate(
-            object target,
-            string methodName,
-            params object[] arguments
-        )
+        private static void InvokePrivate(object target, string methodName, params object[] arguments)
         {
-            MethodInfo method = target
-                .GetType()
-                .GetMethod(
-                    methodName,
-                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-                );
+            MethodInfo method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(method != null, $"The {methodName} method must exist.");
             method.Invoke(target, arguments);
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)
         {
-            FieldInfo field = target
-                .GetType()
-                .GetField(
-                    fieldName,
-                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
-                );
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             Assert.That(field != null, $"The {fieldName} field must exist.");
             field.SetValue(target, value);
         }
 
-        private static DataVisualizerThemeSettings CreateTheme(
-            TestCleanupScope cleanup,
-            StyleSheet sheet
-        )
+        private static DataVisualizerThemeSettings CreateTheme(TestCleanupScope cleanup, StyleSheet sheet)
         {
-            DataVisualizerThemeSettings theme =
-                ScriptableObject.CreateInstance<DataVisualizerThemeSettings>();
+            DataVisualizerThemeSettings theme = ScriptableObject.CreateInstance<DataVisualizerThemeSettings>();
             cleanup.Defer(() => Object.DestroyImmediate(theme));
             using SerializedObject serialized = new(theme);
             serialized.FindProperty("styleSheet").objectReferenceValue = sheet;
@@ -93,20 +70,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.DeleteAsset(folder);
             }
             string created = AssetDatabase.CreateFolder("Assets", "TempThemeHotReloadTests");
-            Assert.IsFalse(
-                string.IsNullOrEmpty(created),
-                "The temporary theme assets folder must be created."
-            );
+            Assert.IsFalse(string.IsNullOrEmpty(created), "The temporary theme assets folder must be created.");
             cleanup.Defer(() => AssetDatabase.DeleteAsset(folder));
             return folder;
         }
 
         private static StyleSheet CreateSheetAsset(string path)
         {
-            System.IO.File.WriteAllText(
-                path,
-                ".hot-reload-test\n" + "{\n" + "    color: rgb(1, 2, 3);\n" + "}\n"
-            );
+            System.IO.File.WriteAllText(path, ".hot-reload-test\n" + "{\n" + "    color: rgb(1, 2, 3);\n" + "}\n");
             AssetDatabase.ImportAsset(path);
             StyleSheet sheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(path);
             Assert.That(sheet != null, path);
@@ -115,8 +86,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static DataVisualizerThemeSettings CreateThemeAsset(string path, StyleSheet sheet)
         {
-            DataVisualizerThemeSettings theme =
-                ScriptableObject.CreateInstance<DataVisualizerThemeSettings>();
+            DataVisualizerThemeSettings theme = ScriptableObject.CreateInstance<DataVisualizerThemeSettings>();
             using SerializedObject serialized = new(theme);
             serialized.FindProperty("styleSheet").objectReferenceValue = sheet;
             serialized.ApplyModifiedPropertiesWithoutUndo();
@@ -145,11 +115,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual(dropdown.FilteredItems.Count, rows.Count);
             for (int index = 0; index < rows.Count; index++)
             {
-                Assert.AreEqual(
-                    index == expected,
-                    rows[index].ClassListContains(StyleConstants.SelectedClass),
-                    $"Row {index} highlight"
-                );
+                Assert.AreEqual(index == expected, rows[index].ClassListContains(StyleConstants.SelectedClass), $"Row {index} highlight");
             }
         }
 
@@ -160,13 +126,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             target.SendEvent(evt);
         }
 
-        private static void RecordColor(
-            List<string> failures,
-            string theme,
-            string property,
-            string expected,
-            Color actual
-        )
+        private static void RecordColor(List<string> failures, string theme, string property, string expected, Color actual)
         {
             string actualHex = ColorUtility.ToHtmlStringRGBA(actual);
             if (!string.Equals(expected, actualHex, System.StringComparison.Ordinal))
@@ -194,10 +154,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
 
                 string value = line[(valueStart + 1)..].TrimEnd(';').Trim();
-                if (
-                    value.StartsWith("#", System.StringComparison.Ordinal)
-                    && ColorUtility.TryParseHtmlString(value, out Color color)
-                )
+                if (value.StartsWith("#", System.StringComparison.Ordinal) && ColorUtility.TryParseHtmlString(value, out Color color))
                 {
                     tokens[line[..valueStart].Trim()] = color;
                 }
@@ -208,16 +165,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static double SrgbChannelToLinear(double channel)
         {
-            return channel <= 0.03928
-                ? channel / 12.92
-                : System.Math.Pow((channel + 0.055) / 1.055, 2.4);
+            return channel <= 0.03928 ? channel / 12.92 : System.Math.Pow((channel + 0.055) / 1.055, 2.4);
         }
 
         private static double RelativeLuminance(Color color)
         {
-            return 0.2126 * SrgbChannelToLinear(color.r)
-                + 0.7152 * SrgbChannelToLinear(color.g)
-                + 0.0722 * SrgbChannelToLinear(color.b);
+            return 0.2126 * SrgbChannelToLinear(color.r) + 0.7152 * SrgbChannelToLinear(color.g) + 0.0722 * SrgbChannelToLinear(color.b);
         }
 
         private static double ContrastRatio(Color first, Color second)
@@ -248,24 +201,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.IsFalse(string.IsNullOrEmpty(item.DisplayName));
                 if (1 < index)
                 {
-                    Assert.That(
-                        System.StringComparer.OrdinalIgnoreCase.Compare(
-                            items[index - 1].Theme.name,
-                            item.Theme.name
-                        ),
-                        Is.LessThanOrEqualTo(0)
-                    );
+                    Assert.That(System.StringComparer.OrdinalIgnoreCase.Compare(items[index - 1].Theme.name, item.Theme.name), Is.LessThanOrEqualTo(0));
                 }
             }
 
             string folder = GetThemeFolder();
-            foreach (
-                string name in new[] { "Classic", "Compact", "Dracula", "Dx", "Minimal", "Nord" }
-            )
+            foreach (string name in new[] { "Classic", "Compact", "Dracula", "Dx", "Minimal", "Nord" })
             {
                 string path = folder + name + ".asset";
-                DataVisualizerThemeSettings theme =
-                    AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(path);
+                DataVisualizerThemeSettings theme = AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(path);
                 Assert.That(theme != null, path);
                 Assert.That(theme.StyleSheet != null, path);
                 ThemeDropdownItem[] matches = items.Where(item => item.Path == path).ToArray();
@@ -294,10 +238,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase("aSSETS/cOLDpALETTE", 1)]
         [TestCase("pACKAGES/nIGHTpALETTE/sECOND.aSSET", 2)]
         [TestCase("rEsEt", 0)]
-        public void ShouldFilterNameAndPathIgnoringCaseAndSurroundingWhitespace(
-            string query,
-            int expectedIndex
-        )
+        public void ShouldFilterNameAndPathIgnoringCaseAndSurroundingWhitespace(string query, int expectedIndex)
         {
             using TestCleanupScope cleanup = new();
             ThemeDropdownItem[] items = CreateItems(cleanup);
@@ -308,10 +249,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AssertHighlight(dropdown, 0);
             Button row = dropdown.Results.Q<Button>("theme-search-result");
             Assert.AreEqual(items[expectedIndex].DisplayName, row.text);
-            Assert.AreEqual(
-                expectedIndex == 0 ? "Restore the Dx appearance." : items[expectedIndex].Path,
-                row.tooltip
-            );
+            Assert.AreEqual(expectedIndex == 0 ? "Restore the Dx appearance." : items[expectedIndex].Path, row.tooltip);
             Assert.That(dropdown.Results.Q<Label>("theme-search-empty") == null);
         }
 
@@ -337,9 +275,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldShowEmptyStateWithoutSelectionWhenNothingMatches(bool emptyItems)
         {
             using TestCleanupScope cleanup = new();
-            ThemeDropdownItem[] items = emptyItems
-                ? System.Array.Empty<ThemeDropdownItem>()
-                : CreateItems(cleanup);
+            ThemeDropdownItem[] items = emptyItems ? System.Array.Empty<ThemeDropdownItem>() : CreateItems(cleanup);
             int selections = 0;
             SearchableThemeDropdown dropdown = new(items, null, _ => selections++);
             if (!emptyItems)
@@ -348,10 +284,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
             Assert.IsEmpty(dropdown.FilteredItems);
             AssertHighlight(dropdown, -1);
-            Assert.AreEqual(
-                "No matching themes",
-                dropdown.Results.Q<Label>("theme-search-empty")?.text
-            );
+            Assert.AreEqual("No matching themes", dropdown.Results.Q<Label>("theme-search-empty")?.text);
             Assert.AreEqual(1, dropdown.Results.contentContainer.childCount);
             dropdown.MoveHighlight(int.MaxValue);
             dropdown.MoveHighlight(int.MinValue);
@@ -369,12 +302,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             ThemeDropdownItem[] items = CreateItems(cleanup);
             List<DataVisualizerThemeSettings> selections = new();
             int cancellations = 0;
-            SearchableThemeDropdown dropdown = new(
-                items,
-                null,
-                selections.Add,
-                () => cancellations++
-            );
+            SearchableThemeDropdown dropdown = new(items, null, selections.Add, () => cancellations++);
             dropdown.SetFilter("NightPalette");
             Assert.IsFalse(dropdown.SelectFilteredIndex(-1));
             Assert.IsFalse(dropdown.SelectFilteredIndex(1));
@@ -383,10 +311,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             CollectionAssert.AreEqual(new[] { items[2].Theme }, selections);
             dropdown.SetFilter("Reset");
             Assert.IsTrue(dropdown.SelectHighlighted());
-            CollectionAssert.AreEqual(
-                new DataVisualizerThemeSettings[] { items[2].Theme, null },
-                selections
-            );
+            CollectionAssert.AreEqual(new DataVisualizerThemeSettings[] { items[2].Theme, null }, selections);
             Assert.AreEqual(0, cancellations);
         }
 
@@ -397,12 +322,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             ThemeDropdownItem[] items = CreateItems(cleanup);
             int selections = 0;
             int cancellations = 0;
-            SearchableThemeDropdown dropdown = new(
-                items,
-                items[1].Theme,
-                _ => selections++,
-                () => cancellations++
-            );
+            SearchableThemeDropdown dropdown = new(items, items[1].Theme, _ => selections++, () => cancellations++);
             dropdown.Cancel();
             Assert.AreEqual(1, cancellations);
             Assert.AreEqual(0, selections);
@@ -465,12 +385,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             cleanup.Defer(window.Close);
             List<DataVisualizerThemeSettings> selections = new();
             int cancellations = 0;
-            SearchableThemeDropdown dropdown = new(
-                items,
-                null,
-                selections.Add,
-                () => cancellations++
-            );
+            SearchableThemeDropdown dropdown = new(items, null, selections.Add, () => cancellations++);
             window.rootVisualElement.Add(dropdown);
             window.ShowUtility();
             yield return null;
@@ -516,9 +431,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             using TestCleanupScope cleanup = new();
             string folder = GetThemeFolder();
-            StyleSheet baseSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                folder + "DataVisualizerStyles.uss"
-            );
+            StyleSheet baseSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "DataVisualizerStyles.uss");
             Assert.That(baseSheet != null);
             LayoutTestWindow window = ScriptableObject.CreateInstance<LayoutTestWindow>();
             cleanup.Defer(window.Close);
@@ -536,8 +449,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             root.Add(inspector);
             root.Add(scroller);
             root.Add(toggle);
-            root.Query<VisualElement>()
-                .ForEach(element => element.pickingMode = PickingMode.Ignore);
+            root.Query<VisualElement>().ForEach(element => element.pickingMode = PickingMode.Ignore);
             window.ShowUtility();
             yield return null;
             StyleSheet[] initialSheets = new StyleSheet[root.styleSheets.count];
@@ -548,9 +460,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             VisualElement input = field.Q(className: "unity-base-text-field__input");
             VisualElement tracker = scroller.Q(className: "unity-base-slider__tracker");
             VisualElement dragger = scroller.Q(className: "unity-base-slider__dragger");
-            VisualElement toggleContainer = toggle.Q(
-                className: HorizontalToggle.containerUssClassName
-            );
+            VisualElement toggleContainer = toggle.Q(className: HorizontalToggle.containerUssClassName);
             Assert.That(input != null);
             Assert.That(tracker != null);
             Assert.That(dragger != null);
@@ -571,12 +481,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             StyleSheet previousThemeSheet = null;
             for (int index = 0; index < names.Length; index++)
             {
-                DataVisualizerThemeSettings theme =
-                    names[index] == null
-                        ? null
-                        : AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
-                            folder + names[index] + ".asset"
-                        );
+                DataVisualizerThemeSettings theme = names[index] == null ? null : AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(folder + names[index] + ".asset");
                 if (names[index] != null)
                 {
                     Assert.That(theme != null, names[index]);
@@ -586,10 +491,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 yield return new WaitForSecondsRealtime(0.5f);
                 Assert.That(root.panel != null);
                 Assert.IsTrue(root.styleSheets.Contains(baseSheet));
-                Assert.AreEqual(
-                    initialSheets.Length + (theme == null ? 0 : 1),
-                    root.styleSheets.count
-                );
+                Assert.AreEqual(initialSheets.Length + (theme == null ? 0 : 1), root.styleSheets.count);
                 for (int sheetIndex = 0; sheetIndex < initialSheets.Length; sheetIndex++)
                 {
                     Assert.AreSame(initialSheets[sheetIndex], root.styleSheets[sheetIndex]);
@@ -604,143 +506,29 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
                 previousThemeSheet = theme == null ? null : theme.StyleSheet;
                 string name = names[index] ?? "Default";
-                RecordColor(
-                    failures,
-                    name,
-                    "root background",
-                    backgrounds[index],
-                    root.resolvedStyle.backgroundColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "button background",
-                    controls[index],
-                    button.resolvedStyle.backgroundColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "button text",
-                    texts[index],
-                    button.resolvedStyle.color
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "button border",
-                    borders[index],
-                    button.resolvedStyle.borderTopColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "input background",
-                    inputs[index],
-                    input.resolvedStyle.backgroundColor
-                );
+                RecordColor(failures, name, "root background", backgrounds[index], root.resolvedStyle.backgroundColor);
+                RecordColor(failures, name, "button background", controls[index], button.resolvedStyle.backgroundColor);
+                RecordColor(failures, name, "button text", texts[index], button.resolvedStyle.color);
+                RecordColor(failures, name, "button border", borders[index], button.resolvedStyle.borderTopColor);
+                RecordColor(failures, name, "input background", inputs[index], input.resolvedStyle.backgroundColor);
                 RecordColor(failures, name, "input text", texts[index], input.resolvedStyle.color);
-                RecordColor(
-                    failures,
-                    name,
-                    "input border",
-                    borders[index],
-                    input.resolvedStyle.borderTopColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "field label",
-                    texts[index],
-                    field.labelElement.resolvedStyle.color
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "inspector background",
-                    surfaces[index],
-                    inspector.resolvedStyle.backgroundColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "inspector text",
-                    texts[index],
-                    inspector.resolvedStyle.color
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "inspector border",
-                    borders[index],
-                    inspector.resolvedStyle.borderTopColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "scroller background",
-                    controls[index],
-                    scroller.resolvedStyle.backgroundColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "scroller tracker",
-                    inputs[index],
-                    tracker.resolvedStyle.backgroundColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "scroller dragger",
-                    borders[index],
-                    dragger.resolvedStyle.backgroundColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "toggle background",
-                    inputs[index],
-                    toggleContainer.resolvedStyle.backgroundColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "toggle indicator",
-                    positives[index],
-                    toggle.Indicator.resolvedStyle.backgroundColor
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "toggle selected text",
-                    onPositives[index],
-                    toggle.LeftLabel.resolvedStyle.color
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "toggle unselected text",
-                    muted[index],
-                    toggle.RightLabel.resolvedStyle.color
-                );
+                RecordColor(failures, name, "input border", borders[index], input.resolvedStyle.borderTopColor);
+                RecordColor(failures, name, "field label", texts[index], field.labelElement.resolvedStyle.color);
+                RecordColor(failures, name, "inspector background", surfaces[index], inspector.resolvedStyle.backgroundColor);
+                RecordColor(failures, name, "inspector text", texts[index], inspector.resolvedStyle.color);
+                RecordColor(failures, name, "inspector border", borders[index], inspector.resolvedStyle.borderTopColor);
+                RecordColor(failures, name, "scroller background", controls[index], scroller.resolvedStyle.backgroundColor);
+                RecordColor(failures, name, "scroller tracker", inputs[index], tracker.resolvedStyle.backgroundColor);
+                RecordColor(failures, name, "scroller dragger", borders[index], dragger.resolvedStyle.backgroundColor);
+                RecordColor(failures, name, "toggle background", inputs[index], toggleContainer.resolvedStyle.backgroundColor);
+                RecordColor(failures, name, "toggle indicator", positives[index], toggle.Indicator.resolvedStyle.backgroundColor);
+                RecordColor(failures, name, "toggle selected text", onPositives[index], toggle.LeftLabel.resolvedStyle.color);
+                RecordColor(failures, name, "toggle unselected text", muted[index], toggle.RightLabel.resolvedStyle.color);
                 toggle.SelectRight(animate: false, notify: false);
                 yield return new WaitForSecondsRealtime(0.5f);
                 Assert.IsFalse(toggle.IsLeftSelected);
-                RecordColor(
-                    failures,
-                    name,
-                    "toggle right selected text",
-                    onPositives[index],
-                    toggle.RightLabel.resolvedStyle.color
-                );
-                RecordColor(
-                    failures,
-                    name,
-                    "toggle left unselected text",
-                    muted[index],
-                    toggle.LeftLabel.resolvedStyle.color
-                );
+                RecordColor(failures, name, "toggle right selected text", onPositives[index], toggle.RightLabel.resolvedStyle.color);
+                RecordColor(failures, name, "toggle left unselected text", muted[index], toggle.LeftLabel.resolvedStyle.color);
                 toggle.SelectLeft(animate: false, notify: false);
             }
             Assert.IsEmpty(failures, string.Join("\n", failures));
@@ -756,9 +544,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             window.Show();
             VisualElement root = window.rootVisualElement;
             root.AddToClassList("dataviz-root");
-            root.styleSheets.Add(
-                AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "DataVisualizerStyles.uss")
-            );
+            root.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "DataVisualizerStyles.uss"));
             DataVisualizerThemeSelection selection = new();
             bool resetInvoked = false;
             Button reset = new(() =>
@@ -785,10 +571,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string[] accents = { "#d2691e", "#88c0d0", "#bd93f9" };
             for (int index = 0; index < names.Length; index++)
             {
-                DataVisualizerThemeSettings theme =
-                    AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
-                        folder + names[index] + ".asset"
-                    );
+                DataVisualizerThemeSettings theme = AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(folder + names[index] + ".asset");
                 Assert.That(theme != null, names[index]);
                 Assert.That(theme.StyleSheet != null, names[index]);
                 string guid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(theme));
@@ -796,39 +579,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 selection.Apply(root, theme);
                 ColorUtility.TryParseHtmlString(accents[index], out Color accent);
                 yield return new WaitForSecondsRealtime(0.5f);
-                Assert.AreEqual(
-                    ColorUtility.ToHtmlStringRGBA(accent),
-                    ColorUtility.ToHtmlStringRGBA(reset.resolvedStyle.color),
-                    names[index]
-                );
-                Assert.AreEqual(
-                    surfaces[index],
-                    ColorUtility.ToHtmlStringRGBA(namespaceRow.resolvedStyle.backgroundColor),
-                    names[index]
-                );
+                Assert.AreEqual(ColorUtility.ToHtmlStringRGBA(accent), ColorUtility.ToHtmlStringRGBA(reset.resolvedStyle.color), names[index]);
+                Assert.AreEqual(surfaces[index], ColorUtility.ToHtmlStringRGBA(namespaceRow.resolvedStyle.backgroundColor), names[index]);
                 Assert.AreEqual(select.resolvedStyle.fontSize, reset.resolvedStyle.fontSize);
                 Assert.AreEqual(select.resolvedStyle.color, themeField.resolvedStyle.color);
                 Assert.AreEqual(select.resolvedStyle.fontSize, themeField.resolvedStyle.fontSize);
-                Assert.AreEqual(
-                    select.resolvedStyle.borderTopWidth,
-                    themeField.resolvedStyle.borderTopWidth
-                );
+                Assert.AreEqual(select.resolvedStyle.borderTopWidth, themeField.resolvedStyle.borderTopWidth);
                 Assert.AreEqual(select.resolvedStyle.paddingTop, reset.resolvedStyle.paddingTop);
-                Assert.AreEqual(
-                    select.resolvedStyle.paddingBottom,
-                    reset.resolvedStyle.paddingBottom
-                );
+                Assert.AreEqual(select.resolvedStyle.paddingBottom, reset.resolvedStyle.paddingBottom);
                 Assert.AreEqual(select.resolvedStyle.paddingLeft, reset.resolvedStyle.paddingLeft);
-                Assert.AreEqual(
-                    select.resolvedStyle.paddingRight,
-                    reset.resolvedStyle.paddingRight
-                );
+                Assert.AreEqual(select.resolvedStyle.paddingRight, reset.resolvedStyle.paddingRight);
                 Assert.AreEqual(select.resolvedStyle.height, reset.resolvedStyle.height);
                 Assert.AreEqual(select.resolvedStyle.alignSelf, reset.resolvedStyle.alignSelf);
-                Assert.AreEqual(
-                    select.resolvedStyle.borderTopWidth,
-                    reset.resolvedStyle.borderTopWidth
-                );
+                Assert.AreEqual(select.resolvedStyle.borderTopWidth, reset.resolvedStyle.borderTopWidth);
             }
 
             ColorUtility.TryParseHtmlString("#282a36", out Color focusedOnAccent);
@@ -846,20 +609,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 yield return null;
             }
             Assert.IsTrue(resetInvoked, "The reset click callback must run.");
-            Assert.IsFalse(
-                root.styleSheets.Contains(
-                    AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "Dracula.uss")
-                )
-            );
+            Assert.IsFalse(root.styleSheets.Contains(AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "Dracula.uss")));
             reset.Blur();
             yield return new WaitForSecondsRealtime(0.5f);
             ColorUtility.TryParseHtmlString("#d2691e", out Color classic);
             Assert.AreEqual(classic, reset.resolvedStyle.color);
-            Assert.IsTrue(
-                root.styleSheets.Contains(
-                    AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "DataVisualizerStyles.uss")
-                )
-            );
+            Assert.IsTrue(root.styleSheets.Contains(AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "DataVisualizerStyles.uss")));
         }
 
         [UnityTest]
@@ -872,9 +627,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             window.Show();
             VisualElement root = window.rootVisualElement;
             root.AddToClassList("dataviz-root");
-            root.styleSheets.Add(
-                AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "DataVisualizerStyles.uss")
-            );
+            root.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "DataVisualizerStyles.uss"));
             Button actionButton = new() { text = "X" };
             actionButton.AddToClassList("action-button");
             root.Add(actionButton);
@@ -889,34 +642,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             int[] radii = { 6, 4, 0 };
             for (int index = 0; index < names.Length; index++)
             {
-                DataVisualizerThemeSettings theme =
-                    AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
-                        folder + names[index] + ".asset"
-                    );
+                DataVisualizerThemeSettings theme = AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(folder + names[index] + ".asset");
                 Assert.That(theme != null, names[index]);
                 Assert.That(theme.StyleSheet != null, names[index]);
                 selection.Apply(root, theme);
                 yield return new WaitForSecondsRealtime(0.5f);
-                Assert.AreEqual(
-                    fontSizes[index],
-                    controlButton.resolvedStyle.fontSize,
-                    $"{names[index]} control font size"
-                );
-                Assert.AreEqual(
-                    radii[index],
-                    controlButton.resolvedStyle.borderTopLeftRadius,
-                    $"{names[index]} control radius"
-                );
-                Assert.AreEqual(
-                    circleSizes[index],
-                    actionButton.resolvedStyle.height,
-                    $"{names[index]} action button size"
-                );
-                Assert.AreEqual(
-                    secondaryFonts[index],
-                    actionButton.resolvedStyle.fontSize,
-                    $"{names[index]} action button font"
-                );
+                Assert.AreEqual(fontSizes[index], controlButton.resolvedStyle.fontSize, $"{names[index]} control font size");
+                Assert.AreEqual(radii[index], controlButton.resolvedStyle.borderTopLeftRadius, $"{names[index]} control radius");
+                Assert.AreEqual(circleSizes[index], actionButton.resolvedStyle.height, $"{names[index]} action button size");
+                Assert.AreEqual(secondaryFonts[index], actionButton.resolvedStyle.fontSize, $"{names[index]} action button font");
             }
 
             selection.Apply(root, null);
@@ -933,8 +667,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldPreserveThemeGuidThroughBothPersistenceModesAndJson(string guid)
         {
             using TestCleanupScope cleanup = new();
-            DataVisualizerSettings settings =
-                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
             cleanup.Defer(() => Object.DestroyImmediate(settings));
             DataVisualizerUserState state = new() { themeGuid = guid };
             settings.HydrateFrom(state);
@@ -945,10 +678,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual(guid, restored.themeGuid);
             if (string.IsNullOrEmpty(guid))
             {
-                Assert.AreSame(
-                    DataVisualizerThemeSelection.ResolveDefault(),
-                    DataVisualizerThemeSelection.Resolve(restored.themeGuid)
-                );
+                Assert.AreSame(DataVisualizerThemeSelection.ResolveDefault(), DataVisualizerThemeSelection.Resolve(restored.themeGuid));
             }
             else
             {
@@ -963,31 +693,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             DataVisualizerUserState state = DataVisualizerUserState.FromJson("{}");
             Assert.IsTrue(string.IsNullOrEmpty(state.themeGuid));
-            Assert.AreSame(
-                DataVisualizerThemeSelection.ResolveDefault(),
-                DataVisualizerThemeSelection.Resolve(state.themeGuid)
-            );
+            Assert.AreSame(DataVisualizerThemeSelection.ResolveDefault(), DataVisualizerThemeSelection.Resolve(state.themeGuid));
         }
 
         [Test]
         public void ShouldResolveEmptySelectionToTheShippedDxDefault()
         {
-            DataVisualizerThemeSettings defaultTheme =
-                DataVisualizerThemeSelection.ResolveDefault();
+            DataVisualizerThemeSettings defaultTheme = DataVisualizerThemeSelection.ResolveDefault();
             Assert.That(defaultTheme != null, "The shipped Dx default theme asset must exist.");
             Assert.AreEqual("Dx", defaultTheme.name);
-            Assert.That(
-                defaultTheme.StyleSheet != null,
-                "The shipped Dx default theme must reference its stylesheet."
-            );
-            Assert.AreEqual(
-                GetThemeFolder() + "Dx.asset",
-                AssetDatabase.GetAssetPath(defaultTheme)
-            );
-            Assert.AreSame(
-                defaultTheme,
-                DataVisualizerThemeSelection.Resolve(DataVisualizerThemeSelection.DefaultThemeGuid)
-            );
+            Assert.That(defaultTheme.StyleSheet != null, "The shipped Dx default theme must reference its stylesheet.");
+            Assert.AreEqual(GetThemeFolder() + "Dx.asset", AssetDatabase.GetAssetPath(defaultTheme));
+            Assert.AreSame(defaultTheme, DataVisualizerThemeSelection.Resolve(DataVisualizerThemeSelection.DefaultThemeGuid));
             Assert.AreSame(defaultTheme, DataVisualizerThemeSelection.Resolve(string.Empty));
             Assert.AreSame(defaultTheme, DataVisualizerThemeSelection.Resolve(null));
         }
@@ -998,19 +715,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldKeepDxTextContrastReadable(string foregroundToken, string backgroundToken)
         {
             Dictionary<string, Color> tokens = ParseDxRootTokens();
-            Assert.That(
-                tokens.TryGetValue(foregroundToken, out Color foreground),
-                $"The Dx theme must define {foregroundToken}."
-            );
-            Assert.That(
-                tokens.TryGetValue(backgroundToken, out Color background),
-                $"The Dx theme must define {backgroundToken}."
-            );
-            Assert.That(
-                ContrastRatio(foreground, background),
-                Is.GreaterThanOrEqualTo(4.5),
-                $"{foregroundToken} on {backgroundToken} must meet 4.5:1."
-            );
+            Assert.That(tokens.TryGetValue(foregroundToken, out Color foreground), $"The Dx theme must define {foregroundToken}.");
+            Assert.That(tokens.TryGetValue(backgroundToken, out Color background), $"The Dx theme must define {backgroundToken}.");
+            Assert.That(ContrastRatio(foreground, background), Is.GreaterThanOrEqualTo(4.5), $"{foregroundToken} on {backgroundToken} must meet 4.5:1.");
         }
 
         [Test]
@@ -1073,21 +780,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             first.Apply(root, theme);
             Assert.AreEqual(2, root.styleSheets.count);
             second.Apply(root, theme);
-            Assert.AreEqual(
-                2,
-                root.styleSheets.count,
-                "A selection-added sheet must be adopted, never duplicated."
-            );
+            Assert.AreEqual(2, root.styleSheets.count, "A selection-added sheet must be adopted, never duplicated.");
             Assert.AreSame(sheet, root.styleSheets[1]);
             second.Apply(root, null);
             Assert.AreEqual(1, root.styleSheets.count);
             Assert.AreSame(baseSheet, root.styleSheets[0]);
             first.Apply(root, null);
-            Assert.AreEqual(
-                1,
-                root.styleSheets.count,
-                "A stale tracker must not remove a pre-existing sheet."
-            );
+            Assert.AreEqual(1, root.styleSheets.count, "A stale tracker must not remove a pre-existing sheet.");
         }
 
         [Test]
@@ -1108,11 +807,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             second.Apply(root, secondTheme);
             Assert.AreEqual(3, root.styleSheets.count);
             second.Apply(root, firstTheme);
-            Assert.AreEqual(
-                2,
-                root.styleSheets.count,
-                "Re-applying a still-present selection-added theme must converge to one entry."
-            );
+            Assert.AreEqual(2, root.styleSheets.count, "Re-applying a still-present selection-added theme must converge to one entry.");
             Assert.AreSame(firstSheet, root.styleSheets[1]);
             second.Apply(root, null);
             Assert.AreEqual(1, root.styleSheets.count);
@@ -1124,10 +819,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldRemoveOwnedThemeSheetWhenWindowCleanupRuns()
         {
-            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField(
-                "Instance",
-                BindingFlags.Static | BindingFlags.NonPublic
-            );
+            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField("Instance", BindingFlags.Static | BindingFlags.NonPublic);
             Assert.That(instanceField != null, "The window Instance field must exist.");
             object previousInstance = instanceField.GetValue(null);
             using TestCleanupScope cleanup = new();
@@ -1138,10 +830,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             window.CreateGUI();
 
             VisualElement root = window.rootVisualElement;
-            DataVisualizerThemeSelection selection = ReadPrivateField<DataVisualizerThemeSelection>(
-                window,
-                "_themeSelection"
-            );
+            DataVisualizerThemeSelection selection = ReadPrivateField<DataVisualizerThemeSelection>(window, "_themeSelection");
 
             /*
                 CreateGUI applied the host's persisted theme, so drop it first:
@@ -1155,37 +844,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual(baselineCount + 1, root.styleSheets.count);
 
             InvokePrivate(window, "Cleanup");
-            Assert.IsFalse(
-                root.styleSheets.Contains(sheet),
-                "Cleanup must remove the sheet the window's selection owns."
-            );
-            Assert.AreEqual(
-                baselineCount,
-                root.styleSheets.count,
-                "Cleanup must leave no selection-owned sheet behind."
-            );
+            Assert.IsFalse(root.styleSheets.Contains(sheet), "Cleanup must remove the sheet the window's selection owns.");
+            Assert.AreEqual(baselineCount, root.styleSheets.count, "Cleanup must leave no selection-owned sheet behind.");
             int afterCleanupCount = root.styleSheets.count;
             new DataVisualizerThemeSelection().Apply(root, null);
-            Assert.AreEqual(
-                afterCleanupCount,
-                root.styleSheets.count,
-                "A fresh reset after Cleanup must be a no-op."
-            );
+            Assert.AreEqual(afterCleanupCount, root.styleSheets.count, "A fresh reset after Cleanup must be a no-op.");
         }
 
         [Test]
         public void ShouldOpenFreshWindowInDxAndLandResetOnDxWhileKeepingExplicitSelection()
         {
-            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField(
-                "Instance",
-                BindingFlags.Static | BindingFlags.NonPublic
-            );
+            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField("Instance", BindingFlags.Static | BindingFlags.NonPublic);
             Assert.That(instanceField != null, "The window Instance field must exist.");
             object previousInstance = instanceField.GetValue(null);
-            string tempDirectory = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "DataVisualizerThemeResetTests-" + System.IO.Path.GetRandomFileName()
-            );
+            string tempDirectory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "DataVisualizerThemeResetTests-" + System.IO.Path.GetRandomFileName());
             System.IO.Directory.CreateDirectory(tempDirectory);
             using TestCleanupScope cleanup = new();
             /*
@@ -1204,69 +876,36 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 directory so the user-state persistence path writes there
                 instead of the host's persistentDataPath.
             */
-            DataVisualizerSettings settings =
-                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
             cleanup.Defer(() => Object.DestroyImmediate(settings));
-            string userStateFilePath = System.IO.Path.Combine(
-                tempDirectory,
-                "DataVisualizerUserState.json"
-            );
+            string userStateFilePath = System.IO.Path.Combine(tempDirectory, "DataVisualizerUserState.json");
             SetPrivateField(window, "_settings", settings);
             SetPrivateField(window, "_userState", new DataVisualizerUserState());
             SetPrivateField(window, "_userStateFilePath", userStateFilePath);
 
-            DataVisualizerThemeSettings defaultTheme =
-                DataVisualizerThemeSelection.ResolveDefault();
+            DataVisualizerThemeSettings defaultTheme = DataVisualizerThemeSelection.ResolveDefault();
             Assert.That(defaultTheme != null, "The shipped Dx default theme asset must exist.");
             StyleSheet defaultSheet = defaultTheme.StyleSheet;
-            DataVisualizerThemeSettings classic =
-                AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
-                    GetThemeFolder() + "Classic.asset"
-                );
+            DataVisualizerThemeSettings classic = AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(GetThemeFolder() + "Classic.asset");
             Assert.That(classic != null, "The shipped Classic theme asset must exist.");
             string classicGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(classic));
 
             window.CreateGUI();
             VisualElement root = window.rootVisualElement;
-            Assert.AreEqual(
-                "Dx",
-                root.Q<Button>("theme-field").text,
-                "A window with no saved theme must open in Dx."
-            );
+            Assert.AreEqual("Dx", root.Q<Button>("theme-field").text, "A window with no saved theme must open in Dx.");
             Assert.IsTrue(root.styleSheets.Contains(defaultSheet));
 
             InvokePrivate(window, "SelectTheme", classic);
             Assert.AreEqual("Classic", root.Q<Button>("theme-field").text);
-            Assert.AreEqual(
-                classicGuid,
-                ReadPrivateField<DataVisualizerUserState>(window, "_userState").themeGuid
-            );
-            Assert.AreEqual(
-                classicGuid,
-                DataVisualizerUserState
-                    .FromJson(System.IO.File.ReadAllText(userStateFilePath))
-                    .themeGuid
-            );
-            Assert.IsFalse(
-                root.styleSheets.Contains(defaultSheet),
-                "Selecting Classic must replace the applied Dx sheet."
-            );
+            Assert.AreEqual(classicGuid, ReadPrivateField<DataVisualizerUserState>(window, "_userState").themeGuid);
+            Assert.AreEqual(classicGuid, DataVisualizerUserState.FromJson(System.IO.File.ReadAllText(userStateFilePath)).themeGuid);
+            Assert.IsFalse(root.styleSheets.Contains(defaultSheet), "Selecting Classic must replace the applied Dx sheet.");
 
             InvokePrivate(window, "ResetTheme");
             Assert.AreEqual("Dx", root.Q<Button>("theme-field").text);
             Assert.IsTrue(root.styleSheets.Contains(defaultSheet));
-            Assert.That(
-                string.IsNullOrEmpty(
-                    ReadPrivateField<DataVisualizerUserState>(window, "_userState").themeGuid
-                )
-            );
-            Assert.IsTrue(
-                string.IsNullOrEmpty(
-                    DataVisualizerUserState
-                        .FromJson(System.IO.File.ReadAllText(userStateFilePath))
-                        .themeGuid
-                )
-            );
+            Assert.That(string.IsNullOrEmpty(ReadPrivateField<DataVisualizerUserState>(window, "_userState").themeGuid));
+            Assert.IsTrue(string.IsNullOrEmpty(DataVisualizerUserState.FromJson(System.IO.File.ReadAllText(userStateFilePath)).themeGuid));
 
             /*
                 Selecting the Dx asset itself must keep an explicit selection:
@@ -1274,10 +913,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 default selection.
             */
             InvokePrivate(window, "SelectTheme", defaultTheme);
-            Assert.AreEqual(
-                DataVisualizerThemeSelection.DefaultThemeGuid,
-                ReadPrivateField<DataVisualizerUserState>(window, "_userState").themeGuid
-            );
+            Assert.AreEqual(DataVisualizerThemeSelection.DefaultThemeGuid, ReadPrivateField<DataVisualizerUserState>(window, "_userState").themeGuid);
             Assert.AreEqual("Dx", root.Q<Button>("theme-field").text);
             Assert.IsTrue(root.styleSheets.Contains(defaultSheet));
         }
@@ -1305,63 +941,29 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             using TestCleanupScope cleanup = new();
             string folder = CreateTempAssetsFolder(cleanup);
             StyleSheet sheet = CreateSheetAsset(folder + "/HotReload.uss");
-            DataVisualizerThemeSettings theme = CreateThemeAsset(
-                folder + "/HotReloadTheme.asset",
-                sheet
-            );
+            DataVisualizerThemeSettings theme = CreateThemeAsset(folder + "/HotReloadTheme.asset", sheet);
             string themePath = AssetDatabase.GetAssetPath(theme);
             string sheetPath = AssetDatabase.GetAssetPath(sheet);
             DataVisualizerThemeSelection selection = new();
             string[] empty = System.Array.Empty<string>();
 
-            Assert.IsFalse(
-                selection.IsAffectedByAssetChanges(new[] { themePath }, new[] { sheetPath }, empty)
-            );
+            Assert.IsFalse(selection.IsAffectedByAssetChanges(new[] { themePath }, new[] { sheetPath }, empty));
             Assert.IsFalse(selection.IsAffectedByAssetChanges(null, null, null));
 
             selection.Apply(new VisualElement(), theme);
-            Assert.IsTrue(
-                selection.IsAffectedByAssetChanges(new[] { themePath }, empty, empty),
-                "imported theme"
-            );
-            Assert.IsTrue(
-                selection.IsAffectedByAssetChanges(empty, new[] { themePath }, empty),
-                "deleted theme"
-            );
-            Assert.IsTrue(
-                selection.IsAffectedByAssetChanges(empty, empty, new[] { themePath }),
-                "moved theme"
-            );
-            Assert.IsTrue(
-                selection.IsAffectedByAssetChanges(new[] { sheetPath }, empty, empty),
-                "imported sheet"
-            );
-            Assert.IsTrue(
-                selection.IsAffectedByAssetChanges(empty, new[] { sheetPath }, empty),
-                "deleted sheet"
-            );
-            Assert.IsTrue(
-                selection.IsAffectedByAssetChanges(empty, empty, new[] { sheetPath }),
-                "moved sheet"
-            );
+            Assert.IsTrue(selection.IsAffectedByAssetChanges(new[] { themePath }, empty, empty), "imported theme");
+            Assert.IsTrue(selection.IsAffectedByAssetChanges(empty, new[] { themePath }, empty), "deleted theme");
+            Assert.IsTrue(selection.IsAffectedByAssetChanges(empty, empty, new[] { themePath }), "moved theme");
+            Assert.IsTrue(selection.IsAffectedByAssetChanges(new[] { sheetPath }, empty, empty), "imported sheet");
+            Assert.IsTrue(selection.IsAffectedByAssetChanges(empty, new[] { sheetPath }, empty), "deleted sheet");
+            Assert.IsTrue(selection.IsAffectedByAssetChanges(empty, empty, new[] { sheetPath }), "moved sheet");
             Assert.IsFalse(
-                selection.IsAffectedByAssetChanges(
-                    new[] { folder + "/Other.uss" },
-                    new[] { folder + "/Other.asset" },
-                    new[] { folder + "/Renamed.asset" }
-                ),
+                selection.IsAffectedByAssetChanges(new[] { folder + "/Other.uss" }, new[] { folder + "/Other.asset" }, new[] { folder + "/Renamed.asset" }),
                 "unrelated paths"
             );
 
             selection.Apply(new VisualElement(), null);
-            Assert.IsFalse(
-                selection.IsAffectedByAssetChanges(
-                    new[] { themePath },
-                    new[] { sheetPath },
-                    new[] { themePath }
-                ),
-                "reset clears tracking"
-            );
+            Assert.IsFalse(selection.IsAffectedByAssetChanges(new[] { themePath }, new[] { sheetPath }, new[] { themePath }), "reset clears tracking");
         }
 
         [Test]
@@ -1371,10 +973,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string folder = CreateTempAssetsFolder(cleanup);
             StyleSheet firstSheet = CreateSheetAsset(folder + "/First.uss");
             StyleSheet secondSheet = CreateSheetAsset(folder + "/Second.uss");
-            DataVisualizerThemeSettings theme = CreateThemeAsset(
-                folder + "/Theme.asset",
-                firstSheet
-            );
+            DataVisualizerThemeSettings theme = CreateThemeAsset(folder + "/Theme.asset", firstSheet);
             VisualElement root = new();
             root.styleSheets.Add(CreateSheet(cleanup));
             DataVisualizerThemeSelection selection = new();
@@ -1386,13 +985,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 serialized.FindProperty("styleSheet").objectReferenceValue = secondSheet;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
             }
-            Assert.IsTrue(
-                selection.IsAffectedByAssetChanges(
-                    new[] { AssetDatabase.GetAssetPath(theme) },
-                    System.Array.Empty<string>(),
-                    System.Array.Empty<string>()
-                )
-            );
+            Assert.IsTrue(selection.IsAffectedByAssetChanges(new[] { AssetDatabase.GetAssetPath(theme) }, System.Array.Empty<string>(), System.Array.Empty<string>()));
             selection.Apply(root, theme);
             Assert.IsFalse(root.styleSheets.Contains(firstSheet));
             Assert.AreSame(secondSheet, root.styleSheets[1]);

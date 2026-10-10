@@ -11,22 +11,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static IEnumerable<TestCaseData> AuthoredIdCases()
         {
-            yield return new TestCaseData("f1c91b4f-c0d3-4f97-9937-3994689d3b6f").SetName(
-                "ShouldPreserveHyphenatedAuthoredIdWhenValidated"
-            );
-            yield return new TestCaseData("6eb4def1eeb18784c817551d7d7537b6").SetName(
-                "ShouldPreserveCanonicalShapedAuthoredIdWhenValidated"
-            );
+            yield return new TestCaseData("f1c91b4f-c0d3-4f97-9937-3994689d3b6f").SetName("ShouldPreserveHyphenatedAuthoredIdWhenValidated");
+            yield return new TestCaseData("6eb4def1eeb18784c817551d7d7537b6").SetName("ShouldPreserveCanonicalShapedAuthoredIdWhenValidated");
         }
 
         private static IEnumerable<TestCaseData> EmptyIdCases()
         {
-            yield return new TestCaseData(string.Empty).SetName(
-                "ShouldFillEmptySerializedIdFromMetaGuidWhenValidated"
-            );
-            yield return new TestCaseData(" ").SetName(
-                "ShouldFillWhitespaceSerializedIdFromMetaGuidWhenValidated"
-            );
+            yield return new TestCaseData(string.Empty).SetName("ShouldFillEmptySerializedIdFromMetaGuidWhenValidated");
+            yield return new TestCaseData(" ").SetName("ShouldFillWhitespaceSerializedIdFromMetaGuidWhenValidated");
         }
 
         /*
@@ -68,9 +60,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.SaveAssets();
                 AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
 
-                TestDataObject reloadedDataObject = AssetDatabase.LoadAssetAtPath<TestDataObject>(
-                    assetPath
-                );
+                TestDataObject reloadedDataObject = AssetDatabase.LoadAssetAtPath<TestDataObject>(assetPath);
 
                 Assert.AreEqual(authoredId, reloadedDataObject.Id);
             }
@@ -108,9 +98,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.SaveAssets();
                 AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
 
-                TestDataObject reloadedDataObject = AssetDatabase.LoadAssetAtPath<TestDataObject>(
-                    assetPath
-                );
+                TestDataObject reloadedDataObject = AssetDatabase.LoadAssetAtPath<TestDataObject>(assetPath);
 
                 Assert.AreEqual(canonicalGuid, reloadedDataObject.Id);
             }

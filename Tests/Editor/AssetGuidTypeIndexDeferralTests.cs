@@ -26,8 +26,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static string CreateFixtureFolder()
         {
-            string folder =
-                "Assets/DataVisualizerIndexDeferralTests_" + Guid.NewGuid().ToString("N");
+            string folder = "Assets/DataVisualizerIndexDeferralTests_" + Guid.NewGuid().ToString("N");
             EnsureFolderExists(folder);
             return folder;
         }
@@ -44,10 +43,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string folder = CreateFixtureFolder();
             try
             {
-                string guid = CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    folder + "/First.asset"
-                );
+                string guid = CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), folder + "/First.asset");
                 AssetDatabase.SaveAssets();
 
                 AssetGuidTypeIndex index = new();
@@ -95,10 +91,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string folder = CreateFixtureFolder();
             try
             {
-                string importedGuid = CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    folder + "/ImportedWhileBusy.asset"
-                );
+                string importedGuid = CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), folder + "/ImportedWhileBusy.asset");
                 AssetDatabase.SaveAssets();
 
                 AssetGuidTypeIndex index = new() { AssetDatabaseBusyOverride = () => true };
@@ -112,18 +105,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         just imported, so its reconciliation must stay synchronous: only the
                         background pump defers while the database is busy.
                     */
-                    Assert.IsTrue(
-                        index.ApplyAssetChanges(
-                            new[] { folder + "/ImportedWhileBusy.asset" },
-                            Array.Empty<string>(),
-                            Array.Empty<string>(),
-                            Array.Empty<string>()
-                        )
-                    );
-                    CollectionAssert.Contains(
-                        index.GetKnownGuids(typeof(TestDataObject)),
-                        importedGuid
-                    );
+                    Assert.IsTrue(index.ApplyAssetChanges(new[] { folder + "/ImportedWhileBusy.asset" }, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+                    CollectionAssert.Contains(index.GetKnownGuids(typeof(TestDataObject)), importedGuid);
                 }
                 finally
                 {
@@ -147,10 +130,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string folder = CreateFixtureFolder();
             try
             {
-                string guid = CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    folder + "/First.asset"
-                );
+                string guid = CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), folder + "/First.asset");
                 AssetDatabase.SaveAssets();
 
                 AssetGuidTypeIndex index = new();

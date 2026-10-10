@@ -13,10 +13,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Extensions
     internal static class ListViewCompatExtensions
     {
         /// <summary>Subscribes to the list's selection-changed event across Unity versions.</summary>
-        internal static void RegisterSelectionChangedCompat(
-            this ListView listView,
-            Action<IEnumerable<object>> callback
-        )
+        internal static void RegisterSelectionChangedCompat(this ListView listView, Action<IEnumerable<object>> callback)
         {
 #if UNITY_2022_3_OR_NEWER
             listView.selectionChanged += callback;

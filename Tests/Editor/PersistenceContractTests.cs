@@ -58,12 +58,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static List<string> CollectPreferenceKeyValues()
         {
             List<string> preferenceKeyValues = new();
-            FieldInfo[] fields = typeof(DataVisualizerWindow).GetFields(
-                BindingFlags.Public
-                    | BindingFlags.NonPublic
-                    | BindingFlags.Static
-                    | BindingFlags.FlattenHierarchy
-            );
+            FieldInfo[] fields = typeof(DataVisualizerWindow).GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.FlattenHierarchy);
             foreach (FieldInfo field in fields)
             {
                 if (!field.IsLiteral || field.IsInitOnly || field.FieldType != typeof(string))
@@ -72,10 +67,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
 
                 string value = (string)field.GetValue(null);
-                if (
-                    value.StartsWith(PreferenceKeyPrefix, StringComparison.Ordinal)
-                    && PreferenceKeyPrefix.Length < value.Length
-                )
+                if (value.StartsWith(PreferenceKeyPrefix, StringComparison.Ordinal) && PreferenceKeyPrefix.Length < value.Length)
                 {
                     preferenceKeyValues.Add(value);
                 }
@@ -88,12 +80,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static List<string> CollectUserStateFieldNames()
         {
             List<string> fieldNames = new();
-            FieldInfo[] fields = typeof(DataVisualizerUserState).GetFields(
-                BindingFlags.Public
-                    | BindingFlags.NonPublic
-                    | BindingFlags.Instance
-                    | BindingFlags.DeclaredOnly
-            );
+            FieldInfo[] fields = typeof(DataVisualizerUserState).GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
             foreach (FieldInfo field in fields)
             {
                 if (field.IsStatic || field.IsInitOnly || field.IsLiteral || !field.IsPublic)
@@ -110,13 +97,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static string ReadConstString(Type declaringType, string fieldName)
         {
-            FieldInfo field = declaringType.GetField(
-                fieldName,
-                BindingFlags.Public
-                    | BindingFlags.NonPublic
-                    | BindingFlags.Static
-                    | BindingFlags.FlattenHierarchy
-            );
+            FieldInfo field = declaringType.GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.FlattenHierarchy);
             return field?.GetValue(null) as string;
         }
 
@@ -128,15 +109,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         */
         private static bool IsUnityBookkeepingProperty(string propertyName)
         {
-            return propertyName.StartsWith("m_", StringComparison.Ordinal)
-                || string.Equals(propertyName, "hideFlags", StringComparison.Ordinal);
+            return propertyName.StartsWith("m_", StringComparison.Ordinal) || string.Equals(propertyName, "hideFlags", StringComparison.Ordinal);
         }
 
-        private static void AssertContractSurface(
-            IReadOnlyList<string> expectedNames,
-            List<string> actualNames,
-            string surfaceName
-        )
+        private static void AssertContractSurface(IReadOnlyList<string> expectedNames, List<string> actualNames, string surfaceName)
         {
             HashSet<string> actual = new(actualNames, StringComparer.Ordinal);
             HashSet<string> expected = new(expectedNames, StringComparer.Ordinal);
@@ -179,11 +155,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "EditorPrefs key prefix changed; persisted user settings (window sizes, splitters) would reset on upgrade. Update PersistenceContractTests deliberately with a migration story."
             );
 
-            AssertContractSurface(
-                ExpectedPreferenceKeyValues,
-                CollectPreferenceKeyValues(),
-                "EditorPrefs keys"
-            );
+            AssertContractSurface(ExpectedPreferenceKeyValues, CollectPreferenceKeyValues(), "EditorPrefs keys");
         }
 
         [Test]
@@ -204,8 +176,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldExposeOnlyDeclaredFieldsWhenSettingsAssetIsSerialized()
         {
-            DataVisualizerSettings settings =
-                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
             using TestCleanupScope cleanup = new();
             cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
 
@@ -223,21 +194,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 actualFieldNames.Add(property.name);
             }
 
-            AssertContractSurface(
-                ExpectedSettingsAssetFieldNames,
-                actualFieldNames,
-                "settings asset serialized fields"
-            );
+            AssertContractSurface(ExpectedSettingsAssetFieldNames, actualFieldNames, "settings asset serialized fields");
         }
 
         [Test]
         public void ShouldExposeOnlyDeclaredFieldsWhenUserStateFormatIsEnumerated()
         {
-            AssertContractSurface(
-                ExpectedUserStateFieldNames,
-                CollectUserStateFieldNames(),
-                "user state persisted fields"
-            );
+            AssertContractSurface(ExpectedUserStateFieldNames, CollectUserStateFieldNames(), "user state persisted fields");
         }
 
         [Test]

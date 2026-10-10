@@ -56,11 +56,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             Add(title);
             SearchField = new TextField("Search") { name = "theme-search-field" };
             Add(SearchField);
-            Results = new ScrollView(ScrollViewMode.Vertical)
-            {
-                name = "theme-search-results",
-                style = { flexGrow = 1, minHeight = 0 },
-            };
+            Results = new ScrollView(ScrollViewMode.Vertical) { name = "theme-search-results", style = { flexGrow = 1, minHeight = 0 } };
             Add(Results);
             SearchField.RegisterValueChangedCallback(evt => SetFilter(evt.newValue));
             RegisterCallback<KeyDownEvent>(OnKeyDown, TrickleDown.TrickleDown);
@@ -80,10 +76,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             List<DataVisualizerThemeSettings> themes = new();
             HashSet<string> paths = new(StringComparer.Ordinal);
             Dictionary<string, int> nameCounts = new(StringComparer.OrdinalIgnoreCase);
-            string[] guids = AssetDatabase.FindAssets(
-                "t:DataVisualizerThemeSettings",
-                new[] { "Assets", "Packages" }
-            );
+            string[] guids = AssetDatabase.FindAssets("t:DataVisualizerThemeSettings", new[] { "Assets", "Packages" });
             foreach (string guid in guids)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
@@ -92,8 +85,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                     continue;
                 }
 
-                DataVisualizerThemeSettings theme =
-                    AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(path);
+                DataVisualizerThemeSettings theme = AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(path);
                 if (theme == null)
                 {
                     continue;
@@ -107,40 +99,22 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             themes.Sort(
                 (left, right) =>
                 {
-                    int comparison = StringComparer.OrdinalIgnoreCase.Compare(
-                        left.name,
-                        right.name
-                    );
+                    int comparison = StringComparer.OrdinalIgnoreCase.Compare(left.name, right.name);
                     if (comparison != 0)
                     {
                         return comparison;
                     }
 
                     comparison = StringComparer.Ordinal.Compare(left.name, right.name);
-                    return comparison != 0
-                        ? comparison
-                        : StringComparer.Ordinal.Compare(
-                            AssetDatabase.GetAssetPath(left),
-                            AssetDatabase.GetAssetPath(right)
-                        );
+                    return comparison != 0 ? comparison : StringComparer.Ordinal.Compare(AssetDatabase.GetAssetPath(left), AssetDatabase.GetAssetPath(right));
                 }
             );
-            List<ThemeDropdownItem> items = new(themes.Count + 1)
-            {
-                new(null, string.Empty, "Dx (Default / Reset)"),
-            };
+            List<ThemeDropdownItem> items = new(themes.Count + 1) { new(null, string.Empty, "Dx (Default / Reset)") };
             foreach (DataVisualizerThemeSettings theme in themes)
             {
                 string path = AssetDatabase.GetAssetPath(theme);
                 string displayName =
-                    1 < nameCounts[theme.name]
-                    || string.Equals(
-                        theme.name,
-                        items[0].DisplayName,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                        ? $"{theme.name} ({path})"
-                        : theme.name;
+                    1 < nameCounts[theme.name] || string.Equals(theme.name, items[0].DisplayName, StringComparison.OrdinalIgnoreCase) ? $"{theme.name} ({path})" : theme.name;
                 items.Add(new ThemeDropdownItem(theme, path, displayName));
             }
 
@@ -158,10 +132,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             for (int i = 0; i < Items.Count; ++i)
             {
                 ThemeDropdownItem item = Items[i];
-                if (
-                    item.DisplayName.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0
-                    && item.Path.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0
-                )
+                if (item.DisplayName.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0 && item.Path.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0)
                 {
                     continue;
                 }
@@ -221,13 +192,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 return;
             }
 
-            Highlight(
-                (int)
-                    Math.Max(
-                        0L,
-                        Math.Min(_filteredItems.Count - 1L, (long)_highlightedIndex + offset)
-                    )
-            );
+            Highlight((int)Math.Max(0L, Math.Min(_filteredItems.Count - 1L, (long)_highlightedIndex + offset)));
         }
 
         public void Cancel()

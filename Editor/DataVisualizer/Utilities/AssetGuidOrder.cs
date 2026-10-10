@@ -6,18 +6,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
     public static class AssetGuidOrder
     {
-        public static List<string> MergeLoadedOrder(
-            IReadOnlyList<string> canonicalOrder,
-            IReadOnlyList<string> loadedOrder
-        )
+        public static List<string> MergeLoadedOrder(IReadOnlyList<string> canonicalOrder, IReadOnlyList<string> loadedOrder)
         {
             List<string> mergedOrder = CopyDistinct(canonicalOrder);
             List<string> distinctLoadedOrder = CopyDistinct(loadedOrder);
             HashSet<string> canonicalLookup = new(mergedOrder, StringComparer.OrdinalIgnoreCase);
-            HashSet<string> loadedLookup = new(
-                distinctLoadedOrder,
-                StringComparer.OrdinalIgnoreCase
-            );
+            HashSet<string> loadedLookup = new(distinctLoadedOrder, StringComparer.OrdinalIgnoreCase);
             List<string> loadedCanonicalGuids = new();
             foreach (string guid in distinctLoadedOrder)
             {
@@ -59,11 +53,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public static bool PlaceAfter(List<string> order, string guid, string anchorGuid)
         {
-            if (
-                order == null
-                || string.IsNullOrWhiteSpace(guid)
-                || string.Equals(guid, anchorGuid, StringComparison.OrdinalIgnoreCase)
-            )
+            if (order == null || string.IsNullOrWhiteSpace(guid) || string.Equals(guid, anchorGuid, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
