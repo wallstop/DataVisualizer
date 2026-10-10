@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "displayName": "DxVisualizer",
   "description": "Your game data, one window. Find, inspect, organize, and edit ScriptableObject data in one Unity editor window.",
-  "dependencies": {},
   "unity": "2021.3",
   "keywords": [
     "DxVisualizer",
@@ -59,42 +58,11 @@
     "unity:mcp:host": "node .llm/mcp/unity-mcp-host.mjs",
     "unity:mcp:doctor": "node .llm/mcp/unity-mcp-doctor.mjs",
     "tools:install": "bash .devcontainer/install-npm-tools.sh",
-    "ai:backends:install": "bash .devcontainer/ai-backends.sh install"
+    "ai:backends:install": "bash .devcontainer/ai-backends.sh install",
+    "format:md": "prettier --write \"**/*.md\"",
+    "format:md:check": "prettier --check \"**/*.md\""
+  },
+  "devDependencies": {
+    "prettier": "3.9.9"
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
