@@ -141,6 +141,31 @@ $cases = @(
         VerbosePattern = 'entry 1: 45'
     }
     [pscustomobject]@{
+        # Every Markdown list marker starts a measured entry; a marker the
+        # lint did not recognize would sit outside the cap instead of
+        # failing it. Dash and star render at 19, digit at 20 ('digit' has
+        # one more letter).
+        Name = 'MeasuresEveryBulletMarkerShape'
+        UnreleasedBody = @(
+            '- Add the dash entry.',
+            '* Add the star entry.',
+            '1. Add the digit entry.'
+        ) -join "`n"
+        ExpectPass = $true
+        ExpectFailure = ''
+        VerbosePattern = '3 entry\(ies\)'
+        ExtraPattern = 'entry 3: 20'
+    }
+    [pscustomobject]@{
+        # The vacuous-pass shape: an ordered entry as the only content must
+        # still be measured and fail, not be ignored.
+        Name = 'Fails_WhenAnOrderedEntryIsTheOnlyContent'
+        UnreleasedBody = "1. $overCapEntry"
+        ExpectPass = $false
+        ExpectFailure = 'measures 301 rendered characters, over the 300 cap'
+        VerbosePattern = ''
+    }
+    [pscustomobject]@{
         # Every exclusion together, the shape the shipped entries use.
         Name = 'Passes_WhenARealisticEntryUsesEveryExclusion'
         # Single-quoted so the backticks stay literal in the fixture.

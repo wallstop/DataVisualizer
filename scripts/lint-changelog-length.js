@@ -51,7 +51,10 @@ const CAP = 300;
 const UNRELEASED_HEADING = /^## \[Unreleased\]\s*$/;
 const SECTION_HEADING = /^## /;
 const SUBSECTION_HEADING = /^### /;
-const BULLET = /^- /;
+// Every Markdown list marker: an entry the lint did not recognize would sit
+// outside the cap instead of failing it, so all three unordered markers and
+// both ordered forms count as entries.
+const BULLET = /^(?:[-*+]|\d+[.)]) /;
 
 // An inline link renders as its text; the target does not count.
 const INLINE_LINK = /\[([^[\]]*)\]\([^()]*\)/g;
@@ -115,9 +118,9 @@ function extractUnreleased(lines, source) {
 }
 
 /*
-    One entry per top-level bullet. A soft-wrapped continuation line joins the
-    bullet above it; a blank line or a subsection heading ends the entry, and
-    the nearest '### ' heading names it in the report.
+    One entry per top-level list item. A soft-wrapped continuation line joins
+    the item above it; a blank line or a subsection heading ends the entry,
+    and the nearest '### ' heading names it in the report.
 */
 function extractEntries(sectionLines) {
     const entries = [];
@@ -134,8 +137,9 @@ function extractEntries(sectionLines) {
             current = null;
             continue;
         }
-        if (BULLET.test(line)) {
-            current = { subsection, lines: [line.slice(2)] };
+        const bullet = BULLET.exec(line);
+        if (bullet !== null) {
+            current = { subsection, lines: [line.slice(bullet[0].length)] };
             entries.push(current);
             continue;
         }
