@@ -1,9 +1,33 @@
+# Runs the harness self-tests, optionally narrowed to named test files by the
+# fast check's surface selection. An empty -Names runs everything. Names may
+# arrive comma-joined because pwsh -File cannot carry array arguments. A name
+# that does not exist fails safe to the full suite, so a stale mapping or a
+# typo can never silently run a zero-test suite.
+param(
+    [string[]]$Names = @()
+)
+
 Set-StrictMode -Version 2.0
+
+$Names = @($Names | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 
 $tests = Get-ChildItem -Path $PSScriptRoot -Filter 'test-*.ps1' | Sort-Object -Property Name
 if ($tests.Count -eq 0) {
     Write-Host 'No self-tests found.'
     exit 0
+}
+
+if ($Names.Count -gt 0) {
+    $unknown = @($Names | Where-Object { $tests.Name -notcontains $_ })
+    if ($unknown.Count -gt 0) {
+        Write-Host "[run-all] unknown test file(s) requested: $($unknown -join ', '); running the full suite."
+        $Names = @()
+    }
+}
+
+if ($Names.Count -gt 0) {
+    $tests = @($tests | Where-Object { $Names -contains $_.Name })
+    Write-Host ("[run-all] surface selection: {0} test file(s): {1}" -f $tests.Count, ($tests.Name -join ', '))
 }
 
 $failed = 0
