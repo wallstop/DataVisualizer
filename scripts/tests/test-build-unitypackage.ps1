@@ -91,9 +91,17 @@ function Get-FixtureFileHash {
 
 function Get-ArchiveMembers {
     param([string]$Archive)
-    return (& tar -tzf $Archive) |
-        ForEach-Object { $_.Trim() } |
-        Where-Object { $_ -ne '' }
+    # GNU tar parses the first colon in the -f archive name as a remote host spec, so a
+    # Windows drive path fails with 'Cannot connect to C: resolve failed'; list from the
+    # archive's directory under its leaf name, mirroring runTar in the validator.
+    Push-Location -LiteralPath (Split-Path -Parent $Archive)
+    try {
+        return (& tar -tzf (Split-Path -Leaf $Archive)) |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ -ne '' }
+    } finally {
+        Pop-Location
+    }
 }
 
 Invoke-TestCase 'Builds_DeterministicArchive_WithStandardGuidEntries' {
@@ -144,7 +152,13 @@ Invoke-TestCase 'Builds_DeterministicArchive_WithStandardGuidEntries' {
 
         $extract = Join-Path $root 'extract'
         New-Item -ItemType Directory -Path $extract -Force | Out-Null
-        tar -xzf $archive -C $extract
+        # Same GNU tar -f colon caveat as Get-ArchiveMembers above.
+        Push-Location -LiteralPath (Split-Path -Parent $archive)
+        try {
+            tar -xzf (Split-Path -Leaf $archive) -C $extract
+        } finally {
+            Pop-Location
+        }
         if ($LASTEXITCODE -ne 0) { throw 'tar extraction failed' }
         foreach ($expected in $expectedGuids) {
             $pathnameContent = [System.IO.File]::ReadAllText((Join-Path $extract "$($expected.Guid)/pathname"))

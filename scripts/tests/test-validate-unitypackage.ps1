@@ -158,7 +158,15 @@ function New-HandBuiltArchive {
     foreach ($name in $MemberOrder) {
         Write-MemberFile -Stage $Stage -Name $name -Content $Members[$name]
     }
-    & tar -czf $ArchivePath -C $Stage @MemberOrder
+    # GNU tar parses the first colon in the -f archive name as a remote host spec, so a
+    # Windows drive path fails with 'Cannot connect to C: resolve failed'; stage from the
+    # archive's directory under its leaf name, mirroring runTar in the validator.
+    Push-Location -LiteralPath (Split-Path -Parent $ArchivePath)
+    try {
+        & tar -czf (Split-Path -Leaf $ArchivePath) -C $Stage @MemberOrder
+    } finally {
+        Pop-Location
+    }
     if ($LASTEXITCODE -ne 0) { throw 'tar staging failed for the hand-built fixture archive' }
 }
 
