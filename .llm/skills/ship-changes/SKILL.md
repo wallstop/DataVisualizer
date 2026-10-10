@@ -52,28 +52,31 @@ Run the narrowest sufficient layer; escalate on failure:
 
 ## Pull Requests
 
-Use this body shape. Confirm CSharpier, `npm pack`, and both Unity test suites
-before handoff.
+GitHub pre-fills the body from `.github/pull_request_template.md` (Why/What +
+Type of Change + Checklist); keep that shape. Confirm CSharpier, `npm pack`,
+and both Unity test suites before handoff.
 
 ```markdown
-<One sentence: what changed and why.>
+**Why:** <The problem this PR solves. One or two plain sentences. Name what was
+broken or missing and for whom. No implementation detail.>
 
-## Behavior
-<Up to two bullets.>
+**What:**
 
-## Validation
-<Up to two bullets: tests run, captures.>
+- <One-line bullet of an actual change.>
+- <One-line bullet.>
 
-## Risk / Rollback
-<One line risk. One line revert plan.>
+Fixes #<issue>
 ```
 
 Rules (see `.llm/context.md`):
 
-- Body stays under 15 lines. Every section: bullets, not paragraphs.
-- No history, no diff narration, no "this PR", no restating commits.
-- Details live in commits, tests, and issues; link to them, do not paste.
-- UI tweaks add one screenshot or GIF under Validation.
+- Body narrative stays under 15 lines; every bullet is one line.
+- No Behavior/Validation/Risk headers, no validation transcripts, no risk or
+  rollback essays, no history, no diff narration, no "this PR". The template's
+  Type of Change and Checklist sections are the only allowed headers.
+- Validation evidence, limitations, and risk go in the commit body, tests, and
+  issues; link to them, do not paste them.
+- UI tweaks add one screenshot or GIF after the bullets.
 
 Never explicitly request a review from a person, team, bot, or automation. Do not
 mention a reviewer in a comment, call a reviewer-request API, or otherwise trigger a

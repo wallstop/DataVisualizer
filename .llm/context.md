@@ -262,10 +262,10 @@ pre-commit config on staged `.cs` files.
   PR body.
 - Short imperative subjects with the subsystem up front (for example
   "Fix settings persistence dirty state"); reference related issue IDs in the body.
-- Keep PR bodies scannable: one-sentence summary of what and why, then the
-  template in `ship-changes` (Behavior, Validation, Risk/Rollback), at most two
-  bullets per section, 15 lines total. No paragraphs, history, or diff narration;
-  details live in commits, tests, and issues. Add screenshots or GIFs for UI tweaks.
+- Lead PR bodies with the problem: `**Why:**` states the defect or need in user
+  terms, `**What:**` lists one-line change bullets, then `Fixes`/`Refs` lines
+  (template in `ship-changes`). Cap 15 lines; no headers beyond Why/What, no
+  validation transcripts or risk essays; details live in commits, tests, issues.
 - Confirm CSharpier formatting, `npm pack`, and both Unity test suites before
   requesting review.
 - Version bumps: change `package.json`, then run `npm run lint:llm:fix` so the
