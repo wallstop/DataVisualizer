@@ -27,6 +27,11 @@ exclude_docs: |
 theme:
   name: material
   custom_dir: docs/overrides
+  # The mark and favicon come from the brand set (issue #150), rendered in
+  # the Dx palette. The dark logo is legible on both the ink default and the
+  # paper light scheme, so one variant serves both.
+  logo: images/brand/dxvisualizer-mark.svg
+  favicon: images/brand/favicon-32.png
   features:
     - navigation.sections
     - navigation.top
