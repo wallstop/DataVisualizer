@@ -29,7 +29,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return (T)field.GetValue(target);
         }
 
-        private static void InvokePrivate(object target, string methodName)
+        private static void InvokePrivate(
+            object target,
+            string methodName,
+            params object[] arguments
+        )
         {
             MethodInfo method = target
                 .GetType()
@@ -38,7 +42,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
                 );
             Assert.That(method != null, $"The {methodName} method must exist.");
-            method.Invoke(target, null);
+            method.Invoke(target, arguments);
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            FieldInfo field = target
+                .GetType()
+                .GetField(
+                    fieldName,
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+                );
+            Assert.That(field != null, $"The {fieldName} field must exist.");
+            field.SetValue(target, value);
         }
 
         private static DataVisualizerThemeSettings CreateTheme(
@@ -116,7 +132,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             dracula.name = "Dracula";
             return new ThemeDropdownItem[]
             {
-                new(null, string.Empty, "Classic (Default / Reset)"),
+                new(null, string.Empty, "Dx (Default / Reset)"),
                 new(nord, "Assets/ColdPalette/First.asset", "Nord"),
                 new(dracula, "Packages/NightPalette/Second.asset", "Dracula"),
             };
@@ -159,6 +175,60 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        private static Dictionary<string, Color> ParseDxRootTokens()
+        {
+            string[] lines = System.IO.File.ReadAllText(GetThemeFolder() + "Dx.uss").Split('\n');
+            Dictionary<string, Color> tokens = new(System.StringComparer.Ordinal);
+            foreach (string rawLine in lines)
+            {
+                string line = rawLine.Trim();
+                if (!line.StartsWith("--dataviz-", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                int valueStart = line.IndexOf(':');
+                if (valueStart < 0 || !line.EndsWith(";", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string value = line[(valueStart + 1)..].TrimEnd(';').Trim();
+                if (
+                    value.StartsWith("#", System.StringComparison.Ordinal)
+                    && ColorUtility.TryParseHtmlString(value, out Color color)
+                )
+                {
+                    tokens[line[..valueStart].Trim()] = color;
+                }
+            }
+
+            return tokens;
+        }
+
+        private static double SrgbChannelToLinear(double channel)
+        {
+            return channel <= 0.03928
+                ? channel / 12.92
+                : System.Math.Pow((channel + 0.055) / 1.055, 2.4);
+        }
+
+        private static double RelativeLuminance(Color color)
+        {
+            return 0.2126 * SrgbChannelToLinear(color.r)
+                + 0.7152 * SrgbChannelToLinear(color.g)
+                + 0.0722 * SrgbChannelToLinear(color.b);
+        }
+
+        private static double ContrastRatio(Color first, Color second)
+        {
+            double firstLuminance = RelativeLuminance(first);
+            double secondLuminance = RelativeLuminance(second);
+            double lighter = System.Math.Max(firstLuminance, secondLuminance);
+            double darker = System.Math.Min(firstLuminance, secondLuminance);
+            return (lighter + 0.05) / (darker + 0.05);
+        }
+
         [Test]
         public void ShouldDiscoverShippedAssetsWithDefaultResetFirstAndUniquePaths()
         {
@@ -167,7 +237,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.IsTrue(items[0].IsDefault);
             Assert.That(items[0].Theme == null);
             Assert.AreEqual(string.Empty, items[0].Path);
-            Assert.AreEqual("Classic (Default / Reset)", items[0].DisplayName);
+            Assert.AreEqual("Dx (Default / Reset)", items[0].DisplayName);
             HashSet<string> paths = new(System.StringComparer.Ordinal);
             for (int index = 1; index < items.Count; index++)
             {
@@ -189,7 +259,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             string folder = GetThemeFolder();
-            foreach (string name in new[] { "Classic", "Compact", "Dracula", "Minimal", "Nord" })
+            foreach (
+                string name in new[] { "Classic", "Compact", "Dracula", "Dx", "Minimal", "Nord" }
+            )
             {
                 string path = folder + name + ".asset";
                 DataVisualizerThemeSettings theme =
@@ -237,7 +309,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Button row = dropdown.Results.Q<Button>("theme-search-result");
             Assert.AreEqual(items[expectedIndex].DisplayName, row.text);
             Assert.AreEqual(
-                expectedIndex == 0 ? "Restore the Classic appearance." : items[expectedIndex].Path,
+                expectedIndex == 0 ? "Restore the Dx appearance." : items[expectedIndex].Path,
                 row.tooltip
             );
             Assert.That(dropdown.Results.Q<Label>("theme-search-empty") == null);
@@ -871,7 +943,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             restored.HydrateFrom(settings);
             restored = DataVisualizerUserState.FromJson(JsonUtility.ToJson(restored));
             Assert.AreEqual(guid, restored.themeGuid);
-            Assert.That(DataVisualizerThemeSelection.Resolve(restored.themeGuid) == null);
+            if (string.IsNullOrEmpty(guid))
+            {
+                Assert.AreSame(
+                    DataVisualizerThemeSelection.ResolveDefault(),
+                    DataVisualizerThemeSelection.Resolve(restored.themeGuid)
+                );
+            }
+            else
+            {
+                Assert.That(DataVisualizerThemeSelection.Resolve(restored.themeGuid) == null);
+            }
+
             Assert.AreEqual(guid, restored.themeGuid);
         }
 
@@ -880,7 +963,54 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             DataVisualizerUserState state = DataVisualizerUserState.FromJson("{}");
             Assert.IsTrue(string.IsNullOrEmpty(state.themeGuid));
-            Assert.That(DataVisualizerThemeSelection.Resolve(state.themeGuid) == null);
+            Assert.AreSame(
+                DataVisualizerThemeSelection.ResolveDefault(),
+                DataVisualizerThemeSelection.Resolve(state.themeGuid)
+            );
+        }
+
+        [Test]
+        public void ShouldResolveEmptySelectionToTheShippedDxDefault()
+        {
+            DataVisualizerThemeSettings defaultTheme =
+                DataVisualizerThemeSelection.ResolveDefault();
+            Assert.That(defaultTheme != null, "The shipped Dx default theme asset must exist.");
+            Assert.AreEqual("Dx", defaultTheme.name);
+            Assert.That(
+                defaultTheme.StyleSheet != null,
+                "The shipped Dx default theme must reference its stylesheet."
+            );
+            Assert.AreEqual(
+                GetThemeFolder() + "Dx.asset",
+                AssetDatabase.GetAssetPath(defaultTheme)
+            );
+            Assert.AreSame(
+                defaultTheme,
+                DataVisualizerThemeSelection.Resolve(DataVisualizerThemeSelection.DefaultThemeGuid)
+            );
+            Assert.AreSame(defaultTheme, DataVisualizerThemeSelection.Resolve(string.Empty));
+            Assert.AreSame(defaultTheme, DataVisualizerThemeSelection.Resolve(null));
+        }
+
+        [TestCase("--dataviz-text", "--dataviz-background")]
+        [TestCase("--dataviz-muted", "--dataviz-background")]
+        [TestCase("--dataviz-on-accent", "--dataviz-accent")]
+        public void ShouldKeepDxTextContrastReadable(string foregroundToken, string backgroundToken)
+        {
+            Dictionary<string, Color> tokens = ParseDxRootTokens();
+            Assert.That(
+                tokens.TryGetValue(foregroundToken, out Color foreground),
+                $"The Dx theme must define {foregroundToken}."
+            );
+            Assert.That(
+                tokens.TryGetValue(backgroundToken, out Color background),
+                $"The Dx theme must define {backgroundToken}."
+            );
+            Assert.That(
+                ContrastRatio(foreground, background),
+                Is.GreaterThanOrEqualTo(4.5),
+                $"{foregroundToken} on {backgroundToken} must meet 4.5:1."
+            );
         }
 
         [Test]
@@ -1041,6 +1171,115 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 root.styleSheets.count,
                 "A fresh reset after Cleanup must be a no-op."
             );
+        }
+
+        [Test]
+        public void ShouldOpenFreshWindowInDxAndLandResetOnDxWhileKeepingExplicitSelection()
+        {
+            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField(
+                "Instance",
+                BindingFlags.Static | BindingFlags.NonPublic
+            );
+            Assert.That(instanceField != null, "The window Instance field must exist.");
+            object previousInstance = instanceField.GetValue(null);
+            string tempDirectory = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "DataVisualizerThemeResetTests-" + System.IO.Path.GetRandomFileName()
+            );
+            System.IO.Directory.CreateDirectory(tempDirectory);
+            using TestCleanupScope cleanup = new();
+            /*
+                Registered first, so it runs last: the window may save user
+                state while it is destroyed, before the temp directory goes.
+            */
+            cleanup.Defer(() => System.IO.Directory.Delete(tempDirectory, true));
+            cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
+            cleanup.Defer(() => instanceField.SetValue(null, previousInstance));
+            DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
+
+            /*
+                In-memory settings and user state keep the host project's saved
+                theme out of this test. The state file path points at a temp
+                directory so the user-state persistence path writes there
+                instead of the host's persistentDataPath.
+            */
+            DataVisualizerSettings settings =
+                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            cleanup.Defer(() => Object.DestroyImmediate(settings));
+            string userStateFilePath = System.IO.Path.Combine(
+                tempDirectory,
+                "DataVisualizerUserState.json"
+            );
+            SetPrivateField(window, "_settings", settings);
+            SetPrivateField(window, "_userState", new DataVisualizerUserState());
+            SetPrivateField(window, "_userStateFilePath", userStateFilePath);
+
+            DataVisualizerThemeSettings defaultTheme =
+                DataVisualizerThemeSelection.ResolveDefault();
+            Assert.That(defaultTheme != null, "The shipped Dx default theme asset must exist.");
+            StyleSheet defaultSheet = defaultTheme.StyleSheet;
+            DataVisualizerThemeSettings classic =
+                AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
+                    GetThemeFolder() + "Classic.asset"
+                );
+            Assert.That(classic != null, "The shipped Classic theme asset must exist.");
+            string classicGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(classic));
+
+            window.CreateGUI();
+            VisualElement root = window.rootVisualElement;
+            Assert.AreEqual(
+                "Dx",
+                root.Q<Button>("theme-field").text,
+                "A window with no saved theme must open in Dx."
+            );
+            Assert.IsTrue(root.styleSheets.Contains(defaultSheet));
+
+            InvokePrivate(window, "SelectTheme", classic);
+            Assert.AreEqual("Classic", root.Q<Button>("theme-field").text);
+            Assert.AreEqual(
+                classicGuid,
+                ReadPrivateField<DataVisualizerUserState>(window, "_userState").themeGuid
+            );
+            Assert.AreEqual(
+                classicGuid,
+                DataVisualizerUserState
+                    .FromJson(System.IO.File.ReadAllText(userStateFilePath))
+                    .themeGuid
+            );
+            Assert.IsFalse(
+                root.styleSheets.Contains(defaultSheet),
+                "Selecting Classic must replace the applied Dx sheet."
+            );
+
+            InvokePrivate(window, "ResetTheme");
+            Assert.AreEqual("Dx", root.Q<Button>("theme-field").text);
+            Assert.IsTrue(root.styleSheets.Contains(defaultSheet));
+            Assert.That(
+                string.IsNullOrEmpty(
+                    ReadPrivateField<DataVisualizerUserState>(window, "_userState").themeGuid
+                )
+            );
+            Assert.IsTrue(
+                string.IsNullOrEmpty(
+                    DataVisualizerUserState
+                        .FromJson(System.IO.File.ReadAllText(userStateFilePath))
+                        .themeGuid
+                )
+            );
+
+            /*
+                Selecting the Dx asset itself must keep an explicit selection:
+                the saved GUID becomes the Dx asset's GUID, not the empty
+                default selection.
+            */
+            InvokePrivate(window, "SelectTheme", defaultTheme);
+            Assert.AreEqual(
+                DataVisualizerThemeSelection.DefaultThemeGuid,
+                ReadPrivateField<DataVisualizerUserState>(window, "_userState").themeGuid
+            );
+            Assert.AreEqual("Dx", root.Q<Button>("theme-field").text);
+            Assert.IsTrue(root.styleSheets.Contains(defaultSheet));
         }
 
         [Test]

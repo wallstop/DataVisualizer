@@ -10,6 +10,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
     public sealed class DataVisualizerThemeSelection
     {
         /*
+            The shipped default theme asset. A missing or empty selection
+            resolves to it, so a fresh project opens in Dx and Reset Theme
+            lands there after clearing the saved selection. The GUID matches
+            the shipped `Dx.asset.meta`; the package path covers a GUID that
+            was regenerated after a collision.
+        */
+        public const string DefaultThemeGuid = "b3a7d91e0c5f4e62a8d4f17c2e6b9a05";
+
+        private const string DefaultThemePackagePath =
+            "Packages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/Styles/Dx.asset";
+
+        /*
             Sheets this class added, per root, so a later Apply through any
             selection instance can adopt (and remove) a theme entry it finds
             already applied. Static is what makes the #121 fix work: instance
@@ -35,9 +47,28 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
         public static DataVisualizerThemeSettings Resolve(string guid)
         {
             return string.IsNullOrEmpty(guid)
-                ? null
+                ? ResolveDefault()
                 : AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
                     AssetDatabase.GUIDToAssetPath(guid)
+                );
+        }
+
+        /*
+            An explicit selection that points at a deleted asset stays broken
+            (null, bare package style) and keeps its saved GUID, matching the
+            pre-default semantics. Only a missing or empty selection resolves
+            to the default.
+        */
+        public static DataVisualizerThemeSettings ResolveDefault()
+        {
+            DataVisualizerThemeSettings theme =
+                AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
+                    AssetDatabase.GUIDToAssetPath(DefaultThemeGuid)
+                );
+            return theme != null
+                ? theme
+                : AssetDatabase.LoadAssetAtPath<DataVisualizerThemeSettings>(
+                    DefaultThemePackagePath
                 );
         }
 

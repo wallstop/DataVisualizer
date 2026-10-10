@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add the Dx theme and make it the default: a fresh window opens in Dx and
+  Reset Theme returns to it. Explicit selections survive, and a missing Dx
+  asset falls back to the package style (#148).
+
 ### Changed
 
 - Renamed to DxVisualizer. The display name, window title, and menu item
