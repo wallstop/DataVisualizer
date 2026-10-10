@@ -133,7 +133,12 @@ function resolvePackedPaths(root, packageFile) {
         if (!existsSync(tarballPath)) {
             throw new Error(`Cannot read package file '${tarballPath}'.`);
         }
-        const result = spawnSync('tar', ['-tzf', tarballPath], { cwd: root, encoding: 'utf8' });
+        /*
+            GNU tar parses the first colon in the -f archive name as a remote host spec, so the
+            tarball is listed from its own directory under a colon-free relative name (see
+            validate-unitypackage.mjs runTar).
+        */
+        const result = spawnSync('tar', ['-tzf', basename(tarballPath)], { cwd: dirname(tarballPath), encoding: 'utf8' });
         if (result.error) {
             throw new Error(`Cannot run tar: ${result.error.message}`);
         }

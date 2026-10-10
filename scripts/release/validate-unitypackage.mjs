@@ -87,8 +87,14 @@ function readValue(argv, index, flag) {
     return argv[index];
 }
 
-function runTar(args, purpose) {
-    const result = spawnSync('tar', args, { encoding: 'utf8' });
+/*
+    GNU tar parses the first colon in the -f archive name as a remote host spec, so a
+    Windows drive path ('C:\...') fails with 'Cannot connect to C: resolve failed'.
+    Every tar invocation therefore runs from the archive's directory with a colon-free
+    relative name, which is portable across the GNU and BSD tar builds.
+*/
+function runTar(args, purpose, workingDirectory) {
+    const result = spawnSync('tar', args, { encoding: 'utf8', cwd: workingDirectory });
     if (result.error) {
         throw new Error(`Cannot run tar: ${result.error.message}`);
     }
@@ -136,7 +142,7 @@ function verifyChecksum(archivePath, checksumFile, archiveSha256) {
 }
 
 function listArchiveMembers(archivePath) {
-    const listing = runTar(['-tzf', archivePath], 'list the archive');
+    const listing = runTar(['-tzf', basename(archivePath)], 'list the archive', dirname(archivePath));
     const members = [];
     for (const line of listing.split(/\r?\n/)) {
         const entry = line.trim();
@@ -418,7 +424,7 @@ function main() {
     const grouped = groupMembers(listArchiveMembers(archivePath));
     const extractDirectory = mkdtempSync(join(tmpdir(), 'unitypackage-validate-'));
     try {
-        runTar(['-xzf', archivePath, '-C', extractDirectory], 'extract the archive');
+        runTar(['-xzf', basename(archivePath), '-C', extractDirectory], 'extract the archive', dirname(archivePath));
         const archiveEntries = resolveArchiveEntries(grouped, extractDirectory);
 
         verifyGitWorkTree(root);
