@@ -18,6 +18,10 @@ on:
       - ".pre-commit-config.yaml"
       - ".editorconfig"
       - ".gitattributes"
+      - ".prettierrc.json"
+      - ".prettierignore"
+      - ".csharpierrc"
+      - "**/*.md"
       - ".devcontainer/**"
       - "Editor/**/*.cs"
       - "Runtime/**/*.cs"
@@ -41,6 +45,10 @@ on:
       - ".pre-commit-config.yaml"
       - ".editorconfig"
       - ".gitattributes"
+      - ".prettierrc.json"
+      - ".prettierignore"
+      - ".csharpierrc"
+      - "**/*.md"
       - ".devcontainer/**"
       - "Editor/**/*.cs"
       - "Runtime/**/*.cs"
@@ -73,6 +81,12 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Install npm dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check Markdown formatting
+        run: npm run format:md:check
 
       - name: Lint LLM instructions
         run: pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput

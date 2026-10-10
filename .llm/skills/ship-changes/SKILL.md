@@ -15,6 +15,7 @@ Run the narrowest sufficient layer; escalate on failure:
 | --- | --- | --- |
 | Pre-commit hook | staged files | automatic (`pre-commit` + `.pre-commit-config.yaml`) |
 | C# member layout | all C# types | `npm run lint:csharp-member-order` |
+| Markdown formatting | tracked Markdown | `npm run format:md:check` |
 | Local gate | whole harness | `npm run lint:llm` |
 | Harness self-tests | scripts | `pwsh -NoProfile -File scripts/tests/run-all.ps1` |
 | Packaging | tarball integrity | `npm pack` |
@@ -27,6 +28,8 @@ Run the narrowest sufficient layer; escalate on failure:
    it automatically on staged C# files; verify with `-- check`). Then run
    `npm run lint:csharp-member-order`; the `:fix` command safely permutes complete
    member slices, but conditional/static-initialization barriers require manual review.
+1b. Changed `.md` files (except `.prettierignore`d skills): `npm run format:md`,
+   verify with `npm run format:md:check`.
 2. If any `.llm/**` file changed: `npm run lint:llm` (regenerates nothing; use
    `npm run lint:llm:fix` to auto-fix index drift and version sync, then review the
    diff and re-stage).
