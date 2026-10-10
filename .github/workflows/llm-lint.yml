@@ -106,6 +106,9 @@ jobs:
       - name: Enforce the line-ending contract
         run: node scripts/lint-line-endings.js --verbose
 
+      - name: Enforce the changelog entry length cap
+        run: node scripts/lint-changelog-length.js --verbose
+
       - name: Enforce assembly warning policy
         run: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
 

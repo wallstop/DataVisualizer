@@ -55,7 +55,8 @@ Run the narrowest sufficient layer; escalate on failure:
   Tests, CI, tooling, and release mechanics go in commits and PR bodies, never
   in `CHANGELOG.md`. Entries are one or two sentences, at most 300 rendered
   characters (issue references and link targets do not count), starting with
-  the verb its section names (`Add`, `Fix`), user-visible effect first. No
+  the verb its section names (`Add`, `Fix`), user-visible effect first;
+  `npm run lint:changelog-length` enforces the cap on `[Unreleased]`. No
   root-cause narration, mechanism, file paths, or "verified on" notes; the
   long version lives in the commit body or a docs guide. Never modify released
   sections; edit `[Unreleased]` entries in place. A fix for a defect that was
