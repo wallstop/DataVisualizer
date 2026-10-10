@@ -146,6 +146,7 @@ npm run format:md:check
 npm run lint:csharp-member-order
 npm run lint:csharp-null-assertions
 npm run lint:csharp-usings
+npm run lint:changelog-length
 pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
 pwsh -NoProfile -File scripts/generate-skills-index.ps1
 pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput

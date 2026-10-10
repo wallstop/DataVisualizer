@@ -55,6 +55,13 @@ repos:
         pass_filenames: false
         files: ^(\.editorconfig|\.gitattributes)$
         description: Fails when .editorconfig and .gitattributes disagree about the line ending CSharpier writes and git checks out.
+      - id: lint-changelog-length
+        name: Enforce the changelog entry length cap
+        entry: node scripts/lint-changelog-length.js
+        language: system
+        pass_filenames: false
+        files: ^CHANGELOG\.md$
+        description: Fails when a CHANGELOG [Unreleased] entry renders over 300 characters, excluding issue references and link targets.
       - id: lint-assembly-warnings
         name: Enforce assembly warning policy
         entry: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
