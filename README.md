@@ -1,15 +1,15 @@
-# Data Visualizer
+# DxVisualizer
 
 > **🤖 AI Assistance Disclosure**
 >
 > The early versions of Data Visualizer were heavily human-authored. More recent development has been a mix of human effort and AI assistance: human authors lead design,
 > architecture, and review, while AI tools assist with feature development, bug detection, performance optimization, and documentation.
 
-Data Visualizer streamlines working with ScriptableObject-heavy systems by centralizing asset management, inspection, and batch operations in a single window. Instead of hunting
+DxVisualizer streamlines working with ScriptableObject-heavy systems by centralizing asset management, inspection, and batch operations in a single window. Instead of hunting
 through the Project panel and repeatedly switching contexts, you get a namespace-organized view of all your data types with inline editing, batch operations, and workflow
 automation.
 
-Data Visualizer is free forever: no subscriptions, no paid upgrades, no feature-gated tiers. The full source is MIT-licensed, and every capability documented here ships in the free
+DxVisualizer is free forever: no subscriptions, no paid upgrades, no feature-gated tiers. The full source is MIT-licensed, and every capability documented here ships in the free
 package.
 
 This guide captures the key points from the companion [video walkthrough](https://youtu.be/3oUxUSKNyhw) while keeping the instructions project-agnostic. A browsable version of this
@@ -17,8 +17,8 @@ documentation, with per-topic pages, is published at <https://wallstop.github.io
 
 ## Getting Started
 
-Open **Tools → Wallstop Studios → Data Visualizer** and dock it alongside the Inspector. The tool persists your layout, selection, and tracked types between sessions, so you can
-jump back into your workflow immediately.
+Open **Tools → Wallstop Studios → DxVisualizer** and dock it alongside the Inspector. The tool persists your layout, selection, and tracked types between sessions, so you can jump
+back into your workflow immediately.
 
 ## Window Layout
 
@@ -72,12 +72,12 @@ Three controls above the Namespace panel populate your catalog:
 
 **Search Types** queries Unity's known ScriptableObject types. Add individual types or entire namespaces in one operation.
 
-**Scan Asset Folder** crawls a folder recursively, discovering all ScriptableObject types and wiring up existing instances. Ideal for bootstrapping Data Visualizer on established
+**Scan Asset Folder** crawls a folder recursively, discovering all ScriptableObject types and wiring up existing instances. Ideal for bootstrapping DxVisualizer on established
 projects.
 
 **Scan Scripts Folder** targets source folders containing ScriptableObject classes. Use this when you've written new types but haven't created any assets yet.
 
-Removing types or namespaces is non-destructive—it only stops Data Visualizer from tracking them. Your assets remain untouched on disk.
+Removing types or namespaces is non-destructive—it only stops DxVisualizer from tracking them. Your assets remain untouched on disk.
 
 Organize the catalog to match your team's mental model. The structure persists across sessions, so everyone can navigate consistently.
 
@@ -102,14 +102,14 @@ removes its labels, and the filter re-applies immediately.
 ![Settings popover with persistence toggles and data folder field](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-settings.png)
 _Settings popover. Regenerated from the live window by the docs capture pipeline._
 
-**Persist State in UserState** (the default) stores the selected namespace and type, the selected object per type, namespace, type, and object ordering, collapse state, tracked
-types, per-type label filters, and the per-type processor scope in a per-user JSON file instead of a shared project asset. Each developer keeps a private arrangement and version
-control stays free of layout churn.
+With **Persist State in Settings Asset** off (the default), the window stores the selected namespace and type, the selected object per type, namespace, type, and object ordering,
+collapse state, tracked types, per-type label filters, and the per-type processor scope in a per-user JSON file instead of a shared project asset. Each developer keeps a private
+arrangement and version control stays free of layout churn.
 
-Turning the setting off stores the same state inside a `DataVisualizerSettings` asset in the project, which suits a team that wants one shared arrangement. Data Visualizer creates
-one at `Assets/Editor/DataVisualizerSettings.asset` on first use if no such asset exists. Switching between the two copies the current state across.
+Turning **Persist State in Settings Asset** on stores the same state inside a `DataVisualizerSettings` asset in the project, which suits a team that wants one shared arrangement.
+DxVisualizer creates one at `Assets/Editor/DataVisualizerSettings.asset` on first use if no such asset exists. Switching between the two copies the current state across.
 
-**Select Active Object** syncs selection between Data Visualizer and Unity's Inspector window. Useful for cross-referencing assets in other editor windows.
+**Select Active Object** syncs selection between DxVisualizer and Unity's Inspector window. Useful for cross-referencing assets in other editor windows.
 
 **Data Folder** defines where new assets land, each in a per-type folder named after its full namespace. Click the path to ping the current folder, or browse to set a new default.
 
@@ -126,8 +126,8 @@ toggles, scrollers, and inspector surfaces. Action colors remain distinct: dange
 for cancel/move, and emphasis for alternate toggle modes. **Reset Theme** keeps the compact Data Folder button sizing, clears the saved selection, and restores Classic. Selecting
 the Classic asset gives the same appearance but keeps an explicit selection.
 
-Create a theme with **Assets → Create → Wallstop Studios → DataVisualizer → Data Visualizer Theme**. Assign a `.uss` asset to its **Style Sheet** field, then choose the theme in
-the window's **Settings → Theme** field. Keep your theme and stylesheet under an `Editor` folder; they are editor-only assets.
+Create a theme with **Assets → Create → Wallstop Studios → DxVisualizer → DxVisualizer Theme**. Assign a `.uss` asset to its **Style Sheet** field, then choose the theme in the
+window's **Settings → Theme** field. Keep your theme and stylesheet under an `Editor` folder; they are editor-only assets.
 
 The selected theme follows the existing project/user persistence setting. Switching that setting copies the current selection. Choose **Classic (Default / Reset)** or use **Reset
 Theme** to restore the package style. A missing theme falls back to the package style without discarding its saved GUID; reset clears that reference too.
@@ -145,9 +145,9 @@ For example, this stylesheet changes the accent, standard button states, window 
 }
 ```
 
-The override stylesheet is applied after the package stylesheet. Standard control rules are scoped to `.dataviz-root` inside the Data Visualizer window. Normal USS selector
-precedence still applies, and explicit inline styles take priority. Data color swatches and label colors remain data-driven; IMGUI and custom third-party inspector styling are not
-replaced. Use `Nord.uss` or `Dracula.uss` as palette references; copy them under your project's `Editor` folder before customizing rather than editing installed package files. The
+The override stylesheet is applied after the package stylesheet. Standard control rules are scoped to `.dataviz-root` inside the DxVisualizer window. Normal USS selector precedence
+still applies, and explicit inline styles take priority. Data color swatches and label colors remain data-driven; IMGUI and custom third-party inspector styling are not replaced.
+Use `Nord.uss` or `Dracula.uss` as palette references; copy them under your project's `Editor` folder before customizing rather than editing installed package files. The
 `--dataviz-background` and `--dataviz-input` tokens control the window and input surfaces. Semantic `--dataviz-danger`, `--dataviz-positive`, `--dataviz-secondary`,
 `--dataviz-warning`, and `--dataviz-emphasis` tokens each have a matching `--dataviz-on-*` foreground token for filled states. Theme changes apply to the open window without
 reselecting or reopening: editing the applied theme's stylesheet, changing its Style Sheet reference, or renaming/moving the assets updates immediately, and deleting the applied
@@ -155,7 +155,7 @@ theme falls back to the package style while keeping the saved GUID semantics.
 
 ## Extensibility
 
-Data Visualizer exposes several extension points for custom workflows:
+DxVisualizer exposes several extension points for custom workflows:
 
 **Attributes** let you override display namespace or friendly names on ScriptableObject classes. `[CustomDataVisualization(Namespace = "...", TypeName = "...")]` replaces the
 namespace group and the display name the window shows. Without it the window files a type under the last segment of its C# namespace. Useful when code organization doesn't match
@@ -173,7 +173,7 @@ Derived classes override only what they need—GUID generation, cache resets, co
 without writing per-asset editor scripts.
 
 **UI Toolkit Extensions** render custom UI alongside the default inspector. Return a `VisualElement` tree—graphs, thumbnails, validation badges, or any UI Toolkit component—from
-`IGUIProvider.BuildGUI` (or `BaseDataObject.BuildGUI`) and Data Visualizer slots it in below the inspector. The `DataVisualizerGUIContext` argument carries the selected asset's
+`IGUIProvider.BuildGUI` (or `BaseDataObject.BuildGUI`) and DxVisualizer slots it in below the inspector. The `DataVisualizerGUIContext` argument carries the selected asset's
 `SerializedObject` for writing changes back. Because the entire window runs on UI Toolkit, this approach scales to complex dashboards without leaving the unified workflow.
 
 **Processors** are plain `IDataProcessor` classes that the window discovers with no registration. `Name` labels the button, `Description` is its tooltip, `Accepts` lists the types

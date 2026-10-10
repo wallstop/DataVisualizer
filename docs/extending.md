@@ -169,7 +169,7 @@ Odin integration is optional. The package has no dependency on Odin and compiles
 ## Removing a type from the catalog
 
 Types deriving from `BaseDataObject` and types carrying `[CustomDataVisualization]` are managed for you and have no remove button. Other tracked types can be removed with the **X**
-on their row or their namespace header. Removing a type stops Data Visualizer from tracking it; the assets stay on disk.
+on their row or their namespace header. Removing a type stops DxVisualizer from tracking it; the assets stay on disk.
 
 ## Next steps
 

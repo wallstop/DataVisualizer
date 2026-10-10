@@ -19,7 +19,7 @@ Unity imports the package, and the menu item appears.
 
 ## Open the window
 
-Select **Tools → Wallstop Studios → Data Visualizer**, then dock it next to the Inspector. The window has three panels:
+Select **Tools → Wallstop Studios → DxVisualizer**, then dock it next to the Inspector. The window has three panels:
 
 - **Namespaces and types** (left) lists your ScriptableObject types by C# namespace. Expand a namespace, then select a type to load its instances.
 - **Objects** (center) lists every instance of the selected type. One row is selected at a time.
@@ -33,7 +33,7 @@ Three controls above the namespace panel fill the catalog:
 - **Scan Asset Folder** crawls a folder and registers the types and existing assets it finds. Use it to adopt a project that already has data.
 - **Scan Scripts Folder** registers types from source folders, which is the right choice before you create any assets.
 
-Removing a type or namespace only stops Data Visualizer from tracking it. Your assets stay on disk.
+Removing a type or namespace only stops DxVisualizer from tracking it. Your assets stay on disk.
 
 ![Manage-visible-types popover listing the project's ScriptableObject types](images/data-visualizer-import.png)
 
@@ -45,8 +45,8 @@ _Type search popover over the namespace panel. Regenerated from the live window 
 2. Select an instance in the middle panel.
 3. Edit a field in the right panel. The change saves immediately, as in Unity's own Inspector.
 
-Use the buttons above the object list to manage the selection: **Clone** writes a copy with a `Clone` suffix beside the original, **Rename** renames the asset on disk, **Move**
-retargets it to another folder, and **Delete** removes it after you confirm.
+Each object row carries four action buttons: **Clone** writes a copy with a `Clone` suffix beside the original, **Rename** renames the asset on disk, **Move** retargets it to
+another folder, and **Delete** removes it after you confirm.
 
 ## Create an asset
 
@@ -73,11 +73,12 @@ Ordering, collapse state, tracked types, and your selection persist between sess
 
 Under **Settings**, choose where that state lives:
 
-- **Persist State in UserState** (default) stores it in your local user cache, so each developer keeps a private arrangement and version control stays free of layout churn.
+- Leaving **Persist State in Settings Asset** off (the default) stores it in your local user cache, so each developer keeps a private arrangement and version control stays free of
+  layout churn.
 - The project settings asset stores the state in the repository, which suits a team that wants one shared arrangement.
 
-**Select Active Object** mirrors your Data Visualizer selection in Unity's Inspector, and **Data Folder** sets where new assets are created. New assets land in a per-type folder
-under it; clones stay beside their original.
+**Select Active Object** mirrors your DxVisualizer selection in Unity's Inspector, and **Data Folder** sets where new assets are created. New assets land in a per-type folder under
+it; clones stay beside their original.
 
 ## While the editor is playing
 

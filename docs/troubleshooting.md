@@ -54,7 +54,7 @@ preferred size is kept separately and restored when the space returns. See [Pane
 
 ## The arrangement did not load
 
-State lives in one of two places, chosen by **Persist State in UserState**:
+State lives in one of two places, chosen by the **Persist State in Settings Asset** toggle:
 
 - User state: `DataVisualizerUserState.json` in Unity's per-user persistent data path. Each developer has a private copy.
 - Project asset: a `DataVisualizerSettings` asset, created at `Assets/Editor/DataVisualizerSettings.asset` on first use if none exists.
@@ -101,5 +101,5 @@ recompile, and report up to date before the next edit, then re-run.
 - [Search and filtering](search-and-filter.md) — what each finder matches.
 - [Managing assets](managing-assets.md) — asset operations and processors.
 - [Organizing your data](organizing.md) — layout, themes, persistence.
-- [Issues](https://github.com/wallstop/DataVisualizer/issues) — known problems and where to report new ones. Data Visualizer is alpha software; a report with the console output and
+- [Issues](https://github.com/wallstop/DataVisualizer/issues) — known problems and where to report new ones. DxVisualizer is alpha software; a report with the console output and
   Unity version helps a lot.

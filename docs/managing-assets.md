@@ -51,7 +51,7 @@ The asset keeps its file name.
 ## Processors
 
 The **Processors** area sits below the namespace panel. It lists every `IDataProcessor` implementation in your project whose `Accepts` list covers the selected type, sorted by
-name. A processor with no `Accepts` list applies to every type. The collapsed header shows how many processors are listed; the area is hidden entirely when none apply.
+name. A processor with no `Accepts` list is never offered. The collapsed header shows how many processors are listed; the area is hidden entirely when none apply.
 
 Clicking a processor opens a confirmation that names the processor and the number of objects it will receive. Confirming runs `Process`, saves assets, refreshes the AssetDatabase,
 and schedules a window refresh. A processor that throws is caught: the exception is logged and an **Error running processor '…'** dialog reports the message. Other processors are

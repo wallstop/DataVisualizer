@@ -15,7 +15,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
         public string DataFolderPath => _dataFolderPath;
 
-        [Tooltip("If true, window state (selection, order, collapse) is saved in a special ScriptableObject. If false, state is saved within this settings asset file.")]
+        [Tooltip(
+            "If true, window state (selection, order, collapse) is saved within this settings asset file. If false, state is saved as JSON to a per-user file in Unity's persistent data path."
+        )]
         public bool persistStateInSettingsAsset;
 
         [Tooltip("If true, when selecting an Object, it will be selected in the Inspector.")]

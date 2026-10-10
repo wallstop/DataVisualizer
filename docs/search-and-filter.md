@@ -1,6 +1,6 @@
 # Search and filtering
 
-Data Visualizer has three separate finders. Each one narrows a different thing, and they do not affect each other.
+DxVisualizer has three separate finders. Each one narrows a different thing, and they do not affect each other.
 
 | Finder        | Where it is                                 | What it narrows               |
 | ------------- | ------------------------------------------- | ----------------------------- |
