@@ -247,6 +247,84 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
+        public IEnumerator ShouldRecordTemporaryClampWhenSystemShrinksWindowDuringSettle()
+        {
+            bool hadInitialSizeApplied = EditorPrefs.HasKey(InitialSizeAppliedKey);
+            bool initialSizeApplied = EditorPrefs.GetBool(InitialSizeAppliedKey);
+            bool hadPreferredSize = EditorPrefs.HasKey(PreferredWindowSizeKey);
+            string savedPreferredSize = EditorPrefs.GetString(PreferredWindowSizeKey);
+            bool hadTemporaryClampSize = EditorPrefs.HasKey(TemporaryWindowClampSizeKey);
+            string temporaryClampSize = EditorPrefs.GetString(TemporaryWindowClampSizeKey);
+            Vector2 preferredSize = new(1200f, 900f);
+            Vector2 systemShrunkSize = new(900f, 600f);
+
+            using (TestCleanupScope cleanup = new())
+            {
+                cleanup.Defer(() =>
+                {
+                    CloseDataVisualizerWindows();
+                    RestoreBoolPreference(InitialSizeAppliedKey, hadInitialSizeApplied, initialSizeApplied);
+                    RestoreStringPreference(PreferredWindowSizeKey, hadPreferredSize, savedPreferredSize);
+                    RestoreStringPreference(TemporaryWindowClampSizeKey, hadTemporaryClampSize, temporaryClampSize);
+                });
+                CloseDataVisualizerWindows();
+                yield return null;
+                EditorPrefs.SetBool(InitialSizeAppliedKey, false);
+                EditorPrefs.SetString(PreferredWindowSizeKey, MonitorUtility.SerializeSize(preferredSize));
+                EditorPrefs.DeleteKey(TemporaryWindowClampSizeKey);
+
+                DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
+                window.ShowUtility();
+                yield return null;
+                Assert.That(window.docked, Is.False);
+                DataVisualizerWindow.ShowWindow();
+
+                /*
+                    Wait for placement to settle (the completion task reopens the settle window
+                    one frame after the last geometry change) before simulating the OS shrink
+                    so the shrink lands inside the fresh settle window even on slow hosts.
+                */
+                int stableFrames = 0;
+                Vector2 lastSize = window.position.size;
+                double placementDeadline = EditorApplication.timeSinceStartup + 5d;
+                while (EditorApplication.timeSinceStartup < placementDeadline && stableFrames < 2)
+                {
+                    yield return null;
+                    Vector2 currentSize = window.position.size;
+                    stableFrames = MonitorUtility.IsSameSize(currentSize, lastSize) ? stableFrames + 1 : 0;
+                    lastSize = currentSize;
+                }
+
+                /*
+                    Placement that finishes at the preferred size can leave no temporary clamp
+                    behind, and the OS can still shrink the window afterwards (work-area
+                    clamping on Windows). The shrink's geometry change arrives inside the
+                    settle window and must record a clamp — created even though none was
+                    active — while the saved preferred size stays untouched.
+                */
+                EditorPrefs.DeleteKey(TemporaryWindowClampSizeKey);
+
+                // Above the base minimum on every host, so Unity accepts the shrink request.
+                window.position = new Rect(window.position.x, window.position.y, systemShrunkSize.x, systemShrunkSize.y);
+                double deadline = EditorApplication.timeSinceStartup + 5d;
+                while (EditorApplication.timeSinceStartup < deadline && !EditorPrefs.HasKey(TemporaryWindowClampSizeKey))
+                {
+                    yield return null;
+                }
+
+                Assert.That(
+                    EditorPrefs.HasKey(TemporaryWindowClampSizeKey),
+                    Is.True,
+                    "A system shrink during the settle window must record a temporary clamp even when no clamp was active."
+                );
+                Assert.That(MonitorUtility.TryParseSize(EditorPrefs.GetString(TemporaryWindowClampSizeKey), out Vector2 clampedSize), Is.True);
+                Assert.That(clampedSize, Is.EqualTo(systemShrunkSize));
+                Assert.That(EditorPrefs.GetString(PreferredWindowSizeKey), Is.EqualTo(MonitorUtility.SerializeSize(preferredSize)));
+                Assert.That(window.minSize, Is.EqualTo(MonitorUtility.CalculateWindowMinimumSize(new Vector2(860f, 480f), clampedSize, true)));
+            }
+        }
+
+        [UnityTest]
         public IEnumerator ShouldKeepRestoredWindowDockedWhenInitialPlacementPreferenceIsCleared()
         {
             bool hadInitialSizeApplied = EditorPrefs.HasKey(InitialSizeAppliedKey);

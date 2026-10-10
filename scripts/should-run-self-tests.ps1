@@ -61,10 +61,3 @@ if ($selfTestSelection.All) {
     Write-Output ($selfTestSelection.Names -join ',')
 }
 exit 0
-selfTestSelection = Get-SelfTestSelection -Paths $changed -AvailableTestFiles $testFiles
-if ($selfTestSelection.All) {
-    Write-Output 'all'
-} else {
-    Write-Output ($selfTestSelection.Names -join ',')
-}
-exit 0

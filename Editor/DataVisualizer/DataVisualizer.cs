@@ -424,7 +424,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Label _dataFolderPathDisplay;
         private bool _hasObservedInitialWindowGeometry;
         private bool _packagePlacementPending;
-        private float _windowSettleDeadline;
+        private double _windowSettleDeadline;
         private Vector2 _pendingPackagePreferredSize;
         private Vector2 _temporaryClampedWindowSize;
         private IVisualElementScheduledItem _packagePlacementCompletionTask;
@@ -1703,11 +1703,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 While the settle window is open, every geometry change is system settling (Unity's
                 initial layout size, OS work-area adjustments) and never a user resize, so the
                 saved preferred size survives opening and placement. A temporary clamp follows
-                the actual size so the relaxed minimum stays valid while it is active.
+                the actual size — created even when none was active, because placement can finish
+                at the preferred size and the OS can still shrink the window afterwards. Size
+                compares run before any EditorPrefs lookup so the settle path stays in memory.
             */
             if (EditorApplication.timeSinceStartup < _windowSettleDeadline)
             {
-                if (!docked && EditorPrefs.HasKey(PrefsTemporaryWindowClampSizeKey) && !MonitorUtility.IsSameSize(position.size, _temporaryClampedWindowSize))
+                if (!docked && !MonitorUtility.IsSameSize(position.size, _temporaryClampedWindowSize))
                 {
                     _temporaryClampedWindowSize = position.size;
                     WriteWindowSize(PrefsTemporaryWindowClampSizeKey, _temporaryClampedWindowSize);
