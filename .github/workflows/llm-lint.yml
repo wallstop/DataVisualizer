@@ -23,6 +23,8 @@ on:
       - ".csharpierrc"
       - "**/*.md"
       - ".devcontainer/**"
+      - ".mcp.json"
+      - ".env.local.example"
       - "Editor/**/*.cs"
       - "Runtime/**/*.cs"
       - "Tests/**/*.cs"
@@ -50,6 +52,8 @@ on:
       - ".csharpierrc"
       - "**/*.md"
       - ".devcontainer/**"
+      - ".mcp.json"
+      - ".env.local.example"
       - "Editor/**/*.cs"
       - "Runtime/**/*.cs"
       - "Tests/**/*.cs"
@@ -81,6 +85,15 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      # The lint job only installs prettier; caching the npm download skips
+      # most of the install on every run on both operating systems.
+      - name: Cache npm packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
 
       - name: Install npm dependencies
         run: npm install --no-audit --no-fund
