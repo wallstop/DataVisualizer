@@ -112,7 +112,25 @@ jobs:
       - name: Enforce assembly warning policy
         run: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
 
+      - name: Resolve the harness self-test scope
+        id: self-test-scope
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ -n "${BASE_SHA}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ] && ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            git fetch --depth=1 origin "${BASE_SHA}" || true
+          fi
+          verdict="$(pwsh -NoProfile -File scripts/should-run-self-tests.ps1 -BaseSha "${BASE_SHA:-}")"
+          echo "self-tests=${verdict}" >> "${GITHUB_OUTPUT}"
+
+      # The self-tests only verify the harness surface (scripts, .llm, CI and
+      # devcontainer wiring, package manifests). Skip them when that surface
+      # is untouched; every surface change still runs the full suite on both
+      # operating systems.
       - name: Run harness self-tests
+        if: steps.self-test-scope.outputs.self-tests != 'skip'
         run: pwsh -NoProfile -File scripts/tests/run-all.ps1
 
       - name: Enforce .llm file length limit

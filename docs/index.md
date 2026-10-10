@@ -1,11 +1,11 @@
-# Data Visualizer
+# DxVisualizer
 
-Data Visualizer is a Unity editor window for ScriptableObject-heavy projects. It gathers your data in one place: a catalog of your ScriptableObject types organized by namespace, a
+DxVisualizer is a Unity editor window for ScriptableObject-heavy projects. It gathers your data in one place: a catalog of your ScriptableObject types organized by namespace, a
 list of every instance of the selected type, and the inspector for the asset you picked. You edit, reorder, and batch-process data without moving between the Project panel and the
 Inspector.
 
-Data Visualizer is free forever. There are no subscriptions, no paid upgrades, and no feature-gated tiers. The full source is MIT-licensed, and every capability described here
-ships in the free package.
+DxVisualizer is free forever. There are no subscriptions, no paid upgrades, and no feature-gated tiers. The full source is MIT-licensed, and every capability described here ships
+in the free package.
 
 ![Data Visualizer layout with namespace, object, and inspector columns](images/data-visualizer-layout.png)
 
@@ -31,11 +31,11 @@ _Full window overview. Regenerated from the live window by the docs capture pipe
 2. Select **+**, then **Add package from git URL**.
 3. Enter `https://github.com/wallstop/DataVisualizer.git` and select **Add**.
 
-Open the window with **Tools → Wallstop Studios → Data Visualizer**. [Getting started](getting-started.md) walks through the first session.
+Open the window with **Tools → Wallstop Studios → DxVisualizer**. [Getting started](getting-started.md) walks through the first session.
 
 !!! note
 
-    Data Visualizer is alpha software. It was built for wallstop studios'
+    DxVisualizer is alpha software. It was built for wallstop studios'
     internal use, there is no support commitment yet, and breaking changes can
     arrive in any release. Feel free to use it, and report what breaks.
 

@@ -137,6 +137,9 @@ See the generated [Skills Index](./skills/index.md). Regenerate it after adding 
 
 ### Validation Ladder (Run After Each Change)
 
+Per-iteration speed: run `npm run check:fast` first (formats and lints only the files changed since `origin/main`, and skips harness self-tests when their surface is unchanged).
+The full ladder below gates review.
+
 ```bash
 dotnet tool restore
 dotnet tool run csharpier -- format Editor Runtime Tests

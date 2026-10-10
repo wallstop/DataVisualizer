@@ -13,6 +13,7 @@ Run the narrowest sufficient layer; escalate on failure:
 
 | Layer | Scope | Command |
 | --- | --- | --- |
+| Fast check | changed files | `npm run check:fast` |
 | Pre-commit hook | staged files | automatic (`pre-commit` + `.pre-commit-config.yaml`) |
 | C# member layout | all C# types | `npm run lint:csharp-member-order` |
 | Markdown formatting | tracked Markdown | `npm run format:md:check` |

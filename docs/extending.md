@@ -1,7 +1,7 @@
 # Extending the window
 
 The runtime assembly is part of the package and carries the extension surface, so your types compile against it in both the editor and a player build. Everything on this page is
-public API.
+public API. Code identifiers keep the `DataVisualizer` name — namespaces, types, and assemblies are unchanged by the rebrand, so your code needs no edits.
 
 ## Display attributes
 
@@ -169,7 +169,7 @@ Odin integration is optional. The package has no dependency on Odin and compiles
 ## Removing a type from the catalog
 
 Types deriving from `BaseDataObject` and types carrying `[CustomDataVisualization]` are managed for you and have no remove button. Other tracked types can be removed with the **X**
-on their row or their namespace header. Removing a type stops Data Visualizer from tracking it; the assets stay on disk.
+on their row or their namespace header. Removing a type stops DxVisualizer from tracking it; the assets stay on disk.
 
 ## Next steps
 
