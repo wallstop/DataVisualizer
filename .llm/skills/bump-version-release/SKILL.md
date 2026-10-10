@@ -35,8 +35,11 @@ preparation on a version that has already been bumped locally.
 
 - `CHANGELOG.md` is user-facing only: features, fixes, visible behavior. No
   tests, CI, tooling, or release mechanics. Write plain Simplified Technical
-  English. The GitHub Release notes are extracted from the released section,
-  so keep that section's copy release-ready.
+  English following the entry limits in
+  [ship-changes](../skills/ship-changes/SKILL.md): one or two sentences, at
+  most 300 rendered characters, verb-first, user effect first. The GitHub
+  Release notes are extracted from the released section, so keep that
+  section's copy release-ready.
 
 ## Dist-Tag Rules
 
