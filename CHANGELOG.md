@@ -9,11 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- A Dx theme for the window, and it is now the default: a fresh window with no
-  saved theme opens in Dx, and **Reset Theme** clears the saved selection and
-  lands on Dx. Explicit theme selections, including Classic, survive the
-  upgrade. If the Dx asset is missing, the window falls back to the package
-  style and keeps the saved GUID (#148).
+- Add the Dx theme and make it the default: a fresh window opens in Dx and
+  Reset Theme returns to it. Explicit selections survive, and a missing Dx
+  asset falls back to the package style (#148).
 
 ### Changed
 
