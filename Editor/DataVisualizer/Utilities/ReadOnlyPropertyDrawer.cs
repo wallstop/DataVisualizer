@@ -9,9 +9,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     [CustomPropertyDrawer(typeof(ReadOnlyAttribute))]
     internal sealed class DxReadOnlyPropertyDrawer : PropertyDrawer
     {
-        private static readonly ReusableDisposalScope<bool> GuiEnabledScopes = new(enabled =>
-            GUI.enabled = enabled
-        );
+        private static readonly ReusableDisposalScope<bool> GuiEnabledScopes = new(enabled => GUI.enabled = enabled);
 
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {

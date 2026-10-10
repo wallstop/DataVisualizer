@@ -20,16 +20,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             capture leaves the host's saved window state untouched, mirroring the hygiene of
             SplitterWidthPersistenceTests.
         */
-        private const string PrefsSplitterOuterKey =
-            "WallstopStudios.Editor.DataVisualizer.SplitterOuterFixedPaneWidth";
-        private const string PrefsSplitterInnerKey =
-            "WallstopStudios.Editor.DataVisualizer.SplitterInnerFixedPaneWidth";
-        private const string PrefsInitialSizeAppliedKey =
-            "WallstopStudios.Editor.DataVisualizer.InitialSizeApplied";
-        private const string PrefsPreferredWindowSizeKey =
-            "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
-        private const string PrefsTemporaryWindowClampSizeKey =
-            "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
+        private const string PrefsSplitterOuterKey = "WallstopStudios.Editor.DataVisualizer.SplitterOuterFixedPaneWidth";
+        private const string PrefsSplitterInnerKey = "WallstopStudios.Editor.DataVisualizer.SplitterInnerFixedPaneWidth";
+        private const string PrefsInitialSizeAppliedKey = "WallstopStudios.Editor.DataVisualizer.InitialSizeApplied";
+        private const string PrefsPreferredWindowSizeKey = "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
+        private const string PrefsTemporaryWindowClampSizeKey = "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
 
         private static string CreateCapturePath(string fileName)
         {
@@ -43,16 +38,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             bool hadInner = EditorPrefs.HasKey(PrefsSplitterInnerKey);
             float inner = hadInner ? EditorPrefs.GetFloat(PrefsSplitterInnerKey) : 0f;
             bool hadInitialSizeApplied = EditorPrefs.HasKey(PrefsInitialSizeAppliedKey);
-            bool initialSizeApplied =
-                hadInitialSizeApplied && EditorPrefs.GetBool(PrefsInitialSizeAppliedKey);
+            bool initialSizeApplied = hadInitialSizeApplied && EditorPrefs.GetBool(PrefsInitialSizeAppliedKey);
             bool hadPreferredWindowSize = EditorPrefs.HasKey(PrefsPreferredWindowSizeKey);
-            string preferredWindowSize = hadPreferredWindowSize
-                ? EditorPrefs.GetString(PrefsPreferredWindowSizeKey)
-                : null;
+            string preferredWindowSize = hadPreferredWindowSize ? EditorPrefs.GetString(PrefsPreferredWindowSizeKey) : null;
             bool hadTemporaryWindowClampSize = EditorPrefs.HasKey(PrefsTemporaryWindowClampSizeKey);
-            string temporaryWindowClampSize = hadTemporaryWindowClampSize
-                ? EditorPrefs.GetString(PrefsTemporaryWindowClampSizeKey)
-                : null;
+            string temporaryWindowClampSize = hadTemporaryWindowClampSize ? EditorPrefs.GetString(PrefsTemporaryWindowClampSizeKey) : null;
 
             cleanup.Defer(() =>
             {
@@ -67,16 +57,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     EditorPrefs.DeleteKey(PrefsInitialSizeAppliedKey);
                 }
 
-                RestoreStringPreference(
-                    PrefsPreferredWindowSizeKey,
-                    hadPreferredWindowSize,
-                    preferredWindowSize
-                );
-                RestoreStringPreference(
-                    PrefsTemporaryWindowClampSizeKey,
-                    hadTemporaryWindowClampSize,
-                    temporaryWindowClampSize
-                );
+                RestoreStringPreference(PrefsPreferredWindowSizeKey, hadPreferredWindowSize, preferredWindowSize);
+                RestoreStringPreference(PrefsTemporaryWindowClampSizeKey, hadTemporaryWindowClampSize, temporaryWindowClampSize);
             });
         }
 
@@ -112,14 +94,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AddSwatch(root, new Color(0.16f, 0.5f, 0.73f, 1f), 24f, 112f, 96f, 64f);
         }
 
-        private static void AddSwatch(
-            VisualElement root,
-            Color color,
-            float left,
-            float top,
-            float width,
-            float height
-        )
+        private static void AddSwatch(VisualElement root, Color color, float left, float top, float width, float height)
         {
             VisualElement swatch = new()
             {
@@ -139,46 +114,23 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static void AssertValidPngFile(string path, EditorSurfaceCaptureResult result)
         {
             byte[] bytes = File.ReadAllBytes(path);
-            Assert.That(
-                bytes.Length,
-                Is.GreaterThan(PngSignatureLength + 16),
-                $"A captured PNG must carry its signature and IHDR header, got {bytes.Length} bytes."
-            );
+            Assert.That(bytes.Length, Is.GreaterThan(PngSignatureLength + 16), $"A captured PNG must carry its signature and IHDR header, got {bytes.Length} bytes.");
             byte[] signature = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a };
             for (int index = 0; index < PngSignatureLength; index++)
             {
-                Assert.That(
-                    bytes[index],
-                    Is.EqualTo(signature[index]),
-                    "Captured files must be real PNGs."
-                );
+                Assert.That(bytes[index], Is.EqualTo(signature[index]), "Captured files must be real PNGs.");
             }
 
             int width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
             int height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
-            Assert.AreEqual(
-                result.Width,
-                width,
-                "The PNG IHDR width must match the captured surface."
-            );
-            Assert.AreEqual(
-                result.Height,
-                height,
-                "The PNG IHDR height must match the captured surface."
-            );
-            Assert.AreEqual(
-                result.ByteCount,
-                bytes.Length,
-                "Every encoded byte must reach the file."
-            );
+            Assert.AreEqual(result.Width, width, "The PNG IHDR width must match the captured surface.");
+            Assert.AreEqual(result.Height, height, "The PNG IHDR height must match the captured surface.");
+            Assert.AreEqual(result.ByteCount, bytes.Length, "Every encoded byte must reach the file.");
         }
 
         private static void InvokeCleanup(DataVisualizerWindow window)
         {
-            MethodInfo cleanupMethod = typeof(DataVisualizerWindow).GetMethod(
-                "Cleanup",
-                BindingFlags.Instance | BindingFlags.NonPublic
-            );
+            MethodInfo cleanupMethod = typeof(DataVisualizerWindow).GetMethod("Cleanup", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(cleanupMethod != null, "The window Cleanup method must exist.");
             cleanupMethod.Invoke(window, Array.Empty<object>());
         }
@@ -186,22 +138,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldFailClosedWhenWindowIsNull()
         {
-            Assert.Throws<ArgumentNullException>(() =>
-                EditorSurfaceCapture.Capture(null, "Temp/x.png")
-            );
+            Assert.Throws<ArgumentNullException>(() => EditorSurfaceCapture.Capture(null, "Temp/x.png"));
         }
 
         [Test]
-        public void ShouldFailClosedWhenOutputPathIsNullOrWhitespace(
-            [Values(null, "", "   ")] string outputPath
-        )
+        public void ShouldFailClosedWhenOutputPathIsNullOrWhitespace([Values(null, "", "   ")] string outputPath)
         {
             EditorWindow window = ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
             try
             {
-                Assert.Throws<ArgumentException>(() =>
-                    EditorSurfaceCapture.Capture(window, outputPath)
-                );
+                Assert.Throws<ArgumentException>(() => EditorSurfaceCapture.Capture(window, outputPath));
             }
             finally
             {
@@ -220,8 +166,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             using TestCleanupScope cleanup = new();
             string firstPath = CreateCapturePath("deterministic-first.png");
             string secondPath = CreateCapturePath("deterministic-second.png");
-            EditorSurfaceCaptureHostWindow window =
-                ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            EditorSurfaceCaptureHostWindow window = ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
             cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
             window.position = new Rect(0f, 0f, 320f, 200f);
             EditorSurfaceCapture.ShowPopup(window);
@@ -232,26 +177,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             AssertValidPngFile(firstPath, first);
             AssertValidPngFile(secondPath, second);
-            Assert.AreEqual(
-                first.Width,
-                second.Width,
-                "Repeated captures of one static surface must agree on width."
-            );
-            Assert.AreEqual(
-                first.Height,
-                second.Height,
-                "Repeated captures of one static surface must agree on height."
-            );
-            Assert.That(
-                File.ReadAllBytes(secondPath),
-                Is.EqualTo(File.ReadAllBytes(firstPath)),
-                "Repeated captures of one static surface must be byte-identical."
-            );
-            Assert.That(
-                first.DistinctColorCount,
-                Is.AtLeast(4),
-                "The captured surface must show the background plus the placed swatches."
-            );
+            Assert.AreEqual(first.Width, second.Width, "Repeated captures of one static surface must agree on width.");
+            Assert.AreEqual(first.Height, second.Height, "Repeated captures of one static surface must agree on height.");
+            Assert.That(File.ReadAllBytes(secondPath), Is.EqualTo(File.ReadAllBytes(firstPath)), "Repeated captures of one static surface must be byte-identical.");
+            Assert.That(first.DistinctColorCount, Is.AtLeast(4), "The captured surface must show the background plus the placed swatches.");
         }
 
         [Test]
@@ -262,10 +191,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.Ignore("Offscreen capture needs a graphics device.");
             }
 
-            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField(
-                "Instance",
-                BindingFlags.Static | BindingFlags.NonPublic
-            );
+            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField("Instance", BindingFlags.Static | BindingFlags.NonPublic);
             Assert.That(instanceField != null, "The window Instance field must exist.");
             object previousInstance = instanceField.GetValue(null);
             using TestCleanupScope cleanup = new();
@@ -284,8 +210,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(
                 result.DistinctColorCount,
                 Is.GreaterThan(1),
-                "The captured window must be non-blank; a single distinct color means the "
-                    + "panel never painted and the capture is useless for documentation."
+                "The captured window must be non-blank; a single distinct color means the " + "panel never painted and the capture is useless for documentation."
             );
             InvokeCleanup(window);
         }

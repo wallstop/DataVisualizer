@@ -50,11 +50,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 );
 
                 CollectionAssert.AreEqual(new[] { "stale-saved-guid" }, mergedGuids);
-                Assert.AreEqual(
-                    "stale-saved-guid",
-                    normalizedSavedObjectGuid,
-                    "a deferred normalization must hand the raw GUID back so the caller keeps the saved selection"
-                );
+                Assert.AreEqual("stale-saved-guid", normalizedSavedObjectGuid, "a deferred normalization must hand the raw GUID back so the caller keeps the saved selection");
 
                 /*
                     Idle control: the same stale GUID fails normalization, so it is neither added
@@ -113,8 +109,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldHandBackValidSavedGuidUnchangedWhenNormalizationDeferred()
         {
-            string folder =
-                "Assets/DataVisualizerGuidDeferralTests_" + Guid.NewGuid().ToString("N");
+            string folder = "Assets/DataVisualizerGuidDeferralTests_" + Guid.NewGuid().ToString("N");
             EnsureFolderExists(folder);
             using (TestCleanupScope cleanup = new())
             {
@@ -125,10 +120,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 });
 
                 string assetPath = folder + "/First.asset";
-                AssetDatabase.CreateAsset(
-                    ScriptableObject.CreateInstance<TestDataObject>(),
-                    assetPath
-                );
+                AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), assetPath);
                 AssetDatabase.SaveAssets();
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
                 string upperGuid = assetGuid.ToUpperInvariant();

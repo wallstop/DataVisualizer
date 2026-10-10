@@ -84,9 +84,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             SearchResultMatchInfo matchInfo = new();
             matchInfo.AddMatchedField(new MatchDetail("first", "second"));
-            using (
-                IEnumerator<string> partialEnumeration = matchInfo.AllMatchedTerms.GetEnumerator()
-            )
+            using (IEnumerator<string> partialEnumeration = matchInfo.AllMatchedTerms.GetEnumerator())
             {
                 Assert.IsTrue(partialEnumeration.MoveNext());
                 Assert.AreEqual("first", partialEnumeration.Current);

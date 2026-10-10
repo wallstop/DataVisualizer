@@ -6,11 +6,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
     internal static class ReflectionHelpers
     {
-        public static bool IsAttributeDefined<T>(
-            this ICustomAttributeProvider provider,
-            out T attribute,
-            bool inherit = true
-        )
+        public static bool IsAttributeDefined<T>(this ICustomAttributeProvider provider, out T attribute, bool inherit = true)
             where T : Attribute
         {
             try
@@ -35,10 +31,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return IsAttributeDefined<T>(provider, inherit: true);
         }
 
-        public static bool IsAttributeDefined<T>(
-            this ICustomAttributeProvider provider,
-            bool inherit
-        )
+        public static bool IsAttributeDefined<T>(this ICustomAttributeProvider provider, bool inherit)
             where T : Attribute
         {
             return IsAttributeDefined(provider, out T _, inherit);

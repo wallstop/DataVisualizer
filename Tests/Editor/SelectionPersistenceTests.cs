@@ -30,10 +30,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             namespaceGroup.Add(typeContainer);
             typeContainer.Add(typeItem);
 
-            Assert.AreSame(
-                namespaceGroup,
-                DataVisualizer.FindAncestorNamespaceGroup(typeItem, namespaceList)
-            );
+            Assert.AreSame(namespaceGroup, DataVisualizer.FindAncestorNamespaceGroup(typeItem, namespaceList));
         }
 
         [Test]
@@ -51,10 +48,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             namespaceGroup.Add(objectRow);
             objectRow.Add(typeItem);
 
-            Assert.AreSame(
-                namespaceGroup,
-                DataVisualizer.FindAncestorNamespaceGroup(typeItem, namespaceList)
-            );
+            Assert.AreSame(namespaceGroup, DataVisualizer.FindAncestorNamespaceGroup(typeItem, namespaceList));
         }
 
         [Test]
@@ -90,12 +84,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             };
             Dictionary<string, int> namespaceOrder = new() { ["First"] = 0, ["Second"] = 1 };
 
-            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(
-                typesByNamespace,
-                namespaceOrder,
-                "Missing",
-                secondType.FullName
-            );
+            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(typesByNamespace, namespaceOrder, "Missing", secondType.FullName);
 
             Assert.AreSame(secondType, resolvedType);
             Assert.AreEqual(firstType.Name, secondType.Name);
@@ -113,12 +102,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             };
             Dictionary<string, int> namespaceOrder = new() { ["First"] = 0, ["Second"] = 1 };
 
-            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(
-                typesByNamespace,
-                namespaceOrder,
-                "Second",
-                string.Empty
-            );
+            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(typesByNamespace, namespaceOrder, "Second", string.Empty);
 
             Assert.AreSame(secondType, resolvedType);
         }
@@ -135,12 +119,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             };
             Dictionary<string, int> namespaceOrder = new() { ["Alpha"] = 1, ["Beta"] = 0 };
 
-            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(
-                typesByNamespace,
-                namespaceOrder,
-                "Missing",
-                string.Empty
-            );
+            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(typesByNamespace, namespaceOrder, "Missing", string.Empty);
 
             Assert.AreSame(secondType, resolvedType);
         }
@@ -157,12 +136,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             };
             Dictionary<string, int> namespaceOrder = new() { ["Beta"] = 0, ["Alpha"] = 0 };
 
-            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(
-                typesByNamespace,
-                namespaceOrder,
-                string.Empty,
-                string.Empty
-            );
+            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(typesByNamespace, namespaceOrder, string.Empty, string.Empty);
 
             Assert.AreSame(firstType, resolvedType);
         }
@@ -199,12 +173,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             };
             Dictionary<string, int> namespaceOrder = new() { ["First"] = 0, ["Second"] = 1 };
 
-            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(
-                typesByNamespace,
-                namespaceOrder,
-                string.Empty,
-                secondType.FullName
-            );
+            Type resolvedType = DataVisualizer.ResolveSelectedTypeByFullName(typesByNamespace, namespaceOrder, string.Empty, secondType.FullName);
 
             Assert.AreSame(secondType, resolvedType);
         }
@@ -227,17 +196,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 ["Gamma"] = 2,
             };
 
-            Type orderedFallback = DataVisualizer.ResolveSelectedTypeByFullName(
-                typesByNamespace,
-                namespaceOrder,
-                "Alpha",
-                string.Empty
-            );
-            Assert.AreSame(
-                secondType,
-                orderedFallback,
-                "the saved namespace's empty list must fall through to the next ordered namespace"
-            );
+            Type orderedFallback = DataVisualizer.ResolveSelectedTypeByFullName(typesByNamespace, namespaceOrder, "Alpha", string.Empty);
+            Assert.AreSame(secondType, orderedFallback, "the saved namespace's empty list must fall through to the next ordered namespace");
 
             Type ordinalFallback = DataVisualizer.ResolveSelectedTypeByFullName(
                 typesByNamespace,
@@ -245,11 +205,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 savedNamespaceKey: "Alpha",
                 savedTypeFullName: string.Empty
             );
-            Assert.AreSame(
-                secondType,
-                ordinalFallback,
-                "the first ordinal namespace's empty list must fall through to the next ordinal namespace"
-            );
+            Assert.AreSame(secondType, ordinalFallback, "the first ordinal namespace's empty list must fall through to the next ordinal namespace");
         }
 
         [Test]
@@ -262,30 +218,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.IsTrue(userState.SetLastObjectForType(typeFullName, objectGuid));
             Assert.AreEqual(objectGuid, userState.GetLastObjectForType(typeFullName));
 
-            Assert.IsFalse(
-                userState.SetLastObjectForType(typeFullName, objectGuid),
-                "duplicate saved object selection should be unchanged"
-            );
+            Assert.IsFalse(userState.SetLastObjectForType(typeFullName, objectGuid), "duplicate saved object selection should be unchanged");
 
             Assert.IsTrue(userState.SetLastObjectForType(typeFullName, null));
             Assert.That(userState.GetLastObjectForType(typeFullName) == null);
-            Assert.IsFalse(
-                userState.SetLastObjectForType(typeFullName, null),
-                "clearing an absent saved object selection should be unchanged"
-            );
+            Assert.IsFalse(userState.SetLastObjectForType(typeFullName, null), "clearing an absent saved object selection should be unchanged");
         }
 
         [Test]
         public void ShouldResolveSavedObjectGuidOnlyForExactType()
         {
-            string folderName =
-                "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
+            string folderName = "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
             string folderPath = "Assets/" + folderName;
             string assetPath = folderPath + "/Selection.asset";
 
             AssetDatabase.CreateFolder("Assets", folderName);
-            SelectionPersistenceGuidData asset =
-                ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
+            SelectionPersistenceGuidData asset = ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
 
             using (TestCleanupScope cleanup = new())
             {
@@ -299,35 +247,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
 
-                Assert.IsTrue(
-                    AssetGuidDiscovery.TryResolveAssetGuidForType(
-                        assetGuid,
-                        typeof(SelectionPersistenceGuidData),
-                        out string resolvedPath
-                    )
-                );
+                Assert.IsTrue(AssetGuidDiscovery.TryResolveAssetGuidForType(assetGuid, typeof(SelectionPersistenceGuidData), out string resolvedPath));
                 Assert.AreEqual(assetPath, resolvedPath);
-                Assert.IsFalse(
-                    AssetGuidDiscovery.TryResolveAssetGuidForType(
-                        assetGuid,
-                        typeof(OtherSelectionPersistenceGuidData),
-                        out _
-                    )
-                );
+                Assert.IsFalse(AssetGuidDiscovery.TryResolveAssetGuidForType(assetGuid, typeof(OtherSelectionPersistenceGuidData), out _));
             }
         }
 
         [Test]
         public void ShouldIncludeDirectlyResolvedSavedGuidWhenFindAssetsMissesIt()
         {
-            string folderName =
-                "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
+            string folderName = "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
             string folderPath = "Assets/" + folderName;
             string assetPath = folderPath + "/Selection.asset";
 
             AssetDatabase.CreateFolder("Assets", folderName);
-            SelectionPersistenceGuidData asset =
-                ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
+            SelectionPersistenceGuidData asset = ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
 
             using (TestCleanupScope cleanup = new())
             {
@@ -357,14 +291,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldNormalizeSavedGuidWhenFindAssetsReturnsDifferentCasing()
         {
-            string folderName =
-                "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
+            string folderName = "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
             string folderPath = "Assets/" + folderName;
             string assetPath = folderPath + "/Selection.asset";
 
             AssetDatabase.CreateFolder("Assets", folderName);
-            SelectionPersistenceGuidData asset =
-                ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
+            SelectionPersistenceGuidData asset = ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
 
             using (TestCleanupScope cleanup = new())
             {
@@ -394,14 +326,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldPreserveSavedGuidWhenFindAssetsAlreadyReturnedIt()
         {
-            string folderName =
-                "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
+            string folderName = "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
             string folderPath = "Assets/" + folderName;
             string assetPath = folderPath + "/Selection.asset";
 
             AssetDatabase.CreateFolder("Assets", folderName);
-            SelectionPersistenceGuidData asset =
-                ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
+            SelectionPersistenceGuidData asset = ScriptableObject.CreateInstance<SelectionPersistenceGuidData>();
 
             using (TestCleanupScope cleanup = new())
             {
@@ -431,14 +361,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldClearSavedGuidWhenFindAssetsReturnedWrongExactType()
         {
-            string folderName =
-                "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
+            string folderName = "DataVisualizerSelectionPersistenceTests_" + Guid.NewGuid().ToString("N");
             string folderPath = "Assets/" + folderName;
             string assetPath = folderPath + "/Other.asset";
 
             AssetDatabase.CreateFolder("Assets", folderName);
-            OtherSelectionPersistenceGuidData asset =
-                ScriptableObject.CreateInstance<OtherSelectionPersistenceGuidData>();
+            OtherSelectionPersistenceGuidData asset = ScriptableObject.CreateInstance<OtherSelectionPersistenceGuidData>();
 
             using (TestCleanupScope cleanup = new())
             {
@@ -468,12 +396,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldTreatDeletedAssetPathAsRelevantWhenPathIsAsset()
         {
-            Assert.IsTrue(
-                DataVisualizerAssetProcessor.IsDeletedAssetPathRelevant("Assets/Deleted.asset")
-            );
-            Assert.IsFalse(
-                DataVisualizerAssetProcessor.IsDeletedAssetPathRelevant("Assets/Deleted.prefab")
-            );
+            Assert.IsTrue(DataVisualizerAssetProcessor.IsDeletedAssetPathRelevant("Assets/Deleted.asset"));
+            Assert.IsFalse(DataVisualizerAssetProcessor.IsDeletedAssetPathRelevant("Assets/Deleted.prefab"));
         }
     }
 }

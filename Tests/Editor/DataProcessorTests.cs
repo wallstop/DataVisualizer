@@ -26,10 +26,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             IDataProcessor processor = this;
 
-            int count = processor.WillEffect(
-                typeof(ScriptableObject),
-                new ScriptableObject[] { null, null, null }
-            );
+            int count = processor.WillEffect(typeof(ScriptableObject), new ScriptableObject[] { null, null, null });
 
             Assert.AreEqual(3, count);
         }
@@ -49,9 +46,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             IDataProcessor processor = this;
 
-            Assert.Throws<ArgumentNullException>(() =>
-                processor.WillEffect(typeof(ScriptableObject), null)
-            );
+            Assert.Throws<ArgumentNullException>(() => processor.WillEffect(typeof(ScriptableObject), null));
         }
 
         public void Process(Type type, IEnumerable<ScriptableObject> objects) { }

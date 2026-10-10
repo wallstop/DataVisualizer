@@ -69,13 +69,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
             if (referencedGuids != null && 0 < referencedGuids.Count)
             {
-                candidateLookup ??= new HashSet<string>(
-                    candidates,
-                    StringComparer.OrdinalIgnoreCase
-                );
-                if (
-                    0 < AddResolvedGuids(type, referencedGuids, candidateLookup, deferNormalization)
-                )
+                candidateLookup ??= new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
+                if (0 < AddResolvedGuids(type, referencedGuids, candidateLookup, deferNormalization))
                 {
                     candidateAdded = true;
                 }
@@ -91,10 +86,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                         would clear a selection that may still be valid once the database settles.
                     */
                     normalizedSavedGuid = savedObjectGuid;
-                    candidateLookup ??= new HashSet<string>(
-                        candidates,
-                        StringComparer.OrdinalIgnoreCase
-                    );
+                    candidateLookup ??= new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
                     if (candidateLookup.Add(normalizedSavedGuid))
                     {
                         candidateAdded = true;
@@ -103,10 +95,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 else if (TryNormalizeGuidForType(type, savedObjectGuid, out string normalizedGuid))
                 {
                     normalizedSavedGuid = normalizedGuid;
-                    candidateLookup ??= new HashSet<string>(
-                        candidates,
-                        StringComparer.OrdinalIgnoreCase
-                    );
+                    candidateLookup ??= new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
                     if (candidateLookup.Add(normalizedSavedGuid))
                     {
                         candidateAdded = true;
@@ -126,12 +115,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return mergedCandidates;
         }
 
-        public static int AddResolvedGuids(
-            Type type,
-            IEnumerable<string> referencedGuids,
-            ISet<string> destination,
-            bool deferNormalization = false
-        )
+        public static int AddResolvedGuids(Type type, IEnumerable<string> referencedGuids, ISet<string> destination, bool deferNormalization = false)
         {
             if (type == null || referencedGuids == null || destination == null)
             {
@@ -141,10 +125,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             int addedCount = 0;
             foreach (string referencedGuid in referencedGuids)
             {
-                if (
-                    string.IsNullOrWhiteSpace(referencedGuid)
-                    || destination.Contains(referencedGuid)
-                )
+                if (string.IsNullOrWhiteSpace(referencedGuid) || destination.Contains(referencedGuid))
                 {
                     continue;
                 }
@@ -160,9 +141,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 }
                 else
                 {
-                    added =
-                        TryNormalizeGuidForType(type, referencedGuid, out string normalizedGuid)
-                        && destination.Add(normalizedGuid);
+                    added = TryNormalizeGuidForType(type, referencedGuid, out string normalizedGuid) && destination.Add(normalizedGuid);
                 }
 
                 if (added)
@@ -174,17 +153,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return addedCount;
         }
 
-        public static bool TryNormalizeGuidForType(
-            Type type,
-            string assetGuid,
-            out string normalizedGuid
-        )
+        public static bool TryNormalizeGuidForType(Type type, string assetGuid, out string normalizedGuid)
         {
-            if (
-                type == null
-                || string.IsNullOrWhiteSpace(assetGuid)
-                || !TryResolveAssetGuidForType(assetGuid, type, out string assetPath)
-            )
+            if (type == null || string.IsNullOrWhiteSpace(assetGuid) || !TryResolveAssetGuidForType(assetGuid, type, out string assetPath))
             {
                 normalizedGuid = null;
                 return false;
@@ -202,11 +173,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             a script recompile), so callers must pass deferNormalization while
             IsAssetDatabaseBusy() instead of invoking this path during that window (issue #36).
         */
-        public static bool TryResolveAssetGuidForType(
-            string assetGuid,
-            Type type,
-            out string assetPath
-        )
+        public static bool TryResolveAssetGuidForType(string assetGuid, Type type, out string assetPath)
         {
             if (string.IsNullOrWhiteSpace(assetGuid) || type == null)
             {
@@ -215,10 +182,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             string resolvedAssetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
-            if (
-                string.IsNullOrWhiteSpace(resolvedAssetPath)
-                || AssetDatabase.GetMainAssetTypeAtPath(resolvedAssetPath) != type
-            )
+            if (string.IsNullOrWhiteSpace(resolvedAssetPath) || AssetDatabase.GetMainAssetTypeAtPath(resolvedAssetPath) != type)
             {
                 assetPath = null;
                 return false;

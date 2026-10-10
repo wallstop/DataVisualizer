@@ -127,16 +127,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string OutputDirectoryArgument = "-docsImageOutputDir";
         private const string OutputDirectoryEnvironmentVariable = "DATAVISUALIZER_DOCS_IMAGE_DIR";
 
-        private const string PrefsSplitterOuterKey =
-            "WallstopStudios.Editor.DataVisualizer.SplitterOuterFixedPaneWidth";
-        private const string PrefsSplitterInnerKey =
-            "WallstopStudios.Editor.DataVisualizer.SplitterInnerFixedPaneWidth";
-        private const string PrefsInitialSizeAppliedKey =
-            "WallstopStudios.Editor.DataVisualizer.InitialSizeApplied";
-        private const string PrefsPreferredWindowSizeKey =
-            "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
-        private const string PrefsTemporaryWindowClampSizeKey =
-            "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
+        private const string PrefsSplitterOuterKey = "WallstopStudios.Editor.DataVisualizer.SplitterOuterFixedPaneWidth";
+        private const string PrefsSplitterInnerKey = "WallstopStudios.Editor.DataVisualizer.SplitterInnerFixedPaneWidth";
+        private const string PrefsInitialSizeAppliedKey = "WallstopStudios.Editor.DataVisualizer.InitialSizeApplied";
+        private const string PrefsPreferredWindowSizeKey = "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
+        private const string PrefsTemporaryWindowClampSizeKey = "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
 
         private const int PaintedDistinctColorFloor = 12;
         private const float PaintedModalFractionCeiling = 0.97f;
@@ -155,20 +150,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "Damage Table",
         };
 
-        private static readonly IReadOnlyList<string> ManifestShotNames = new[]
-        {
-            LayoutShotName,
-            InstanceActionsShotName,
-            CreateShotName,
-            ImportShotName,
-            SettingsShotName,
-        };
+        private static readonly IReadOnlyList<string> ManifestShotNames = new[] { LayoutShotName, InstanceActionsShotName, CreateShotName, ImportShotName, SettingsShotName };
 
-        private static readonly BindingFlags ReflectedInstanceMembers =
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        private static readonly BindingFlags ReflectedInstanceMembers = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
-        private static readonly BindingFlags ReflectedStaticMembers =
-            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        private static readonly BindingFlags ReflectedStaticMembers = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
 
         /*
             Batch-mode entry point for
@@ -180,17 +166,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         */
         public static void RunFromCommandLine()
         {
-            string outputDirectory = ResolveOutputDirectory(
-                Environment.GetCommandLineArgs(),
-                Environment.GetEnvironmentVariable(OutputDirectoryEnvironmentVariable)
-            );
+            string outputDirectory = ResolveOutputDirectory(Environment.GetCommandLineArgs(), Environment.GetEnvironmentVariable(OutputDirectoryEnvironmentVariable));
             IReadOnlyList<EditorSurfaceCaptureResult> results = CaptureAll(outputDirectory);
             foreach (EditorSurfaceCaptureResult result in results)
             {
-                Debug.Log(
-                    $"[DocsImageCapture] {result.OutputPath}: {result.Width}x{result.Height}, "
-                        + $"{result.ByteCount} bytes, {result.DistinctColorCount} distinct colors."
-                );
+                Debug.Log($"[DocsImageCapture] {result.OutputPath}: {result.Width}x{result.Height}, " + $"{result.ByteCount} bytes, {result.DistinctColorCount} distinct colors.");
             }
         }
 
@@ -211,25 +191,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return results;
         }
 
-        internal static EditorSurfaceCaptureResult CaptureShot(
-            string shotName,
-            string outputDirectory
-        )
+        internal static EditorSurfaceCaptureResult CaptureShot(string shotName, string outputDirectory)
         {
             if (!IsKnownShot(shotName))
             {
-                throw new ArgumentException(
-                    $"Unknown shot '{shotName}'. Known shots: {string.Join(", ", ManifestShotNames)}.",
-                    nameof(shotName)
-                );
+                throw new ArgumentException($"Unknown shot '{shotName}'. Known shots: {string.Join(", ", ManifestShotNames)}.", nameof(shotName));
             }
 
             ValidateOutputDirectory(outputDirectory);
             if (!EditorSurfaceCapture.IsSupported)
             {
                 throw new InvalidOperationException(
-                    "Docs image capture needs a graphics device; this editor is running "
-                        + "without one, so capture refuses to write a blank image."
+                    "Docs image capture needs a graphics device; this editor is running " + "without one, so capture refuses to write a blank image."
                 );
             }
 
@@ -237,16 +210,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string capturePath = Path.Combine(outputDirectory, fileName);
 
             WindowPreferenceSnapshot preferences = WindowPreferenceSnapshot.Capture();
-            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField(
-                "Instance",
-                ReflectedStaticMembers
-            );
+            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField("Instance", ReflectedStaticMembers);
             if (instanceField == null)
             {
-                throw new InvalidOperationException(
-                    "The DataVisualizer window exposes no Instance field; the capture "
-                        + "driver cannot preserve the host's window instance."
-                );
+                throw new InvalidOperationException("The DataVisualizer window exposes no Instance field; the capture " + "driver cannot preserve the host's window instance.");
             }
 
             object previousInstance = instanceField.GetValue(null);
@@ -269,10 +236,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 VerifySelectedObject(window);
                 ArrangeShotState(window, shotName);
 
-                EditorSurfaceCaptureResult result = EditorSurfaceCapture.Capture(
-                    window,
-                    capturePath
-                );
+                EditorSurfaceCaptureResult result = EditorSurfaceCapture.Capture(window, capturePath);
                 ValidateCapturedRegions(window, capturePath, shotName);
                 return CropCapturedShot(window, shotName, capturePath, result);
             }
@@ -296,13 +260,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             for (int index = 0; index < arguments.Length - 1; index++)
             {
-                if (
-                    string.Equals(
-                        arguments[index],
-                        OutputDirectoryArgument,
-                        StringComparison.Ordinal
-                    )
-                )
+                if (string.Equals(arguments[index], OutputDirectoryArgument, StringComparison.Ordinal))
                 {
                     string value = arguments[index + 1];
                     if (!string.IsNullOrWhiteSpace(value))
@@ -328,20 +286,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             The shot name selects the subject regions (the open popover or the row action
             bar) that join the guarded set for that shot.
         */
-        internal static void ValidateCapturedRegions(
-            EditorWindow window,
-            string capturePath,
-            string shotName
-        )
+        internal static void ValidateCapturedRegions(EditorWindow window, string capturePath, string shotName)
         {
             Rect rootBounds = window.rootVisualElement.worldBound;
-            ValidateRegionAnalysis(
-                Analyze(
-                    File.ReadAllBytes(capturePath),
-                    rootBounds,
-                    CollectRegions(window, shotName)
-                )
-            );
+            ValidateRegionAnalysis(Analyze(File.ReadAllBytes(capturePath), rootBounds, CollectRegions(window, shotName)));
         }
 
         /*
@@ -383,11 +331,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             duplicating the hero. The rect comes from the live window's settled bounds and
             stays inside the window, so the mapping into the captured pixels is exact.
         */
-        internal static bool TryComputeCropRect(
-            EditorWindow window,
-            string shotName,
-            out Rect cropRect
-        )
+        internal static bool TryComputeCropRect(EditorWindow window, string shotName, out Rect cropRect)
         {
             VisualElement root = window.rootVisualElement;
             switch (shotName)
@@ -396,40 +340,25 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     cropRect = default;
                     return false;
                 case InstanceActionsShotName:
-                    cropRect = PaddedToRootBounds(
-                        root,
-                        RequiredElementBounds(root, ObjectColumnElementName, shotName)
-                    );
+                    cropRect = PaddedToRootBounds(root, RequiredElementBounds(root, ObjectColumnElementName, shotName));
                     return true;
                 case CreateShotName:
                     cropRect = PaddedToRootBounds(
                         root,
-                        Union(
-                            RequiredElementBounds(root, CreatePopoverElementName, shotName),
-                            RequiredElementBounds(root, CreateButtonElementName, shotName)
-                        )
+                        Union(RequiredElementBounds(root, CreatePopoverElementName, shotName), RequiredElementBounds(root, CreateButtonElementName, shotName))
                     );
                     return true;
                 case ImportShotName:
                     cropRect = PaddedToRootBounds(
                         root,
-                        Union(
-                            RequiredElementBounds(root, TypeAddPopoverElementName, shotName),
-                            RequiredElementBounds(root, TypeAddButtonElementName, shotName)
-                        )
+                        Union(RequiredElementBounds(root, TypeAddPopoverElementName, shotName), RequiredElementBounds(root, TypeAddButtonElementName, shotName))
                     );
                     return true;
                 case SettingsShotName:
-                    cropRect = PaddedToRootBounds(
-                        root,
-                        RequiredElementBounds(root, SettingsPopoverElementName, shotName)
-                    );
+                    cropRect = PaddedToRootBounds(root, RequiredElementBounds(root, SettingsPopoverElementName, shotName));
                     return true;
                 default:
-                    throw new ArgumentException(
-                        $"Unknown shot '{shotName}'. Known shots: {string.Join(", ", ManifestShotNames)}.",
-                        nameof(shotName)
-                    );
+                    throw new ArgumentException($"Unknown shot '{shotName}'. Known shots: {string.Join(", ", ManifestShotNames)}.", nameof(shotName));
             }
         }
 
@@ -439,17 +368,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             surface, the same mapping the issue #114 RCA used; UI Toolkit measures from the
             top while the pixel array starts at the bottom row.
         */
-        internal static CaptureRegionAnalysis Analyze(
-            byte[] pngBytes,
-            Rect sourceBounds,
-            IReadOnlyList<CaptureRegion> regions
-        )
+        internal static CaptureRegionAnalysis Analyze(byte[] pngBytes, Rect sourceBounds, IReadOnlyList<CaptureRegion> regions)
         {
             if (sourceBounds.width < 1f || sourceBounds.height < 1f)
             {
                 throw new InvalidOperationException(
-                    $"The captured surface laid out to {sourceBounds.width}x{sourceBounds.height}; "
-                        + "region analysis has no surface to measure."
+                    $"The captured surface laid out to {sourceBounds.width}x{sourceBounds.height}; " + "region analysis has no surface to measure."
                 );
             }
 
@@ -458,9 +382,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 if (!readback.LoadImage(pngBytes))
                 {
-                    throw new InvalidOperationException(
-                        "The captured file is not a decodable PNG; region analysis cannot run."
-                    );
+                    throw new InvalidOperationException("The captured file is not a decodable PNG; region analysis cannot run.");
                 }
 
                 Color32[] pixels = readback.GetPixels32();
@@ -469,22 +391,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 bool canaryPainted = false;
                 foreach (CaptureRegion region in regions)
                 {
-                    Rect pngRect = PixelRectForUiRect(
-                        region.Rect,
-                        sourceBounds,
-                        readback.width,
-                        readback.height
-                    );
-                    int distinctColors = MeasureRegionColors(
-                        pixels,
-                        readback.width,
-                        readback.height,
-                        pngRect,
-                        out float modalColorFraction
-                    );
-                    metrics.Add(
-                        new CaptureRegionMetric(region, distinctColors, modalColorFraction)
-                    );
+                    Rect pngRect = PixelRectForUiRect(region.Rect, sourceBounds, readback.width, readback.height);
+                    int distinctColors = MeasureRegionColors(pixels, readback.width, readback.height, pngRect, out float modalColorFraction);
+                    metrics.Add(new CaptureRegionMetric(region, distinctColors, modalColorFraction));
                     if (region.Name == CanaryRegionName)
                     {
                         canaryFound = true;
@@ -515,11 +424,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             validated surface minus everything outside the subject; byte identity across
             runs is preserved because both the decode and the encode are deterministic.
         */
-        internal static EditorSurfaceCaptureResult CropCapturedPng(
-            string capturePath,
-            Rect uiCropRect,
-            Rect sourceBounds
-        )
+        internal static EditorSurfaceCaptureResult CropCapturedPng(string capturePath, Rect uiCropRect, Rect sourceBounds)
         {
             byte[] fullPng = File.ReadAllBytes(capturePath);
             Texture2D source = new(2, 2, TextureFormat.RGBA32, false);
@@ -527,29 +432,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 if (!source.LoadImage(fullPng))
                 {
-                    throw new InvalidOperationException(
-                        "The captured file is not a decodable PNG; the crop cannot run."
-                    );
+                    throw new InvalidOperationException("The captured file is not a decodable PNG; the crop cannot run.");
                 }
 
-                Rect pixelRect = PixelRectForUiRect(
-                    uiCropRect,
-                    sourceBounds,
-                    source.width,
-                    source.height
-                );
+                Rect pixelRect = PixelRectForUiRect(uiCropRect, sourceBounds, source.width, source.height);
                 int x0 = Mathf.Clamp(Mathf.RoundToInt(pixelRect.x), 0, source.width - 1);
                 int y0 = Mathf.Clamp(Mathf.RoundToInt(pixelRect.y), 0, source.height - 1);
-                int croppedWidth = Mathf.Clamp(
-                    Mathf.RoundToInt(pixelRect.width),
-                    1,
-                    source.width - x0
-                );
-                int croppedHeight = Mathf.Clamp(
-                    Mathf.RoundToInt(pixelRect.height),
-                    1,
-                    source.height - y0
-                );
+                int croppedWidth = Mathf.Clamp(Mathf.RoundToInt(pixelRect.width), 1, source.width - x0);
+                int croppedHeight = Mathf.Clamp(Mathf.RoundToInt(pixelRect.height), 1, source.height - y0);
 
                 Color32[] sourcePixels = source.GetPixels32();
                 Color32[] croppedPixels = new Color32[croppedWidth * croppedHeight];
@@ -559,19 +449,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     int sourceRow = firstSourceRow + row;
                     for (int column = 0; column < croppedWidth; column++)
                     {
-                        croppedPixels[row * croppedWidth + column] = sourcePixels[
-                            sourceRow * source.width + x0 + column
-                        ];
+                        croppedPixels[row * croppedWidth + column] = sourcePixels[sourceRow * source.width + x0 + column];
                     }
                 }
 
-                Texture2D cropped = new(
-                    croppedWidth,
-                    croppedHeight,
-                    TextureFormat.RGB24,
-                    false,
-                    true
-                );
+                Texture2D cropped = new(croppedWidth, croppedHeight, TextureFormat.RGB24, false, true);
                 try
                 {
                     cropped.SetPixels32(croppedPixels);
@@ -579,19 +461,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     byte[] png = cropped.EncodeToPNG();
                     if (png == null || png.Length <= PngSignatureLength)
                     {
-                        throw new InvalidOperationException(
-                            "PNG encoding of the cropped capture produced no usable bytes."
-                        );
+                        throw new InvalidOperationException("PNG encoding of the cropped capture produced no usable bytes.");
                     }
 
                     File.WriteAllBytes(capturePath, png);
-                    return new EditorSurfaceCaptureResult(
-                        capturePath,
-                        croppedWidth,
-                        croppedHeight,
-                        png.Length,
-                        EditorSurfaceCapture.CountDistinctColors(cropped)
-                    );
+                    return new EditorSurfaceCaptureResult(capturePath, croppedWidth, croppedHeight, png.Length, EditorSurfaceCapture.CountDistinctColors(cropped));
                 }
                 finally
                 {
@@ -619,48 +493,23 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             its type rows behind a display:none container, and a region that cannot paint
             would otherwise clamp to a one-pixel sample that always fails the painted check.
         */
-        internal static IReadOnlyList<CaptureRegion> CollectRegions(
-            EditorWindow window,
-            string shotName
-        )
+        internal static IReadOnlyList<CaptureRegion> CollectRegions(EditorWindow window, string shotName)
         {
             if (!IsKnownShot(shotName))
             {
-                throw new ArgumentException(
-                    $"Unknown shot '{shotName}'. Known shots: {string.Join(", ", ManifestShotNames)}.",
-                    nameof(shotName)
-                );
+                throw new ArgumentException($"Unknown shot '{shotName}'. Known shots: {string.Join(", ", ManifestShotNames)}.", nameof(shotName));
             }
 
             VisualElement root = window.rootVisualElement;
             List<CaptureRegion> regions = new();
-            foreach (
-                VisualElement group in root.Query<VisualElement>(
-                        null,
-                        StyleConstants.NamespaceItemClass
-                    )
-                    .ToList()
-            )
+            foreach (VisualElement group in root.Query<VisualElement>(null, StyleConstants.NamespaceItemClass).ToList())
             {
-                AddRenderedRegion(
-                    regions,
-                    group.name,
-                    group,
-                    group.ClassListContains(StyleConstants.SelectedClass)
-                );
+                AddRenderedRegion(regions, group.name, group, group.ClassListContains(StyleConstants.SelectedClass));
             }
 
-            foreach (
-                VisualElement item in root.Query<VisualElement>(null, StyleConstants.TypeItemClass)
-                    .ToList()
-            )
+            foreach (VisualElement item in root.Query<VisualElement>(null, StyleConstants.TypeItemClass).ToList())
             {
-                AddRenderedRegion(
-                    regions,
-                    item.name,
-                    item,
-                    item.ClassListContains(StyleConstants.SelectedClass)
-                );
+                AddRenderedRegion(regions, item.name, item, item.ClassListContains(StyleConstants.SelectedClass));
             }
 
             AddRegion(root, regions, CanaryRegionName, false);
@@ -741,33 +590,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             source bounds: UI Toolkit measures from the top-left while the pixel array starts
             at the bottom row.
         */
-        private static Rect PixelRectForUiRect(
-            Rect uiRect,
-            Rect sourceBounds,
-            int pixelWidth,
-            int pixelHeight
-        )
+        private static Rect PixelRectForUiRect(Rect uiRect, Rect sourceBounds, int pixelWidth, int pixelHeight)
         {
             float scaleX = pixelWidth / sourceBounds.width;
             float scaleY = pixelHeight / sourceBounds.height;
-            return new Rect(
-                (uiRect.x - sourceBounds.x) * scaleX,
-                (uiRect.y - sourceBounds.y) * scaleY,
-                uiRect.width * scaleX,
-                uiRect.height * scaleY
-            );
+            return new Rect((uiRect.x - sourceBounds.x) * scaleX, (uiRect.y - sourceBounds.y) * scaleY, uiRect.width * scaleX, uiRect.height * scaleY);
         }
 
         /*
             Rewrites the validated capture in place as the shot's cropped image when the
             shot defines a crop; full-window shots return the capture untouched.
         */
-        private static EditorSurfaceCaptureResult CropCapturedShot(
-            EditorWindow window,
-            string shotName,
-            string capturePath,
-            EditorSurfaceCaptureResult result
-        )
+        private static EditorSurfaceCaptureResult CropCapturedShot(EditorWindow window, string shotName, string capturePath, EditorSurfaceCaptureResult result)
         {
             if (!TryComputeCropRect(window, shotName, out Rect cropRect))
             {
@@ -782,27 +616,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             missing or unrendered element means the arrangement broke, so the shot fails
             closed instead of cropping or guarding against a stale rect.
         */
-        private static Rect RequiredElementBounds(
-            VisualElement root,
-            string elementName,
-            string shotName
-        )
+        private static Rect RequiredElementBounds(VisualElement root, string elementName, string shotName)
         {
             VisualElement element = root.Q(elementName);
             if (element == null)
             {
-                throw new InvalidOperationException(
-                    $"The window exposes no '{elementName}' element; the '{shotName}' shot "
-                        + "cannot prove its subject was arranged."
-                );
+                throw new InvalidOperationException($"The window exposes no '{elementName}' element; the '{shotName}' shot " + "cannot prove its subject was arranged.");
             }
 
             if (!IsRenderedForCapture(element))
             {
-                throw new InvalidOperationException(
-                    $"The '{elementName}' element is not rendered; the '{shotName}' shot "
-                        + "would document a state that is not on screen."
-                );
+                throw new InvalidOperationException($"The '{elementName}' element is not rendered; the '{shotName}' shot " + "would document a state that is not on screen.");
             }
 
             return element.worldBound;
@@ -821,20 +645,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static Rect Union(Rect first, Rect second)
         {
-            return Rect.MinMaxRect(
-                Mathf.Min(first.xMin, second.xMin),
-                Mathf.Min(first.yMin, second.yMin),
-                Mathf.Max(first.xMax, second.xMax),
-                Mathf.Max(first.yMax, second.yMax)
-            );
+            return Rect.MinMaxRect(Mathf.Min(first.xMin, second.xMin), Mathf.Min(first.yMin, second.yMin), Mathf.Max(first.xMax, second.xMax), Mathf.Max(first.yMax, second.yMax));
         }
 
-        private static void AddRenderedRegion(
-            List<CaptureRegion> regions,
-            string regionName,
-            VisualElement element,
-            bool paintedOnGapHosts
-        )
+        private static void AddRenderedRegion(List<CaptureRegion> regions, string regionName, VisualElement element, bool paintedOnGapHosts)
         {
             if (IsRenderedForCapture(element))
             {
@@ -842,12 +656,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
-        private static void AddRegion(
-            VisualElement root,
-            List<CaptureRegion> regions,
-            string elementName,
-            bool paintedOnGapHosts
-        )
+        private static void AddRegion(VisualElement root, List<CaptureRegion> regions, string elementName, bool paintedOnGapHosts)
         {
             VisualElement element = root.Q(elementName);
             if (element != null)
@@ -862,11 +671,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             a missing or unrendered subject fails closed, because a capture without its
             subject is the misleading image the validation exists to block.
         */
-        private static void AddSubjectRegion(
-            VisualElement root,
-            List<CaptureRegion> regions,
-            string shotName
-        )
+        private static void AddSubjectRegion(VisualElement root, List<CaptureRegion> regions, string shotName)
         {
             switch (shotName)
             {
@@ -885,32 +690,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
-        private static void AddRequiredRegion(
-            VisualElement root,
-            List<CaptureRegion> regions,
-            string elementName,
-            string shotName
-        )
+        private static void AddRequiredRegion(VisualElement root, List<CaptureRegion> regions, string elementName, string shotName)
         {
-            regions.Add(
-                new CaptureRegion(
-                    elementName,
-                    RequiredElementBounds(root, elementName, shotName),
-                    false
-                )
-            );
+            regions.Add(new CaptureRegion(elementName, RequiredElementBounds(root, elementName, shotName), false));
         }
 
-        private static void AddFirstRenderedRowActions(
-            VisualElement root,
-            List<CaptureRegion> regions,
-            string shotName
-        )
+        private static void AddFirstRenderedRowActions(VisualElement root, List<CaptureRegion> regions, string shotName)
         {
-            foreach (
-                VisualElement actions in root.Query<VisualElement>(null, ObjectItemActionsClass)
-                    .ToList()
-            )
+            foreach (VisualElement actions in root.Query<VisualElement>(null, ObjectItemActionsClass).ToList())
             {
                 if (!IsRenderedForCapture(actions))
                 {
@@ -922,18 +709,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             throw new InvalidOperationException(
-                $"The window exposes no rendered '{ObjectItemActionsClass}' row; the "
-                    + $"'{shotName}' shot cannot prove the row actions painted."
+                $"The window exposes no rendered '{ObjectItemActionsClass}' row; the " + $"'{shotName}' shot cannot prove the row actions painted."
             );
         }
 
-        private static int MeasureRegionColors(
-            Color32[] pixels,
-            int width,
-            int height,
-            Rect pngRect,
-            out float modalColorFraction
-        )
+        private static int MeasureRegionColors(Color32[] pixels, int width, int height, Rect pngRect, out float modalColorFraction)
         {
             int x0 = Mathf.Clamp(Mathf.RoundToInt(pngRect.x), 0, width - 1);
             int y0 = Mathf.Clamp(Mathf.RoundToInt(pngRect.y), 0, height - 1);
@@ -982,10 +762,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             if (string.IsNullOrWhiteSpace(outputDirectory))
             {
-                throw new ArgumentException(
-                    "Capture needs an output directory.",
-                    nameof(outputDirectory)
-                );
+                throw new ArgumentException("Capture needs an output directory.", nameof(outputDirectory));
             }
         }
 
@@ -1022,10 +799,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>(assetPath);
             if (asset == null)
             {
-                throw new InvalidOperationException(
-                    $"The fixture asset '{assetPath}' did not load; the window would "
-                        + "capture an unarranged state."
-                );
+                throw new InvalidOperationException($"The fixture asset '{assetPath}' did not load; the window would " + "capture an unarranged state.");
             }
 
             return asset;
@@ -1046,10 +820,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
             if (loadInitialContent == null)
             {
-                throw new InvalidOperationException(
-                    "The DataVisualizer window exposes no LoadInitialContent member; the "
-                        + "capture driver cannot build the namespace tree."
-                );
+                throw new InvalidOperationException("The DataVisualizer window exposes no LoadInitialContent member; the " + "capture driver cannot build the namespace tree.");
             }
 
             loadInitialContent.Invoke(window, null);
@@ -1057,26 +828,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static NamespaceController GetNamespaceController(DataVisualizerWindow window)
         {
-            FieldInfo controllerField = typeof(DataVisualizerWindow).GetField(
-                "_namespaceController",
-                ReflectedInstanceMembers
-            );
+            FieldInfo controllerField = typeof(DataVisualizerWindow).GetField("_namespaceController", ReflectedInstanceMembers);
             object controller = controllerField?.GetValue(window);
             if (controller == null)
             {
-                throw new InvalidOperationException(
-                    "The DataVisualizer window exposes no namespace controller; the capture "
-                        + "driver cannot select the fixture type."
-                );
+                throw new InvalidOperationException("The DataVisualizer window exposes no namespace controller; the capture " + "driver cannot select the fixture type.");
             }
 
             return (NamespaceController)controller;
         }
 
-        private static void SelectFixtureType(
-            DataVisualizerWindow window,
-            NamespaceController controller
-        )
+        private static void SelectFixtureType(DataVisualizerWindow window, NamespaceController controller)
         {
             controller.SelectType(window, typeof(PlayModeDataObject));
         }
@@ -1099,17 +861,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void VerifySelectedObject(DataVisualizerWindow window)
         {
-            FieldInfo selectedObjectField = typeof(DataVisualizerWindow).GetField(
-                "_selectedObject",
-                ReflectedInstanceMembers
-            );
+            FieldInfo selectedObjectField = typeof(DataVisualizerWindow).GetField("_selectedObject", ReflectedInstanceMembers);
             object selected = selectedObjectField?.GetValue(window);
             if (selected is not PlayModeDataObject)
             {
-                throw new InvalidOperationException(
-                    "The fixture asset was not selected after SelectObject; the capture "
-                        + "would show an empty inspector."
-                );
+                throw new InvalidOperationException("The fixture asset was not selected after SelectObject; the capture " + "would show an empty inspector.");
             }
         }
 
@@ -1124,10 +880,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
             if (selectObject == null)
             {
-                throw new InvalidOperationException(
-                    "The DataVisualizer window exposes no SelectObject member; the capture "
-                        + "driver cannot stage the inspector."
-                );
+                throw new InvalidOperationException("The DataVisualizer window exposes no SelectObject member; the capture " + "driver cannot stage the inspector.");
             }
 
             selectObject.Invoke(window, new object[] { asset });
@@ -1145,35 +898,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             switch (shotName)
             {
                 case CreateShotName:
-                    InvokeWindowMethod(
-                        window,
-                        "BuildCreatePopoverContent",
-                        new[] { typeof(Type) },
-                        new object[] { typeof(PlayModeDataObject) }
-                    );
+                    InvokeWindowMethod(window, "BuildCreatePopoverContent", new[] { typeof(Type) }, new object[] { typeof(PlayModeDataObject) });
                     StagePopoverForCapture(window, CreatePopoverFieldName, CreateButtonFieldName);
                     break;
                 case ImportShotName:
-                    InvokeWindowMethod(
-                        window,
-                        "BuildTypeAddList",
-                        new[] { typeof(string) },
-                        new object[] { null }
-                    );
+                    InvokeWindowMethod(window, "BuildTypeAddList", new[] { typeof(string) }, new object[] { null });
                     StagePopoverForCapture(window, TypeAddPopoverFieldName, TypeAddButtonFieldName);
                     break;
                 case SettingsShotName:
-                    InvokeWindowMethod(
-                        window,
-                        "BuildSettingsPopoverContent",
-                        Type.EmptyTypes,
-                        Array.Empty<object>()
-                    );
-                    StagePopoverForCapture(
-                        window,
-                        SettingsPopoverFieldName,
-                        SettingsButtonFieldName
-                    );
+                    InvokeWindowMethod(window, "BuildSettingsPopoverContent", Type.EmptyTypes, Array.Empty<object>());
+                    StagePopoverForCapture(window, SettingsPopoverFieldName, SettingsButtonFieldName);
                     break;
             }
         }
@@ -1182,11 +916,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Reveals a popover through the extracted production step OpenPopover schedules,
             so the shot shows the same placement and visibility a user gets.
         */
-        private static void StagePopoverForCapture(
-            DataVisualizerWindow window,
-            string popoverFieldName,
-            string triggerFieldName
-        )
+        private static void StagePopoverForCapture(DataVisualizerWindow window, string popoverFieldName, string triggerFieldName)
         {
             VisualElement popover = ReadWindowElement(window, popoverFieldName);
             VisualElement trigger = ReadWindowElement(window, triggerFieldName);
@@ -1194,66 +924,38 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "PositionAndDisplayPopover",
                 ReflectedInstanceMembers,
                 binder: null,
-                types: new[]
-                {
-                    typeof(VisualElement),
-                    typeof(VisualElement),
-                    typeof(bool),
-                    typeof(bool),
-                },
+                types: new[] { typeof(VisualElement), typeof(VisualElement), typeof(bool), typeof(bool) },
                 modifiers: null
             );
             if (positionAndDisplay == null)
             {
                 throw new InvalidOperationException(
-                    "The DataVisualizer window exposes no PositionAndDisplayPopover member; "
-                        + "the capture driver cannot stage the popover states."
+                    "The DataVisualizer window exposes no PositionAndDisplayPopover member; " + "the capture driver cannot stage the popover states."
                 );
             }
 
             positionAndDisplay.Invoke(window, new object[] { popover, trigger, false, true });
         }
 
-        private static void InvokeWindowMethod(
-            DataVisualizerWindow window,
-            string methodName,
-            Type[] parameterTypes,
-            object[] arguments
-        )
+        private static void InvokeWindowMethod(DataVisualizerWindow window, string methodName, Type[] parameterTypes, object[] arguments)
         {
-            MethodInfo method = typeof(DataVisualizerWindow).GetMethod(
-                methodName,
-                ReflectedInstanceMembers,
-                binder: null,
-                types: parameterTypes,
-                modifiers: null
-            );
+            MethodInfo method = typeof(DataVisualizerWindow).GetMethod(methodName, ReflectedInstanceMembers, binder: null, types: parameterTypes, modifiers: null);
             if (method == null)
             {
-                throw new InvalidOperationException(
-                    $"The DataVisualizer window exposes no {methodName} member; the capture "
-                        + "driver cannot arrange the popover states."
-                );
+                throw new InvalidOperationException($"The DataVisualizer window exposes no {methodName} member; the capture " + "driver cannot arrange the popover states.");
             }
 
             method.Invoke(window, arguments);
         }
 
-        private static VisualElement ReadWindowElement(
-            DataVisualizerWindow window,
-            string fieldName
-        )
+        private static VisualElement ReadWindowElement(DataVisualizerWindow window, string fieldName)
         {
-            FieldInfo field = typeof(DataVisualizerWindow).GetField(
-                fieldName,
-                ReflectedInstanceMembers
-            );
+            FieldInfo field = typeof(DataVisualizerWindow).GetField(fieldName, ReflectedInstanceMembers);
             object value = field?.GetValue(window);
             if (value is not VisualElement element)
             {
                 throw new InvalidOperationException(
-                    $"The DataVisualizer window exposes no '{fieldName}' visual element; the "
-                        + "capture driver cannot arrange the popover states."
+                    $"The DataVisualizer window exposes no '{fieldName}' visual element; the " + "capture driver cannot arrange the popover states."
                 );
             }
 
@@ -1262,10 +964,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void InvokeCleanup(DataVisualizerWindow window)
         {
-            MethodInfo cleanup = typeof(DataVisualizerWindow).GetMethod(
-                "Cleanup",
-                ReflectedInstanceMembers
-            );
+            MethodInfo cleanup = typeof(DataVisualizerWindow).GetMethod("Cleanup", ReflectedInstanceMembers);
             cleanup?.Invoke(window, null);
         }
 
@@ -1296,9 +995,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 A uniform region is one background color; painted rows carry borders and text
                 antialiasing, which yields dozens of distinct colors on both measured hosts.
             */
-            internal bool Painted =>
-                DistinctColors >= PaintedDistinctColorFloor
-                && ModalColorFraction <= PaintedModalFractionCeiling;
+            internal bool Painted => DistinctColors >= PaintedDistinctColorFloor && ModalColorFraction <= PaintedModalFractionCeiling;
 
             internal CaptureRegion Region { get; }
 
@@ -1306,11 +1003,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             internal float ModalColorFraction { get; }
 
-            internal CaptureRegionMetric(
-                CaptureRegion region,
-                int distinctColors,
-                float modalColorFraction
-            )
+            internal CaptureRegionMetric(CaptureRegion region, int distinctColors, float modalColorFraction)
             {
                 Region = region;
                 DistinctColors = distinctColors;
@@ -1324,10 +1017,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             internal bool CanaryPainted { get; }
 
-            internal CaptureRegionAnalysis(
-                IReadOnlyList<CaptureRegionMetric> metrics,
-                bool canaryPainted
-            )
+            internal CaptureRegionAnalysis(IReadOnlyList<CaptureRegionMetric> metrics, bool canaryPainted)
             {
                 Metrics = metrics;
                 CanaryPainted = canaryPainted;
@@ -1387,12 +1077,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     initialSizeApplied: EditorPrefs.GetBool(PrefsInitialSizeAppliedKey),
                     hadPreferredWindowSize: EditorPrefs.HasKey(PrefsPreferredWindowSizeKey),
                     preferredWindowSize: EditorPrefs.GetString(PrefsPreferredWindowSizeKey),
-                    hadTemporaryWindowClampSize: EditorPrefs.HasKey(
-                        PrefsTemporaryWindowClampSizeKey
-                    ),
-                    temporaryWindowClampSize: EditorPrefs.GetString(
-                        PrefsTemporaryWindowClampSizeKey
-                    )
+                    hadTemporaryWindowClampSize: EditorPrefs.HasKey(PrefsTemporaryWindowClampSizeKey),
+                    temporaryWindowClampSize: EditorPrefs.GetString(PrefsTemporaryWindowClampSizeKey)
                 );
             }
 
@@ -1447,16 +1133,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     EditorPrefs.DeleteKey(PrefsInitialSizeAppliedKey);
                 }
 
-                RestoreString(
-                    PrefsPreferredWindowSizeKey,
-                    _hadPreferredWindowSize,
-                    _preferredWindowSize
-                );
-                RestoreString(
-                    PrefsTemporaryWindowClampSizeKey,
-                    _hadTemporaryWindowClampSize,
-                    _temporaryWindowClampSize
-                );
+                RestoreString(PrefsPreferredWindowSizeKey, _hadPreferredWindowSize, _preferredWindowSize);
+                RestoreString(PrefsTemporaryWindowClampSizeKey, _hadTemporaryWindowClampSize, _temporaryWindowClampSize);
             }
         }
 
@@ -1501,28 +1179,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             internal static PersistedSelectionSnapshot Capture(DataVisualizerWindow window)
             {
-                DataVisualizerSettings settings = ReadProperty<DataVisualizerSettings>(
-                    window,
-                    "Settings"
-                );
-                DataVisualizerUserState userState = ReadProperty<DataVisualizerUserState>(
-                    window,
-                    "UserState"
-                );
+                DataVisualizerSettings settings = ReadProperty<DataVisualizerSettings>(window, "Settings");
+                DataVisualizerUserState userState = ReadProperty<DataVisualizerUserState>(window, "UserState");
                 if (settings == null || userState == null)
                 {
                     throw new InvalidOperationException(
-                        "The DataVisualizer window exposes no Settings/UserState; the capture "
-                            + "driver cannot snapshot the persisted selection."
+                        "The DataVisualizer window exposes no Settings/UserState; the capture " + "driver cannot snapshot the persisted selection."
                     );
                 }
 
                 return new PersistedSelectionSnapshot(
                     settingsNamespaceKey: ReadMember<string>(settings, NamespaceKeyMember),
                     settingsTypeFullName: ReadMember<string>(settings, TypeFullNameMember),
-                    settingsObjectSelections: CloneSelections(
-                        ReadMember<List<LastObjectSelectionEntry>>(settings, ObjectSelectionsMember)
-                    ),
+                    settingsObjectSelections: CloneSelections(ReadMember<List<LastObjectSelectionEntry>>(settings, ObjectSelectionsMember)),
                     userStateNamespaceKey: userState.lastSelectedNamespaceKey,
                     userStateTypeFullName: userState.lastSelectedTypeFullName,
                     userStateObjectSelections: CloneSelections(userState.lastObjectSelections)
@@ -1531,9 +1200,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             private static T ReadProperty<T>(object target, string propertyName)
             {
-                PropertyInfo property = target
-                    .GetType()
-                    .GetProperty(propertyName, ReflectedInstanceMembers);
+                PropertyInfo property = target.GetType().GetProperty(propertyName, ReflectedInstanceMembers);
                 return (T)property?.GetValue(target);
             }
 
@@ -1549,9 +1216,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 field?.SetValue(target, value);
             }
 
-            private static List<LastObjectSelectionEntry> CloneSelections(
-                List<LastObjectSelectionEntry> entries
-            )
+            private static List<LastObjectSelectionEntry> CloneSelections(List<LastObjectSelectionEntry> entries)
             {
                 List<LastObjectSelectionEntry> clones = new();
                 if (entries == null)
@@ -1573,18 +1238,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     "PersistSettings",
                     ReflectedInstanceMembers,
                     binder: null,
-                    types: new[]
-                    {
-                        typeof(Func<DataVisualizerSettings, bool>),
-                        typeof(Func<DataVisualizerUserState, bool>),
-                    },
+                    types: new[] { typeof(Func<DataVisualizerSettings, bool>), typeof(Func<DataVisualizerUserState, bool>) },
                     modifiers: null
                 );
                 if (persistSettings == null)
                 {
                     throw new InvalidOperationException(
-                        "The DataVisualizer window exposes no PersistSettings member; the "
-                            + "capture driver cannot restore the persisted selection."
+                        "The DataVisualizer window exposes no PersistSettings member; the " + "capture driver cannot restore the persisted selection."
                     );
                 }
 
@@ -1592,11 +1252,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 {
                     SetMember(settings, NamespaceKeyMember, _settingsNamespaceKey);
                     SetMember(settings, TypeFullNameMember, _settingsTypeFullName);
-                    SetMember(
-                        settings,
-                        ObjectSelectionsMember,
-                        CloneSelections(_settingsObjectSelections)
-                    );
+                    SetMember(settings, ObjectSelectionsMember, CloneSelections(_settingsObjectSelections));
                     return true;
                 };
                 Func<DataVisualizerUserState, bool> userStateApplier = userState =>

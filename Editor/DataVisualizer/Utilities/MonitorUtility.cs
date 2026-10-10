@@ -26,10 +26,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return TryResolveEditorPlacementRect(EditorGUIUtility.GetMainWindowPosition, out rect);
         }
 
-        public static bool TryResolveEditorPlacementRect(
-            Func<Rect> editorPointRectProvider,
-            out Rect rect
-        )
+        public static bool TryResolveEditorPlacementRect(Func<Rect> editorPointRectProvider, out Rect rect)
         {
             return TryGetUsableRect(editorPointRectProvider, out rect);
         }
@@ -43,12 +40,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return new Rect(x, y, constrainedWidth, constrainedHeight);
         }
 
-        public static Vector2 SelectPreferredSize(
-            Vector2 savedSize,
-            bool hasSavedSize,
-            Vector2 currentSize,
-            Vector2 minimumSize
-        )
+        public static Vector2 SelectPreferredSize(Vector2 savedSize, bool hasSavedSize, Vector2 currentSize, Vector2 minimumSize)
         {
             if (hasSavedSize && IsUsableSize(savedSize))
             {
@@ -58,29 +50,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return NormalizePreferredSize(currentSize, minimumSize);
         }
 
-        public static Vector2 CalculateWindowMinimumSize(
-            Vector2 minimumSize,
-            Vector2 temporaryClampedSize,
-            bool temporaryClampIsActive
-        )
+        public static Vector2 CalculateWindowMinimumSize(Vector2 minimumSize, Vector2 temporaryClampedSize, bool temporaryClampIsActive)
         {
             if (!temporaryClampIsActive || !IsUsableSize(temporaryClampedSize))
             {
                 return minimumSize;
             }
 
-            return new Vector2(
-                Mathf.Min(minimumSize.x, temporaryClampedSize.x),
-                Mathf.Min(minimumSize.y, temporaryClampedSize.y)
-            );
+            return new Vector2(Mathf.Min(minimumSize.x, temporaryClampedSize.x), Mathf.Min(minimumSize.y, temporaryClampedSize.y));
         }
 
         public static bool IsSameSize(Vector2 lhs, Vector2 rhs)
         {
-            return IsUsableSize(lhs)
-                && IsUsableSize(rhs)
-                && Mathf.Approximately(lhs.x, rhs.x)
-                && Mathf.Approximately(lhs.y, rhs.y);
+            return IsUsableSize(lhs) && IsUsableSize(rhs) && Mathf.Approximately(lhs.x, rhs.x) && Mathf.Approximately(lhs.y, rhs.y);
         }
 
         public static Vector2 NormalizePreferredSize(Vector2 size, Vector2 minimumSize)
@@ -93,20 +75,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return new Vector2(Mathf.Max(minimumSize.x, size.x), Mathf.Max(minimumSize.y, size.y));
         }
 
-        public static bool ShouldCapturePreferredSize(
-            bool packagePlacementPending,
-            bool hasObservedInitialGeometry,
-            bool isDocked
-        )
+        public static bool ShouldCapturePreferredSize(bool packagePlacementPending, bool hasObservedInitialGeometry, bool isDocked)
         {
             return !packagePlacementPending && hasObservedInitialGeometry && !isDocked;
         }
 
         public static string SerializeSize(Vector2 size)
         {
-            return size.x.ToString("R", CultureInfo.InvariantCulture)
-                + ","
-                + size.y.ToString("R", CultureInfo.InvariantCulture);
+            return size.x.ToString("R", CultureInfo.InvariantCulture) + "," + size.y.ToString("R", CultureInfo.InvariantCulture);
         }
 
         public static bool TryParseSize(string serializedSize, out Vector2 size)
@@ -117,18 +93,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 if (
                     0 < separatorIndex
                     && separatorIndex == serializedSize.LastIndexOf(',')
-                    && float.TryParse(
-                        serializedSize.Substring(0, separatorIndex),
-                        NumberStyles.Float,
-                        CultureInfo.InvariantCulture,
-                        out float width
-                    )
-                    && float.TryParse(
-                        serializedSize.Substring(separatorIndex + 1),
-                        NumberStyles.Float,
-                        CultureInfo.InvariantCulture,
-                        out float height
-                    )
+                    && float.TryParse(serializedSize.Substring(0, separatorIndex), NumberStyles.Float, CultureInfo.InvariantCulture, out float width)
+                    && float.TryParse(serializedSize.Substring(separatorIndex + 1), NumberStyles.Float, CultureInfo.InvariantCulture, out float height)
                 )
                 {
                     Vector2 candidate = new(width, height);
@@ -149,11 +115,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return !initialSizeApplied && !isDocked;
         }
 
-        public static bool TryResolveMonitorRect(
-            Func<Rect> preferredRectProvider,
-            Func<Rect> fallbackRectProvider,
-            out Rect rect
-        )
+        public static bool TryResolveMonitorRect(Func<Rect> preferredRectProvider, Func<Rect> fallbackRectProvider, out Rect rect)
         {
             /*
                 Retained as a general source-compatible resolver. Initial editor placement uses

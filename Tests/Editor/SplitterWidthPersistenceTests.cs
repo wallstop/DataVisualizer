@@ -11,16 +11,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class SplitterWidthPersistenceTests
     {
-        private const string SplitterOuterKey =
-            "WallstopStudios.Editor.DataVisualizer.SplitterOuterFixedPaneWidth";
-        private const string SplitterInnerKey =
-            "WallstopStudios.Editor.DataVisualizer.SplitterInnerFixedPaneWidth";
-        private const string InitialSizeAppliedKey =
-            "WallstopStudios.Editor.DataVisualizer.InitialSizeApplied";
-        private const string PreferredWindowSizeKey =
-            "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
-        private const string TemporaryWindowClampSizeKey =
-            "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
+        private const string SplitterOuterKey = "WallstopStudios.Editor.DataVisualizer.SplitterOuterFixedPaneWidth";
+        private const string SplitterInnerKey = "WallstopStudios.Editor.DataVisualizer.SplitterInnerFixedPaneWidth";
+        private const string InitialSizeAppliedKey = "WallstopStudios.Editor.DataVisualizer.InitialSizeApplied";
+        private const string PreferredWindowSizeKey = "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
+        private const string TemporaryWindowClampSizeKey = "WallstopStudios.Editor.DataVisualizer.TemporaryWindowClampSize";
         private const float TestOuterWidth = 350f;
         private const float TestInnerWidth = 250f;
         private const float ChangedOuterWidth = 330f;
@@ -44,9 +39,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void CloseDataVisualizerWindows()
         {
-            foreach (
-                DataVisualizerWindow window in Resources.FindObjectsOfTypeAll<DataVisualizerWindow>()
-            )
+            foreach (DataVisualizerWindow window in Resources.FindObjectsOfTypeAll<DataVisualizerWindow>())
             {
                 window.Close();
             }
@@ -62,14 +55,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void ChangePaneWidth(TwoPaneSplitView splitView, float width)
         {
-            MethodInfo setFixedPaneDimension = typeof(TwoPaneSplitView).GetMethod(
-                "SetFixedPaneDimension",
-                BindingFlags.Instance | BindingFlags.NonPublic
-            );
-            Assert.That(
-                setFixedPaneDimension != null,
-                "TwoPaneSplitView.SetFixedPaneDimension is required to drive a pane-width change."
-            );
+            MethodInfo setFixedPaneDimension = typeof(TwoPaneSplitView).GetMethod("SetFixedPaneDimension", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(setFixedPaneDimension != null, "TwoPaneSplitView.SetFixedPaneDimension is required to drive a pane-width change.");
             setFixedPaneDimension.Invoke(splitView, new object[] { width });
         }
 
@@ -88,19 +75,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static IEnumerator WaitForSavedWidth(float expectedWidth)
         {
             float deadline = (float)EditorApplication.timeSinceStartup + DebounceTimeoutSeconds;
-            while (
-                (float)EditorApplication.timeSinceStartup < deadline
-                && !Mathf.Approximately(EditorPrefs.GetFloat(SplitterOuterKey), expectedWidth)
-            )
+            while ((float)EditorApplication.timeSinceStartup < deadline && !Mathf.Approximately(EditorPrefs.GetFloat(SplitterOuterKey), expectedWidth))
             {
                 yield return null;
             }
 
-            Assert.That(
-                EditorPrefs.GetFloat(SplitterOuterKey),
-                Is.EqualTo(expectedWidth).Within(PaneWidthTolerance),
-                "the debounced save must persist the changed pane width"
-            );
+            Assert.That(EditorPrefs.GetFloat(SplitterOuterKey), Is.EqualTo(expectedWidth).Within(PaneWidthTolerance), "the debounced save must persist the changed pane width");
         }
 
         [UnityTest]
@@ -114,11 +94,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 yield return OpenSplitterWindow(floating: false);
 
-                Assert.AreEqual(
-                    TestOuterWidth,
-                    EditorPrefs.GetFloat(SplitterOuterKey),
-                    "the restored width must not be rewritten before a pane change"
-                );
+                Assert.AreEqual(TestOuterWidth, EditorPrefs.GetFloat(SplitterOuterKey), "the restored width must not be rewritten before a pane change");
 
                 ChangePaneWidth(_outerSplitView, ChangedOuterWidth);
                 yield return WaitForPaneWidth(ChangedOuterWidth);
@@ -149,11 +125,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 yield return WaitForPaneWidth(ChangedOuterWidth);
                 yield return WaitForSavedWidth(ChangedOuterWidth);
 
-                Assert.AreEqual(
-                    innerBefore,
-                    EditorPrefs.GetFloat(SplitterInnerKey),
-                    "a save triggered by one pane change must not rewrite the unchanged sibling width"
-                );
+                Assert.AreEqual(innerBefore, EditorPrefs.GetFloat(SplitterInnerKey), "a save triggered by one pane change must not rewrite the unchanged sibling width");
             }
         }
 
@@ -174,18 +146,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 yield return WaitForPaneWidth(TestOuterWidth);
 
                 float settledAt = (float)EditorApplication.timeSinceStartup;
-                while (
-                    (float)EditorApplication.timeSinceStartup < settledAt + DebounceTimeoutSeconds
-                )
+                while ((float)EditorApplication.timeSinceStartup < settledAt + DebounceTimeoutSeconds)
                 {
                     yield return null;
                 }
 
-                Assert.AreEqual(
-                    TestOuterWidth,
-                    EditorPrefs.GetFloat(SplitterOuterKey),
-                    "a pane width that settles back to the saved value must cancel the pending save"
-                );
+                Assert.AreEqual(TestOuterWidth, EditorPrefs.GetFloat(SplitterOuterKey), "a pane width that settles back to the saved value must cancel the pending save");
             }
         }
 
@@ -203,11 +169,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 ChangePaneWidth(_outerSplitView, ChangedOuterWidth);
                 yield return WaitForPaneWidth(ChangedOuterWidth);
 
-                Assert.AreEqual(
-                    TestOuterWidth,
-                    EditorPrefs.GetFloat(SplitterOuterKey),
-                    "the changed width must still be pending inside the debounce window"
-                );
+                Assert.AreEqual(TestOuterWidth, EditorPrefs.GetFloat(SplitterOuterKey), "the changed width must still be pending inside the debounce window");
 
                 CloseDataVisualizerWindows();
                 yield return null;
@@ -229,16 +191,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             _hadOriginalInner = EditorPrefs.HasKey(SplitterInnerKey);
             _originalInner = _hadOriginalInner ? EditorPrefs.GetFloat(SplitterInnerKey) : 0f;
             _hadInitialSizeApplied = EditorPrefs.HasKey(InitialSizeAppliedKey);
-            _originalInitialSizeApplied =
-                _hadInitialSizeApplied && EditorPrefs.GetBool(InitialSizeAppliedKey);
+            _originalInitialSizeApplied = _hadInitialSizeApplied && EditorPrefs.GetBool(InitialSizeAppliedKey);
             _hadPreferredWindowSize = EditorPrefs.HasKey(PreferredWindowSizeKey);
-            _originalPreferredWindowSize = _hadPreferredWindowSize
-                ? EditorPrefs.GetString(PreferredWindowSizeKey)
-                : null;
+            _originalPreferredWindowSize = _hadPreferredWindowSize ? EditorPrefs.GetString(PreferredWindowSizeKey) : null;
             _hadTemporaryWindowClampSize = EditorPrefs.HasKey(TemporaryWindowClampSizeKey);
-            _originalTemporaryWindowClampSize = _hadTemporaryWindowClampSize
-                ? EditorPrefs.GetString(TemporaryWindowClampSizeKey)
-                : null;
+            _originalTemporaryWindowClampSize = _hadTemporaryWindowClampSize ? EditorPrefs.GetString(TemporaryWindowClampSizeKey) : null;
             EditorPrefs.SetFloat(SplitterOuterKey, TestOuterWidth);
             EditorPrefs.SetFloat(SplitterInnerKey, TestInnerWidth);
 
@@ -250,11 +207,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             else
             {
                 EditorWindow.GetWindow<LayoutTestWindow>("DxVisualizer Test Anchor");
-                _window = EditorWindow.GetWindow<DataVisualizerWindow>(
-                    "DxVisualizer",
-                    false,
-                    typeof(LayoutTestWindow)
-                );
+                _window = EditorWindow.GetWindow<DataVisualizerWindow>("DxVisualizer", false, typeof(LayoutTestWindow));
             }
 
             yield return WaitForSplitViews();
@@ -267,10 +220,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 yield return null;
 
-                if (
-                    IsPersistedWidthToResolved(SplitterOuterKey)
-                    && IsPersistedWidthToInnerResolved()
-                )
+                if (IsPersistedWidthToResolved(SplitterOuterKey) && IsPersistedWidthToInnerResolved())
                 {
                     yield break;
                 }
@@ -285,18 +235,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 return false;
             }
 
-            return Mathf.Approximately(
-                EditorPrefs.GetFloat(SplitterInnerKey),
-                innerSplitView.fixedPane.resolvedStyle.width
-            );
+            return Mathf.Approximately(EditorPrefs.GetFloat(SplitterInnerKey), innerSplitView.fixedPane.resolvedStyle.width);
         }
 
         private bool IsPersistedWidthToResolved(string preferenceKey)
         {
-            return Mathf.Approximately(
-                EditorPrefs.GetFloat(preferenceKey),
-                _outerSplitView.fixedPane.resolvedStyle.width
-            );
+            return Mathf.Approximately(EditorPrefs.GetFloat(preferenceKey), _outerSplitView.fixedPane.resolvedStyle.width);
         }
 
         private void RestoreSplitterPreferences()
@@ -319,16 +263,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 EditorPrefs.DeleteKey(SplitterInnerKey);
             }
 
-            RestoreStringPreference(
-                PreferredWindowSizeKey,
-                _hadPreferredWindowSize,
-                _originalPreferredWindowSize
-            );
-            RestoreStringPreference(
-                TemporaryWindowClampSizeKey,
-                _hadTemporaryWindowClampSize,
-                _originalTemporaryWindowClampSize
-            );
+            RestoreStringPreference(PreferredWindowSizeKey, _hadPreferredWindowSize, _originalPreferredWindowSize);
+            RestoreStringPreference(TemporaryWindowClampSizeKey, _hadTemporaryWindowClampSize, _originalTemporaryWindowClampSize);
             if (_hadInitialSizeApplied)
             {
                 EditorPrefs.SetBool(InitialSizeAppliedKey, _originalInitialSizeApplied);
@@ -341,14 +277,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private IEnumerator WaitForSplitViews()
         {
-            FieldInfo outerField = typeof(DataVisualizerWindow).GetField(
-                "_outerSplitView",
-                BindingFlags.Instance | BindingFlags.NonPublic
-            );
-            Assert.That(
-                outerField != null,
-                "DataVisualizer must declare the '_outerSplitView' field."
-            );
+            FieldInfo outerField = typeof(DataVisualizerWindow).GetField("_outerSplitView", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(outerField != null, "DataVisualizer must declare the '_outerSplitView' field.");
 
             float deadline = (float)EditorApplication.timeSinceStartup + LayoutTimeoutSeconds;
             while ((float)EditorApplication.timeSinceStartup < deadline)
@@ -356,22 +286,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 yield return null;
 
                 _outerSplitView = (TwoPaneSplitView)outerField.GetValue(_window);
-                if (
-                    _outerSplitView != null
-                    && _outerSplitView.fixedPane != null
-                    && Mathf.Approximately(
-                        _outerSplitView.fixedPane.resolvedStyle.width,
-                        TestOuterWidth
-                    )
-                )
+                if (_outerSplitView != null && _outerSplitView.fixedPane != null && Mathf.Approximately(_outerSplitView.fixedPane.resolvedStyle.width, TestOuterWidth))
                 {
                     yield break;
                 }
             }
 
             Assert.Fail(
-                $"The split views never settled at the restored outer width {TestOuterWidth}; "
-                    + $"last resolved width was {_outerSplitView?.fixedPane?.resolvedStyle.width}."
+                $"The split views never settled at the restored outer width {TestOuterWidth}; " + $"last resolved width was {_outerSplitView?.fixedPane?.resolvedStyle.width}."
             );
         }
 
@@ -389,10 +311,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
             }
 
-            Assert.Fail(
-                $"The fixed pane width never settled at {expectedWidth}; "
-                    + $"last resolved width was {fixedPane.resolvedStyle.width}."
-            );
+            Assert.Fail($"The fixed pane width never settled at {expectedWidth}; " + $"last resolved width was {fixedPane.resolvedStyle.width}.");
         }
     }
 }

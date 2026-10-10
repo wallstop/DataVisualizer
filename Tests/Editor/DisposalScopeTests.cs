@@ -55,14 +55,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldReportReusableCleanupFailureWithoutThrowingFromDispose()
         {
-            ReusableDisposalScope<int> scopes = new(_ =>
-                throw new InvalidOperationException("Expected cleanup failure.")
-            );
+            ReusableDisposalScope<int> scopes = new(_ => throw new InvalidOperationException("Expected cleanup failure."));
             ReusableDisposalLease<int> lease = scopes.Acquire(1);
-            LogAssert.Expect(
-                LogType.Exception,
-                "InvalidOperationException: Expected cleanup failure."
-            );
+            LogAssert.Expect(LogType.Exception, "InvalidOperationException: Expected cleanup failure.");
 
             Assert.DoesNotThrow(lease.Dispose);
         }
@@ -87,13 +82,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             bool finalCleanupRan = false;
             TestCleanupScope cleanup = new();
             cleanup.Defer(() => finalCleanupRan = true);
-            cleanup.Defer(() =>
-                throw new InvalidOperationException("Expected test cleanup failure.")
-            );
-            LogAssert.Expect(
-                LogType.Exception,
-                "InvalidOperationException: Expected test cleanup failure."
-            );
+            cleanup.Defer(() => throw new InvalidOperationException("Expected test cleanup failure."));
+            LogAssert.Expect(LogType.Exception, "InvalidOperationException: Expected test cleanup failure.");
 
             cleanup.Dispose();
 

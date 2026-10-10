@@ -19,13 +19,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             Type[] enumTypes = PackageAssemblies
                 .SelectMany(assembly => assembly.GetTypes())
-                .Where(type =>
-                    type.IsEnum
-                    && type.Namespace?.StartsWith(
-                        "WallstopStudios.DataVisualizer",
-                        StringComparison.Ordinal
-                    ) == true
-                )
+                .Where(type => type.IsEnum && type.Namespace?.StartsWith("WallstopStudios.DataVisualizer", StringComparison.Ordinal) == true)
                 .Distinct()
                 .OrderBy(type => type.FullName, StringComparer.Ordinal)
                 .ToArray();
@@ -35,16 +29,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 object zeroValue = Enum.ToObject(enumType, 0);
                 string zeroMemberName = Enum.GetName(enumType, zeroValue);
-                Assert.That(
-                    zeroMemberName != null,
-                    $"{enumType.FullName} must declare a zero value."
-                );
+                Assert.That(zeroMemberName != null, $"{enumType.FullName} must declare a zero value.");
 
                 FieldInfo zeroMember = enumType.GetField(zeroMemberName);
-                Assert.That(
-                    zeroMember.GetCustomAttribute<ObsoleteAttribute>() != null,
-                    $"{enumType.FullName}.{zeroMemberName} must be marked obsolete."
-                );
+                Assert.That(zeroMember.GetCustomAttribute<ObsoleteAttribute>() != null, $"{enumType.FullName}.{zeroMemberName} must be marked obsolete.");
             }
         }
     }

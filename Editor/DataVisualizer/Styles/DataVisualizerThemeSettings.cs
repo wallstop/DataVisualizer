@@ -3,11 +3,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
     using UnityEngine;
     using UnityEngine.UIElements;
 
-    [CreateAssetMenu(
-        fileName = "DataVisualizerThemeSettings",
-        menuName = "Wallstop Studios/DxVisualizer/DxVisualizer Theme",
-        order = 2
-    )]
+    [CreateAssetMenu(fileName = "DataVisualizerThemeSettings", menuName = "Wallstop Studios/DxVisualizer/DxVisualizer Theme", order = 2)]
     public sealed class DataVisualizerThemeSettings : ScriptableObject
     {
         public StyleSheet StyleSheet => styleSheet;

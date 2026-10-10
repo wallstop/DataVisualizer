@@ -21,15 +21,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         private readonly Dictionary<string, int> _namespaceOrder;
         private Type _selectedType;
 
-        public NamespaceController(
-            Dictionary<string, List<Type>> managedTypes,
-            Dictionary<string, int> namespaceOrder
-        )
+        public NamespaceController(Dictionary<string, List<Type>> managedTypes, Dictionary<string, int> namespaceOrder)
         {
             // Need to store references, not copy, for double data binding
             _managedTypes = managedTypes ?? throw new ArgumentNullException(nameof(managedTypes));
-            _namespaceOrder =
-                namespaceOrder ?? throw new ArgumentNullException(nameof(namespaceOrder));
+            _namespaceOrder = namespaceOrder ?? throw new ArgumentNullException(nameof(namespaceOrder));
             _selectedType = null;
         }
 
@@ -52,31 +48,19 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 int compensatedIndex = Mathf.Max(0, index - offset);
                 goUpButton.EnableInClassList("go-button-disabled", compensatedIndex == 0);
-                goUpButton.EnableInClassList(
-                    StyleConstants.ActionButtonClass,
-                    compensatedIndex != 0
-                );
+                goUpButton.EnableInClassList(StyleConstants.ActionButtonClass, compensatedIndex != 0);
                 goUpButton.EnableInClassList("go-button", compensatedIndex != 0);
             }
             Button goDownButton = item.Q<Button>("go-down-button");
             if (goDownButton != null)
             {
-                goDownButton.EnableInClassList(
-                    "go-button-disabled",
-                    index == parent.childCount - 1
-                );
-                goDownButton.EnableInClassList(
-                    StyleConstants.ActionButtonClass,
-                    index != parent.childCount - 1
-                );
+                goDownButton.EnableInClassList("go-button-disabled", index == parent.childCount - 1);
+                goDownButton.EnableInClassList(StyleConstants.ActionButtonClass, index != parent.childCount - 1);
                 goDownButton.EnableInClassList("go-button", index != parent.childCount - 1);
             }
         }
 
-        public static List<string> RemoveManagedTypeNames(
-            IEnumerable<string> managedTypeNames,
-            IEnumerable<string> typeNamesToRemove
-        )
+        public static List<string> RemoveManagedTypeNames(IEnumerable<string> managedTypeNames, IEnumerable<string> typeNamesToRemove)
         {
             if (managedTypeNames == null)
             {
@@ -117,11 +101,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal static bool IsTypeRemovable(Type type)
         {
-            return type == null
-                || (
-                    !typeof(BaseDataObject).IsAssignableFrom(type)
-                    && !type.IsAttributeDefined<CustomDataVisualizationAttribute>()
-                );
+            return type == null || (!typeof(BaseDataObject).IsAssignableFrom(type) && !type.IsAttributeDefined<CustomDataVisualizationAttribute>());
         }
 
         internal static string GetNamespaceKey(Type type)
@@ -132,10 +112,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return emptyNamespace;
             }
 
-            if (
-                type.IsAttributeDefined(out CustomDataVisualizationAttribute attribute)
-                && !string.IsNullOrWhiteSpace(attribute.Namespace)
-            )
+            if (type.IsAttributeDefined(out CustomDataVisualizationAttribute attribute) && !string.IsNullOrWhiteSpace(attribute.Namespace))
             {
                 return attribute.Namespace;
             }
@@ -147,9 +124,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             int lastSeparatorIndex = namespaceName.LastIndexOf('.');
-            return lastSeparatorIndex < 0
-                ? namespaceName
-                : namespaceName.Substring(lastSeparatorIndex + 1);
+            return lastSeparatorIndex < 0 ? namespaceName : namespaceName.Substring(lastSeparatorIndex + 1);
         }
 
         internal static string GetTypeDisplayName(Type type)
@@ -159,12 +134,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 return emptyType;
             }
-            if (
-                type.IsAttributeDefined(
-                    out CustomDataVisualizationAttribute attribute,
-                    inherit: false
-                ) && !string.IsNullOrWhiteSpace(attribute.TypeName)
-            )
+            if (type.IsAttributeDefined(out CustomDataVisualizationAttribute attribute, inherit: false) && !string.IsNullOrWhiteSpace(attribute.TypeName))
             {
                 return attribute.TypeName;
             }
@@ -184,11 +154,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             return element.userData as Type;
         }
 
-        private static void SaveNamespaceAndTypeSelectionState(
-            DataVisualizer dataVisualizer,
-            string namespaceKey,
-            Type type
-        )
+        private static void SaveNamespaceAndTypeSelectionState(DataVisualizer dataVisualizer, string namespaceKey, Type type)
         {
             try
             {
@@ -212,21 +178,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private static void SetLastSelectedTypeFullName(
-            DataVisualizer dataVisualizer,
-            string typeFullName
-        )
+        private static void SetLastSelectedTypeFullName(DataVisualizer dataVisualizer, string typeFullName)
         {
             dataVisualizer.PersistSettings(
                 settings =>
                 {
-                    if (
-                        string.Equals(
-                            settings.lastSelectedTypeFullName,
-                            typeFullName,
-                            StringComparison.Ordinal
-                        )
-                    )
+                    if (string.Equals(settings.lastSelectedTypeFullName, typeFullName, StringComparison.Ordinal))
                     {
                         return false;
                     }
@@ -235,13 +192,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
                 userState =>
                 {
-                    if (
-                        string.Equals(
-                            userState.lastSelectedTypeFullName,
-                            typeFullName,
-                            StringComparison.Ordinal
-                        )
-                    )
+                    if (string.Equals(userState.lastSelectedTypeFullName, typeFullName, StringComparison.Ordinal))
                     {
                         return false;
                     }
@@ -256,13 +207,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             dataVisualizer.PersistSettings(
                 settings =>
                 {
-                    if (
-                        string.Equals(
-                            settings.lastSelectedNamespaceKey,
-                            value,
-                            StringComparison.Ordinal
-                        )
-                    )
+                    if (string.Equals(settings.lastSelectedNamespaceKey, value, StringComparison.Ordinal))
                     {
                         return false;
                     }
@@ -271,13 +216,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
                 userState =>
                 {
-                    if (
-                        string.Equals(
-                            userState.lastSelectedNamespaceKey,
-                            value,
-                            StringComparison.Ordinal
-                        )
-                    )
+                    if (string.Equals(userState.lastSelectedNamespaceKey, value, StringComparison.Ordinal))
                     {
                         return false;
                     }
@@ -287,10 +226,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        private static bool TryGetNamespace(
-            VisualElement typeElement,
-            out VisualElement namespaceElement
-        )
+        private static bool TryGetNamespace(VisualElement typeElement, out VisualElement namespaceElement)
         {
             VisualElement candidateNamespace = typeElement?.parent?.parent;
             if (candidateNamespace == null)
@@ -303,22 +239,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             return true;
         }
 
-        private static void ApplyNamespaceCollapsedState(
-            DataVisualizer dataVisualizer,
-            Label indicator,
-            VisualElement typesContainer,
-            bool collapsed,
-            bool saveState
-        )
+        private static void ApplyNamespaceCollapsedState(DataVisualizer dataVisualizer, Label indicator, VisualElement typesContainer, bool collapsed, bool saveState)
         {
             if (indicator == null || typesContainer == null)
             {
                 return;
             }
 
-            indicator.text = collapsed
-                ? StyleConstants.ArrowCollapsed
-                : StyleConstants.ArrowExpanded;
+            indicator.text = collapsed ? StyleConstants.ArrowCollapsed : StyleConstants.ArrowExpanded;
             typesContainer.style.display = collapsed ? DisplayStyle.None : DisplayStyle.Flex;
 
             if (!saveState)
@@ -334,11 +262,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             SetIsNamespaceCollapsed(dataVisualizer, namespaceKey, collapsed);
         }
 
-        private static void SetIsNamespaceCollapsed(
-            DataVisualizer dataVisualizer,
-            string namespaceKey,
-            bool isCollapsed
-        )
+        private static void SetIsNamespaceCollapsed(DataVisualizer dataVisualizer, string namespaceKey, bool isCollapsed)
         {
             if (string.IsNullOrWhiteSpace(namespaceKey))
             {
@@ -351,10 +275,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        private static bool GetIsNamespaceCollapsed(
-            DataVisualizer dataVisualizer,
-            string namespaceKey
-        )
+        private static bool GetIsNamespaceCollapsed(DataVisualizer dataVisualizer, string namespaceKey)
         {
             if (string.IsNullOrWhiteSpace(namespaceKey))
             {
@@ -364,25 +285,18 @@ namespace WallstopStudios.DataVisualizer.Editor
             DataVisualizerSettings settings = dataVisualizer.Settings;
             if (settings.persistStateInSettingsAsset)
             {
-                NamespaceCollapseState entry = settings.namespaceCollapseStates?.Find(state =>
-                    string.Equals(state.namespaceKey, namespaceKey, StringComparison.Ordinal)
-                );
+                NamespaceCollapseState entry = settings.namespaceCollapseStates?.Find(state => string.Equals(state.namespaceKey, namespaceKey, StringComparison.Ordinal));
                 return entry?.isCollapsed ?? false;
             }
             else
             {
                 DataVisualizerUserState userState = dataVisualizer.UserState;
-                NamespaceCollapseState entry = userState.namespaceCollapseStates?.Find(state =>
-                    string.Equals(state.namespaceKey, namespaceKey, StringComparison.Ordinal)
-                );
+                NamespaceCollapseState entry = userState.namespaceCollapseStates?.Find(state => string.Equals(state.namespaceKey, namespaceKey, StringComparison.Ordinal));
                 return entry?.isCollapsed ?? false;
             }
         }
 
-        private static void PersistManagedTypesList(
-            DataVisualizer dataVisualizer,
-            List<string> managedList
-        )
+        private static void PersistManagedTypesList(DataVisualizer dataVisualizer, List<string> managedList)
         {
             dataVisualizer.PersistSettings(
                 settings =>
@@ -398,11 +312,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
         }
 
-        private static void RemoveTypeOrderEntry(
-            DataVisualizer dataVisualizer,
-            string namespaceKey,
-            string typeName
-        )
+        private static void RemoveTypeOrderEntry(DataVisualizer dataVisualizer, string namespaceKey, string typeName)
         {
             if (string.IsNullOrWhiteSpace(namespaceKey) || string.IsNullOrWhiteSpace(typeName))
             {
@@ -412,48 +322,28 @@ namespace WallstopStudios.DataVisualizer.Editor
             dataVisualizer.PersistSettings(
                 settings =>
                 {
-                    NamespaceTypeOrder orderEntry = settings.typeOrders?.Find(typeOrder =>
-                        string.Equals(
-                            typeOrder.namespaceKey,
-                            namespaceKey,
-                            StringComparison.Ordinal
-                        )
-                    );
+                    NamespaceTypeOrder orderEntry = settings.typeOrders?.Find(typeOrder => string.Equals(typeOrder.namespaceKey, namespaceKey, StringComparison.Ordinal));
                     return orderEntry != null && orderEntry.typeNames.Remove(typeName);
                 },
                 userState =>
                 {
-                    NamespaceTypeOrder orderEntry = userState.typeOrders?.Find(typeOrder =>
-                        string.Equals(
-                            typeOrder.namespaceKey,
-                            namespaceKey,
-                            StringComparison.Ordinal
-                        )
-                    );
+                    NamespaceTypeOrder orderEntry = userState.typeOrders?.Find(typeOrder => string.Equals(typeOrder.namespaceKey, namespaceKey, StringComparison.Ordinal));
                     return orderEntry != null && orderEntry.typeNames.Remove(typeName);
                 }
             );
         }
 
-        private static void RemoveNamespaceCollapseState(
-            DataVisualizer dataVisualizer,
-            string namespaceKey
-        )
+        private static void RemoveNamespaceCollapseState(DataVisualizer dataVisualizer, string namespaceKey)
         {
             if (string.IsNullOrWhiteSpace(namespaceKey))
             {
                 return;
             }
 
-            dataVisualizer.PersistSettings(
-                settings => settings.RemoveNamespaceCollapseState(namespaceKey),
-                userState => userState.RemoveNamespaceCollapseState(namespaceKey)
-            );
+            dataVisualizer.PersistSettings(settings => settings.RemoveNamespaceCollapseState(namespaceKey), userState => userState.RemoveNamespaceCollapseState(namespaceKey));
         }
 
-        private static HashSet<Type> CollectManagedTypes(
-            Dictionary<string, List<Type>> managedTypes
-        )
+        private static HashSet<Type> CollectManagedTypes(Dictionary<string, List<Type>> managedTypes)
         {
             HashSet<Type> managedTypeSet = new();
             foreach (List<Type> types in managedTypes.Values)
@@ -471,14 +361,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             order key sort by that key ascending, and equal-key entries keep dictionary
             enumeration order. The insertion sort is what provides that stability.
         */
-        private static KeyValuePair<string, List<Type>>[] OrderedNamespaceEntries(
-            Dictionary<string, List<Type>> managedTypes,
-            Dictionary<string, int> namespaceOrder
-        )
+        private static KeyValuePair<string, List<Type>>[] OrderedNamespaceEntries(Dictionary<string, List<Type>> managedTypes, Dictionary<string, int> namespaceOrder)
         {
-            KeyValuePair<string, List<Type>>[] entries = new KeyValuePair<string, List<Type>>[
-                managedTypes.Count
-            ];
+            KeyValuePair<string, List<Type>>[] entries = new KeyValuePair<string, List<Type>>[managedTypes.Count];
             int[] orderKeys = new int[entries.Length];
             int defaultOrder = namespaceOrder.Count;
             int index = 0;
@@ -581,9 +466,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (TryGet(_selectedType, out VisualElement currentSelection))
             {
                 currentSelection.RemoveFromClassList(StyleConstants.SelectedClass);
-                currentSelection
-                    .Q<Label>(TypeItemLabelName)
-                    ?.AddToClassList(StyleConstants.ClickableClass);
+                currentSelection.Q<Label>(TypeItemLabelName)?.AddToClassList(StyleConstants.ClickableClass);
                 if (TryGetNamespace(currentSelection, out VisualElement currentNamespaceElement))
                 {
                     currentNamespaceElement.RemoveFromClassList(StyleConstants.SelectedClass);
@@ -633,10 +516,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             namespaceListContainer.Clear();
             VisualElement namespaceContainer = namespaceListContainer;
             _namespaceCache.Clear();
-            KeyValuePair<string, List<Type>>[] orderedEntries = OrderedNamespaceEntries(
-                _managedTypes,
-                _namespaceOrder
-            );
+            KeyValuePair<string, List<Type>>[] orderedEntries = OrderedNamespaceEntries(_managedTypes, _namespaceOrder);
             for (int index = 0; index < orderedEntries.Length; index++)
             {
                 (string key, List<Type> types) = orderedEntries[index];
@@ -652,11 +532,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 int removableTypeCount = nonCoreManagedTypes.Count;
                 bool showNamespaceRemoveButton = 1 < removableTypeCount;
 
-                VisualElement namespaceGroupItem = new()
-                {
-                    name = $"namespace-group-{key}",
-                    userData = namespaceKey,
-                };
+                VisualElement namespaceGroupItem = new() { name = $"namespace-group-{key}", userData = namespaceKey };
 
                 namespaceGroupItem.AddToClassList(StyleConstants.NamespaceItemClass);
                 if (types.Count == 0)
@@ -665,18 +541,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 namespaceListContainer.Add(namespaceGroupItem);
-                namespaceGroupItem.RegisterCallback<PointerDownEvent>(
-                    dataVisualizer.OnNamespacePointerDown
-                );
+                namespaceGroupItem.RegisterCallback<PointerDownEvent>(dataVisualizer.OnNamespacePointerDown);
 
                 VisualElement header = new() { name = $"namespace-header-{key}" };
                 header.AddToClassList(StyleConstants.NamespaceHeaderClass);
                 namespaceGroupItem.Add(header);
 
-                Label indicator = new(StyleConstants.ArrowExpanded)
-                {
-                    name = $"namespace-indicator-{key}",
-                };
+                Label indicator = new(StyleConstants.ArrowExpanded) { name = $"namespace-indicator-{key}" };
                 indicator.AddToClassList(StyleConstants.NamespaceIndicatorClass);
                 indicator.AddToClassList(StyleConstants.ClickableClass);
                 header.Add(indicator);
@@ -753,11 +624,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                             "Remove",
                             () =>
                             {
-                                HandleRemoveNamespaceTypesConfirmed(
-                                    dataVisualizer,
-                                    namespaceKey,
-                                    nonCoreManagedTypes
-                                );
+                                HandleRemoveNamespaceTypesConfirmed(dataVisualizer, namespaceKey, nonCoreManagedTypes);
                                 if (nonCoreManagedTypes.Contains(SelectedType))
                                 {
                                     SelectType(dataVisualizer, null);
@@ -769,8 +636,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     })
                     {
                         text = "X",
-                        tooltip =
-                            $"Remove {removableTypeCount} non-BaseDataObject type{(1 < removableTypeCount ? "s" : "")}",
+                        tooltip = $"Remove {removableTypeCount} non-BaseDataObject type{(1 < removableTypeCount ? "s" : "")}",
                     };
                     namespaceRemoveButton.AddToClassList(StyleConstants.ActionButtonClass);
                     namespaceRemoveButton.AddToClassList(StyleConstants.DeleteButtonClass);
@@ -778,22 +644,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                     headerRight.Add(namespaceRemoveButton);
                 }
 
-                VisualElement typesContainer = new()
-                {
-                    name = $"types-container-{key}",
-                    userData = namespaceKey,
-                };
+                VisualElement typesContainer = new() { name = $"types-container-{key}", userData = namespaceKey };
                 typesContainer.AddToClassList(StyleConstants.TypesContainerClass);
                 namespaceGroupItem.Add(typesContainer);
 
                 bool isCollapsed = GetIsNamespaceCollapsed(dataVisualizer, namespaceKey);
-                ApplyNamespaceCollapsedState(
-                    dataVisualizer,
-                    indicator,
-                    typesContainer,
-                    isCollapsed,
-                    false
-                );
+                ApplyNamespaceCollapsedState(dataVisualizer, indicator, typesContainer, isCollapsed, false);
 
                 // ReSharper disable once HeapView.CanAvoidClosure
                 indicator.RegisterCallback<PointerDownEvent>(ToggleNamespace);
@@ -872,9 +728,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     typeItem.Add(typeLabel);
 
                     // ReSharper disable once HeapView.CanAvoidClosure
-                    typeItem.RegisterCallback<PointerDownEvent>(evt =>
-                        dataVisualizer.OnTypePointerDown(namespaceGroupItem, evt)
-                    );
+                    typeItem.RegisterCallback<PointerDownEvent>(evt => dataVisualizer.OnTypePointerDown(namespaceGroupItem, evt));
                     // ReSharper disable once HeapView.CanAvoidClosure
                     typeItem.RegisterCallback<PointerUpEvent>(evt =>
                     {
@@ -929,31 +783,16 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
 
                     VisualElement parentGroup = header.parent;
-                    Label associatedIndicator = parentGroup?.Q<Label>(
-                        className: StyleConstants.NamespaceIndicatorClass
-                    );
-                    VisualElement associatedTypesContainer = parentGroup?.Q<VisualElement>(
-                        $"types-container-{namespaceKey}"
-                    );
+                    Label associatedIndicator = parentGroup?.Q<Label>(className: StyleConstants.NamespaceIndicatorClass);
+                    VisualElement associatedTypesContainer = parentGroup?.Q<VisualElement>($"types-container-{namespaceKey}");
                     string nsKey = parentGroup?.userData as string;
 
-                    if (
-                        associatedIndicator != null
-                        && associatedTypesContainer != null
-                        && !string.IsNullOrWhiteSpace(nsKey)
-                    )
+                    if (associatedIndicator != null && associatedTypesContainer != null && !string.IsNullOrWhiteSpace(nsKey))
                     {
-                        bool currentlyCollapsed =
-                            associatedTypesContainer.style.display == DisplayStyle.None;
+                        bool currentlyCollapsed = associatedTypesContainer.style.display == DisplayStyle.None;
                         bool newCollapsedState = !currentlyCollapsed;
 
-                        ApplyNamespaceCollapsedState(
-                            dataVisualizer,
-                            associatedIndicator,
-                            associatedTypesContainer,
-                            newCollapsedState,
-                            true
-                        );
+                        ApplyNamespaceCollapsedState(dataVisualizer, associatedIndicator, associatedTypesContainer, newCollapsedState, true);
                     }
                 }
             }
@@ -987,10 +826,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             return typeNames;
         }
 
-        private bool InternalDeselectAndGetCurrentIndex(
-            out VisualElement parent,
-            out int currentIndex
-        )
+        private bool InternalDeselectAndGetCurrentIndex(out VisualElement parent, out int currentIndex)
         {
             if (!TryGet(_selectedType, out VisualElement element))
             {
@@ -1025,21 +861,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             return false;
         }
 
-        private void HandleRemoveNamespaceTypesConfirmed(
-            DataVisualizer dataVisualizer,
-            string namespaceKey,
-            List<Type> typesToRemove
-        )
+        private void HandleRemoveNamespaceTypesConfirmed(DataVisualizer dataVisualizer, string namespaceKey, List<Type> typesToRemove)
         {
             if (typesToRemove == null || typesToRemove.Count == 0)
             {
                 return;
             }
 
-            HashSet<string> currentManagedTypeNames = new(
-                GetManagedTypeNames(namespaceKey),
-                StringComparer.Ordinal
-            );
+            HashSet<string> currentManagedTypeNames = new(GetManagedTypeNames(namespaceKey), StringComparer.Ordinal);
             List<string> removedTypeNames = new();
             bool changed = false;
             foreach (Type type in typesToRemove)
@@ -1063,10 +892,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     RemoveNamespaceCollapseState(dataVisualizer, namespaceKey);
                 }
 
-                PersistManagedTypesList(
-                    dataVisualizer,
-                    RemoveManagedTypeNames(GetAllManagedTypeNames(), removedTypeNames)
-                );
+                PersistManagedTypesList(dataVisualizer, RemoveManagedTypeNames(GetAllManagedTypeNames(), removedTypeNames));
                 DataVisualizer.SignalRefresh();
             }
             /*
@@ -1080,9 +906,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             if (!IsTypeRemovable(typeToRemove))
             {
-                Debug.LogWarning(
-                    $"Attempted to remove BaseDataObject derivative '{typeToRemove?.FullName}' or null type."
-                );
+                Debug.LogWarning($"Attempted to remove BaseDataObject derivative '{typeToRemove?.FullName}' or null type.");
                 return;
             }
 
@@ -1098,10 +922,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     RemoveNamespaceCollapseState(dataVisualizer, namespaceKey);
                 }
 
-                PersistManagedTypesList(
-                    dataVisualizer,
-                    RemoveManagedTypeNames(GetAllManagedTypeNames(), new[] { typeName })
-                );
+                PersistManagedTypesList(dataVisualizer, RemoveManagedTypeNames(GetAllManagedTypeNames(), new[] { typeName }));
                 DataVisualizer.SignalRefresh();
             }
             /*

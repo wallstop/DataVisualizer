@@ -23,26 +23,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 Assert.That(!string.IsNullOrEmpty(firstId));
                 Assert.That(!string.IsNullOrEmpty(secondId));
-                Assert.AreEqual(
-                    firstId,
-                    first.GetObjectIdString(),
-                    "The id must be stable across repeated calls on the same object."
-                );
-                Assert.AreNotEqual(
-                    firstId,
-                    secondId,
-                    "Distinct objects must produce distinct ids."
-                );
+                Assert.AreEqual(firstId, first.GetObjectIdString(), "The id must be stable across repeated calls on the same object.");
+                Assert.AreNotEqual(firstId, secondId, "Distinct objects must produce distinct ids.");
 #if UNITY_6000_4_OR_NEWER
-                Assert.IsTrue(
-                    ulong.TryParse(firstId, out _),
-                    "The EntityId branch must produce a numeric (ulong) id string."
-                );
+                Assert.IsTrue(ulong.TryParse(firstId, out _), "The EntityId branch must produce a numeric (ulong) id string.");
 #else
-                Assert.IsTrue(
-                    int.TryParse(firstId, out _),
-                    "The legacy InstanceID branch must produce a numeric (int) id string."
-                );
+                Assert.IsTrue(int.TryParse(firstId, out _), "The legacy InstanceID branch must produce a numeric (int) id string.");
 #endif
             }
         }

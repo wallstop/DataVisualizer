@@ -18,25 +18,15 @@ namespace WallstopStudios.DataVisualizer
     using Sirenix.OdinInspector;
 #endif
 
-    public abstract class BaseDataObject
-        :
+    public abstract class BaseDataObject :
 #if ODIN_INSPECTOR
         SerializedScriptableObject
 #else
         ScriptableObject
 #endif
-            ,
-            IComparable<BaseDataObject>,
-            IDuplicable,
-            ICreatable,
-            IRenamable,
-            IGUIProvider,
-            IDisplayable
+            , IComparable<BaseDataObject>, IDuplicable, ICreatable, IRenamable, IGUIProvider, IDisplayable
     {
-        protected static readonly Regex CloneRegex = new(
-            @"^(.*?)(\s\(Clone(?: (\d+))?\))?$",
-            RegexOptions.Compiled
-        );
+        protected static readonly Regex CloneRegex = new(@"^(.*?)(\s\(Clone(?: (\d+))?\))?$", RegexOptions.Compiled);
 
         public virtual string Id => _assetGuid;
 
@@ -132,11 +122,7 @@ namespace WallstopStudios.DataVisualizer
 
             if (string.IsNullOrWhiteSpace(numberPart))
             {
-                return (
-                        string.IsNullOrWhiteSpace(baseName) && input.Trim() == "(Clone)"
-                            ? ""
-                            : baseName
-                    ) + " (Clone 1)";
+                return (string.IsNullOrWhiteSpace(baseName) && input.Trim() == "(Clone)" ? "" : baseName) + " (Clone 1)";
             }
 
             if (!int.TryParse(numberPart, out int cloneNumber))

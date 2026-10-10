@@ -61,8 +61,8 @@ editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1`
    enforces this; file-level usings are sanctioned only for namespaceless
    assembly-attribute files and `[assembly: ...]` preambles such as `InternalsVisibleTo`
    (#124).
-2. Format every modified `.cs` file with CSharpier 1.1.2
-   (`dotnet tool run csharpier -- format <paths>`); treat formatting as a gate.
+2. Format every modified `.cs` file with CSharpier 1.1.2 (print width 180 in
+   `.csharpierrc`; `dotnet tool run csharpier -- format <paths>`); gate on it.
 3. Resolve analyzer warnings before review.
 4. Prefer explicit namespaces so the window's namespace/type tree stays predictable.
 5. Avoid runtime reflection and stringly-typed lookups; wire menu items, property

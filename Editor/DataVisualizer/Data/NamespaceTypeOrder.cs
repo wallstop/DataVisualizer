@@ -9,43 +9,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         public string namespaceKey = string.Empty;
         public List<string> typeNames = new();
 
-        public static int CompareTypesByFullNameOrder(
-            Type lhs,
-            Type rhs,
-            IReadOnlyList<string> typeFullNameOrder
-        )
+        public static int CompareTypesByFullNameOrder(Type lhs, Type rhs, IReadOnlyList<string> typeFullNameOrder)
         {
-            return CompareTypeFullNames(
-                lhs?.FullName ?? string.Empty,
-                rhs?.FullName ?? string.Empty,
-                typeFullNameOrder
-            );
+            return CompareTypeFullNames(lhs?.FullName ?? string.Empty, rhs?.FullName ?? string.Empty, typeFullNameOrder);
         }
 
         public static int CompareTypesByFullName(Type lhs, Type rhs)
         {
-            return string.Compare(
-                lhs?.FullName ?? string.Empty,
-                rhs?.FullName ?? string.Empty,
-                StringComparison.Ordinal
-            );
+            return string.Compare(lhs?.FullName ?? string.Empty, rhs?.FullName ?? string.Empty, StringComparison.Ordinal);
         }
 
         public static int CompareTypesByNameThenFullName(Type lhs, Type rhs)
         {
-            int nameComparison = string.Compare(
-                lhs?.Name ?? string.Empty,
-                rhs?.Name ?? string.Empty,
-                StringComparison.Ordinal
-            );
+            int nameComparison = string.Compare(lhs?.Name ?? string.Empty, rhs?.Name ?? string.Empty, StringComparison.Ordinal);
             return nameComparison != 0 ? nameComparison : CompareTypesByFullName(lhs, rhs);
         }
 
-        public static int CompareTypeFullNames(
-            string lhsFullName,
-            string rhsFullName,
-            IReadOnlyList<string> typeFullNameOrder
-        )
+        public static int CompareTypeFullNames(string lhsFullName, string rhsFullName, IReadOnlyList<string> typeFullNameOrder)
         {
             int indexA = IndexOf(typeFullNameOrder, lhsFullName);
             int indexB = IndexOf(typeFullNameOrder, rhsFullName);
@@ -58,9 +38,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
                     return -1;
             }
 
-            return 0 <= indexB
-                ? 1
-                : string.Compare(lhsFullName, rhsFullName, StringComparison.Ordinal);
+            return 0 <= indexB ? 1 : string.Compare(lhsFullName, rhsFullName, StringComparison.Ordinal);
         }
 
         public static Type FindTypeByFullName(IEnumerable<Type> types, string typeFullName)
@@ -101,11 +79,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
         public NamespaceTypeOrder Clone()
         {
-            return new NamespaceTypeOrder
-            {
-                namespaceKey = namespaceKey ?? string.Empty,
-                typeNames = PersistedStateCopy.CloneStrings(typeNames),
-            };
+            return new NamespaceTypeOrder { namespaceKey = namespaceKey ?? string.Empty, typeNames = PersistedStateCopy.CloneStrings(typeNames) };
         }
     }
 }

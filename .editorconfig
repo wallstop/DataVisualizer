@@ -6,6 +6,7 @@ trim_trailing_whitespace = false
 insert_final_newline = false
 indent_style = space
 indent_size = 4
+max_line_length = 180
 
 # Microsoft .NET properties
 csharp_new_line_before_members_in_object_initializers = false

@@ -10,11 +10,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
         public LastObjectSelectionEntry Clone()
         {
-            return new LastObjectSelectionEntry
-            {
-                typeFullName = typeFullName ?? string.Empty,
-                objectGuid = objectGuid ?? string.Empty,
-            };
+            return new LastObjectSelectionEntry { typeFullName = typeFullName ?? string.Empty, objectGuid = objectGuid ?? string.Empty };
         }
     }
 }

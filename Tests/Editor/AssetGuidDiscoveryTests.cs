@@ -43,30 +43,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [OneTimeSetUp]
         public void BuildProjectAssetTypeIndex()
         {
-            _indexRootFolder =
-                "Assets/DataVisualizerAssetGuidTypeIndexTests_" + Guid.NewGuid().ToString("N");
+            _indexRootFolder = "Assets/DataVisualizerAssetGuidTypeIndexTests_" + Guid.NewGuid().ToString("N");
             EnsureFolderExists(_indexRootFolder);
-            _neverRegisteredGuid = CreateAsset(
-                ScriptableObject.CreateInstance<EditorOnlyCreationData>(),
-                _indexRootFolder + "/NeverRegistered.asset"
-            );
-            _firstCollisionGuid = CreateAsset(
-                ScriptableObject.CreateInstance<CollisionA.OrderCollisionData>(),
-                _indexRootFolder + "/FirstCollision.asset"
-            );
-            _secondCollisionGuid = CreateAsset(
-                ScriptableObject.CreateInstance<CollisionB.OrderCollisionData>(),
-                _indexRootFolder + "/SecondCollision.asset"
-            );
+            _neverRegisteredGuid = CreateAsset(ScriptableObject.CreateInstance<EditorOnlyCreationData>(), _indexRootFolder + "/NeverRegistered.asset");
+            _firstCollisionGuid = CreateAsset(ScriptableObject.CreateInstance<CollisionA.OrderCollisionData>(), _indexRootFolder + "/FirstCollision.asset");
+            _secondCollisionGuid = CreateAsset(ScriptableObject.CreateInstance<CollisionB.OrderCollisionData>(), _indexRootFolder + "/SecondCollision.asset");
             AssetDatabase.SaveAssets();
 
             AssetGuidTypeIndex.Shared.Rebuild();
-            bool pathSnapshotCompleted = AssetGuidTypeIndex.Shared.ProcessPendingSlice(
-                double.PositiveInfinity
-            );
-            bool classificationCompleted = AssetGuidTypeIndex.Shared.ProcessPendingSlice(
-                double.PositiveInfinity
-            );
+            bool pathSnapshotCompleted = AssetGuidTypeIndex.Shared.ProcessPendingSlice(double.PositiveInfinity);
+            bool classificationCompleted = AssetGuidTypeIndex.Shared.ProcessPendingSlice(double.PositiveInfinity);
             Assert.IsFalse(pathSnapshotCompleted);
             Assert.IsTrue(classificationCompleted);
             Assert.IsTrue(AssetGuidTypeIndex.Shared.IsComplete);
@@ -83,17 +69,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldIncludeNeverRegisteredAssetWhenProjectIndexRebuildCompletes()
         {
-            string[] typeFilterGuids = AssetDatabase.FindAssets(
-                $"t:{nameof(EditorOnlyCreationData)}"
-            );
+            string[] typeFilterGuids = AssetDatabase.FindAssets($"t:{nameof(EditorOnlyCreationData)}");
 
-            string[] discoveredGuids = AssetGuidDiscovery.MergeCandidates(
-                typeof(EditorOnlyCreationData),
-                typeFilterGuids,
-                Array.Empty<string>(),
-                null,
-                out _
-            );
+            string[] discoveredGuids = AssetGuidDiscovery.MergeCandidates(typeof(EditorOnlyCreationData), typeFilterGuids, Array.Empty<string>(), null, out _);
 
             CollectionAssert.DoesNotContain(typeFilterGuids, _neverRegisteredGuid);
             CollectionAssert.Contains(discoveredGuids, _neverRegisteredGuid);
@@ -102,12 +80,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldKeepIndexedGuidsSeparateWhenShortTypeNamesCollide()
         {
-            string[] firstGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(
-                typeof(CollisionA.OrderCollisionData)
-            );
-            string[] secondGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(
-                typeof(CollisionB.OrderCollisionData)
-            );
+            string[] firstGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(typeof(CollisionA.OrderCollisionData));
+            string[] secondGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(typeof(CollisionB.OrderCollisionData));
 
             CollectionAssert.Contains(firstGuids, _firstCollisionGuid);
             CollectionAssert.DoesNotContain(firstGuids, _secondCollisionGuid);
@@ -120,36 +94,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             string importedAssetPath = _indexRootFolder + "/ImportedAfterIndex.asset";
             string movedAssetPath = _indexRootFolder + "/MovedAfterIndex.asset";
-            string importedAssetGuid = CreateAsset(
-                ScriptableObject.CreateInstance<EditorOnlyCreationData>(),
-                importedAssetPath
-            );
-            string movedAssetGuid = CreateAsset(
-                ScriptableObject.CreateInstance<EditorOnlyCreationData>(),
-                movedAssetPath
-            );
+            string importedAssetGuid = CreateAsset(ScriptableObject.CreateInstance<EditorOnlyCreationData>(), importedAssetPath);
+            string movedAssetGuid = CreateAsset(ScriptableObject.CreateInstance<EditorOnlyCreationData>(), movedAssetPath);
             AssetDatabase.SaveAssets();
 
-            Assert.IsTrue(
-                AssetGuidTypeIndex.Shared.ApplyAssetChanges(
-                    Array.Empty<string>(),
-                    new[] { importedAssetPath },
-                    Array.Empty<string>(),
-                    new[] { movedAssetPath }
-                )
-            );
+            Assert.IsTrue(AssetGuidTypeIndex.Shared.ApplyAssetChanges(Array.Empty<string>(), new[] { importedAssetPath }, Array.Empty<string>(), new[] { movedAssetPath }));
 
-            Assert.IsTrue(
-                AssetGuidTypeIndex.Shared.ApplyAssetChanges(
-                    new[] { importedAssetPath },
-                    Array.Empty<string>(),
-                    new[] { movedAssetPath },
-                    Array.Empty<string>()
-                )
-            );
-            string[] indexedGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(
-                typeof(EditorOnlyCreationData)
-            );
+            Assert.IsTrue(AssetGuidTypeIndex.Shared.ApplyAssetChanges(new[] { importedAssetPath }, Array.Empty<string>(), new[] { movedAssetPath }, Array.Empty<string>()));
+            string[] indexedGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(typeof(EditorOnlyCreationData));
             CollectionAssert.Contains(indexedGuids, importedAssetGuid);
             CollectionAssert.Contains(indexedGuids, movedAssetGuid);
 
@@ -169,9 +121,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 cleanup.Defer(isolatedIndex.Cancel);
                 Assert.IsFalse(isolatedIndex.IsComplete);
-                CollectionAssert.IsEmpty(
-                    isolatedIndex.GetKnownGuids(typeof(EditorOnlyCreationData))
-                );
+                CollectionAssert.IsEmpty(isolatedIndex.GetKnownGuids(typeof(EditorOnlyCreationData)));
 
                 isolatedIndex.Rebuild();
                 Assert.IsFalse(isolatedIndex.ProcessPendingSlice(double.PositiveInfinity));
@@ -193,18 +143,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldIncludeReferencedAssetWhenTypeFilterDoesNotReturnIt()
         {
-            string rootFolder =
-                "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
-            string typeFolder = Path.Combine(
-                    rootFolder,
-                    typeof(EditorOnlyCreationData).FullName.Replace('.', '/')
-                )
-                .Replace('\\', '/');
+            string rootFolder = "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
+            string typeFolder = Path.Combine(rootFolder, typeof(EditorOnlyCreationData).FullName.Replace('.', '/')).Replace('\\', '/');
             string assetPath = typeFolder + "/Created.asset";
 
             EnsureFolderExists(typeFolder);
-            EditorOnlyCreationData asset =
-                ScriptableObject.CreateInstance<EditorOnlyCreationData>();
+            EditorOnlyCreationData asset = ScriptableObject.CreateInstance<EditorOnlyCreationData>();
 
             using (TestCleanupScope cleanup = new())
             {
@@ -217,29 +161,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.SaveAssets();
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
-                string[] typeFilterGuids = AssetDatabase.FindAssets(
-                    $"t:{nameof(EditorOnlyCreationData)}"
-                );
-                string[] discoveredGuids = AssetGuidDiscovery.MergeCandidates(
-                    typeof(EditorOnlyCreationData),
-                    typeFilterGuids,
-                    new[] { assetGuid },
-                    null,
-                    out _
-                );
+                string[] typeFilterGuids = AssetDatabase.FindAssets($"t:{nameof(EditorOnlyCreationData)}");
+                string[] discoveredGuids = AssetGuidDiscovery.MergeCandidates(typeof(EditorOnlyCreationData), typeFilterGuids, new[] { assetGuid }, null, out _);
 
                 CollectionAssert.DoesNotContain(typeFilterGuids, assetGuid);
                 CollectionAssert.Contains(discoveredGuids, assetGuid);
-                Assert.AreEqual(
-                    1,
-                    discoveredGuids.Count(guid =>
-                        string.Equals(guid, assetGuid, StringComparison.OrdinalIgnoreCase)
-                    )
-                );
-                Assert.AreEqual(
-                    typeof(EditorOnlyCreationData),
-                    AssetDatabase.GetMainAssetTypeAtPath(AssetDatabase.GUIDToAssetPath(assetGuid))
-                );
+                Assert.AreEqual(1, discoveredGuids.Count(guid => string.Equals(guid, assetGuid, StringComparison.OrdinalIgnoreCase)));
+                Assert.AreEqual(typeof(EditorOnlyCreationData), AssetDatabase.GetMainAssetTypeAtPath(AssetDatabase.GUIDToAssetPath(assetGuid)));
             }
         }
 
@@ -263,26 +191,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldAssignNullOutputWhenGuidNormalizationFails()
         {
-            Assert.IsFalse(
-                AssetGuidDiscovery.TryNormalizeGuidForType(
-                    typeof(EditorOnlyCreationData),
-                    "missing-guid",
-                    out string normalizedGuid
-                )
-            );
+            Assert.IsFalse(AssetGuidDiscovery.TryNormalizeGuidForType(typeof(EditorOnlyCreationData), "missing-guid", out string normalizedGuid));
             Assert.That(normalizedGuid == null);
         }
 
         [Test]
         public void ShouldRejectReferencedGuidWhenExactTypeDoesNotMatch()
         {
-            string rootFolder =
-                "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
+            string rootFolder = "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
             string assetPath = rootFolder + "/Other.asset";
 
             EnsureFolderExists(rootFolder);
-            OtherEditorOnlyCreationData asset =
-                ScriptableObject.CreateInstance<OtherEditorOnlyCreationData>();
+            OtherEditorOnlyCreationData asset = ScriptableObject.CreateInstance<OtherEditorOnlyCreationData>();
 
             using (TestCleanupScope cleanup = new())
             {
@@ -295,13 +215,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.SaveAssets();
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
-                string[] mergedGuids = AssetGuidDiscovery.MergeCandidates(
-                    typeof(UnindexedAssetGuidDiscoveryData),
-                    Array.Empty<string>(),
-                    new[] { assetGuid },
-                    null,
-                    out _
-                );
+                string[] mergedGuids = AssetGuidDiscovery.MergeCandidates(typeof(UnindexedAssetGuidDiscoveryData), Array.Empty<string>(), new[] { assetGuid }, null, out _);
 
                 Assert.IsEmpty(mergedGuids);
             }
@@ -310,13 +224,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldDeduplicateResolvedGuidsWhenAddingToExistingSet()
         {
-            string rootFolder =
-                "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
+            string rootFolder = "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
             string assetPath = rootFolder + "/Created.asset";
 
             EnsureFolderExists(rootFolder);
-            EditorOnlyCreationData asset =
-                ScriptableObject.CreateInstance<EditorOnlyCreationData>();
+            EditorOnlyCreationData asset = ScriptableObject.CreateInstance<EditorOnlyCreationData>();
 
             using (TestCleanupScope cleanup = new())
             {
@@ -330,35 +242,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
                 HashSet<string> destination = new(StringComparer.OrdinalIgnoreCase);
-                int addedCount = AssetGuidDiscovery.AddResolvedGuids(
-                    typeof(EditorOnlyCreationData),
-                    new[] { assetGuid, assetGuid.ToUpperInvariant() },
-                    destination
-                );
+                int addedCount = AssetGuidDiscovery.AddResolvedGuids(typeof(EditorOnlyCreationData), new[] { assetGuid, assetGuid.ToUpperInvariant() }, destination);
 
                 CollectionAssert.AreEqual(new[] { assetGuid }, destination);
                 Assert.AreEqual(1, addedCount);
-                Assert.AreEqual(
-                    0,
-                    AssetGuidDiscovery.AddResolvedGuids(
-                        typeof(EditorOnlyCreationData),
-                        new[] { assetGuid },
-                        destination
-                    )
-                );
+                Assert.AreEqual(0, AssetGuidDiscovery.AddResolvedGuids(typeof(EditorOnlyCreationData), new[] { assetGuid }, destination));
             }
         }
 
         [Test]
         public void ShouldRejectDerivedAssetWhenBaseTypeIsRequested()
         {
-            string rootFolder =
-                "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
+            string rootFolder = "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
             string assetPath = rootFolder + "/Derived.asset";
 
             EnsureFolderExists(rootFolder);
-            DerivedEditorOnlyCreationData asset =
-                ScriptableObject.CreateInstance<DerivedEditorOnlyCreationData>();
+            DerivedEditorOnlyCreationData asset = ScriptableObject.CreateInstance<DerivedEditorOnlyCreationData>();
 
             using (TestCleanupScope cleanup = new())
             {
@@ -371,13 +270,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.SaveAssets();
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
-                Assert.IsFalse(
-                    AssetGuidDiscovery.TryResolveAssetGuidForType(
-                        assetGuid,
-                        typeof(EditorOnlyCreationData),
-                        out string resolvedPath
-                    )
-                );
+                Assert.IsFalse(AssetGuidDiscovery.TryResolveAssetGuidForType(assetGuid, typeof(EditorOnlyCreationData), out string resolvedPath));
                 Assert.That(resolvedPath == null);
             }
         }
@@ -385,15 +278,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldRejectSubassetWhenRequestedTypeIsNotMainAssetType()
         {
-            string rootFolder =
-                "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
+            string rootFolder = "Assets/DataVisualizerAssetGuidDiscoveryTests_" + Guid.NewGuid().ToString("N");
             string assetPath = rootFolder + "/Main.asset";
 
             EnsureFolderExists(rootFolder);
-            EditorOnlyCreationData mainAsset =
-                ScriptableObject.CreateInstance<EditorOnlyCreationData>();
-            EditorOnlyCreationSubasset subasset =
-                ScriptableObject.CreateInstance<EditorOnlyCreationSubasset>();
+            EditorOnlyCreationData mainAsset = ScriptableObject.CreateInstance<EditorOnlyCreationData>();
+            EditorOnlyCreationSubasset subasset = ScriptableObject.CreateInstance<EditorOnlyCreationSubasset>();
 
             using (TestCleanupScope cleanup = new())
             {
@@ -407,13 +297,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.SaveAssets();
 
                 string assetGuid = AssetDatabase.AssetPathToGUID(assetPath);
-                Assert.IsFalse(
-                    AssetGuidDiscovery.TryResolveAssetGuidForType(
-                        assetGuid,
-                        typeof(EditorOnlyCreationSubasset),
-                        out string resolvedPath
-                    )
-                );
+                Assert.IsFalse(AssetGuidDiscovery.TryResolveAssetGuidForType(assetGuid, typeof(EditorOnlyCreationSubasset), out string resolvedPath));
                 Assert.That(resolvedPath == null);
             }
         }

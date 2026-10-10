@@ -49,10 +49,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         orLabels = new List<string> { "optional" },
                     },
                 },
-                processorStates = new List<ProcessorState>
-                {
-                    new() { typeFullName = "Example.Processor" },
-                },
+                processorStates = new List<ProcessorState> { new() { typeFullName = "Example.Processor" } },
             };
         }
 
@@ -92,23 +89,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             state.processorStates[0].typeFullName = "Changed";
         }
 
-        private static void AssertCollapseStateDirtySemantics(
-            Func<string, bool, bool> setCollapsed,
-            Func<string, bool> removeCollapsed
-        )
+        private static void AssertCollapseStateDirtySemantics(Func<string, bool, bool> setCollapsed, Func<string, bool> removeCollapsed)
         {
             const string namespaceKey = "Gameplay";
 
             Assert.IsTrue(setCollapsed(namespaceKey, false), "first write stores expanded state");
-            Assert.IsFalse(
-                setCollapsed(namespaceKey, false),
-                "duplicate expanded write is unchanged"
-            );
+            Assert.IsFalse(setCollapsed(namespaceKey, false), "duplicate expanded write is unchanged");
             Assert.IsTrue(setCollapsed(namespaceKey, true), "changed collapse state is dirty");
-            Assert.IsFalse(
-                setCollapsed(namespaceKey, true),
-                "duplicate collapsed write is unchanged"
-            );
+            Assert.IsFalse(setCollapsed(namespaceKey, true), "duplicate collapsed write is unchanged");
             Assert.IsTrue(removeCollapsed(namespaceKey), "removing stored state is dirty");
             Assert.IsFalse(removeCollapsed(namespaceKey), "removing absent state is unchanged");
         }
@@ -116,8 +104,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldMarkSettingsDirtyWhenSelectActiveObjectChanges()
         {
-            DataVisualizerSettings settings =
-                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
@@ -134,8 +121,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldNotMarkSettingsDirtyWhenSelectActiveObjectIsUnchanged()
         {
-            DataVisualizerSettings settings =
-                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
@@ -151,8 +137,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldDeepCopyPersistedListsAcrossBothStateTransferDirections()
         {
-            DataVisualizerSettings settings =
-                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
@@ -176,8 +161,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldNormalizeNullPersistedListsToEmptyListsWhenTransferringState()
         {
-            DataVisualizerSettings settings =
-                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
@@ -211,8 +195,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldMarkSettingsDirtyWhenSelectActiveObjectPreferenceChangesThroughWindowHelper()
         {
-            DataVisualizerSettings settings =
-                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
@@ -228,51 +211,32 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldReportDirtyOnlyForActualCollapseStateChangesWhenUsingSettingsStore()
         {
-            DataVisualizerSettings settings =
-                ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
             using (TestCleanupScope cleanup = new())
             {
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
                 const string namespaceKey = "Gameplay";
 
                 EditorUtility.ClearDirty(settings);
-                Assert.IsTrue(
-                    settings.SetNamespaceCollapsed(namespaceKey, false),
-                    "first write stores expanded state"
-                );
+                Assert.IsTrue(settings.SetNamespaceCollapsed(namespaceKey, false), "first write stores expanded state");
                 Assert.IsTrue(EditorUtility.IsDirty(settings));
 
                 EditorUtility.ClearDirty(settings);
-                Assert.IsFalse(
-                    settings.SetNamespaceCollapsed(namespaceKey, false),
-                    "duplicate expanded write is unchanged"
-                );
+                Assert.IsFalse(settings.SetNamespaceCollapsed(namespaceKey, false), "duplicate expanded write is unchanged");
                 Assert.IsFalse(EditorUtility.IsDirty(settings));
 
-                Assert.IsTrue(
-                    settings.SetNamespaceCollapsed(namespaceKey, true),
-                    "changed collapse state is dirty"
-                );
+                Assert.IsTrue(settings.SetNamespaceCollapsed(namespaceKey, true), "changed collapse state is dirty");
                 Assert.IsTrue(EditorUtility.IsDirty(settings));
 
                 EditorUtility.ClearDirty(settings);
-                Assert.IsFalse(
-                    settings.SetNamespaceCollapsed(namespaceKey, true),
-                    "duplicate collapsed write is unchanged"
-                );
+                Assert.IsFalse(settings.SetNamespaceCollapsed(namespaceKey, true), "duplicate collapsed write is unchanged");
                 Assert.IsFalse(EditorUtility.IsDirty(settings));
 
-                Assert.IsTrue(
-                    settings.RemoveNamespaceCollapseState(namespaceKey),
-                    "removing stored state is dirty"
-                );
+                Assert.IsTrue(settings.RemoveNamespaceCollapseState(namespaceKey), "removing stored state is dirty");
                 Assert.IsTrue(EditorUtility.IsDirty(settings));
 
                 EditorUtility.ClearDirty(settings);
-                Assert.IsFalse(
-                    settings.RemoveNamespaceCollapseState(namespaceKey),
-                    "removing absent state is unchanged"
-                );
+                Assert.IsFalse(settings.RemoveNamespaceCollapseState(namespaceKey), "removing absent state is unchanged");
                 Assert.IsFalse(EditorUtility.IsDirty(settings));
             }
         }
@@ -282,32 +246,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             DataVisualizerUserState userState = new();
 
-            AssertCollapseStateDirtySemantics(
-                userState.SetNamespaceCollapsed,
-                userState.RemoveNamespaceCollapseState
-            );
+            AssertCollapseStateDirtySemantics(userState.SetNamespaceCollapsed, userState.RemoveNamespaceCollapseState);
         }
 
-        [TestCase(
-            "{\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\"}",
-            "Example.Namespace.LegacyData"
-        )]
-        [TestCase(
-            "{\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\",\"lastSelectedTypeFullName\":\"Example.Namespace.CurrentData\"}",
-            "Example.Namespace.CurrentData"
-        )]
-        [TestCase(
-            "{\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\",\"lastSelectedTypeFullName\":\"\"}",
-            "Example.Namespace.LegacyData"
-        )]
-        [TestCase(
-            "{\"lastSelectedNamespaceKey\":\"\\\"lastSelectedTypeFullName\\\"\",\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\"}",
-            "Example.Namespace.LegacyData"
-        )]
-        public void ShouldMigrateLegacySelectedTypeNameWhenLoadingUserStateJson(
-            string json,
-            string expectedTypeFullName
-        )
+        [TestCase("{\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\"}", "Example.Namespace.LegacyData")]
+        [TestCase("{\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\",\"lastSelectedTypeFullName\":\"Example.Namespace.CurrentData\"}", "Example.Namespace.CurrentData")]
+        [TestCase("{\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\",\"lastSelectedTypeFullName\":\"\"}", "Example.Namespace.LegacyData")]
+        [TestCase("{\"lastSelectedNamespaceKey\":\"\\\"lastSelectedTypeFullName\\\"\",\"lastSelectedTypeName\":\"Example.Namespace.LegacyData\"}", "Example.Namespace.LegacyData")]
+        public void ShouldMigrateLegacySelectedTypeNameWhenLoadingUserStateJson(string json, string expectedTypeFullName)
         {
             DataVisualizerUserState userState = DataVisualizerUserState.FromJson(json);
 
@@ -327,8 +273,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldDeserializeCurrentFieldsWhenLoadingValidUserStateJson()
         {
-            const string json =
-                "{\"lastSelectedNamespaceKey\":\"Gameplay\",\"lastSelectedTypeFullName\":\"Example.CurrentData\"}";
+            const string json = "{\"lastSelectedNamespaceKey\":\"Gameplay\",\"lastSelectedTypeFullName\":\"Example.CurrentData\"}";
 
             DataVisualizerUserState userState = DataVisualizerUserState.FromJson(json);
 

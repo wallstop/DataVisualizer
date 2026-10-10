@@ -15,11 +15,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
     {
         private static readonly StringBuilder CachedStringBuilder = new();
 
-        public static void CollectMatches(
-            string fullText,
-            IReadOnlyList<string> terms,
-            List<(int Start, int Length)> matches
-        )
+        public static void CollectMatches(string fullText, IReadOnlyList<string> terms, List<(int Start, int Length)> matches)
         {
             if (string.IsNullOrEmpty(fullText) || terms == null || 0 == terms.Count)
             {
@@ -35,9 +31,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                 }
 
                 int start = 0;
-                while (
-                    0 <= (start = fullText.IndexOf(term, start, StringComparison.OrdinalIgnoreCase))
-                )
+                while (0 <= (start = fullText.IndexOf(term, start, StringComparison.OrdinalIgnoreCase)))
                 {
                     matches.Add((start, term.Length));
                     start += term.Length;
@@ -63,11 +57,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             }
         }
 
-        public static string BuildHighlightedRichText(
-            string fullText,
-            IReadOnlyList<(int Start, int Length)> matches,
-            bool colorify
-        )
+        public static string BuildHighlightedRichText(string fullText, IReadOnlyList<(int Start, int Length)> matches, bool colorify)
         {
             if (string.IsNullOrWhiteSpace(fullText))
             {

@@ -12,12 +12,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class NamespaceOrderingTests
     {
-        private static TestCaseData Case(
-            string name,
-            string[] managedTypeNames,
-            string[] removedTypeNames,
-            string[] expectedTypeNames
-        ) => new TestCaseData(managedTypeNames, removedTypeNames, expectedTypeNames).SetName(name);
+        private static TestCaseData Case(string name, string[] managedTypeNames, string[] removedTypeNames, string[] expectedTypeNames) =>
+            new TestCaseData(managedTypeNames, removedTypeNames, expectedTypeNames).SetName(name);
 
         private static IEnumerable<TestCaseData> Cases()
         {
@@ -29,22 +25,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 new[] { "Gameplay.EnemyData", "UI.MenuData", "Gameplay.EnemyData" }
             );
 
-            yield return Case(
-                "Null_managed_returns_empty",
-                null,
-                new[] { "Gameplay.EnemyData" },
-                new string[] { }
-            );
+            yield return Case("Null_managed_returns_empty", null, new[] { "Gameplay.EnemyData" }, new string[] { });
 
             yield return Case(
                 "Dedupe_keeps_first_occurrence",
-                new[]
-                {
-                    "Gameplay.EnemyData",
-                    "Gameplay.SpawnData",
-                    "UI.MenuData",
-                    "Gameplay.EnemyData",
-                },
+                new[] { "Gameplay.EnemyData", "Gameplay.SpawnData", "UI.MenuData", "Gameplay.EnemyData" },
                 new[] { "Gameplay.SpawnData" },
                 new[] { "Gameplay.EnemyData", "UI.MenuData" }
             );
@@ -63,12 +48,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 new[] { "Gameplay.EnemyData", null }
             );
 
-            yield return Case(
-                "Removal_drops_every_ordinal_equal_name",
-                new[] { "Gameplay.EnemyData", "UI.MenuData" },
-                new[] { "UI.MenuData" },
-                new[] { "Gameplay.EnemyData" }
-            );
+            yield return Case("Removal_drops_every_ordinal_equal_name", new[] { "Gameplay.EnemyData", "UI.MenuData" }, new[] { "UI.MenuData" }, new[] { "Gameplay.EnemyData" });
         }
 
         [Test]
@@ -79,15 +59,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             List<Type> types = new() { firstType, secondType };
             List<string> persistedFullNameOrder = new() { secondType.FullName, firstType.FullName };
 
-            types.Sort(
-                (lhs, rhs) =>
-                    NamespaceTypeOrder.CompareTypesByFullNameOrder(lhs, rhs, persistedFullNameOrder)
-            );
+            types.Sort((lhs, rhs) => NamespaceTypeOrder.CompareTypesByFullNameOrder(lhs, rhs, persistedFullNameOrder));
 
-            CollectionAssert.AreEqual(
-                persistedFullNameOrder,
-                types.Select(type => type.FullName).ToList()
-            );
+            CollectionAssert.AreEqual(persistedFullNameOrder, types.Select(type => type.FullName).ToList());
             Assert.AreEqual(firstType.Name, secondType.Name);
         }
 
@@ -98,16 +72,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Type secondType = typeof(CollisionB.OrderCollisionData);
             List<Type> types = new() { secondType, firstType };
 
-            types.Sort(
-                (lhs, rhs) =>
-                    NamespaceTypeOrder.CompareTypesByFullNameOrder(lhs, rhs, Array.Empty<string>())
-            );
+            types.Sort((lhs, rhs) => NamespaceTypeOrder.CompareTypesByFullNameOrder(lhs, rhs, Array.Empty<string>()));
 
             CollectionAssert.AreEqual(
-                new[] { firstType.FullName, secondType.FullName }.OrderBy(
-                    typeFullName => typeFullName,
-                    StringComparer.Ordinal
-                ),
+                new[] { firstType.FullName, secondType.FullName }.OrderBy(typeFullName => typeFullName, StringComparer.Ordinal),
                 types.Select(type => type.FullName).ToList()
             );
         }
@@ -122,10 +90,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             types.Sort(NamespaceTypeOrder.CompareTypesByFullName);
 
             CollectionAssert.AreEqual(
-                new[] { firstType.FullName, secondType.FullName }.OrderBy(
-                    typeFullName => typeFullName,
-                    StringComparer.Ordinal
-                ),
+                new[] { firstType.FullName, secondType.FullName }.OrderBy(typeFullName => typeFullName, StringComparer.Ordinal),
                 types.Select(type => type.FullName).ToList()
             );
         }
@@ -140,10 +105,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             types.Sort(NamespaceTypeOrder.CompareTypesByNameThenFullName);
 
             CollectionAssert.AreEqual(
-                new[] { firstType.FullName, secondType.FullName }.OrderBy(
-                    typeFullName => typeFullName,
-                    StringComparer.Ordinal
-                ),
+                new[] { firstType.FullName, secondType.FullName }.OrderBy(typeFullName => typeFullName, StringComparer.Ordinal),
                 types.Select(type => type.FullName).ToList()
             );
             Assert.AreEqual(firstType.Name, secondType.Name);
@@ -165,33 +127,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldPreserveOtherNamespacesWhenRemovingManagedTypeNames()
         {
-            string[] managedTypeNames =
-            {
-                "Gameplay.EnemyData",
-                "UI.MenuData",
-                "Gameplay.SpawnData",
-            };
+            string[] managedTypeNames = { "Gameplay.EnemyData", "UI.MenuData", "Gameplay.SpawnData" };
             string[] removedTypeNames = { "Gameplay.EnemyData", "Gameplay.SpawnData" };
 
-            List<string> result = NamespaceController.RemoveManagedTypeNames(
-                managedTypeNames,
-                removedTypeNames
-            );
+            List<string> result = NamespaceController.RemoveManagedTypeNames(managedTypeNames, removedTypeNames);
 
             CollectionAssert.AreEqual(new[] { "UI.MenuData" }, result);
         }
 
         [TestCaseSource(nameof(Cases))]
-        public void ShouldRemoveManagedTypeNamesWhenRemovalsDiffer(
-            string[] managedTypeNames,
-            string[] removedTypeNames,
-            string[] expectedTypeNames
-        )
+        public void ShouldRemoveManagedTypeNamesWhenRemovalsDiffer(string[] managedTypeNames, string[] removedTypeNames, string[] expectedTypeNames)
         {
-            List<string> result = NamespaceController.RemoveManagedTypeNames(
-                managedTypeNames,
-                removedTypeNames
-            );
+            List<string> result = NamespaceController.RemoveManagedTypeNames(managedTypeNames, removedTypeNames);
 
             CollectionAssert.AreEqual(expectedTypeNames, result);
         }
@@ -201,10 +148,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             List<string> managedTypeNames = new() { "Gameplay.EnemyData", "UI.MenuData" };
 
-            List<string> result = NamespaceController.RemoveManagedTypeNames(
-                managedTypeNames,
-                null
-            );
+            List<string> result = NamespaceController.RemoveManagedTypeNames(managedTypeNames, null);
 
             CollectionAssert.AreEqual(managedTypeNames, result);
             Assert.AreNotSame(managedTypeNames, result);

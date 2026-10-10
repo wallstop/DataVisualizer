@@ -29,9 +29,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public Func<bool> AssetDatabaseBusyOverride { get; set; }
 
         private readonly Queue<string> _pendingAssetPaths = new();
-        private readonly Dictionary<string, (Type Type, string Guid)> _assetsByPath = new(
-            StringComparer.OrdinalIgnoreCase
-        );
+        private readonly Dictionary<string, (Type Type, string Guid)> _assetsByPath = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<Type, HashSet<string>> _guidsByType = new();
 
         private AssetGuidTypeIndexState _state;
@@ -45,8 +43,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private static bool IsProjectAssetPath(string path)
         {
             // Unity AssetDatabase paths use forward slashes on every supported platform.
-            return path?.StartsWith(ProjectAssetsPrefix, StringComparison.OrdinalIgnoreCase) == true
-                && path.EndsWith(AssetExtension, StringComparison.OrdinalIgnoreCase);
+            return path?.StartsWith(ProjectAssetsPrefix, StringComparison.OrdinalIgnoreCase) == true && path.EndsWith(AssetExtension, StringComparison.OrdinalIgnoreCase);
         }
 
         public string[] GetKnownGuids(Type type)
@@ -165,10 +162,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool movedPathsRemoved = RemovePaths(movedFromAssetPaths);
             bool importedPathsIndexed = IndexPaths(importedAssets);
             bool movedPathsIndexed = IndexPaths(movedAssets);
-            return deletedPathsRemoved
-                || movedPathsRemoved
-                || importedPathsIndexed
-                || movedPathsIndexed;
+            return deletedPathsRemoved || movedPathsRemoved || importedPathsIndexed || movedPathsIndexed;
         }
 
         private bool RunStateMachine(double budgetMilliseconds)
@@ -206,10 +200,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             do
             {
                 IndexPath(_pendingAssetPaths.Dequeue());
-            } while (
-                0 < _pendingAssetPaths.Count
-                && stopwatch.Elapsed.TotalMilliseconds < budgetMilliseconds
-            );
+            } while (0 < _pendingAssetPaths.Count && stopwatch.Elapsed.TotalMilliseconds < budgetMilliseconds);
 
             if (0 < _pendingAssetPaths.Count)
             {
@@ -350,10 +341,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         private bool RemovePath(string path)
         {
-            if (
-                string.IsNullOrWhiteSpace(path)
-                || !_assetsByPath.TryGetValue(path, out (Type Type, string Guid) indexedAsset)
-            )
+            if (string.IsNullOrWhiteSpace(path) || !_assetsByPath.TryGetValue(path, out (Type Type, string Guid) indexedAsset))
             {
                 return false;
             }
@@ -377,9 +365,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool stateChanged = _state != nextState;
             _state = nextState;
 
-            bool shouldProcess =
-                nextState == AssetGuidTypeIndexState.WaitingForPathSnapshot
-                || nextState == AssetGuidTypeIndexState.Classifying;
+            bool shouldProcess = nextState == AssetGuidTypeIndexState.WaitingForPathSnapshot || nextState == AssetGuidTypeIndexState.Classifying;
             if (shouldProcess)
             {
                 EditorApplication.update += ProcessEditorUpdate;

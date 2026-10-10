@@ -12,11 +12,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private readonly long _generation;
         private readonly int _slot;
 
-        internal ReusableDisposalLease(
-            ReusableDisposalScope<TState> owner,
-            int slot,
-            long generation
-        )
+        internal ReusableDisposalLease(ReusableDisposalScope<TState> owner, int slot, long generation)
         {
             _owner = owner;
             _generation = generation;

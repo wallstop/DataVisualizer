@@ -20,11 +20,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
          */
 
         private const BindingFlags DeclaredMemberBindingFlags =
-            BindingFlags.Public
-            | BindingFlags.NonPublic
-            | BindingFlags.Instance
-            | BindingFlags.Static
-            | BindingFlags.DeclaredOnly;
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
 
         private static readonly string[] BaseDataObjectFieldSignatures =
         {
@@ -56,34 +52,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static readonly Dictionary<Type, string[]> InterfaceSignatures = new()
         {
-            {
-                typeof(ICreatable),
-                new[] { "public System.Void AfterCreate()", "public System.Void BeforeCreate()" }
-            },
-            {
-                typeof(IDuplicable),
-                new[]
-                {
-                    "public System.Void AfterClone(UnityEngine.ScriptableObject)",
-                    "public System.Void BeforeClone(UnityEngine.ScriptableObject)",
-                }
-            },
-            {
-                typeof(IRenamable),
-                new[]
-                {
-                    "public System.Void AfterRename(System.String)",
-                    "public System.Void BeforeRename(System.String)",
-                }
-            },
+            { typeof(ICreatable), new[] { "public System.Void AfterCreate()", "public System.Void BeforeCreate()" } },
+            { typeof(IDuplicable), new[] { "public System.Void AfterClone(UnityEngine.ScriptableObject)", "public System.Void BeforeClone(UnityEngine.ScriptableObject)" } },
+            { typeof(IRenamable), new[] { "public System.Void AfterRename(System.String)", "public System.Void BeforeRename(System.String)" } },
             { typeof(IDisplayable), new[] { "System.String Title { public virtual get; }" } },
-            {
-                typeof(IGUIProvider),
-                new[]
-                {
-                    "public UnityEngine.UIElements.VisualElement BuildGUI(WallstopStudios.DataVisualizer.DataVisualizerGUIContext)",
-                }
-            },
+            { typeof(IGUIProvider), new[] { "public UnityEngine.UIElements.VisualElement BuildGUI(WallstopStudios.DataVisualizer.DataVisualizerGUIContext)" } },
             {
                 typeof(IDataProcessor),
                 new[]
@@ -112,10 +85,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         };
 #endif
 
-        private static readonly string[] DataVisualizerGUIContextFieldSignatures =
-        {
-            "serializedObject : UnityEditor.SerializedObject (public, readonly)",
-        };
+        private static readonly string[] DataVisualizerGUIContextFieldSignatures = { "serializedObject : UnityEditor.SerializedObject (public, readonly)" };
 
         private static string FormatType(Type type)
         {
@@ -126,10 +96,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             if (type.IsArray)
             {
-                return FormatType(type.GetElementType())
-                    + "["
-                    + new string(',', type.GetArrayRank() - 1)
-                    + "]";
+                return FormatType(type.GetElementType()) + "[" + new string(',', type.GetArrayRank() - 1) + "]";
             }
 
             if (type.IsGenericType && !type.IsGenericTypeDefinition)
@@ -227,8 +194,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 traits.Add("serialized");
             }
 
-            FormerlySerializedAsAttribute alias =
-                field.GetCustomAttribute<FormerlySerializedAsAttribute>(inherit: false);
+            FormerlySerializedAsAttribute alias = field.GetCustomAttribute<FormerlySerializedAsAttribute>(inherit: false);
             if (alias != null)
             {
                 traits.Add("formerly \"" + alias.oldName + "\"");
@@ -338,9 +304,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static List<string> CollectInterfaceSignatures(Type interfaceType)
         {
             List<string> signatures = new();
-            foreach (
-                PropertyInfo property in interfaceType.GetProperties(DeclaredMemberBindingFlags)
-            )
+            foreach (PropertyInfo property in interfaceType.GetProperties(DeclaredMemberBindingFlags))
             {
                 signatures.Add(BuildPropertySignature(property));
             }
@@ -360,18 +324,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static bool IsPropertyAccessor(MethodInfo method)
         {
-            return method.IsSpecialName
-                && (
-                    method.Name.StartsWith("get_", StringComparison.Ordinal)
-                    || method.Name.StartsWith("set_", StringComparison.Ordinal)
-                );
+            return method.IsSpecialName && (method.Name.StartsWith("get_", StringComparison.Ordinal) || method.Name.StartsWith("set_", StringComparison.Ordinal));
         }
 
-        private static void AssertSignaturesMatch(
-            List<string> actualSignatures,
-            IReadOnlyList<string> expectedSignatures,
-            string surfaceName
-        )
+        private static void AssertSignaturesMatch(List<string> actualSignatures, IReadOnlyList<string> expectedSignatures, string surfaceName)
         {
             HashSet<string> expectedSignaturesSet = new(expectedSignatures, StringComparer.Ordinal);
             HashSet<string> actualSignatureSet = new(actualSignatures, StringComparer.Ordinal);
@@ -409,21 +365,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldPreserveBaseDataObjectDerivationSurfaceWhenHostCodeDerivesFromIt()
         {
             Type baseDataObjectType = typeof(BaseDataObject);
-            AssertSignaturesMatch(
-                CollectFieldSignatures(baseDataObjectType),
-                BaseDataObjectFieldSignatures,
-                "BaseDataObject fields"
-            );
-            AssertSignaturesMatch(
-                CollectPropertySignatures(baseDataObjectType),
-                BaseDataObjectPropertySignatures,
-                "BaseDataObject properties"
-            );
-            AssertSignaturesMatch(
-                CollectClassMethodSignatures(baseDataObjectType),
-                BaseDataObjectMethodSignatures,
-                "BaseDataObject methods"
-            );
+            AssertSignaturesMatch(CollectFieldSignatures(baseDataObjectType), BaseDataObjectFieldSignatures, "BaseDataObject fields");
+            AssertSignaturesMatch(CollectPropertySignatures(baseDataObjectType), BaseDataObjectPropertySignatures, "BaseDataObject properties");
+            AssertSignaturesMatch(CollectClassMethodSignatures(baseDataObjectType), BaseDataObjectMethodSignatures, "BaseDataObject methods");
         }
 
         [Test]
@@ -432,22 +376,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             foreach (KeyValuePair<Type, string[]> interfaceSignatures in InterfaceSignatures)
             {
                 Type interfaceType = interfaceSignatures.Key;
-                AssertSignaturesMatch(
-                    CollectInterfaceSignatures(interfaceType),
-                    interfaceSignatures.Value,
-                    $"{interfaceType.FullName} members"
-                );
+                AssertSignaturesMatch(CollectInterfaceSignatures(interfaceType), interfaceSignatures.Value, $"{interfaceType.FullName} members");
             }
         }
 
         [Test]
         public void ShouldPreserveCompatibilityTypeMemberSignaturesWhenHostCodeUsesThem()
         {
-            AssertSignaturesMatch(
-                CollectFieldSignatures(typeof(DataVisualizerGUIContext)),
-                DataVisualizerGUIContextFieldSignatures,
-                "DataVisualizerGUIContext fields"
-            );
+            AssertSignaturesMatch(CollectFieldSignatures(typeof(DataVisualizerGUIContext)), DataVisualizerGUIContextFieldSignatures, "DataVisualizerGUIContext fields");
             AssertSignaturesMatch(
                 CollectPropertySignatures(typeof(CustomDataVisualizationAttribute)),
                 CustomDataVisualizationAttributePropertySignatures,

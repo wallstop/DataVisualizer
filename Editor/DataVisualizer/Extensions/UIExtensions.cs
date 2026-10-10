@@ -7,8 +7,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Extensions
 
     internal static class UIExtensions
     {
-        private static readonly string PlaceholderTextFieldClass =
-            TextField.ussClassName + "__placeholder";
+        private static readonly string PlaceholderTextFieldClass = TextField.ussClassName + "__placeholder";
 
         /// <summary>
         /// Sets up placeholder text to show when the TextField's text is empty.
@@ -18,12 +17,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Extensions
         /// <param name="placeholder">Text to use as a placeholder.</param>
         /// <param name="clearExistingText">If true, will set the text in the TextField to the empty string.</param>
         /// <param name="changeValueOnFocus">If true, will reset the text to the placeHolder when focus is changed (out).</param>
-        public static void SetPlaceholderText(
-            this TextField textField,
-            string placeholder,
-            bool clearExistingText = true,
-            bool changeValueOnFocus = true
-        )
+        public static void SetPlaceholderText(this TextField textField, string placeholder, bool clearExistingText = true, bool changeValueOnFocus = true)
         {
             if (clearExistingText)
             {
@@ -50,14 +44,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Extensions
                 blinkSchedule = textField
                     .schedule.Execute(() =>
                     {
-                        textField.EnableInClassList(
-                            StyleConstants.TransparentCursorClass,
-                            shouldRenderCursor
-                        );
-                        textField.EnableInClassList(
-                            StyleConstants.StyledCursorClass,
-                            !shouldRenderCursor
-                        );
+                        textField.EnableInClassList(StyleConstants.TransparentCursorClass, shouldRenderCursor);
+                        textField.EnableInClassList(StyleConstants.StyledCursorClass, !shouldRenderCursor);
                         shouldRenderCursor = !shouldRenderCursor;
                     })
                     .Every(StyleConstants.CursorBlinkRateMilliseconds);
@@ -82,9 +70,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Extensions
             }
         }
 
-        public static IEnumerable<VisualElement> IterateChildrenRecursively(
-            this VisualElement element
-        )
+        public static IEnumerable<VisualElement> IterateChildrenRecursively(this VisualElement element)
         {
             foreach (VisualElement child in element.Children())
             {

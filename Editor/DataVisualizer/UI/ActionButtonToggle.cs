@@ -47,11 +47,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
 
         private bool _value;
 
-        public ActionButtonToggle(
-            string label,
-            Action<bool> onClick = null,
-            bool initialValue = false
-        )
+        public ActionButtonToggle(string label, Action<bool> onClick = null, bool initialValue = false)
         {
             _onClick = onClick;
             AddToClassList(ClassName);
@@ -66,9 +62,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             _toggleButtonElement = new VisualElement();
             _toggleButtonElement.AddToClassList(ButtonClassName);
             _toggleButtonElement.RegisterCallback<ClickEvent>(OnClick);
-            _toggleButtonElement.RegisterCallback<PointerDownEvent>(static evt =>
-                evt.StopPropagation()
-            );
+            _toggleButtonElement.RegisterCallback<PointerDownEvent>(static evt => evt.StopPropagation());
             Add(_toggleButtonElement);
             _toggleButtonElement.AddToClassList(StyleConstants.ClickableClass);
 

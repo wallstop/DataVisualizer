@@ -19,19 +19,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Runtime
             ("Sword (Clone 2 extra)", "Sword (Clone 2 extra) (Clone)"),
         };
 
-        private static readonly (string Input, string Expected)[] TitleCases =
-        {
-            (null, string.Empty),
-            ("   ", string.Empty),
-            ("Flame Sword", "Flame Sword"),
-        };
+        private static readonly (string Input, string Expected)[] TitleCases = { (null, string.Empty), ("   ", string.Empty), ("Flame Sword", "Flame Sword") };
 
-        private static readonly (string Input, string Expected)[] DescriptionCases =
-        {
-            (null, string.Empty),
-            ("   ", string.Empty),
-            ("Primary loadout", "Primary loadout"),
-        };
+        private static readonly (string Input, string Expected)[] DescriptionCases = { (null, string.Empty), ("   ", string.Empty), ("Primary loadout", "Primary loadout") };
 
         [UnityTest]
         public IEnumerator ShouldRunInsidePlayModeWhenPlayModeSuiteExecutes()
@@ -54,11 +44,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Runtime
 
                 clone.AfterClone(previous);
 
-                Assert.AreEqual(
-                    expectedTitle,
-                    clone.TitleValue,
-                    "clone title after cloning previous with title '" + previousTitle + "'"
-                );
+                Assert.AreEqual(expectedTitle, clone.TitleValue, "clone title after cloning previous with title '" + previousTitle + "'");
                 Object.Destroy(clone);
                 Object.Destroy(previous);
             }
@@ -104,21 +90,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Runtime
 
             foreach ((string input, string expected) in TitleCases)
             {
-                PlayModeDataObject dataObject =
-                    ScriptableObject.CreateInstance<PlayModeDataObject>();
+                PlayModeDataObject dataObject = ScriptableObject.CreateInstance<PlayModeDataObject>();
 
                 dataObject.Title = input;
 
-                Assert.AreEqual(
-                    expected,
-                    dataObject.TitleValue,
-                    "stored title for input '" + input + "'"
-                );
-                Assert.AreEqual(
-                    expected,
-                    dataObject.Title,
-                    "displayed title for input '" + input + "'"
-                );
+                Assert.AreEqual(expected, dataObject.TitleValue, "stored title for input '" + input + "'");
+                Assert.AreEqual(expected, dataObject.Title, "displayed title for input '" + input + "'");
                 Object.Destroy(dataObject);
             }
         }
@@ -130,21 +107,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Runtime
 
             foreach ((string input, string expected) in DescriptionCases)
             {
-                PlayModeDataObject dataObject =
-                    ScriptableObject.CreateInstance<PlayModeDataObject>();
+                PlayModeDataObject dataObject = ScriptableObject.CreateInstance<PlayModeDataObject>();
 
                 dataObject.Description = input;
 
-                Assert.AreEqual(
-                    expected,
-                    dataObject.DescriptionValue,
-                    "stored description for input '" + input + "'"
-                );
-                Assert.AreEqual(
-                    expected,
-                    dataObject.Description,
-                    "displayed description for input '" + input + "'"
-                );
+                Assert.AreEqual(expected, dataObject.DescriptionValue, "stored description for input '" + input + "'");
+                Assert.AreEqual(expected, dataObject.Description, "displayed description for input '" + input + "'");
                 Object.Destroy(dataObject);
             }
         }
