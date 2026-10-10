@@ -139,12 +139,76 @@ Invoke-TestCase 'Runs_WhenTheBaseCannotBeResolved' {
 }
 
 Invoke-TestCase 'SurfacePath_MatchesTheDeclaredSurfaceOnly' {
-    foreach ($path in @('scripts/lint.js', 'scripts\nested\lint.js', './.llm/context.md', '.github/workflows/ci.yml', 'package.json', 'package-lock.json', 'opencode.json', '.pre-commit-config.yaml')) {
+    foreach ($path in @('scripts/lint.js', 'scripts\nested\lint.js', './.llm/context.md', '.github/workflows/ci.yml', 'package.json', 'package-lock.json', 'opencode.json', '.pre-commit-config.yaml', '.mcp.json', '.env.local.example')) {
         Assert-True (Test-SurfacePath -Path $path) "$path must match the surface"
     }
     foreach ($path in @('README.md', 'docs/index.md', 'Editor/Foo.cs', 'Tests/Editor/Foo.cs', 'sub/package.json', 'docs/images/logo.png', '')) {
         Assert-True (-not (Test-SurfacePath -Path $path)) "'$path' must not match the surface"
     }
+}
+
+# The selection maps a changed surface path onto the test files that verify
+# it. Unmapped, shared, or stale names fail safe to the full suite.
+Invoke-TestCase 'Selection_SelectsTheMappedSubjectTests' {
+    $selection = Get-SelfTestSelection -Paths @('scripts/fast-check.ps1')
+    Assert-True (-not $selection.All) 'a mapped subject must not select the full suite'
+    Assert-True (($selection.Names -join ',') -eq 'test-fast-check.ps1') (
+        "the fast-check subject must select its test file, got: $($selection.Names -join ',')")
+}
+
+Invoke-TestCase 'Selection_UnionsSubjectsAcrossPaths' {
+    $selection = Get-SelfTestSelection -Paths @(
+        'scripts/release/verify-release.mjs',
+        'scripts/release/validate-unitypackage.mjs'
+    )
+    Assert-True (-not $selection.All) 'mapped subjects must not select the full suite'
+    Assert-True (($selection.Names -join ',') -eq 'test-validate-unitypackage.ps1,test-verify-release.ps1') (
+        "the release subjects must union their test files sorted, got: $($selection.Names -join ',')")
+}
+
+Invoke-TestCase 'Selection_PrefersTheSpecificMcpSubjectOverTheCoarseTree' {
+    $selection = Get-SelfTestSelection -Paths @('.llm/mcp/configure.mjs')
+    Assert-True (-not $selection.All) 'the mcp subject must not select the full suite'
+    Assert-True (($selection.Names -join ',') -eq 'test-mcp-credentials.ps1,test-mcp-sync.ps1') (
+        "the mcp subject must select the mcp test files, got: $($selection.Names -join ',')")
+}
+
+Invoke-TestCase 'Selection_MapsATestFileToItself' {
+    $selection = Get-SelfTestSelection -Paths @('scripts/tests/test-harness-scope.ps1')
+    Assert-True (-not $selection.All) 'a test file edit must not select the full suite'
+    Assert-True (($selection.Names -join ',') -eq 'test-harness-scope.ps1') (
+        'a test file edit must select itself for immediate feedback')
+}
+
+Invoke-TestCase 'Selection_FallsBackToAllForSharedSuitePaths' {
+    foreach ($path in @('scripts/tests/TestHelpers.ps1', 'scripts/tests/run-all.ps1', 'package.json', '.config/dotnet-tools.json')) {
+        $selection = Get-SelfTestSelection -Paths @($path)
+        Assert-True ($selection.All) "the shared path $path must select the full suite"
+    }
+}
+
+Invoke-TestCase 'Selection_FallsBackToAllForUnmappedSubjects' {
+    $selection = Get-SelfTestSelection -Paths @('scripts/build-docs.ps1')
+    Assert-True ($selection.All) 'an unmapped surface path must select the full suite'
+}
+
+Invoke-TestCase 'Selection_IgnoresPathsOutsideTheSurface' {
+    $selection = Get-SelfTestSelection -Paths @('scripts/fast-check.ps1', 'docs/index.md', 'node_modules.meta')
+    Assert-True (-not $selection.All) 'non-surface paths must not broaden the selection'
+    Assert-True (($selection.Names -join ',') -eq 'test-fast-check.ps1') (
+        "the selection must keep only the subject test, got: $($selection.Names -join ',')")
+}
+
+Invoke-TestCase 'Selection_FailsSafeWhenAMappedNameIsUnavailable' {
+    $selection = Get-SelfTestSelection -Paths @('scripts/fast-check.ps1') -AvailableTestFiles @('test-other.ps1')
+    Assert-True ($selection.All) 'a mapped name missing from the suite must select the full suite'
+}
+
+Invoke-TestCase 'Selection_AcceptsTheAvailableNames' {
+    $selection = Get-SelfTestSelection -Paths @('scripts/fast-check.ps1') -AvailableTestFiles @('test-fast-check.ps1', 'test-zulu.ps1')
+    Assert-True (-not $selection.All) 'a mapped name present in the suite must not select the full suite'
+    Assert-True (($selection.Names -join ',') -eq 'test-fast-check.ps1') (
+        'the selection must keep the mapped name only')
 }
 
 if ($script:TestFailureCount -gt 0) {

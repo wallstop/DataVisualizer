@@ -46,6 +46,11 @@ function Get-FastCheckPlan {
     # file must keep running the self-tests - but the formatter lists feed
     # file-argument tools (csharpier, prettier), which fail on missing paths.
     $existing = @($changed | Where-Object { Test-Path -LiteralPath (Join-Path $RepoRoot $_) })
+    $testFiles = @(
+        Get-ChildItem -Path (Join-Path $PSScriptRoot 'tests') -Filter 'test-*.ps1' |
+            ForEach-Object { $_.Name }
+    )
+    $selection = Get-SelfTestSelection -Paths $changed -AvailableTestFiles $testFiles
 
     return [pscustomobject]@{
         BaseSha = $BaseSha
@@ -56,6 +61,8 @@ function Get-FastCheckPlan {
         AssemblyConfig = @($changed | Where-Object { $_ -match '\.(asmdef|ruleset|rsp)$' -or $_ -match '\.dll\.meta$' }).Count -gt 0
         ReleaseSurface = @($changed | Where-Object { $_ -eq '.github/workflows/release.yml' -or $_ -eq '.llm/references/RELEASING.md' }).Count -gt 0
         LineEndings = @($changed | Where-Object { $_ -eq '.editorconfig' -or $_ -eq '.gitattributes' }).Count -gt 0
+        SelfTestsAll = $selection.All
+        SelfTestNames = @($selection.Names)
     }
 }
 
@@ -91,6 +98,11 @@ if ($PlanOnly) {
     Write-Host "[fast-check] markdown: $($plan.Markdown -join ', ')"
     foreach ($group in @('Harness', 'Packaging', 'AssemblyConfig', 'ReleaseSurface', 'LineEndings')) {
         Write-Host "[fast-check] $group : $($plan.$group)"
+    }
+    if ($plan.SelfTestsAll) {
+        Write-Host '[fast-check] self-tests: all'
+    } else {
+        Write-Host "[fast-check] self-tests: $($plan.SelfTestNames -join ', ')"
     }
     exit 0
 }
@@ -136,7 +148,13 @@ try {
             Assert-NativeExit -Description 'llm-instructions lint'
             & pwsh -NoProfile -File scripts/lint-file-lengths.ps1
             Assert-NativeExit -Description 'file-lengths lint'
-            & pwsh -NoProfile -File scripts/tests/run-all.ps1
+            if ($plan.SelfTestsAll) {
+                & pwsh -NoProfile -File scripts/tests/run-all.ps1
+            } else {
+                Write-Host ("[fast-check] self-test selection: {0}" -f ($plan.SelfTestNames -join ', '))
+                # pwsh -File cannot carry an array argument; run-all splits commas.
+                & pwsh -NoProfile -File scripts/tests/run-all.ps1 -Names ($plan.SelfTestNames -join ',')
+            }
             Assert-NativeExit -Description 'harness self-tests'
         }
     }
