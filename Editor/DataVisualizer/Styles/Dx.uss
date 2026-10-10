@@ -1,0 +1,139 @@
+/*
+    Dx: the DxVisualizer default theme.
+    Dx family palette: ink surfaces, azure accent, family hues for actions.
+    Token values first; the rules below only thin borders and soften hovers,
+    so the window works unchanged on v0.1.0. See production/TOKENS.md.
+*/
+:root {
+    --dataviz-font-size: 14px;
+    --dataviz-font-size-secondary: 12px;
+    --dataviz-font-size-caption: 11px;
+    --dataviz-font-size-indicator: 9px;
+    --dataviz-circle-size: 24px;
+    --dataviz-control-padding: 6px;
+    --dataviz-control-radius: 6px;
+
+    --dataviz-background: #14171c;
+    --dataviz-pane: #101318;
+    --dataviz-namespace: #191d23;
+    --dataviz-row: #1b2026;
+    --dataviz-popover: #1b1e24;
+    --dataviz-input: #0f1216;
+    --dataviz-border: #2a2f38;
+    --dataviz-hover: #232a33;
+
+    --dataviz-text: #e9eef4;
+    --dataviz-muted: #8a929e;
+
+    --dataviz-accent: #5b9dff;
+    --dataviz-on-accent: #0d1117;
+    --dataviz-control: #1b2026;
+    --dataviz-control-hover: #5b9dff;
+    --dataviz-control-pressed: #3f7fe0;
+
+    --dataviz-selection: #5b9dff;
+    --dataviz-selection-text: #b5d0ff;
+    --dataviz-selected-row: #1a2638;
+
+    --dataviz-danger: #ec4661;
+    --dataviz-on-danger: #0d1117;
+    --dataviz-positive: #7fb88a;
+    --dataviz-on-positive: #0d1117;
+    --dataviz-secondary: #aeb7c2;
+    --dataviz-on-secondary: #0d1117;
+    --dataviz-warning: #f4a836;
+    --dataviz-on-warning: #0d1117;
+    --dataviz-emphasis: #ffd48e;
+    --dataviz-on-emphasis: #0d1117;
+}
+
+/* Rows, groups, and types: 1px outlines, neutral hover, azure only when selected. */
+.object-item {
+    border-width: 1px;
+}
+
+.object-item:hover {
+    border-color: #3a4350;
+}
+
+.object-item.selected {
+    border-color: var(--dataviz-selection);
+}
+
+.namespace-item {
+    border-width: 1px;
+    border-radius: 8px;
+}
+
+.namespace-item:hover {
+    border-color: #3a4350;
+}
+
+.namespace-item.selected {
+    border-color: #2c4a75;
+}
+
+.type-item {
+    border-width: 1px;
+}
+
+.type-item:hover {
+    background-color: var(--dataviz-hover);
+    border-color: #3a4350;
+}
+
+.type-item.selected {
+    border-color: var(--dataviz-selection);
+}
+
+/* Round action buttons and popover controls: 1px rings. */
+.action-button,
+.go-button-disabled {
+    border-width: 1px;
+}
+
+.dataviz-root .popover-button,
+.dataviz-root .popover-close-button,
+.dataviz-root .theme-field,
+.dataviz-root .theme-reset-button,
+.dataviz-root .settings-data-folder-button {
+    border-width: 1px;
+}
+
+.dataviz-root .create-button,
+.dataviz-root .load-from-data-folder-button,
+.dataviz-root .load-from-script-folder-button,
+.dataviz-root .settings-button {
+    border-width: 1px;
+    border-color: var(--dataviz-border);
+}
+
+.rename-text-field > #unity-text-input,
+.create-text-field > #unity-text-input {
+    border-width: 1px;
+}
+
+.settings-data-folder-path-display.unity-label {
+    border-width: 1px;
+    -unity-font-style: normal;
+}
+
+/* Popovers: raised surface with a hairline instead of a translucent black. */
+.popover,
+.search-popover,
+.type-add-popover {
+    border-width: 1px;
+    border-color: var(--dataviz-border);
+}
+
+/*
+    Optional: IBM Plex Sans for prose controls. The window sets its bundled
+    IBM Plex Mono inline on the root, so descendant rules win. Add
+    IBMPlexSans-Regular.ttf (OFL) under Editor/Fonts and uncomment.
+
+.dataviz-root .unity-label,
+.dataviz-root .unity-button,
+.dataviz-root .unity-base-field__label {
+    -unity-font-definition: url("../../Fonts/IBMPlexSans-Regular.ttf");
+}
+*/
