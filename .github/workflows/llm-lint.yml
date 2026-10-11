@@ -150,6 +150,7 @@ jobs:
         run: node scripts/lint-changelog-length.js --verbose
 
       - name: Enforce assembly warning policy
+        shell: bash
         run: ${PYTHON} scripts/lint_assembly_warnings.py
 
       - name: Resolve the harness self-test scope
