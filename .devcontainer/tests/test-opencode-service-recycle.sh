@@ -76,19 +76,64 @@ destroy_sandbox() {
 SERVICE_PID=""
 start_fake_service() {
     local service_env_value="$1"
-    # Every other credential name is explicitly cleared: the test must measure
-    # the fixture, not whatever the developer happens to have exported.
-    env -u ZAI_API_KEY -u Z_AI_API_KEY -u GITHUB_TOKEN \
-        GITHUB_PERSONAL_ACCESS_TOKEN="${service_env_value}" \
-        GITHUB_MCP_PAT="${service_env_value}" \
-        sleep 300 &
-    SERVICE_PID=$!
+    local attempt pid i marker
+    # Issue #175: under full-suite concurrency the spawn can fail to exec or
+    # the fixture can die immediately (observed on hosted runners), which
+    # silently degraded the case into the script's dead-pid path. A readiness
+    # marker written by the fixture's own command chain proves the chain
+    # actually exec'd (kill -0 alone cannot: an unreaped zombie answers it).
+    # Verify readiness after each spawn and retry once; a fixture that still
+    # never becomes ready is caught by require_live_service before the case
+    # acts, mirroring the stub-port pattern of test-mcp-credentials.sh.
+    for attempt in 1 2; do
+        marker="${SANDBOX}/fixture-ready.${attempt}"
+        rm -f "${marker}"
+        # Every other credential name is explicitly cleared: the test must
+        # measure the fixture, not whatever the developer happens to have
+        # exported.
+        env -u ZAI_API_KEY -u Z_AI_API_KEY -u GITHUB_TOKEN \
+            GITHUB_PERSONAL_ACCESS_TOKEN="${service_env_value}" \
+            GITHUB_MCP_PAT="${service_env_value}" \
+            bash -c 'printf "%s\n" "$$" >"$1" && exec sleep 300' fixture "${marker}" &
+        pid=$!
+        i=0
+        while [ "${i}" -lt 20 ]; do
+            # The pid check is part of readiness: the marker must name THIS
+            # spawn, not a leftover file.
+            [ -s "${marker}" ] && grep -q "^${pid}\$" "${marker}" 2>/dev/null && break
+            i=$((i + 1))
+            sleep 0.05
+        done
+        if [ -s "${marker}" ] && grep -q "^${pid}\$" "${marker}" 2>/dev/null; then
+            SERVICE_PID="${pid}"
+            return 0
+        fi
+        # This attempt never became ready: kill first so a live stray cannot
+        # block the reaping wait, then retry.
+        kill "${pid}" 2>/dev/null
+        wait "${pid}" 2>/dev/null
+    done
+    SERVICE_PID="${pid}"
+    return 1
 }
 
 stop_fake_service() {
     [ -n "${SERVICE_PID}" ] && kill "${SERVICE_PID}" 2>/dev/null
     wait "${SERVICE_PID}" 2>/dev/null
     SERVICE_PID=""
+}
+
+# Fails the calling case exactly once, with a named diagnostic, when the
+# fixture is not alive right before the case acts on it (issue #175). A dead
+# fixture must not degrade into wrong-verdict failures from the recycle
+# script's dead-pid path; each service-backed case returns early on this
+# guard, mirroring the stub-readiness pattern of test-mcp-credentials.sh.
+require_live_service() {
+    if [ -n "${SERVICE_PID}" ] && kill -0 "${SERVICE_PID}" 2>/dev/null; then
+        return 0
+    fi
+    fail "fake service (pid ${SERVICE_PID}) is not running; the case needs a live fixture"
+    return 1
 }
 
 # Writes a discovery record pointing at SERVICE_PID.
@@ -124,6 +169,10 @@ test_recycles_service_with_stale_credential() {
     printf 'GITHUB_PERSONAL_ACCESS_TOKEN=%s\n' "${LIVE}" >"${SANDBOX}/.env.local"
     start_fake_service "${STALE}"
     write_service_record
+    if ! require_live_service; then
+        destroy_sandbox
+        return
+    fi
     OUT="$(run_recycle)"
     assert_contains "reports the stale credential" "stale credential" "${OUT}"
     assert_contains "names the service pid it recycled" "${SERVICE_PID}" "${OUT}"
@@ -143,6 +192,10 @@ test_removes_stale_discovery_record() {
     printf 'GITHUB_PERSONAL_ACCESS_TOKEN=%s\n' "${LIVE}" >"${SANDBOX}/.env.local"
     start_fake_service "${STALE}"
     write_service_record
+    if ! require_live_service; then
+        destroy_sandbox
+        return
+    fi
     run_recycle >/dev/null
     if [ -f "${SANDBOX}/state/opencode/service.json" ]; then
         fail "stale discovery record was not removed"
@@ -163,6 +216,10 @@ test_leaves_matching_service_alone() {
     printf 'GITHUB_PERSONAL_ACCESS_TOKEN=%s\n' "${LIVE}" >"${SANDBOX}/.env.local"
     start_fake_service "${LIVE}"
     write_service_record
+    if ! require_live_service; then
+        destroy_sandbox
+        return
+    fi
     OUT="$(run_recycle)"
     if kill -0 "${SERVICE_PID}" 2>/dev/null; then
         pass "matching service is left running"
@@ -185,6 +242,10 @@ test_dry_run_reports_without_killing() {
     printf 'GITHUB_PERSONAL_ACCESS_TOKEN=%s\n' "${LIVE}" >"${SANDBOX}/.env.local"
     start_fake_service "${STALE}"
     write_service_record
+    if ! require_live_service; then
+        destroy_sandbox
+        return
+    fi
     OUT="$(run_recycle --dry-run)"
     if kill -0 "${SERVICE_PID}" 2>/dev/null; then
         pass "dry-run leaves the service running"
@@ -233,6 +294,10 @@ test_no_env_file_is_a_no_op() {
     make_sandbox
     start_fake_service "${LIVE}"
     write_service_record
+    if ! require_live_service; then
+        destroy_sandbox
+        return
+    fi
     OUT="$(run_recycle)"
     if kill -0 "${SERVICE_PID}" 2>/dev/null; then
         pass "missing .env.local leaves the service alone"
@@ -256,6 +321,10 @@ test_quoted_and_crlf_env_file_is_parsed_like_the_loader() {
     printf '\xEF\xBB\xBFGITHUB_PERSONAL_ACCESS_TOKEN="%s"\r\n' "${LIVE}" >"${SANDBOX}/.env.local"
     start_fake_service "${LIVE}"
     write_service_record
+    if ! require_live_service; then
+        destroy_sandbox
+        return
+    fi
     OUT="$(run_recycle)"
     assert_not_contains \
         "quoted+CRLF+BOM env file is not misread as a mismatch" \
@@ -280,6 +349,10 @@ test_inherited_env_is_not_mistaken_for_a_file_value() {
     printf 'GITHUB_PERSONAL_ACCESS_TOKEN=%s\n' "${LIVE}" >"${SANDBOX}/.env.local"
     start_fake_service "${LIVE}"
     write_service_record
+    if ! require_live_service; then
+        destroy_sandbox
+        return
+    fi
     OUT="$(GITHUB_MCP_PAT="${STALE}" run_recycle)"
     assert_not_contains \
         "an inherited value for a key absent from .env.local is ignored" \
@@ -299,6 +372,10 @@ test_never_prints_credential_values() {
         >"${SANDBOX}/.env.local"
     start_fake_service "${STALE}"
     write_service_record
+    if ! require_live_service; then
+        destroy_sandbox
+        return
+    fi
     OUT="$(run_recycle)"
     assert_not_contains "output omits the file credential" "${LIVE}" "${OUT}"
     assert_not_contains "output omits the service credential" "${STALE}" "${OUT}"
