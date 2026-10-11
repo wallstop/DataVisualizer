@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 """Runs the harness self-test suite, optionally narrowed by surface (issue #171).
 
-Typed Python port of ``scripts/tests/run-all.ps1``: every ``test-*.ps1``
-file next to this script runs in a child pwsh with its output captured and
-replayed in name order, so the log shape is identical to the PowerShell
-runner. ``--names`` takes the same comma-separated test file names the fast
-check's surface selection produces; an unknown name fails safe to the full
-suite, so a stale mapping or a typo can never silently run a zero-test
-suite. When no test file is found the runner reports it and exits 0, like
-the original.
+Typed Python port of ``scripts/tests/run-all.ps1``: every self-test file
+next to this script runs in a child interpreter with its output captured
+and replayed in name order, so the log shape is identical to the PowerShell
+runner. The suite is migrating to typed Python (issue #171): ``test_*.py``
+files run under this process's own interpreter, while the not-yet-ported
+``test-*.ps1`` files keep running in a child pwsh, so a tranche can port
+its files without a flag day. pwsh is required only when a selected file
+is still a ``.ps1``; a Python-only selection runs on any interpreter.
 
-The child launches stay pwsh because the test files are PowerShell; this
-slice removes the parent pwsh (and its startup) from the hot path. The test
-files themselves are the remaining surface for this issue.
+``--names`` takes the same comma-separated test file names the fast check's
+surface selection produces; an unknown name fails safe to the full suite,
+so a stale mapping or a typo can never silently run a zero-test suite.
+When no test file is found the runner reports it and exits 0, like the
+original.
+
+The runner stays deliberately self-contained (one file, standard library
+only) so the self-tests can copy it into a sandbox tree and exercise it
+against stub suites; its discovery therefore keeps its own glob instead of
+importing the scope module.
 
 Workers fail closed: a child that cannot start, or a worker thread that
 crashes, records a failed result, and the verdict verifies that every
@@ -37,8 +44,15 @@ TESTS_DIR = Path(__file__).resolve().parent
 
 
 def discover_test_files() -> List[str]:
-    """List the test file names in name order."""
-    return sorted(path.name for path in TESTS_DIR.glob("test-*.ps1"))
+    """List the test file names in name order across both migration patterns.
+
+    Typed Python files (``test_*.py``) and the remaining PowerShell files
+    (``test-*.ps1``) share one name-ordered list so the suite treats them
+    identically; helper modules never match either pattern by design.
+    """
+    names = [path.name for path in TESTS_DIR.glob("test_*.py")]
+    names.extend(path.name for path in TESTS_DIR.glob("test-*.ps1"))
+    return sorted(names)
 
 
 def resolve_selection(names_csv: str, available: Sequence[str]) -> Tuple[List[str], bool]:
@@ -53,8 +67,12 @@ def resolve_selection(names_csv: str, available: Sequence[str]) -> Tuple[List[st
     return requested, True
 
 
-def run_tests(selected: Sequence[str], pwsh: str) -> int:
-    """Run each test in a child pwsh and replay the captured output in name order.
+def run_tests(selected: Sequence[str], python_executable: str, pwsh: Optional[str]) -> int:
+    """Run each test in a child interpreter and replay the captured output in name order.
+
+    ``test_*.py`` files run under ``python_executable`` (this process's own
+    interpreter); ``test-*.ps1`` files run in a child pwsh, which ``main``
+    guarantees is resolved whenever any selected file needs it.
 
     Every selected file must produce exactly one recorded result before the
     verdict is computed: a worker that crashes records a failed result, and
@@ -65,8 +83,12 @@ def run_tests(selected: Sequence[str], pwsh: str) -> int:
     lock = threading.Lock()
 
     def run_one(name: str) -> Tuple[str, Optional[int], str]:
+        if name.endswith(".py"):
+            command = [python_executable, str(TESTS_DIR / name)]
+        else:
+            command = [pwsh or "", "-NoProfile", "-File", str(TESTS_DIR / name)]
         completed = subprocess.run(
-            [pwsh, "-NoProfile", "-File", str(TESTS_DIR / name)],
+            command,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -135,11 +157,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     options = parser.parse_args(argv)
 
-    pwsh = shutil.which("pwsh")
-    if pwsh is None:
-        print("[run-all] ERROR: pwsh is required to run the test files; install PowerShell 7+")
-        return 1
-
     available = discover_test_files()
     if not available:
         print("No self-tests found.")
@@ -148,7 +165,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     selected, narrowed = resolve_selection(options.names, available)
     if narrowed:
         print(f"[run-all] surface selection: {len(selected)} test file(s): {', '.join(selected)}")
-    return run_tests(selected, pwsh)
+
+    # pwsh is only a requirement of the not-yet-ported test files: a Python
+    # selection must run on hosts that never had pwsh, while a mixed or
+    # PowerShell selection still fails closed without it.
+    pwsh: Optional[str] = None
+    if any(name.endswith(".ps1") for name in selected):
+        pwsh = shutil.which("pwsh")
+        if pwsh is None:
+            print("[run-all] ERROR: pwsh is required to run the test files; install PowerShell 7+")
+            return 1
+
+    return run_tests(selected, sys.executable, pwsh)
 
 
 if __name__ == "__main__":

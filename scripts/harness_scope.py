@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Single source of truth for which repository paths can change a self-test outcome.
 
-The harness self-tests (``scripts/tests/test-*.ps1``) verify this repository's
-agent tooling: lint scripts, the release pipeline, MCP configuration, and the
-devcontainer. Both the CI lint workflow (through
+The harness self-tests (``scripts/tests/test_*.py``, plus the remaining
+``scripts/tests/test-*.ps1`` files during the issue #171 migration) verify
+this repository's agent tooling: lint scripts, the release pipeline, MCP
+configuration, and the devcontainer. Both the CI lint workflow (through
 ``scripts/should_run_self_tests.py``) and the local fast check
 (``scripts/fast_check.py``) run the selection defined here, so the two always
 agree. Every verdict fails safe: an unmapped path, a stale name, or an
@@ -50,17 +51,20 @@ SURFACE_FILES: Tuple[str, ...] = (
 # Which self-test files verify which tooling subject. A change outside every
 # subject (shared manifests, the suite's own helpers, or anything unmapped)
 # selects every test file, so a subject without a mapping still gets coverage.
+# The tests that drive typed Python scripts are typed Python themselves
+# (issue #171); subjects still driving PowerShell or node tools keep their
+# .ps1 test names until their tranche ports.
 SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
-    "scripts/fast_check.py": ("test-fast-check.ps1",),
-    "scripts/gate.py": ("test-gate.ps1",),
-    "pyproject.toml": ("test-gate.ps1",),
-    "uv.lock": ("test-gate.ps1",),
-    "scripts/harness_scope.py": ("test-fast-check.ps1", "test-harness-scope.ps1"),
-    "scripts/should_run_self_tests.py": ("test-harness-scope.ps1",),
-    "scripts/generate_skills_index.py": ("test-generate-skills-index.ps1",),
-    "scripts/lint_llm_instructions.py": ("test-lint-llm-instructions.ps1",),
-    "scripts/lint_file_lengths.py": ("test-file-lengths.ps1",),
-    "scripts/lint_assembly_warnings.py": ("test-assembly-warnings.ps1",),
+    "scripts/fast_check.py": ("test_fast_check.py",),
+    "scripts/gate.py": ("test_gate.py",),
+    "pyproject.toml": ("test_gate.py",),
+    "uv.lock": ("test_gate.py",),
+    "scripts/harness_scope.py": ("test_fast_check.py", "test_harness_scope.py"),
+    "scripts/should_run_self_tests.py": ("test_harness_scope.py",),
+    "scripts/generate_skills_index.py": ("test_generate_skills_index.py",),
+    "scripts/lint_llm_instructions.py": ("test_lint_llm_instructions.py",),
+    "scripts/lint_file_lengths.py": ("test_file_lengths.py",),
+    "scripts/lint_assembly_warnings.py": ("test_assembly_warnings.py",),
     "scripts/lint-csharp-member-order.js": ("test-csharp-member-order.ps1",),
     "scripts/lint-csharp-null-assertions.js": ("test-lint-csharp-null-assertions.ps1",),
     "scripts/lint-csharp-usings.js": ("test-lint-csharp-usings.ps1",),
@@ -75,14 +79,14 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/release/tag-release.mjs": ("test-tag-release.ps1",),
     "scripts/release/prepare-release.mjs": ("test-prepare-release.ps1",),
     "scripts/release/extract-release-notes.mjs": ("test-extract-release-notes.ps1",),
-    "scripts/LlmConfig.psm1": ("test-lint-llm-instructions.ps1", "test-file-lengths.ps1", "test-generate-skills-index.ps1"),
+    "scripts/LlmConfig.psm1": ("test_lint_llm_instructions.py", "test_file_lengths.py", "test_generate_skills_index.py"),
     # Retired PowerShell surfaces (issue #171) keep their entries so a
     # deletion still selects the tests that verify the contract they used to
     # own, instead of failing safe to the full suite.
-    "scripts/generate-skills-index.ps1": ("test-generate-skills-index.ps1",),
-    "scripts/lint-llm-instructions.ps1": ("test-lint-llm-instructions.ps1",),
-    "scripts/lint-file-lengths.ps1": ("test-file-lengths.ps1",),
-    "scripts/lint-assembly-warnings.ps1": ("test-assembly-warnings.ps1",),
+    "scripts/generate-skills-index.ps1": ("test_generate_skills_index.py",),
+    "scripts/lint-llm-instructions.ps1": ("test_lint_llm_instructions.py",),
+    "scripts/lint-file-lengths.ps1": ("test_file_lengths.py",),
+    "scripts/lint-assembly-warnings.ps1": ("test_assembly_warnings.py",),
     ".devcontainer/ai-backends.sh": ("test-ai-backends.ps1", "test-env-local-precedence.ps1"),
     ".devcontainer/env-local.sh": ("test-ai-backends.ps1", "test-env-local-precedence.ps1"),
     ".devcontainer/recycle-stale-opencode-service.sh": ("test-opencode-service-recycle.ps1",),
@@ -103,7 +107,7 @@ SUBJECT_PREFIXES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             "test-opencode-service-recycle.ps1",
         ),
     ),
-    (".llm/", ("test-lint-llm-instructions.ps1", "test-file-lengths.ps1", "test-generate-skills-index.ps1")),
+    (".llm/", ("test_lint_llm_instructions.py", "test_file_lengths.py", "test_generate_skills_index.py")),
     (".github/", ("test-release-workflows.ps1", "test-lint-release-secrets.ps1")),
 )
 
@@ -112,7 +116,7 @@ SHARED_PREFIXES: Tuple[str, ...] = (
     ".config/",
 )
 
-_SELF_TEST_FILE_PATTERN = re.compile(r"^scripts/tests/(test-[a-z0-9-]+\.ps1)$")
+_SELF_TEST_FILE_PATTERN = re.compile(r"^scripts/tests/(test-[a-z0-9-]+\.ps1|test_[a-z0-9_]+\.py)$")
 _RENAME_PATTERN = re.compile(r"^(.*) -> (.*)$")
 
 
@@ -150,6 +154,20 @@ def is_surface_path(path: str) -> bool:
         if normalized == surface_file:
             return True
     return False
+
+
+def available_test_files() -> Tuple[str, ...]:
+    """List the self-test file names the suite currently discovers.
+
+    Both migration patterns count (``test_*.py`` and the remaining
+    ``test-*.ps1``), so a mapped name is only considered available when the
+    runner would actually discover it; a stale mapping therefore fails safe
+    to the full suite instead of narrowing to a file that does not exist.
+    """
+    tests_dir = Path(__file__).resolve().parent / "tests"
+    names = [path.name for path in tests_dir.glob("test_*.py")]
+    names.extend(path.name for path in tests_dir.glob("test-*.ps1"))
+    return tuple(sorted(names))
 
 
 def _git_lines(repo_root: Path, args: Sequence[str]) -> List[str]:
