@@ -231,7 +231,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             CheckStep(
                 "harness.skills-index",
                 "skills index",
-                ("pwsh", "-NoProfile", "-File", "scripts/generate-skills-index.ps1"),
+                ("uv", "run", "scripts/generate_skills_index.py"),
                 skills_dependencies,
             )
         )
@@ -248,7 +248,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             CheckStep(
                 "harness.llm-instructions",
                 ".llm instructions lint",
-                ("pwsh", "-NoProfile", "-File", "scripts/lint-llm-instructions.ps1"),
+                ("uv", "run", "scripts/lint_llm_instructions.py"),
                 ("harness.skills-index",),
             )
         )
@@ -256,7 +256,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             CheckStep(
                 "harness.file-lengths",
                 ".llm file-length lint",
-                ("pwsh", "-NoProfile", "-File", "scripts/lint-file-lengths.ps1"),
+                ("uv", "run", "scripts/lint_file_lengths.py"),
                 ("harness.skills-index",),
             )
         )

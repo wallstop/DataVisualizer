@@ -3,7 +3,10 @@ Set-StrictMode -Version 2.0
 $script:TestFailureCount = 0
 . (Join-Path $PSScriptRoot 'TestHelpers.ps1')
 
-$generateScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'generate-skills-index.ps1'
+$generateScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'generate_skills_index.py'
+# The generator is typed Python (issue #171); the tests only need a working
+# interpreter because the fixtures never touch a toolchain.
+$python = Find-Python
 Write-Host '== generate-skills-index self-tests =='
 
 function Assert-SectionOrder {
@@ -43,7 +46,7 @@ Invoke-TestCase 'Generates_Index_GroupedAndSorted' {
                 ".llm/skills/$($skill.Dir)/SKILL.md"
             ) -Content (($frontmatter -join "`n") + "`n")
         }
-        & $generateScript -Root $root *> $null
+        & $python @($generateScript, '--root', $root) *> $null
         Assert-ExitCode 0 'generation should succeed'
         $indexPath = Get-FixturePath -Root $root -RelativePath '.llm/skills/index.md'
         Assert-True (Test-Path -LiteralPath $indexPath) 'index.md should be created'
@@ -86,7 +89,7 @@ Invoke-TestCase 'Fails_When_NameMismatchesDirectory' {
             'Body.'
         ) -join "`n"
         Write-FixtureFile -Root $root -RelativePath '.llm/skills/foo/SKILL.md' -Content $skill
-        $output = & $generateScript -Root $root *>&1 | Out-String
+        $output = & $python @($generateScript, '--root', $root) *>&1 | Out-String
         Assert-ExitCode 1 'name/directory mismatch should fail'
         Assert-True ($output -match 'name') "output should explain the mismatch, got: $output"
     } finally {
@@ -100,7 +103,7 @@ Invoke-TestCase 'Fails_When_FrontmatterMissing' {
         Write-FixtureFile -Root $root -RelativePath '.llm/skills/foo/SKILL.md' -Content (
             "# Skill: Foo`n`nNo frontmatter here.`n"
         )
-        & $generateScript -Root $root *> $null
+        & $python @($generateScript, '--root', $root) *> $null
         Assert-ExitCode 1 'missing frontmatter should fail'
     } finally {
         Remove-TempRoot $root
@@ -112,7 +115,7 @@ Invoke-TestCase 'Fails_When_DescriptionMissing' {
     try {
         $skill = @('---', 'name: foo', '---', '', '# Skill: Foo', '', 'Body.') -join "`n"
         Write-FixtureFile -Root $root -RelativePath '.llm/skills/foo/SKILL.md' -Content $skill
-        & $generateScript -Root $root *> $null
+        & $python @($generateScript, '--root', $root) *> $null
         Assert-ExitCode 1 'missing description should fail'
     } finally {
         Remove-TempRoot $root
@@ -135,7 +138,7 @@ Invoke-TestCase 'Fails_When_CategoryUnknown' {
             'Body.'
         ) -join "`n"
         Write-FixtureFile -Root $root -RelativePath '.llm/skills/foo/SKILL.md' -Content $skill
-        & $generateScript -Root $root *> $null
+        & $python @($generateScript, '--root', $root) *> $null
         Assert-ExitCode 1 'unknown category should fail'
     } finally {
         Remove-TempRoot $root
@@ -146,7 +149,7 @@ Invoke-TestCase 'Fails_When_NoSkillsFound' {
     $root = New-TempRoot
     try {
         Write-FixtureFile -Root $root -RelativePath '.llm/context.md' -Content 'placeholder'
-        $output = & $generateScript -Root $root *>&1 | Out-String
+        $output = & $python @($generateScript, '--root', $root) *>&1 | Out-String
         Assert-ExitCode 1 'empty skills directory should fail'
         Assert-True ($output -match 'no skills') "output should explain the empty state, got: $output"
     } finally {
@@ -170,12 +173,12 @@ Invoke-TestCase 'Output_IsDeterministic_And_EncodedWithoutBom_WithLf' {
             'Body.'
         ) -join "`n"
         Write-FixtureFile -Root $root -RelativePath '.llm/skills/alpha-skill/SKILL.md' -Content $skill
-        & $generateScript -Root $root *> $null
+        & $python @($generateScript, '--root', $root) *> $null
         Assert-ExitCode 0 'first run should succeed'
         $indexPath = Get-FixturePath -Root $root -RelativePath '.llm/skills/index.md'
         $first = [System.IO.File]::ReadAllBytes($indexPath)
         Start-Sleep -Milliseconds 20
-        & $generateScript -Root $root *> $null
+        & $python @($generateScript, '--root', $root) *> $null
         Assert-ExitCode 0 'second run should succeed'
         $second = [System.IO.File]::ReadAllBytes($indexPath)
         Assert-True ($first.Length -gt 0) 'index should not be empty'
@@ -209,7 +212,7 @@ Invoke-TestCase 'Fails_When_SkillNameExceeds64Chars' {
             'Body.'
         ) -join "`n"
         Write-FixtureFile -Root $root -RelativePath ".llm/skills/$longName/SKILL.md" -Content $skill
-        & $generateScript -Root $root *> $null
+        & $python @($generateScript, '--root', $root) *> $null
         Assert-ExitCode 1 'names over 64 characters should fail'
     } finally {
         Remove-TempRoot $root

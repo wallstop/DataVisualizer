@@ -57,9 +57,9 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "uv.lock": ("test-gate.ps1",),
     "scripts/harness_scope.py": ("test-fast-check.ps1", "test-harness-scope.ps1"),
     "scripts/should_run_self_tests.py": ("test-harness-scope.ps1",),
-    "scripts/generate-skills-index.ps1": ("test-generate-skills-index.ps1",),
-    "scripts/lint-llm-instructions.ps1": ("test-lint-llm-instructions.ps1",),
-    "scripts/lint-file-lengths.ps1": ("test-file-lengths.ps1",),
+    "scripts/generate_skills_index.py": ("test-generate-skills-index.ps1",),
+    "scripts/lint_llm_instructions.py": ("test-lint-llm-instructions.ps1",),
+    "scripts/lint_file_lengths.py": ("test-file-lengths.ps1",),
     "scripts/lint-assembly-warnings.ps1": ("test-assembly-warnings.ps1",),
     "scripts/lint-csharp-member-order.js": ("test-csharp-member-order.ps1",),
     "scripts/lint-csharp-null-assertions.js": ("test-lint-csharp-null-assertions.ps1",),
@@ -76,6 +76,12 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/release/prepare-release.mjs": ("test-prepare-release.ps1",),
     "scripts/release/extract-release-notes.mjs": ("test-extract-release-notes.ps1",),
     "scripts/LlmConfig.psm1": ("test-lint-llm-instructions.ps1", "test-file-lengths.ps1", "test-generate-skills-index.ps1"),
+    # Retired PowerShell surfaces (issue #171 slice 3) keep their entries so a
+    # deletion still selects the tests that verify the contract they used to
+    # own, instead of failing safe to the full suite.
+    "scripts/generate-skills-index.ps1": ("test-generate-skills-index.ps1",),
+    "scripts/lint-llm-instructions.ps1": ("test-lint-llm-instructions.ps1",),
+    "scripts/lint-file-lengths.ps1": ("test-file-lengths.ps1",),
     ".devcontainer/ai-backends.sh": ("test-ai-backends.ps1", "test-env-local-precedence.ps1"),
     ".devcontainer/env-local.sh": ("test-ai-backends.ps1", "test-env-local-precedence.ps1"),
     ".devcontainer/recycle-stale-opencode-service.sh": ("test-opencode-service-recycle.ps1",),

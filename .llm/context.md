@@ -44,8 +44,8 @@ scripts/                         PowerShell automation for this .llm harness
 
 ## Skills Reference
 
-See the generated [Skills Index](./skills/index.md). Regenerate it after adding or editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1` (validated by
-`scripts/lint-llm-instructions.ps1`).
+See the generated [Skills Index](./skills/index.md). Regenerate it after adding or editing any skill with `uv run scripts/generate_skills_index.py` (validated by
+`scripts/lint_llm_instructions.py`).
 
 The typed Python tooling surface (`pyproject.toml`, executed through `uv`) hosts the agent harness per issue #171; `npm run check:gate` is its entry point. New non-Unity tooling
 lands there as annotated, stdlib-first Python; `uvx pyright` validates types locally. Failure detail gets one owner field that every failure path writes and every consumer
@@ -135,7 +135,7 @@ lands there as annotated, stdlib-first Python; `uvx pyright` validates types loc
 ### Skills Discipline
 
 - Skills live at `.llm/skills/<kebab-name>/SKILL.md` (standard Agent Skills format); see [manage-skills](./skills/manage-skills/SKILL.md) before creating or editing one.
-- Every `.md` file under `.llm/` must stay within the 300-line hard limit (enforced by `scripts/lint-file-lengths.ps1`); keep SKILL.md bodies lean and move bulk material to
+- Every `.md` file under `.llm/` must stay within the 300-line hard limit (enforced by `scripts/lint_file_lengths.py`); keep SKILL.md bodies lean and move bulk material to
   `.llm/code-samples/` or `.llm/references/`.
 - After editing any skill: regenerate the index, then run `npm run lint:llm`.
 

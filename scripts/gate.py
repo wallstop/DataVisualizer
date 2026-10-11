@@ -115,7 +115,7 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "harness.skills-index",
                 "Skills index regeneration",
-                ("pwsh", "-NoProfile", "-File", "scripts/generate-skills-index.ps1"),
+                ("uv", "run", "scripts/generate_skills_index.py"),
                 ("markdown.format",),
             ),
             Step(
@@ -128,13 +128,13 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "harness.llm-instructions",
                 ".llm instructions lint",
-                ("pwsh", "-NoProfile", "-File", "scripts/lint-llm-instructions.ps1", "-VerboseOutput"),
+                ("uv", "run", "scripts/lint_llm_instructions.py", "--verbose-output"),
                 ("harness.skills-index",),
             ),
             Step(
                 "harness.file-lengths",
                 ".llm file-length lint",
-                ("pwsh", "-NoProfile", "-File", "scripts/lint-file-lengths.ps1", "-VerboseOutput"),
+                ("uv", "run", "scripts/lint_file_lengths.py", "--verbose-output"),
                 ("harness.skills-index",),
             ),
             Step(

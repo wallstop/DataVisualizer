@@ -54,9 +54,9 @@ Keep bodies lean (aim under 120 lines, hard limit 300 for every `.md` under `.ll
 ## Creating a Skill
 
 1. Create `.llm/skills/<kebab-name>/SKILL.md` with valid frontmatter and a lean body.
-2. Regenerate the index: `pwsh -NoProfile -File scripts/generate-skills-index.ps1`.
-3. Validate: `pwsh -NoProfile -File scripts/lint-llm-instructions.ps1` and
-   `pwsh -NoProfile -File scripts/lint-file-lengths.ps1` (or just `npm run lint:llm`).
+2. Regenerate the index: `uv run scripts/generate_skills_index.py`.
+3. Validate: `uv run scripts/lint_llm_instructions.py` and
+   `uv run scripts/lint_file_lengths.py` (or just `npm run lint:llm`).
 4. Run the harness self-tests once before committing:
    `pwsh -NoProfile -File scripts/tests/run-all.ps1`.
 5. Commit the new directory together with the regenerated `.llm/skills/index.md`.
@@ -64,7 +64,7 @@ Keep bodies lean (aim under 120 lines, hard limit 300 for every `.md` under `.ll
 ## Editing a Skill
 
 Run the size linter immediately after each edit
-(`pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -Paths .llm/skills/<name>/SKILL.md`):
+(`uv run scripts/lint_file_lengths.py -Paths .llm/skills/<name>/SKILL.md`):
 size issues discovered at commit time require human judgment to fix.
 
 ## Splitting an Oversize Skill
