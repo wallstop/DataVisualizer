@@ -48,7 +48,8 @@ See the generated [Skills Index](./skills/index.md). Regenerate it after adding 
 `scripts/lint-llm-instructions.ps1`).
 
 The typed Python tooling surface (`pyproject.toml`, executed through `uv`) hosts the agent harness per issue #171; `npm run check:gate` is its entry point. New non-Unity tooling
-lands there as annotated, stdlib-first Python; `uvx pyright` validates types locally.
+lands there as annotated, stdlib-first Python; `uvx pyright` validates types locally. Failure detail gets one owner field that every failure path writes and every consumer
+(console, report JSON) surfaces; optional enrichment degrades to a documented absent value instead of crashing the tool.
 
 ## Critical Rules
 

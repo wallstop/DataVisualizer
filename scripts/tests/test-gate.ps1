@@ -122,6 +122,48 @@ Invoke-TestCase 'Plan_ExcludesTheUnitySuites' {
     Assert-True ($unityCommands.Count -eq 0) "no step may launch a Unity suite, got: $($unityCommands -join '; ')"
 }
 
+# A failed step must never report without a reason: a launch failure reaches
+# the console and the report JSON, and an unusable git in the environment
+# block degrades to null instead of crashing the gate (PR #172 review).
+Invoke-TestCase 'LaunchFailure_SurfacesTheReasonInConsoleAndReport' {
+    $savedPath = $env:PATH
+    $reportPath = Join-Path (New-TempRoot -Prefix 'gate-launchfail-') 'report.json'
+    try {
+        $env:PATH = ''
+        $result = Invoke-Gate -Python $python -Arguments @('--only', 'csharp.tool-restore', '--report', $reportPath)
+    } finally {
+        $env:PATH = $savedPath
+    }
+    Assert-True ($result.ExitCode -eq 1) "a failed launch must exit 1 (got $($result.ExitCode)): $($result.Output)"
+    Assert-True ($result.Output -match "program not found on PATH: 'dotnet'") (
+        "the console must name the missing program: $($result.Output)")
+    Assert-True ($result.Output -notmatch 'Traceback') "a launch failure must not crash with a traceback: $($result.Output)"
+    Assert-True (Test-Path -LiteralPath $reportPath) 'the report must still be written after a launch failure'
+    $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+    $step = $report.steps[0]
+    Assert-True ($step.ok -eq $false) 'the launch-failed step must be recorded as failed'
+    Assert-True ($null -eq $step.exit_code) "a step that never ran must have no exit code, got $($step.exit_code)"
+    Assert-True ($step.failure -match 'dotnet') "the report must carry the failure reason, got: $($step.failure)"
+    Assert-True ($null -eq $report.environment.git_head) 'an unusable git must degrade to a null git head'
+    Remove-TempRoot -Path (Split-Path -Parent $reportPath)
+}
+
+# An unwritable report is a visible error, not a crash that flips the verdict
+# of checks that actually passed.
+Invoke-TestCase 'ReportWriteFailure_FailsVisiblyWithoutChangingTheVerdict' {
+    $unwritableDirectory = Join-Path (New-TempRoot -Prefix 'gate-reportfail-') 'missing'
+    $reportPath = Join-Path $unwritableDirectory 'report.json'
+    try {
+        $result = Invoke-Gate -Python $python -Arguments @('--only', 'csharp.tool-restore', '--report', $reportPath)
+    } finally {
+        Remove-TempRoot -Path $unwritableDirectory
+    }
+    Assert-True ($result.ExitCode -eq 0) "the verdict must stay the step verdict (got $($result.ExitCode)): $($result.Output)"
+    Assert-True ($result.Output -match '\[gate\] report FAILED:') (
+        "the console must report the unwritable report path: $($result.Output)")
+    Assert-True ($result.Output -notmatch 'Traceback') "a report write failure must not crash: $($result.Output)"
+}
+
 if ($script:TestFailureCount -gt 0) {
     Write-Host "gate self-tests: $($script:TestFailureCount) failed"
     exit 1

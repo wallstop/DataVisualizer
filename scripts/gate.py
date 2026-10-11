@@ -273,7 +273,13 @@ def check_empty_output(stdout: str, stderr: str) -> Optional[str]:
 
 @dataclass
 class StepResult:
-    """Outcome of one executed step."""
+    """Outcome of one executed step.
+
+    ``failure`` is the single owner of failure detail: every failed launch,
+    nonzero exit, and policy check writes it, and every consumer (console
+    line, report JSON) surfaces it. A failed step must never report without
+    a reason.
+    """
 
     name: str
     title: str
@@ -283,7 +289,6 @@ class StepResult:
     exit_code: Optional[int]
     ok: bool
     shell: bool
-    output_tail: Optional[str] = None
     failure: Optional[str] = None
 
 
@@ -328,8 +333,11 @@ class Gate:
             )
 
         if self._report_path is not None:
-            self._write_report(self._report_path, started_utc, total_seconds, not failed, environment)
-            print(f"[gate] report: {self._report_path}")
+            try:
+                self._write_report(self._report_path, started_utc, total_seconds, not failed, environment)
+                print(f"[gate] report: {self._report_path}")
+            except OSError as error:
+                print(f"[gate] report FAILED: could not write {self._report_path}: {error}")
         return 0 if not failed else 1
 
     def _run_phase(self, lanes: Sequence[Tuple[str, Tuple[Step, ...]]]) -> None:
@@ -354,9 +362,9 @@ class Gate:
                     print(f"[gate] ok   {step.name} ({result.seconds:.1f}s)")
                 else:
                     print(f"[gate] FAIL {step.name} ({result.seconds:.1f}s)")
-                    if result.output_tail:
+                    if result.failure:
                         print(f"[gate] ---- {step.name} ----")
-                        print(result.output_tail)
+                        print(result.failure)
 
     def _wait_for_dependencies(self, step: Step) -> None:
         for dependency in step.after:
@@ -405,7 +413,7 @@ class Gate:
                 completed.returncode,
                 False,
                 shell,
-                output_tail=failure,
+                failure=failure,
             )
         return StepResult(step.name, step.title, lane_name, step.args, seconds, completed.returncode, True, shell)
 
@@ -436,7 +444,7 @@ class Gate:
                     "exit_code": result.exit_code,
                     "ok": result.ok,
                     "shell": result.shell,
-                    **({"failure": result.output_tail} if result.output_tail is not None else {}),
+                    **({"failure": result.failure} if result.failure is not None else {}),
                 }
                 for result in self._results
             ],
@@ -453,13 +461,17 @@ def _tail(header: str, stdout: str, stderr: str, limit: int) -> str:
 
 
 def _git_head() -> Optional[str]:
-    completed = subprocess.run(
-        ["git", "rev-parse", "--verify", "HEAD"],
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    """Best-effort environment enrichment: an unusable git degrades to None."""
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
     head = (completed.stdout or "").strip()
     return head or None
 
