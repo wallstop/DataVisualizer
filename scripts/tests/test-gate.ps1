@@ -170,6 +170,48 @@ Invoke-TestCase 'ReportWriteFailure_IsVisibleWithoutCrashingTheGate' {
     Assert-True ($result.Output -notmatch 'Traceback') "a report write failure must not crash: $($result.Output)"
 }
 
+# A lane thread that dies without recording must fail the gate AND surface
+# the belt's reason on the console, not only in the report JSON: the belt is
+# itself a failure path. KeyboardInterrupt escapes the lane's ``except
+# Exception`` guard, so the patched step reaches the belt unrecorded.
+Invoke-TestCase 'LaneCrash_SurfacesTheReasonInConsoleAndReport' {
+    $scriptsSource = Split-Path -Parent $PSScriptRoot
+    $tempRoot = New-TempRoot -Prefix 'gate-lanecrash-'
+    $reportPath = Join-Path $tempRoot 'report.json'
+    # Precomputed outside the array: an unparenthesized 'a' + $var + 'b'
+    # element inside @(...) flattens into separate array elements, silently
+    # corrupting the built content.
+    $pathLine = 'sys.path.insert(0, r"' + $scriptsSource + '")'
+    $driver = @(
+        'import sys',
+        $pathLine,
+        'import gate',
+        'def crash(self, lane_name, step):',
+        '    raise KeyboardInterrupt("lane died (fixture)")',
+        'gate.Gate._run_step = crash',
+        'sys.exit(gate.main(["--only", "csharp.tool-restore", "--report", sys.argv[1]]))'
+    ) -join "`n"
+    Write-FixtureFile -Root $tempRoot -RelativePath 'lane-crash-driver.py' -Content ($driver + "`n")
+    try {
+        $output = (& $python (Join-Path $tempRoot 'lane-crash-driver.py') $reportPath 2>&1 | Out-String).TrimEnd()
+        Assert-ExitCode 1 'a crashed lane must fail the gate'
+        Assert-True ($output -match '\[gate\] FAIL csharp\.tool-restore') (
+            "the console must carry the belt's FAIL line, got: $output")
+        Assert-True ($output -match 'no result recorded') (
+            "the console must carry the belt's failure reason, got: $output")
+        Assert-True ($output -match 'failed: 1 of 1 step') (
+            "the summary must count the belt record, got: $output")
+        $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+        $step = $report.steps[0]
+        Assert-True ($step.ok -eq $false) 'the belt-recorded step must be failed in the report'
+        Assert-True ($step.failure -match 'no result recorded') (
+            "the report must carry the belt's failure reason, got: $($step.failure)")
+        Assert-True ($report.passed -eq $false) 'the report verdict must be failed'
+    } finally {
+        Remove-TempRoot -Path $tempRoot
+    }
+}
+
 if ($script:TestFailureCount -gt 0) {
     Write-Host "gate self-tests: $($script:TestFailureCount) failed"
     exit 1

@@ -368,24 +368,31 @@ class Gate:
             thread.join()
         # Completeness belt: every expected step must have a recorded result
         # before the verdict is computed. A lane thread that died without
-        # recording must count as failed, never as an absent success.
+        # recording must count as failed, never as an absent success. The
+        # belt is itself a failure path, so it surfaces its reason on the
+        # console like every other failure (one owner field surfaced by
+        # every consumer), matching the fast check's belt output shape.
         recorded = {result.name for result in self._results}
         for lane_name, lane_steps in lanes:
             for step in lane_steps:
                 if step.name not in recorded:
-                    self._results.append(
-                        StepResult(
-                            step.name,
-                            step.title,
-                            lane_name,
-                            step.args,
-                            0.0,
-                            None,
-                            False,
-                            False,
-                            failure="no result recorded; the lane crashed before this step ran",
-                        )
+                    result = StepResult(
+                        step.name,
+                        step.title,
+                        lane_name,
+                        step.args,
+                        0.0,
+                        None,
+                        False,
+                        False,
+                        failure="no result recorded; the lane crashed before this step ran",
                     )
+                    with self._results_lock:
+                        self._results.append(result)
+                    with self._print_lock:
+                        print(f"[gate] FAIL {step.name} ({result.seconds:.1f}s)")
+                        print(f"[gate] ---- {step.name} ----")
+                        print(result.failure)
 
     def _run_lane(self, lane_name: str, lane_steps: Tuple[Step, ...]) -> None:
         try:
