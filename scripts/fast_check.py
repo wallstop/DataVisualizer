@@ -40,6 +40,7 @@ sys.dont_write_bytecode = True
 
 from harness_scope import (
     REPO_ROOT,
+    available_test_files,
     committed_changed_files,
     is_surface_path,
     self_test_selection,
@@ -127,8 +128,7 @@ def build_plan(repo_root: Path, base_sha: str) -> FastCheckPlan:
         raise SystemExit("fast-check: the change scan crashed: " + "; ".join(scan_errors))
     changed = sorted(set(committed + working))
     existing = [path for path in changed if (repo_root / path).exists()]
-    test_files = tuple(path.name for path in sorted((Path(__file__).resolve().parent / "tests").glob("test-*.ps1")))
-    selection = self_test_selection(changed, test_files)
+    selection = self_test_selection(changed, available_test_files())
     return FastCheckPlan(
         repo_root=repo_root,
         base_sha=base_sha,

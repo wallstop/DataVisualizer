@@ -33,6 +33,7 @@ sys.dont_write_bytecode = True
 
 from harness_scope import (
     REPO_ROOT,
+    available_test_files,
     committed_changed_files,
     is_surface_path,
     self_test_selection,
@@ -63,10 +64,6 @@ def resolve_base_sha(repo_root: Path, base_sha: str) -> Optional[str]:
 
 def changed_paths(repo_root: Path, base_sha: str) -> Sequence[str]:
     return committed_changed_files(repo_root, base_sha) + working_tree_changed_files(repo_root)
-
-
-def available_test_files() -> Sequence[str]:
-    return tuple(path.name for path in sorted((Path(__file__).resolve().parent / "tests").glob("test-*.ps1")))
 
 
 def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:

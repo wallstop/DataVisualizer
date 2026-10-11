@@ -143,11 +143,12 @@ lands there as annotated, stdlib-first Python; `uvx pyright` validates types loc
 
 Per-iteration speed: run `npm run check:fast` first (formats and lints only the files changed since `origin/main`, and runs only the surface-selected harness self-tests: each
 changed tooling path maps to the test files that verify it in `scripts/harness_scope.py`, with unmapped or shared paths failing safe to the full suite; measured single-subject
-walls are 2.8-4.0s instead of the 32-42s full suite, and CI runs the same scoped selection). The plan's worktree scan reads `git status --porcelain -uall` with
-`--no-optional-locks` because writing the refreshed index back dominates the scan on bind-mounted checkouts. When a Unity MCP host is connected (host bridge:
-`npm run unity:mcp:host`), run Unity suites through it instead of launching batchmode: `tools.unity.run_tests` with a fixture-name `filter` returns per-test results in seconds
-(measured 7s for 65 `MonitorUtilityTests` on the 6000.5 host), and `tools.unity.eval` can invoke `Tests/Editor/DocsImageCapture` entry points for docs captures. Keep eval return
-values simple strings; the eval wrapper mis-handles heavier reflective results. The full ladder below gates review.
+walls are about 4s for the whole check, about 1s of that the scoped suite, instead of the 28-40s full suite on ext4 after the #171 self-test port, and CI runs the same scoped
+selection). The plan's worktree scan reads `git status --porcelain -uall` with `--no-optional-locks` because writing the refreshed index back dominates the scan on bind-mounted
+checkouts. When a Unity MCP host is connected (host bridge: `npm run unity:mcp:host`), run Unity suites through it instead of launching batchmode: `tools.unity.run_tests` with a
+fixture-name `filter` returns per-test results in seconds (measured 7s for 65 `MonitorUtilityTests` on the 6000.5 host), and `tools.unity.eval` can invoke
+`Tests/Editor/DocsImageCapture` entry points for docs captures. Keep eval return values simple strings; the eval wrapper mis-handles heavier reflective results. The full ladder
+below gates review.
 
 On WSL2 devcontainers the `/workspaces` checkout is a 9p drvfs mount of the Windows host drive, and 9p metadata traffic dominates spawn-heavy harness work: same-window A/B on
 2026-10-11 measured the fast-check plan floor 4.4s → 0.3s, a whole dirty-tree `check:fast` 25.6s → 12.1s, and the full 28-file self-test suite 86s → 40s for an identical tree
