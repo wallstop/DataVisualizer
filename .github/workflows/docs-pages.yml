@@ -7,14 +7,14 @@ on:
       - "docs/**"
       - "mkdocs.yml"
       - "requirements-docs.txt"
-      - "scripts/build-docs.ps1"
+      - "scripts/build_docs.py"
       - ".github/workflows/docs-pages.yml"
   pull_request:
     paths:
       - "docs/**"
       - "mkdocs.yml"
       - "requirements-docs.txt"
-      - "scripts/build-docs.ps1"
+      - "scripts/build_docs.py"
       - ".github/workflows/docs-pages.yml"
 
 # Publication runs to completion instead of being cancelled by a later merge,
@@ -48,8 +48,7 @@ jobs:
           cache-dependency-path: requirements-docs.txt
 
       - name: Build the site (strict)
-        shell: pwsh
-        run: pwsh -NoProfile -File scripts/build-docs.ps1
+        run: python3 scripts/build_docs.py
 
       - name: Upload the built site
         uses: actions/upload-pages-artifact@v5
