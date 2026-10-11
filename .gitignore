@@ -98,6 +98,7 @@ opencode.json.meta
 /site/
 /site.meta
 .docs-venv/
+.venv/
 
 # Unity MCP bridge artifacts (editor state, registry, captures, generated images)
 .artifacts/

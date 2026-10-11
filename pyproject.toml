@@ -1,0 +1,16 @@
+[project]
+name = "dx-harness"
+version = "0.1.0"
+description = "Typed Python harness tooling for the DxVisualizer repository."
+requires-python = ">=3.9"
+dependencies = []
+
+# The migration target for the repository's agent tooling (issue #171): new
+# tooling lands here as typed, stdlib-first Python executed through uv. The
+# review gate (scripts/gate.py) is the first member.
+
+[tool.pyright]
+include = ["scripts"]
+typeCheckingMode = "strict"
+pythonVersion = "3.9"
+reportMissingImports = true

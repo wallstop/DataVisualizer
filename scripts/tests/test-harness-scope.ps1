@@ -180,6 +180,13 @@ Invoke-TestCase 'Selection_MapsATestFileToItself' {
         'a test file edit must select itself for immediate feedback')
 }
 
+Invoke-TestCase 'Selection_MapsTheGateSurface' {
+    $selection = Get-SelfTestSelection -Paths @('scripts/gate.py', 'pyproject.toml', 'uv.lock')
+    Assert-True (-not $selection.All) 'the gate surface must not select the full suite'
+    Assert-True (($selection.Names -join ',') -eq 'test-gate.ps1') (
+        "the gate surface must select its test file, got: $($selection.Names -join ',')")
+}
+
 Invoke-TestCase 'Selection_FallsBackToAllForSharedSuitePaths' {
     foreach ($path in @('scripts/tests/TestHelpers.ps1', 'scripts/tests/run-all.ps1', 'package.json', '.config/dotnet-tools.json')) {
         $selection = Get-SelfTestSelection -Paths @($path)

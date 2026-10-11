@@ -47,6 +47,10 @@ scripts/                         PowerShell automation for this .llm harness
 See the generated [Skills Index](./skills/index.md). Regenerate it after adding or editing any skill with `pwsh -NoProfile -File scripts/generate-skills-index.ps1` (validated by
 `scripts/lint-llm-instructions.ps1`).
 
+The typed Python tooling surface (`pyproject.toml`, executed through `uv`) hosts the agent harness per issue #171; `npm run check:gate` is its entry point. New non-Unity tooling
+lands there as annotated, stdlib-first Python; `uvx pyright` validates types locally. Failure detail gets one owner field that every failure path writes and every consumer
+(console, report JSON) surfaces; optional enrichment degrades to a documented absent value instead of crashing the tool.
+
 ## Critical Rules
 
 ### C# and Unity
@@ -146,29 +150,21 @@ host), and `tools.unity.eval` can invoke `Tests/Editor/DocsImageCapture` entry p
 heavier reflective results. The full ladder below gates review.
 
 ```bash
-dotnet tool restore
-dotnet tool run csharpier -- format Editor Runtime Tests
-dotnet tool run csharpier -- check Editor Runtime Tests
-npm run format:md
-npm run format:md:check
-npm run lint:csharp-member-order
-npm run lint:csharp-null-assertions
-npm run lint:csharp-usings
-npm run lint:changelog-length
-pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
-pwsh -NoProfile -File scripts/generate-skills-index.ps1
-pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput
-pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -VerboseOutput
-pwsh -NoProfile -File scripts/tests/run-all.ps1
-npm run lint:llm
-npm pack
+npm run check:gate
 unity -projectPath <path-to-host-project> -batchmode -quit -runTests -testPlatform editmode
 unity -projectPath <path-to-host-project> -batchmode -quit -runTests -testPlatform playmode
 ```
 
-Layers: the pre-commit framework hook runs CSharpier, C# member-order, null-assertions, and the fast `.llm` checks on staged files; `npm run lint:llm` is the local gate; CI
-(`.github/workflows/llm-lint.yml`) runs everything, including the Prettier Markdown check, on ubuntu and windows. CSharpier and member ordering run via the pre-commit config on
-staged `.cs` files.
+`check:gate` (`scripts/gate.py`, typed Python via uv — issue #171's first slice) runs the whole non-Unity ladder as parallel lanes: CSharpier format, Prettier format, the source
+and harness lints, the release-credential and line-ending checks, the full harness self-test suite, and an `npm pack --dry-run`. Every step prints its wall time; `--report <path>`
+writes machine-readable JSON for cross-run comparison; `--plan` prints the step table without executing; `--only <step[,step]>` re-runs a failed step with its dependencies. Quick
+lanes run concurrently and the self-test suite runs alone as a second phase, because running it alongside the other lanes measured slower on a bind-mounted checkout. The
+post-format `check` steps are dropped locally as redundant (a successful format already proves the invariant; CI still runs both checks), and the gate adds the release-credential
+and line-ending checks the old ladder only ran in CI. Unity suites stay a separate, host-dependent gate.
+
+Layers: the pre-commit framework hook runs CSharpier, C# member-order, null-assertions, and the fast `.llm` checks on staged files; `npm run check:fast` is the per-iteration loop;
+`npm run check:gate` is the review gate; CI (`.github/workflows/llm-lint.yml`) runs everything, including the Prettier Markdown check, on ubuntu and windows. CSharpier and member
+ordering run via the pre-commit config on staged `.cs` files.
 
 ### Testing
 
