@@ -14,6 +14,11 @@ The child launches stay pwsh because the test files are PowerShell; this
 slice removes the parent pwsh (and its startup) from the hot path. The test
 files themselves are the remaining surface for this issue.
 
+Workers fail closed: a child that cannot start, or a worker thread that
+crashes, records a failed result, and the verdict verifies that every
+selected file produced a result, so a resource error under suite
+concurrency can never report success.
+
 Launch with ``python scripts/tests/run_all.py`` (or ``uv run
 scripts/tests/run_all.py``); any Python 3.9+ interpreter works.
 """
@@ -49,7 +54,13 @@ def resolve_selection(names_csv: str, available: Sequence[str]) -> Tuple[List[st
 
 
 def run_tests(selected: Sequence[str], pwsh: str) -> int:
-    """Run each test in a child pwsh and replay the captured output in name order."""
+    """Run each test in a child pwsh and replay the captured output in name order.
+
+    Every selected file must produce exactly one recorded result before the
+    verdict is computed: a worker that crashes records a failed result, and
+    a file whose result never arrives is counted as failed, so a resource
+    error under suite concurrency can never report success.
+    """
     results: List[Tuple[str, Optional[int], str]] = []
     lock = threading.Lock()
 
@@ -61,7 +72,6 @@ def run_tests(selected: Sequence[str], pwsh: str) -> int:
             encoding="utf-8",
             errors="replace",
             check=False,
-            cwd=str(TESTS_DIR.parent.parent),
         )
         output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
         return name, completed.returncode, output
@@ -71,6 +81,14 @@ def run_tests(selected: Sequence[str], pwsh: str) -> int:
         thread.start()
     for thread in threads:
         thread.join()
+
+    # Completeness belt: a selected file without a recorded result cannot
+    # count as passed. The worker conversion below should make this
+    # unreachable; it pins the verdict against any future gap.
+    recorded = {name for name, _, _ in results}
+    for name in selected:
+        if name not in recorded:
+            results.append((name, None, "[run-all] ERROR: no result recorded; the worker crashed before reporting"))
 
     failed = 0
     for name, exit_code, output in sorted(results):
@@ -93,7 +111,14 @@ def _collect(
     results: List[Tuple[str, Optional[int], str]],
     lock: threading.Lock,
 ) -> None:
-    result: Tuple[str, Optional[int], str] = run_one(name)
+    try:
+        result: Tuple[str, Optional[int], str] = run_one(name)
+    except Exception as error:
+        # A crashed worker (spawn failure, resource limits) must record a
+        # failed result; a dead thread that records nothing would otherwise
+        # let the suite report success. ``None`` counts as failed because
+        # it is not the exit code of a test that ran.
+        result = (name, None, f"[run-all] ERROR: could not run {name}: {error!r}")
     with lock:
         results.append(result)
 

@@ -366,22 +366,72 @@ class Gate:
             thread.start()
         for thread in threads:
             thread.join()
+        # Completeness belt: every expected step must have a recorded result
+        # before the verdict is computed. A lane thread that died without
+        # recording must count as failed, never as an absent success.
+        recorded = {result.name for result in self._results}
+        for lane_name, lane_steps in lanes:
+            for step in lane_steps:
+                if step.name not in recorded:
+                    self._results.append(
+                        StepResult(
+                            step.name,
+                            step.title,
+                            lane_name,
+                            step.args,
+                            0.0,
+                            None,
+                            False,
+                            False,
+                            failure="no result recorded; the lane crashed before this step ran",
+                        )
+                    )
 
     def _run_lane(self, lane_name: str, lane_steps: Tuple[Step, ...]) -> None:
-        for step in lane_steps:
-            self._wait_for_dependencies(step)
-            result = self._run_step(lane_name, step)
-            with self._results_lock:
-                self._results.append(result)
-            self._events[step.name].set()
-            with self._print_lock:
-                if result.ok:
-                    print(f"[gate] ok   {step.name} ({result.seconds:.1f}s)")
-                else:
-                    print(f"[gate] FAIL {step.name} ({result.seconds:.1f}s)")
-                    if result.failure:
-                        print(f"[gate] ---- {step.name} ----")
-                        print(result.failure)
+        try:
+            for step in lane_steps:
+                self._wait_for_dependencies(step)
+                result: StepResult
+                try:
+                    result = self._run_step(lane_name, step)
+                except Exception as error:
+                    # A crashed step must record a failure: a dead lane that
+                    # records nothing would let the gate report success.
+                    result = StepResult(
+                        step.name,
+                        step.title,
+                        lane_name,
+                        step.args,
+                        0.0,
+                        None,
+                        False,
+                        False,
+                        failure=f"the lane crashed running this step: {error!r}",
+                    )
+                with self._results_lock:
+                    self._results.append(result)
+                # Released per step, before the next dependency wait can be
+                # reached by another lane: in-lane dependent steps wait on
+                # this event too, so a lane-level release would deadlock the
+                # loop on its own lane's event.
+                self._events[step.name].set()
+                with self._print_lock:
+                    if result.ok:
+                        print(f"[gate] ok   {step.name} ({result.seconds:.1f}s)")
+                    else:
+                        print(f"[gate] FAIL {step.name} ({result.seconds:.1f}s)")
+                        if result.failure:
+                            print(f"[gate] ---- {step.name} ----")
+                            print(result.failure)
+        finally:
+            # Catastrophic-death insurance only (a raise outside the per-step
+            # guard, e.g. from a broken stdout mid-print): release every step
+            # event the lane owns so waiting lanes unblock and the phase's
+            # completeness belt records the unexecuted steps as failed
+            # instead of the gate hanging on their wait() calls. Setting an
+            # already-released event is a no-op.
+            for step in lane_steps:
+                self._events[step.name].set()
 
     def _wait_for_dependencies(self, step: Step) -> None:
         for dependency in step.after:

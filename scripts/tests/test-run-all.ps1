@@ -76,6 +76,53 @@ Invoke-TestCase 'EmptyNames_RunEverything' {
     }
 }
 
+# A worker that cannot start a child must record a failure, not vanish: the
+# pwsh runner failed closed on a spawn error and the port must too.
+Invoke-TestCase 'SpawnFailure_CountsAsFailed' {
+    $fixture = New-RunnerFixture
+    $driver = @(
+        'import os, subprocess, sys',
+        'tests_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "tests")',
+        'sys.path.insert(0, tests_dir)',
+        'import run_all',
+        'def raise_spawn(*args, **kwargs):',
+        '    raise OSError("spawn failed (fixture)")',
+        'subprocess.run = raise_spawn',
+        'sys.exit(run_all.main(["--names", "test-alpha-passes.ps1"]))'
+    ) -join "`n"
+    Write-FixtureFile -Root $fixture.Root -RelativePath 'spawn-failure-driver.py' -Content ($driver + "`n")
+    try {
+        $output = (& $python (Join-Path $fixture.Root 'spawn-failure-driver.py') 2>&1 | Out-String).TrimEnd()
+        Assert-ExitCode 1 'a crashed worker must fail the run'
+        Assert-True ($output -match 'spawn failed \(fixture\)') (
+            "the failure must carry the worker's reason, got: $output")
+        Assert-True ($output -match '1 of 1 test file\(s\) failed') (
+            'the crashed suite must count as failed, got: $output')
+        Assert-True ($output -notmatch 'all 1 test file\(s\) passed') (
+            'a crashed worker must never report success, got: $output')
+    } finally {
+        Remove-TempRoot $fixture.Root
+    }
+}
+
+# Without pwsh the runner cannot run anything and must fail closed instead
+# of reporting an empty pass (mirrors the gate's stripped-PATH case).
+Invoke-TestCase 'MissingPwsh_FailsClosed' {
+    $fixture = New-RunnerFixture
+    $savedPath = $env:PATH
+    try {
+        $env:PATH = ''
+        $output = (& $python @($fixture.Runner, '--names', 'test-alpha-passes.ps1') 2>&1 | Out-String).TrimEnd()
+        Assert-ExitCode 1 'a missing pwsh must fail the run'
+        Assert-True ($output -match 'pwsh is required') (
+            "the error must name the missing requirement, got: $output")
+        Assert-True ($output -notmatch 'passed') 'a run that started nothing must not report success'
+    } finally {
+        $env:PATH = $savedPath
+        Remove-TempRoot $fixture.Root
+    }
+}
+
 if ($script:TestFailureCount -gt 0) {
     Write-Host "run-all self-tests: $($script:TestFailureCount) failed"
     exit 1
