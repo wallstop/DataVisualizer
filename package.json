@@ -42,7 +42,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint:llm": "pwsh -NoProfile -File scripts/lint-llm-instructions.ps1",
-    "check:fast": "pwsh -NoProfile -File scripts/fast-check.ps1",
+    "check:fast": "uv run scripts/fast_check.py",
     "check:gate": "uv run scripts/gate.py",
     "lint:llm:fix": "pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -Fix",
     "lint:assembly-warnings": "pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1",

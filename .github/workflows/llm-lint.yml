@@ -136,8 +136,11 @@ jobs:
           if [ -n "${BASE_SHA}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ] && ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
             git fetch --depth=1 origin "${BASE_SHA}" || true
           fi
-          verdict="$(pwsh -NoProfile -File scripts/should-run-self-tests.ps1 -BaseSha "${BASE_SHA:-}")"
-          selection="$(pwsh -NoProfile -File scripts/should-run-self-tests.ps1 -BaseSha "${BASE_SHA:-}" -Selection)"
+          # The verdict script is stdlib-only typed Python (issue #171); the
+          # system interpreter avoids a uv bootstrap on every runner.
+          if command -v python3 >/dev/null 2>&1; then PYTHON=python3; else PYTHON=python; fi
+          verdict="$("$PYTHON" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}")"
+          selection="$("$PYTHON" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}" --selection)"
           echo "self-tests=${verdict}" >> "${GITHUB_OUTPUT}"
           echo "selection=${selection}" >> "${GITHUB_OUTPUT}"
 

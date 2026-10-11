@@ -100,6 +100,10 @@ opencode.json.meta
 .docs-venv/
 .venv/
 
+# Python bytecode from the typed harness scripts (issue #171); a stray cache
+# under scripts/ would otherwise surface as an untracked harness change
+__pycache__/
+
 # Unity MCP bridge artifacts (editor state, registry, captures, generated images)
 .artifacts/
 GOAL.md*

@@ -82,6 +82,23 @@ function Assert-ExitCode {
     }
 }
 
+function Find-Python {
+    # The typed Python harness scripts (issue #171) need any working Python 3
+    # interpreter; the self-tests only exercise modes that execute no toolchain.
+    $candidates = if ($IsWindows) { @('python', 'python3') } else { @('python3', 'python') }
+    foreach ($candidate in $candidates) {
+        $command = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($null -eq $command) {
+            continue
+        }
+        & $command.Source --version 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            return $command.Source
+        }
+    }
+    throw 'the harness self-tests require a working Python 3 interpreter (python3 or python)'
+}
+
 function New-LlmFixtureRoot {
     param([string]$PackageVersion = '1.2.3')
 
