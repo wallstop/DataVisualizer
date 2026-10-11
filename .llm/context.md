@@ -149,6 +149,12 @@ walls are 2.8-4.0s instead of the 32-42s full suite, and CI runs the same scoped
 (measured 7s for 65 `MonitorUtilityTests` on the 6000.5 host), and `tools.unity.eval` can invoke `Tests/Editor/DocsImageCapture` entry points for docs captures. Keep eval return
 values simple strings; the eval wrapper mis-handles heavier reflective results. The full ladder below gates review.
 
+On WSL2 devcontainers the `/workspaces` checkout is a 9p drvfs mount of the Windows host drive, and 9p metadata traffic dominates spawn-heavy harness work: same-window A/B on
+2026-10-11 measured the fast-check plan floor 4.4s → 0.3s, a whole dirty-tree `check:fast` 25.6s → 12.1s, and the full 28-file self-test suite 86s → 40s for an identical tree
+cloned onto the container-native filesystem. For agent iteration loops, clone the repo under the Linux home directory
+(`git clone https://github.com/wallstop/DataVisualizer.git ~/repo`, one-time `npm install` ≈ 2s), edit, commit, and push branches from there; keep `/workspaces` for Unity
+host-bridge and IDE-integration work.
+
 ```bash
 npm run check:gate
 unity -projectPath <path-to-host-project> -batchmode -quit -runTests -testPlatform editmode
