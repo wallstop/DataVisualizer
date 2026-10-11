@@ -49,6 +49,22 @@ from harness_scope import (
 PLAN_SCHEMA_VERSION = 1
 
 
+def _python_launcher() -> Tuple[str, ...]:
+    """Prefix that runs the harness's own Python scripts on this machine.
+
+    ``uv run`` is the documented path because it provisions the project
+    environment on machines that have uv; anywhere uv is absent the plan
+    degrades to the interpreter running this script, so the built steps
+    always describe commands that can actually execute on this host.
+    """
+    if shutil.which("uv") is not None:
+        return ("uv", "run")
+    return (sys.executable,)
+
+
+_PYTHON_LAUNCHER: Tuple[str, ...] = _python_launcher()
+
+
 def _git_text(repo_root: Path, args: Sequence[str]) -> str:
     """Run a git query and return its trimmed stdout, or an empty string on failure."""
     try:
@@ -231,7 +247,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             CheckStep(
                 "harness.skills-index",
                 "skills index",
-                ("uv", "run", "scripts/generate_skills_index.py"),
+                (*_PYTHON_LAUNCHER, "scripts/generate_skills_index.py"),
                 skills_dependencies,
             )
         )
@@ -248,7 +264,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             CheckStep(
                 "harness.llm-instructions",
                 ".llm instructions lint",
-                ("uv", "run", "scripts/lint_llm_instructions.py"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_llm_instructions.py"),
                 ("harness.skills-index",),
             )
         )
@@ -256,7 +272,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             CheckStep(
                 "harness.file-lengths",
                 ".llm file-length lint",
-                ("uv", "run", "scripts/lint_file_lengths.py"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_file_lengths.py"),
                 ("harness.skills-index",),
             )
         )
@@ -284,31 +300,17 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
         # The self-tests wait for the harness lints they verify; a drift
         # failure must not suppress them, so the drift check is not a
         # dependency and every failure still reaches the verdict.
-        if plan.self_tests_all:
-            tests.append(
-                CheckStep(
-                    "harness.self-tests",
-                    "harness self-tests",
-                    ("pwsh", "-NoProfile", "-File", "scripts/tests/run-all.ps1"),
-                    ("harness.llm-instructions", "harness.file-lengths"),
-                )
+        test_args: List[str] = [*_PYTHON_LAUNCHER, "scripts/tests/run_all.py"]
+        if not plan.self_tests_all:
+            test_args.extend(("--names", ",".join(plan.self_test_names)))
+        tests.append(
+            CheckStep(
+                "harness.self-tests",
+                "harness self-tests",
+                tuple(test_args),
+                ("harness.llm-instructions", "harness.file-lengths"),
             )
-        else:
-            tests.append(
-                CheckStep(
-                    "harness.self-tests",
-                    "harness self-tests",
-                    (
-                        "pwsh",
-                        "-NoProfile",
-                        "-File",
-                        "scripts/tests/run-all.ps1",
-                        "-Names",
-                        ",".join(plan.self_test_names),
-                    ),
-                    ("harness.llm-instructions", "harness.file-lengths"),
-                )
-            )
+        )
     return tuple(quick), tuple(tests)
 
 

@@ -179,9 +179,9 @@ jobs:
         run: |
           selection="${{ steps.self-test-scope.outputs.selection }}"
           if [ "${selection}" = "all" ] || [ -z "${selection}" ]; then
-            pwsh -NoProfile -File scripts/tests/run-all.ps1
+            "${PYTHON}" scripts/tests/run_all.py
           else
-            pwsh -NoProfile -File scripts/tests/run-all.ps1 -Names "${selection}"
+            "${PYTHON}" scripts/tests/run_all.py --names "${selection}"
           fi
 
       - name: Enforce .llm file length limit

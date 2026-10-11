@@ -36,7 +36,7 @@ suites stay outside it.
 2. If any `.llm/**` file changed: `npm run lint:llm` (regenerates nothing; use
    `npm run lint:llm:fix` to auto-fix index drift and version sync, then review the
    diff and re-stage).
-3. `pwsh -NoProfile -File scripts/tests/run-all.ps1` when `scripts/**` changed.
+3. `python scripts/tests/run_all.py` when `scripts/**` changed.
 4. `npm pack` when `package.json`, `files`, or shipped assets changed; confirm the
    tarball contains only `Editor`, `Runtime`, and package metadata payloads. Docs
    imagery ships via GitHub, not npm; `docs/` and dev files must not appear.

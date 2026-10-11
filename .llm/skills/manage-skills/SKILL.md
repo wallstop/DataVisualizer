@@ -58,7 +58,7 @@ Keep bodies lean (aim under 120 lines, hard limit 300 for every `.md` under `.ll
 3. Validate: `uv run scripts/lint_llm_instructions.py` and
    `uv run scripts/lint_file_lengths.py` (or just `npm run lint:llm`).
 4. Run the harness self-tests once before committing:
-   `pwsh -NoProfile -File scripts/tests/run-all.ps1`.
+   `python scripts/tests/run_all.py`.
 5. Commit the new directory together with the regenerated `.llm/skills/index.md`.
 
 ## Editing a Skill

@@ -4,9 +4,12 @@ $script:TestFailureCount = 0
 . (Join-Path $PSScriptRoot 'TestHelpers.ps1')
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$runnerSource = Join-Path $repoRoot 'scripts/tests/run-all.ps1'
-
+$runnerSource = Join-Path $repoRoot 'scripts/tests/run_all.py'
 Write-Host '== run-all self-tests =='
+
+# The runner is typed Python (issue #171); the tests only need a working
+# interpreter because the stub suites never touch a toolchain.
+$python = Find-Python
 
 # run-all discovers test-*.ps1 in its own directory, so a fixture copies the
 # runner beside two stub suites and exercises the name filter and the
@@ -15,21 +18,20 @@ function New-RunnerFixture {
     $root = New-TempRoot -Prefix 'run-all-'
     $testsDirectory = Join-Path $root 'scripts/tests'
     New-Item -ItemType Directory -Path $testsDirectory -Force | Out-Null
-    Copy-Item -LiteralPath $runnerSource -Destination (Join-Path $testsDirectory 'run-all.ps1')
+    Copy-Item -LiteralPath $runnerSource -Destination (Join-Path $testsDirectory 'run_all.py')
     Write-FixtureFile -Root $root -RelativePath 'scripts/tests/test-alpha-passes.ps1' -Content "exit 0`n"
     Write-FixtureFile -Root $root -RelativePath 'scripts/tests/test-zulu-fails.ps1' -Content "exit 1`n"
-    return [pscustomobject]@{ Root = $root; Runner = Join-Path $testsDirectory 'run-all.ps1' }
+    return [pscustomobject]@{ Root = $root; Runner = Join-Path $testsDirectory 'run_all.py' }
 }
 
 function Invoke-Runner {
     param([pscustomobject]$Fixture, [string[]]$Names)
 
-    $argumentList = @('-NoProfile', '-File', $Fixture.Runner)
+    $argumentList = @($Fixture.Runner)
     if ($Names.Count -gt 0) {
-        # pwsh -File cannot carry an array argument; the runner splits commas.
-        $argumentList += @('-Names', ($Names -join ','))
+        $argumentList += @('--names', ($Names -join ','))
     }
-    $output = (& pwsh @argumentList 2>&1 | Out-String).TrimEnd()
+    $output = (& $python @argumentList 2>&1 | Out-String).TrimEnd()
     return $output, $LASTEXITCODE
 }
 

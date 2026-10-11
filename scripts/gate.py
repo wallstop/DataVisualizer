@@ -42,6 +42,23 @@ PLAN_SCHEMA_VERSION = 1
 FAILURE_OUTPUT_LINES = 60
 
 
+def _python_launcher() -> Tuple[str, ...]:
+    """Prefix that runs the harness's own Python scripts on this machine.
+
+    ``uv run`` is the documented path because it provisions the project
+    environment on machines that have uv; anywhere uv is absent (CI runners
+    without it, minimal containers) the gate degrades to the interpreter
+    running this script, so the plan always describes commands that can
+    actually execute on the host that built it.
+    """
+    if shutil.which("uv") is not None:
+        return ("uv", "run")
+    return (sys.executable,)
+
+
+_PYTHON_LAUNCHER: Tuple[str, ...] = _python_launcher()
+
+
 @dataclass(frozen=True)
 class Step:
     """One gate command: a program, its arguments, and its dependencies."""
@@ -115,7 +132,7 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "harness.skills-index",
                 "Skills index regeneration",
-                ("uv", "run", "scripts/generate_skills_index.py"),
+                (*_PYTHON_LAUNCHER, "scripts/generate_skills_index.py"),
                 ("markdown.format",),
             ),
             Step(
@@ -128,13 +145,13 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "harness.llm-instructions",
                 ".llm instructions lint",
-                ("uv", "run", "scripts/lint_llm_instructions.py", "--verbose-output"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_llm_instructions.py", "--verbose-output"),
                 ("harness.skills-index",),
             ),
             Step(
                 "harness.file-lengths",
                 ".llm file-length lint",
-                ("uv", "run", "scripts/lint_file_lengths.py", "--verbose-output"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_file_lengths.py", "--verbose-output"),
                 ("harness.skills-index",),
             ),
             Step(
@@ -157,7 +174,7 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "tests.self-tests",
                 "Harness self-test suite",
-                ("pwsh", "-NoProfile", "-File", "scripts/tests/run-all.ps1"),
+                (*_PYTHON_LAUNCHER, "scripts/tests/run_all.py"),
             ),
         ),
     ),
