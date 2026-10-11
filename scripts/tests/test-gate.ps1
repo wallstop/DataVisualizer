@@ -153,14 +153,14 @@ Invoke-TestCase 'LaunchFailure_SurfacesTheReasonInConsoleAndReport' {
 # unspawned so the case costs interpreter time only (no toolchain on CI).
 Invoke-TestCase 'ReportWriteFailure_IsVisibleWithoutCrashingTheGate' {
     $savedPath = $env:PATH
-    $unwritableDirectory = Join-Path (New-TempRoot -Prefix 'gate-reportfail-') 'missing'
-    $reportPath = Join-Path $unwritableDirectory 'report.json'
+    $tempRoot = New-TempRoot -Prefix 'gate-reportfail-'
+    $reportPath = Join-Path (Join-Path $tempRoot 'missing') 'report.json'
     try {
         $env:PATH = ''
         $result = Invoke-Gate -Python $python -Arguments @('--only', 'csharp.tool-restore', '--report', $reportPath)
     } finally {
         $env:PATH = $savedPath
-        Remove-TempRoot -Path $unwritableDirectory
+        Remove-TempRoot -Path $tempRoot
     }
     Assert-True ($result.ExitCode -eq 1) "the step failure must set the verdict (got $($result.ExitCode)): $($result.Output)"
     Assert-True ($result.Output -match '\[gate\] report FAILED:') (

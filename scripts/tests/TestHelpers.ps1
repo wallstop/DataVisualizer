@@ -15,7 +15,12 @@ function Remove-TempRoot {
     param([string]$Path)
     if (Test-Path -LiteralPath $Path) {
         Remove-Item -LiteralPath $Path -Recurse -Force
+        return
     }
+    # A missing path means the caller handed cleanup a child that was never
+    # created (a derived path instead of the created root), which silently
+    # leaks the real root. Say so instead of no-oping.
+    Write-Host "[TestHelpers] WARNING: Remove-TempRoot called for a path that does not exist; the created root may be leaking: $Path"
 }
 
 function Write-FixtureFile {
