@@ -4,8 +4,8 @@
 This is the typed Python port of ``scripts/LlmConfig.psm1``: the skill
 frontmatter rules, the generated skills-index layout, and the text helpers
 the lints share. Every consumer of the skill contract imports this module,
-so the frontmatter rules live in exactly one place. ``build-docs.ps1``
-keeps its own root resolution until the docs-build slice lands.
+so the frontmatter rules live in exactly one place. ``build_docs.py``
+resolves its own repository root.
 
 The parsing behavior mirrors the PowerShell module verdict for verdict:
 same accepted frontmatter shapes, same error messages, same generated
