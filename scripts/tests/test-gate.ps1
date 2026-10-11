@@ -148,19 +148,25 @@ Invoke-TestCase 'LaunchFailure_SurfacesTheReasonInConsoleAndReport' {
     Remove-TempRoot -Path (Split-Path -Parent $reportPath)
 }
 
-# An unwritable report is a visible error, not a crash that flips the verdict
-# of checks that actually passed.
-Invoke-TestCase 'ReportWriteFailure_FailsVisiblyWithoutChangingTheVerdict' {
+# An unwritable report is a visible error, not a crash that drowns the gate
+# in a traceback or changes its verdict. The stripped PATH keeps every step
+# unspawned so the case costs interpreter time only (no toolchain on CI).
+Invoke-TestCase 'ReportWriteFailure_IsVisibleWithoutCrashingTheGate' {
+    $savedPath = $env:PATH
     $unwritableDirectory = Join-Path (New-TempRoot -Prefix 'gate-reportfail-') 'missing'
     $reportPath = Join-Path $unwritableDirectory 'report.json'
     try {
+        $env:PATH = ''
         $result = Invoke-Gate -Python $python -Arguments @('--only', 'csharp.tool-restore', '--report', $reportPath)
     } finally {
+        $env:PATH = $savedPath
         Remove-TempRoot -Path $unwritableDirectory
     }
-    Assert-True ($result.ExitCode -eq 0) "the verdict must stay the step verdict (got $($result.ExitCode)): $($result.Output)"
+    Assert-True ($result.ExitCode -eq 1) "the step failure must set the verdict (got $($result.ExitCode)): $($result.Output)"
     Assert-True ($result.Output -match '\[gate\] report FAILED:') (
         "the console must report the unwritable report path: $($result.Output)")
+    Assert-True ($result.Output -match "program not found on PATH: 'dotnet'") (
+        "the step failure reason must stay visible: $($result.Output)")
     Assert-True ($result.Output -notmatch 'Traceback') "a report write failure must not crash: $($result.Output)"
 }
 
