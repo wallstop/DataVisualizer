@@ -45,7 +45,7 @@
     "check:fast": "uv run scripts/fast_check.py",
     "check:gate": "uv run scripts/gate.py",
     "lint:llm:fix": "uv run scripts/lint_llm_instructions.py --fix",
-    "lint:assembly-warnings": "pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1",
+    "lint:assembly-warnings": "uv run scripts/lint_assembly_warnings.py",
     "lint:csharp-member-order": "node scripts/lint-csharp-member-order.js",
     "lint:csharp-member-order:fix": "node scripts/lint-csharp-member-order.js --fix",
     "lint:csharp-null-assertions": "node scripts/lint-csharp-null-assertions.js",

@@ -122,7 +122,7 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "assembly.warnings",
                 "Assembly warning-policy lint",
-                ("pwsh", "-NoProfile", "-File", "scripts/lint-assembly-warnings.ps1"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_assembly_warnings.py"),
             ),
         ),
     ),
