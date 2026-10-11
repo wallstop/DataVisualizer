@@ -18,6 +18,8 @@ $script:SelfTestSurfaceFiles = @(
     'package.json',
     'package-lock.json',
     'opencode.json',
+    'pyproject.toml',
+    'uv.lock',
     '.pre-commit-config.yaml',
     '.mcp.json',
     '.env.local.example'
@@ -31,6 +33,9 @@ $script:SelfTestSurfaceFiles = @(
 # suite, so mapping drift can never silently skip coverage.
 $script:SelfTestSubjectsByPath = @{
     'scripts/fast-check.ps1'                        = @('test-fast-check.ps1')
+    'scripts/gate.py'                               = @('test-gate.ps1')
+    'pyproject.toml'                                = @('test-gate.ps1')
+    'uv.lock'                                       = @('test-gate.ps1')
     'scripts/harness-scope.psm1'                    = @('test-fast-check.ps1', 'test-harness-scope.ps1')
     'scripts/should-run-self-tests.ps1'             = @('test-harness-scope.ps1')
     'scripts/generate-skills-index.ps1'             = @('test-generate-skills-index.ps1')

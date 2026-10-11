@@ -17,11 +17,13 @@ Run the narrowest sufficient layer; escalate on failure:
 | Pre-commit hook | staged files | automatic (`pre-commit` + `.pre-commit-config.yaml`) |
 | C# member layout | all C# types | `npm run lint:csharp-member-order` |
 | Markdown formatting | tracked Markdown | `npm run format:md:check` |
-| Local gate | whole harness | `npm run lint:llm` |
-| Harness self-tests | scripts | `pwsh -NoProfile -File scripts/tests/run-all.ps1` |
-| Packaging | tarball integrity | `npm pack` |
-| Unity suites | behavior | EditMode then PlayMode batch commands |
+| Full local gate | every check, parallel lanes | `npm run check:gate` |
+| Unity suites | behavior | EditMode then PlayMode batch commands or the host bridge |
 | CI | everything, ubuntu + windows | `.github/workflows/llm-lint.yml` |
+
+`check:gate` (typed Python via uv, `scripts/gate.py`) runs the member-order, Markdown, `.llm`, release-credential, and line-ending checks plus the full self-test suite and an
+`npm pack --dry-run` in parallel lanes, prints every step's wall time, and supports `--plan`, `--only <step>`, and `--report <path>` for machine-readable timings. The Unity
+suites stay outside it.
 
 ## Pre-Commit Checklist
 

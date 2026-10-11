@@ -1,0 +1,130 @@
+Set-StrictMode -Version 2.0
+
+$script:TestFailureCount = 0
+. (Join-Path $PSScriptRoot 'TestHelpers.ps1')
+
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$gatePath = Join-Path $repoRoot 'scripts/gate.py'
+
+Write-Host '== Gate plan self-tests =='
+
+# The gate is typed Python executed through uv locally; the self-tests only
+# need a working interpreter because --plan executes nothing.
+function Find-GatePython {
+    $candidates = if ($IsWindows) { @('python', 'python3') } else { @('python3', 'python') }
+    foreach ($candidate in $candidates) {
+        $command = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($null -eq $command) {
+            continue
+        }
+        & $command.Source --version 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            return $command.Source
+        }
+    }
+    throw 'the gate self-tests require a working Python 3 interpreter (python3 or python)'
+}
+
+function Invoke-Gate {
+    param([string]$Python, [string[]]$Arguments)
+
+    $output = (& $Python $gatePath @Arguments 2>&1 | Out-String)
+    return [pscustomobject]@{
+        Output   = $output
+        ExitCode = $LASTEXITCODE
+    }
+}
+
+$python = Find-GatePython
+
+# The plan is the gate's contract: every check the ladder requires appears
+# exactly once, with its command and dependencies, and nothing executes.
+Invoke-TestCase 'Plan_PrintsTheFullLaneTable' {
+    $result = Invoke-Gate -Python $python -Arguments @('--plan')
+    Assert-True ($result.ExitCode -eq 0) "the plan must exit 0 (got $($result.ExitCode)): $($result.Output)"
+    $plan = $result.Output | ConvertFrom-Json
+    Assert-True ($plan.schema -eq 1) "the plan must carry schema 1, got $($plan.schema)"
+    $laneNames = @($plan.lanes | ForEach-Object { $_.name })
+    Assert-True (($laneNames -join ',') -eq 'csharp,markdown,assembly,harness,tests,pack') (
+        "the plan must list the six lanes in order, got: $($laneNames -join ',')")
+    $stepNames = @($plan.lanes | ForEach-Object { $_.steps } | ForEach-Object { $_.name })
+    Assert-True ($stepNames.Count -eq 16) "the plan must list 16 steps, got $($stepNames.Count)"
+    Assert-True ($stepNames.Count -eq ($stepNames | Sort-Object -Unique).Count) 'step names must be unique'
+    foreach ($name in $stepNames) {
+        Assert-True ($name -match '^[a-z]+\.[a-z-]+$') "step names must be lane-qualified, got: $name"
+    }
+}
+
+Invoke-TestCase 'Plan_CarriesCommandsAndDependencies' {
+    $plan = (Invoke-Gate -Python $python -Arguments @('--plan')).Output | ConvertFrom-Json
+    $steps = @{}
+    foreach ($lane in $plan.lanes) {
+        foreach ($step in $lane.steps) {
+            Assert-True ($step.args.Count -ge 1) "step $($step.name) must carry a command"
+            Assert-True ($step.title) "step $($step.name) must carry a title"
+            $steps[$step.name] = $step
+        }
+    }
+    Assert-True (($steps['csharp.member-order'].after -join ',') -eq 'csharp.format') (
+        'the member-order lint must run after the CSharpier format')
+    Assert-True (($steps['harness.skills-index'].after -join ',') -eq 'markdown.format') (
+        'the harness lane must wait for Markdown formatting, which rewrites .llm files')
+    Assert-True (($steps['harness.skills-index-drift'].after -join ',') -eq 'harness.skills-index') (
+        'the drift check must run after the index regeneration')
+    foreach ($dependency in $steps['harness.skills-index-drift'].after) {
+        Assert-True ($steps.ContainsKey($dependency)) "dependency $dependency must exist"
+    }
+}
+
+Invoke-TestCase 'Plan_MarksTheDriftCheckAsAnEmptyOutputCheck' {
+    $plan = (Invoke-Gate -Python $python -Arguments @('--plan')).Output | ConvertFrom-Json
+    $checks = @{}
+    foreach ($lane in $plan.lanes) {
+        foreach ($step in $lane.steps) {
+            $checks[$step.name] = $step.check
+        }
+    }
+    Assert-True ($checks['harness.skills-index-drift'] -eq 'empty-output') (
+        'the skills index drift check must require empty output')
+    $withChecks = @($checks.Keys | Where-Object { $checks[$_] -and $_ -ne 'harness.skills-index-drift' })
+    Assert-True ($withChecks.Count -eq 0) "only the drift check may carry a check, got: $($withChecks -join ',')"
+}
+
+Invoke-TestCase 'Plan_ResolvesEveryProgram' {
+    $plan = (Invoke-Gate -Python $python -Arguments @('--plan')).Output | ConvertFrom-Json
+    Assert-True ($plan.unresolved_programs.Count -eq 0) (
+        "every step program must resolve on PATH, unresolved: $($plan.unresolved_programs -join ',')")
+}
+
+# --only re-runs a failed step without retyping the lane: the requested step
+# plus every transitive dependency, and nothing else.
+Invoke-TestCase 'Only_SelectsTheRequestedStepsWithDependencies' {
+    $result = Invoke-Gate -Python $python -Arguments @('--plan', '--only', 'harness.skills-index-drift')
+    Assert-True ($result.ExitCode -eq 0) "the plan must exit 0 (got $($result.ExitCode)): $($result.Output)"
+    $plan = $result.Output | ConvertFrom-Json
+    $selected = @($plan.lanes | ForEach-Object { $_.steps } | ForEach-Object { $_.name })
+    Assert-True (($selected -join ',') -eq 'markdown.format,harness.skills-index,harness.skills-index-drift') (
+        "the selection must keep the requested step and its dependencies, got: $($selected -join ',')")
+}
+
+Invoke-TestCase 'Only_FailsOnUnknownStepNames' {
+    $result = Invoke-Gate -Python $python -Arguments @('--only', 'bogus.step')
+    Assert-True ($result.ExitCode -eq 2) "an unknown step must exit 2 (got $($result.ExitCode)): $($result.Output)"
+    Assert-True ($result.Output -match 'bogus\.step') 'the error must name the unknown step'
+}
+
+# The gate orchestrates the non-Unity ladder; the Unity suites are a separate
+# host-dependent gate and must never appear in the step table.
+Invoke-TestCase 'Plan_ExcludesTheUnitySuites' {
+    $plan = (Invoke-Gate -Python $python -Arguments @('--plan')).Output | ConvertFrom-Json
+    $commands = @($plan.lanes | ForEach-Object { $_.steps } | ForEach-Object { $_.args -join ' ' })
+    $unityCommands = @($commands | Where-Object { $_ -match 'runTests|testPlatform|-runTests' })
+    Assert-True ($unityCommands.Count -eq 0) "no step may launch a Unity suite, got: $($unityCommands -join '; ')"
+}
+
+if ($script:TestFailureCount -gt 0) {
+    Write-Host "gate self-tests: $($script:TestFailureCount) failed"
+    exit 1
+}
+Write-Host 'gate self-tests: all passed'
+exit 0
