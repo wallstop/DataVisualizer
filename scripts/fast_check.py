@@ -298,7 +298,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             CheckStep(
                 "assembly.warnings",
                 "assembly warning policy",
-                ("pwsh", "-NoProfile", "-File", "scripts/lint-assembly-warnings.ps1"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_assembly_warnings.py"),
             )
         )
 

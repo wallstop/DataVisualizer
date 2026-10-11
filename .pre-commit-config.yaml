@@ -64,10 +64,10 @@ repos:
         description: Fails when a CHANGELOG [Unreleased] entry renders over 300 characters, excluding issue references and link targets.
       - id: lint-assembly-warnings
         name: Enforce assembly warning policy
-        entry: pwsh -NoProfile -File scripts/lint-assembly-warnings.ps1
+        entry: uv run scripts/lint_assembly_warnings.py
         language: system
         pass_filenames: false
-        files: (\.asmdef|\.ruleset|\.rsp|\.dll\.meta)$|^scripts/lint-assembly-warnings\.ps1$
+        files: (\.asmdef|\.ruleset|\.rsp|\.dll\.meta)$|^scripts/lint_assembly_warnings\.py$
         description: Requires maximum compiler warnings, strict rulesets, and no repository-local analyzer wiring.
       - id: lint-llm-instructions
         name: Lint the .llm agent harness

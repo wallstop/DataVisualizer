@@ -3,7 +3,10 @@ Set-StrictMode -Version 2.0
 $script:TestFailureCount = 0
 . (Join-Path $PSScriptRoot 'TestHelpers.ps1')
 
-$lintScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'lint-assembly-warnings.ps1'
+$lintScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'lint_assembly_warnings.py'
+# The lint is typed Python (issue #171); the tests only need a working
+# interpreter because the fixtures never touch a toolchain.
+$python = Find-Python
 $assemblyDefinition = '{"name":"Fixture.Assembly"}'
 $warningsAsErrorsRuleset = @'
 <?xml version="1.0" encoding="utf-8"?>
@@ -31,7 +34,7 @@ Write-Host '== assembly warnings policy self-tests =='
 Invoke-TestCase 'Passes_ForRepositoryAssemblies' {
     $repoRoot = (Get-Item (Join-Path $PSScriptRoot '../..')).FullName
 
-    & $lintScript -Root $repoRoot *> $null
+    & $python @($lintScript, '--root', $repoRoot) *> $null
     Assert-ExitCode 0 'repository assemblies should satisfy the warning policy'
 }
 
@@ -41,7 +44,7 @@ Invoke-TestCase 'Passes_When_EveryAssemblyHasWarningsAsErrors' {
         Write-AssemblyFixture -Root $root -Directory 'Runtime'
         Write-AssemblyFixture -Root $root -Directory 'Editor/Nested'
 
-        & $lintScript -Root $root *> $null
+        & $python @($lintScript, '--root', $root) *> $null
         Assert-ExitCode 0 'complete warnings-as-errors coverage should pass'
     } finally {
         Remove-TempRoot $root
@@ -53,7 +56,7 @@ Invoke-TestCase 'Fails_WhenAssemblyHasNoRuleset' {
     try {
         Write-FixtureFile -Root $root -RelativePath 'Runtime/Fixture.asmdef' -Content $assemblyDefinition
 
-        $output = & $lintScript -Root $root *>&1 | Out-String
+        $output = & $python @($lintScript, '--root', $root) *>&1 | Out-String
         Assert-ExitCode 1 'an assembly without a ruleset should fail'
         Assert-True ($output -match 'Runtime/Fixture\.asmdef') "output should name the assembly, got: $output"
     } finally {
@@ -70,7 +73,7 @@ Invoke-TestCase 'Fails_WhenAssemblyHasNoCompilerResponseFile' {
             -RelativePath 'Runtime/WarningsAsErrors.ruleset' `
             -Content $warningsAsErrorsRuleset
 
-        $output = & $lintScript -Root $root *>&1 | Out-String
+        $output = & $python @($lintScript, '--root', $root) *>&1 | Out-String
         Assert-ExitCode 1 'an assembly without csc.rsp should fail'
         Assert-True ($output -match 'expected exactly one named csc\.rsp') "output should require csc.rsp, got: $output"
     } finally {
@@ -84,7 +87,7 @@ Invoke-TestCase 'Fails_WhenAssemblyHasAmbiguousCompilerResponseFiles' {
         Write-AssemblyFixture -Root $root -Directory 'Runtime'
         Write-FixtureFile -Root $root -RelativePath 'Runtime/mcs.rsp' -Content '-warn:4'
 
-        $output = & $lintScript -Root $root *>&1 | Out-String
+        $output = & $python @($lintScript, '--root', $root) *>&1 | Out-String
         Assert-ExitCode 1 'an assembly with ambiguous response files should fail'
         Assert-True ($output -match '2 compiler response files') "output should report the ambiguity, got: $output"
     } finally {
@@ -214,7 +217,7 @@ foreach ($script:responseFileCase in $responseFileCases) {
                 -Directory 'Runtime' `
                 -ResponseFile $script:responseFileCase.Content
 
-            $output = & $lintScript -Root $root *>&1 | Out-String
+            $output = & $python @($lintScript, '--root', $root) *>&1 | Out-String
             if ($script:responseFileCase.ExpectPass) {
                 Assert-ExitCode 0 "$($script:responseFileCase.Name) should pass"
             } else {
@@ -238,7 +241,7 @@ Invoke-TestCase 'Fails_WhenAssemblyHasMultipleRulesets' {
         Write-AssemblyFixture -Root $root -Directory 'Runtime'
         Write-FixtureFile -Root $root -RelativePath 'Runtime/Override.ruleset' -Content $warningsAsErrorsRuleset
 
-        $output = & $lintScript -Root $root *>&1 | Out-String
+        $output = & $python @($lintScript, '--root', $root) *>&1 | Out-String
         Assert-ExitCode 1 'ambiguous assembly rulesets should fail'
         Assert-True ($output -match '2 rulesets') "output should report the ambiguity, got: $output"
     } finally {
@@ -251,7 +254,7 @@ Invoke-TestCase 'Fails_WhenRulesetIsMalformed' {
     try {
         Write-AssemblyFixture -Root $root -Directory 'Runtime' -Ruleset '<RuleSet><IncludeAll'
 
-        $output = & $lintScript -Root $root *>&1 | Out-String
+        $output = & $python @($lintScript, '--root', $root) *>&1 | Out-String
         Assert-ExitCode 1 'malformed ruleset XML should fail'
         Assert-True ($output -match 'valid XML') "output should explain malformed XML, got: $output"
     } finally {
@@ -269,7 +272,7 @@ Invoke-TestCase 'Fails_WhenIncludeAllDoesNotPromoteWarnings' {
 '@
         Write-AssemblyFixture -Root $root -Directory 'Runtime' -Ruleset $warningRuleset
 
-        $output = & $lintScript -Root $root *>&1 | Out-String
+        $output = & $python @($lintScript, '--root', $root) *>&1 | Out-String
         Assert-ExitCode 1 'a non-error IncludeAll action should fail'
         Assert-True ($output -match 'IncludeAll Action="Error"') "output should name the policy, got: $output"
     } finally {
@@ -283,7 +286,7 @@ Invoke-TestCase 'Fails_WhenRepositoryContainsLabeledAnalyzer' {
         Write-AssemblyFixture -Root $root -Directory 'Runtime'
         Write-FixtureFile -Root $root -RelativePath 'Tools/Analyzer.dll.meta' -Content "labels:`n- RoslynAnalyzer"
 
-        $output = & $lintScript -Root $root *>&1 | Out-String
+        $output = & $python @($lintScript, '--root', $root) *>&1 | Out-String
         Assert-ExitCode 1 'a repository-local labeled analyzer should fail'
         Assert-True ($output -match 'repository-local analyzer payload') "output should reject the analyzer payload, got: $output"
     } finally {
@@ -300,7 +303,7 @@ Invoke-TestCase 'Fails_WhenRepositoryContainsKnownAnalyzerPayload' {
             -RelativePath 'Tools/ErrorProne.NET.NOTICE.md' `
             -Content 'development analyzer notice'
 
-        $output = & $lintScript -Root $root *>&1 | Out-String
+        $output = & $python @($lintScript, '--root', $root) *>&1 | Out-String
         Assert-ExitCode 1 'a known repository-local analyzer payload should fail'
         Assert-True ($output -match 'repository-local analyzer payload') "output should reject the known analyzer payload, got: $output"
     } finally {
