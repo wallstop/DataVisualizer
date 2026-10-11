@@ -219,7 +219,7 @@ Invoke-TestCase 'Selection_MapsTheMigratedTrioSurface' {
 }
 
 Invoke-TestCase 'Selection_FallsBackToAllForSharedSuitePaths' {
-    foreach ($path in @('scripts/tests/TestHelpers.ps1', 'scripts/tests/run-all.ps1', 'package.json', '.config/dotnet-tools.json')) {
+    foreach ($path in @('scripts/tests/TestHelpers.ps1', 'scripts/tests/run_all.py', 'package.json', '.config/dotnet-tools.json')) {
         $probe = Invoke-ScopeProbe -Paths $path
         Assert-True ($probe.selection.all) "the shared path $path must select the full suite"
     }

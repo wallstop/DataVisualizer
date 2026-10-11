@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Runs the harness self-test suite, optionally narrowed by surface (issue #171).
+
+Typed Python port of ``scripts/tests/run-all.ps1``: every ``test-*.ps1``
+file next to this script runs in a child pwsh with its output captured and
+replayed in name order, so the log shape is identical to the PowerShell
+runner. ``--names`` takes the same comma-separated test file names the fast
+check's surface selection produces; an unknown name fails safe to the full
+suite, so a stale mapping or a typo can never silently run a zero-test
+suite. When no test file is found the runner reports it and exits 0, like
+the original.
+
+The child launches stay pwsh because the test files are PowerShell; this
+slice removes the parent pwsh (and its startup) from the hot path. The test
+files themselves are the remaining surface for this issue.
+
+Workers fail closed: a child that cannot start, or a worker thread that
+crashes, records a failed result, and the verdict verifies that every
+selected file produced a result, so a resource error under suite
+concurrency can never report success.
+
+Launch with ``python scripts/tests/run_all.py`` (or ``uv run
+scripts/tests/run_all.py``); any Python 3.9+ interpreter works.
+"""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import sys
+import threading
+from pathlib import Path
+from typing import Callable, List, Optional, Sequence, Tuple
+
+TESTS_DIR = Path(__file__).resolve().parent
+
+
+def discover_test_files() -> List[str]:
+    """List the test file names in name order."""
+    return sorted(path.name for path in TESTS_DIR.glob("test-*.ps1"))
+
+
+def resolve_selection(names_csv: str, available: Sequence[str]) -> Tuple[List[str], bool]:
+    """Resolve ``--names`` to selected files, failing safe to the full suite."""
+    requested = [name.strip() for name in names_csv.split(",") if name.strip()]
+    if not requested:
+        return list(available), False
+    unknown = [name for name in requested if name not in available]
+    if unknown:
+        print(f"[run-all] unknown test file(s) requested: {', '.join(unknown)}; running the full suite.")
+        return list(available), False
+    return requested, True
+
+
+def run_tests(selected: Sequence[str], pwsh: str) -> int:
+    """Run each test in a child pwsh and replay the captured output in name order.
+
+    Every selected file must produce exactly one recorded result before the
+    verdict is computed: a worker that crashes records a failed result, and
+    a file whose result never arrives is counted as failed, so a resource
+    error under suite concurrency can never report success.
+    """
+    results: List[Tuple[str, Optional[int], str]] = []
+    lock = threading.Lock()
+
+    def run_one(name: str) -> Tuple[str, Optional[int], str]:
+        completed = subprocess.run(
+            [pwsh, "-NoProfile", "-File", str(TESTS_DIR / name)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
+        return name, completed.returncode, output
+
+    threads = [threading.Thread(target=_collect, args=(name, run_one, results, lock)) for name in selected]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    # Completeness belt: a selected file without a recorded result cannot
+    # count as passed. The worker conversion below should make this
+    # unreachable; it pins the verdict against any future gap.
+    recorded = {name for name, _, _ in results}
+    for name in selected:
+        if name not in recorded:
+            results.append((name, None, "[run-all] ERROR: no result recorded; the worker crashed before reporting"))
+
+    failed = 0
+    for name, exit_code, output in sorted(results):
+        print(f"\nRunning {name}...")
+        print(output)
+        if exit_code != 0:
+            failed += 1
+
+    print()
+    if failed > 0:
+        print(f"Self-tests: {failed} of {len(selected)} test file(s) failed.")
+        return 1
+    print(f"Self-tests: all {len(selected)} test file(s) passed.")
+    return 0
+
+
+def _collect(
+    name: str,
+    run_one: Callable[[str], Tuple[str, Optional[int], str]],
+    results: List[Tuple[str, Optional[int], str]],
+    lock: threading.Lock,
+) -> None:
+    try:
+        result: Tuple[str, Optional[int], str] = run_one(name)
+    except Exception as error:
+        # A crashed worker (spawn failure, resource limits) must record a
+        # failed result; a dead thread that records nothing would otherwise
+        # let the suite report success. ``None`` counts as failed because
+        # it is not the exit code of a test that ran.
+        result = (name, None, f"[run-all] ERROR: could not run {name}: {error!r}")
+    with lock:
+        results.append(result)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="run-all",
+        description="Run the harness self-test suite, optionally narrowed to named test files.",
+    )
+    parser.add_argument(
+        "--names",
+        default="",
+        help="comma-separated test file names; empty runs everything",
+    )
+    options = parser.parse_args(argv)
+
+    pwsh = shutil.which("pwsh")
+    if pwsh is None:
+        print("[run-all] ERROR: pwsh is required to run the test files; install PowerShell 7+")
+        return 1
+
+    available = discover_test_files()
+    if not available:
+        print("No self-tests found.")
+        return 0
+
+    selected, narrowed = resolve_selection(options.names, available)
+    if narrowed:
+        print(f"[run-all] surface selection: {len(selected)} test file(s): {', '.join(selected)}")
+    return run_tests(selected, pwsh)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

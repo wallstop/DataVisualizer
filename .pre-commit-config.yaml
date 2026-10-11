@@ -71,14 +71,14 @@ repos:
         description: Requires maximum compiler warnings, strict rulesets, and no repository-local analyzer wiring.
       - id: lint-llm-instructions
         name: Lint the .llm agent harness
-        entry: pwsh -NoProfile -File scripts/lint-llm-instructions.ps1
+        entry: uv run scripts/lint_llm_instructions.py
         language: system
         pass_filenames: false
         files: ^(\.llm/|scripts/|AGENTS\.md$|CLAUDE\.md$|GEMINI\.md$|\.cursorrules$|\.windsurfrules$|\.github/copilot-instructions\.md$)
         description: Validates SKILL.md frontmatter, index freshness, entrypoint delegation, and version sync. Auto-fixes with the fix script below on the next run.
       - id: lint-file-lengths
         name: Enforce .llm 300-line limit
-        entry: pwsh -NoProfile -File scripts/lint-file-lengths.ps1
+        entry: uv run scripts/lint_file_lengths.py
         language: system
         pass_filenames: false
         files: ^\.llm/.*\.md$

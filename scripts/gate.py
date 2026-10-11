@@ -42,6 +42,23 @@ PLAN_SCHEMA_VERSION = 1
 FAILURE_OUTPUT_LINES = 60
 
 
+def _python_launcher() -> Tuple[str, ...]:
+    """Prefix that runs the harness's own Python scripts on this machine.
+
+    ``uv run`` is the documented path because it provisions the project
+    environment on machines that have uv; anywhere uv is absent (CI runners
+    without it, minimal containers) the gate degrades to the interpreter
+    running this script, so the plan always describes commands that can
+    actually execute on the host that built it.
+    """
+    if shutil.which("uv") is not None:
+        return ("uv", "run")
+    return (sys.executable,)
+
+
+_PYTHON_LAUNCHER: Tuple[str, ...] = _python_launcher()
+
+
 @dataclass(frozen=True)
 class Step:
     """One gate command: a program, its arguments, and its dependencies."""
@@ -115,7 +132,7 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "harness.skills-index",
                 "Skills index regeneration",
-                ("pwsh", "-NoProfile", "-File", "scripts/generate-skills-index.ps1"),
+                (*_PYTHON_LAUNCHER, "scripts/generate_skills_index.py"),
                 ("markdown.format",),
             ),
             Step(
@@ -128,13 +145,13 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "harness.llm-instructions",
                 ".llm instructions lint",
-                ("pwsh", "-NoProfile", "-File", "scripts/lint-llm-instructions.ps1", "-VerboseOutput"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_llm_instructions.py", "--verbose-output"),
                 ("harness.skills-index",),
             ),
             Step(
                 "harness.file-lengths",
                 ".llm file-length lint",
-                ("pwsh", "-NoProfile", "-File", "scripts/lint-file-lengths.ps1", "-VerboseOutput"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_file_lengths.py", "--verbose-output"),
                 ("harness.skills-index",),
             ),
             Step(
@@ -157,7 +174,7 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "tests.self-tests",
                 "Harness self-test suite",
-                ("pwsh", "-NoProfile", "-File", "scripts/tests/run-all.ps1"),
+                (*_PYTHON_LAUNCHER, "scripts/tests/run_all.py"),
             ),
         ),
     ),
@@ -349,22 +366,79 @@ class Gate:
             thread.start()
         for thread in threads:
             thread.join()
-
-    def _run_lane(self, lane_name: str, lane_steps: Tuple[Step, ...]) -> None:
-        for step in lane_steps:
-            self._wait_for_dependencies(step)
-            result = self._run_step(lane_name, step)
-            with self._results_lock:
-                self._results.append(result)
-            self._events[step.name].set()
-            with self._print_lock:
-                if result.ok:
-                    print(f"[gate] ok   {step.name} ({result.seconds:.1f}s)")
-                else:
-                    print(f"[gate] FAIL {step.name} ({result.seconds:.1f}s)")
-                    if result.failure:
+        # Completeness belt: every expected step must have a recorded result
+        # before the verdict is computed. A lane thread that died without
+        # recording must count as failed, never as an absent success. The
+        # belt is itself a failure path, so it surfaces its reason on the
+        # console like every other failure (one owner field surfaced by
+        # every consumer), matching the fast check's belt output shape.
+        recorded = {result.name for result in self._results}
+        for lane_name, lane_steps in lanes:
+            for step in lane_steps:
+                if step.name not in recorded:
+                    result = StepResult(
+                        step.name,
+                        step.title,
+                        lane_name,
+                        step.args,
+                        0.0,
+                        None,
+                        False,
+                        False,
+                        failure="no result recorded; the lane crashed before this step ran",
+                    )
+                    with self._results_lock:
+                        self._results.append(result)
+                    with self._print_lock:
+                        print(f"[gate] FAIL {step.name} ({result.seconds:.1f}s)")
                         print(f"[gate] ---- {step.name} ----")
                         print(result.failure)
+
+    def _run_lane(self, lane_name: str, lane_steps: Tuple[Step, ...]) -> None:
+        try:
+            for step in lane_steps:
+                self._wait_for_dependencies(step)
+                result: StepResult
+                try:
+                    result = self._run_step(lane_name, step)
+                except Exception as error:
+                    # A crashed step must record a failure: a dead lane that
+                    # records nothing would let the gate report success.
+                    result = StepResult(
+                        step.name,
+                        step.title,
+                        lane_name,
+                        step.args,
+                        0.0,
+                        None,
+                        False,
+                        False,
+                        failure=f"the lane crashed running this step: {error!r}",
+                    )
+                with self._results_lock:
+                    self._results.append(result)
+                # Released per step, before the next dependency wait can be
+                # reached by another lane: in-lane dependent steps wait on
+                # this event too, so a lane-level release would deadlock the
+                # loop on its own lane's event.
+                self._events[step.name].set()
+                with self._print_lock:
+                    if result.ok:
+                        print(f"[gate] ok   {step.name} ({result.seconds:.1f}s)")
+                    else:
+                        print(f"[gate] FAIL {step.name} ({result.seconds:.1f}s)")
+                        if result.failure:
+                            print(f"[gate] ---- {step.name} ----")
+                            print(result.failure)
+        finally:
+            # Catastrophic-death insurance only (a raise outside the per-step
+            # guard, e.g. from a broken stdout mid-print): release every step
+            # event the lane owns so waiting lanes unblock and the phase's
+            # completeness belt records the unexecuted steps as failed
+            # instead of the gate hanging on their wait() calls. Setting an
+            # already-released event is a no-op.
+            for step in lane_steps:
+                self._events[step.name].set()
 
     def _wait_for_dependencies(self, step: Step) -> None:
         for dependency in step.after:

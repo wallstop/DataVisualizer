@@ -5,7 +5,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-Import-Module (Join-Path $PSScriptRoot 'LlmConfig.psm1') -DisableNameChecking
 
 function Resolve-PythonLauncher {
     foreach ($candidate in @('python3', 'python')) {
@@ -36,7 +35,17 @@ function Invoke-CheckedPython {
 }
 
 try {
-    $repoRoot = Resolve-LlmRoot $Root
+    # LlmConfig.psm1 retired: build-docs is its last consumer, and it only
+    # needed root resolution. Default root is the parent of scripts/.
+    $repoRoot = if ([string]::IsNullOrWhiteSpace($Root)) {
+        Split-Path -Parent $PSScriptRoot
+    } else {
+        [System.IO.Path]::GetFullPath($Root)
+    }
+    if (-not (Test-Path -LiteralPath $repoRoot)) {
+        Write-Host "[docs] ERROR: repository root '$repoRoot' does not exist"
+        exit 1
+    }
     $requirementsPath = Join-Path $repoRoot 'requirements-docs.txt'
     $configPath = Join-Path $repoRoot 'mkdocs.yml'
     foreach ($required in @($requirementsPath, $configPath)) {

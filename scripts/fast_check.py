@@ -49,6 +49,22 @@ from harness_scope import (
 PLAN_SCHEMA_VERSION = 1
 
 
+def _python_launcher() -> Tuple[str, ...]:
+    """Prefix that runs the harness's own Python scripts on this machine.
+
+    ``uv run`` is the documented path because it provisions the project
+    environment on machines that have uv; anywhere uv is absent the plan
+    degrades to the interpreter running this script, so the built steps
+    always describe commands that can actually execute on this host.
+    """
+    if shutil.which("uv") is not None:
+        return ("uv", "run")
+    return (sys.executable,)
+
+
+_PYTHON_LAUNCHER: Tuple[str, ...] = _python_launcher()
+
+
 def _git_text(repo_root: Path, args: Sequence[str]) -> str:
     """Run a git query and return its trimmed stdout, or an empty string on failure."""
     try:
@@ -104,7 +120,11 @@ def build_plan(repo_root: Path, base_sha: str) -> FastCheckPlan:
     file must keep running the self-tests - but the formatter lists feed
     file-argument tools (csharpier, prettier), which fail on missing paths.
     """
-    committed, working = _scan_paths_concurrently(repo_root, base_sha)
+    committed, working, scan_errors = _scan_paths_concurrently(repo_root, base_sha)
+    if scan_errors:
+        # A crashed scan cannot produce an honest plan: fail closed instead
+        # of classifying nothing and reporting success on zero checks.
+        raise SystemExit("fast-check: the change scan crashed: " + "; ".join(scan_errors))
     changed = sorted(set(committed + working))
     existing = [path for path in changed if (repo_root / path).exists()]
     test_files = tuple(path.name for path in sorted((Path(__file__).resolve().parent / "tests").glob("test-*.ps1")))
@@ -128,31 +148,40 @@ def build_plan(repo_root: Path, base_sha: str) -> FastCheckPlan:
     )
 
 
-def _scan_paths_concurrently(repo_root: Path, base_sha: str) -> Tuple[List[str], List[str]]:
+def _scan_paths_concurrently(repo_root: Path, base_sha: str) -> Tuple[List[str], List[str], List[str]]:
     """Run the committed and working-tree scans side by side.
 
     Both scans are independent read-only git queries, and on bind-mounted
     checkouts each costs about a second of filesystem time; running them
-    sequentially doubled the plan floor's wall time.
+    sequentially doubled the plan floor's wall time. A crashed scan is
+    recorded as an error instead of degrading to an empty list: an empty
+    plan built on a crashed scan would report success while checking
+    nothing.
     """
     committed: List[str] = []
     working: List[str] = []
+    errors: List[str] = []
     lock = threading.Lock()
 
-    def collect(target: List[str], producer: Callable[[], List[str]]) -> None:
-        result = producer()
+    def collect(target: List[str], producer: Callable[[], List[str]], label: str) -> None:
+        try:
+            result = producer()
+        except Exception as error:
+            with lock:
+                errors.append(f"{label}: {error!r}")
+            return
         with lock:
             target.extend(result)
 
     threads = [
-        threading.Thread(target=collect, args=(committed, lambda: committed_changed_files(repo_root, base_sha))),
-        threading.Thread(target=collect, args=(working, lambda: working_tree_changed_files(repo_root))),
+        threading.Thread(target=collect, args=(committed, lambda: committed_changed_files(repo_root, base_sha), "committed scan")),
+        threading.Thread(target=collect, args=(working, lambda: working_tree_changed_files(repo_root), "working-tree scan")),
     ]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
-    return committed, working
+    return committed, working, errors
 
 
 def plan_document(plan: FastCheckPlan) -> Dict[str, object]:
@@ -231,7 +260,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             CheckStep(
                 "harness.skills-index",
                 "skills index",
-                ("pwsh", "-NoProfile", "-File", "scripts/generate-skills-index.ps1"),
+                (*_PYTHON_LAUNCHER, "scripts/generate_skills_index.py"),
                 skills_dependencies,
             )
         )
@@ -248,7 +277,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             CheckStep(
                 "harness.llm-instructions",
                 ".llm instructions lint",
-                ("pwsh", "-NoProfile", "-File", "scripts/lint-llm-instructions.ps1"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_llm_instructions.py"),
                 ("harness.skills-index",),
             )
         )
@@ -256,7 +285,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             CheckStep(
                 "harness.file-lengths",
                 ".llm file-length lint",
-                ("pwsh", "-NoProfile", "-File", "scripts/lint-file-lengths.ps1"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_file_lengths.py"),
                 ("harness.skills-index",),
             )
         )
@@ -284,31 +313,17 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
         # The self-tests wait for the harness lints they verify; a drift
         # failure must not suppress them, so the drift check is not a
         # dependency and every failure still reaches the verdict.
-        if plan.self_tests_all:
-            tests.append(
-                CheckStep(
-                    "harness.self-tests",
-                    "harness self-tests",
-                    ("pwsh", "-NoProfile", "-File", "scripts/tests/run-all.ps1"),
-                    ("harness.llm-instructions", "harness.file-lengths"),
-                )
+        test_args: List[str] = [*_PYTHON_LAUNCHER, "scripts/tests/run_all.py"]
+        if not plan.self_tests_all:
+            test_args.extend(("--names", ",".join(plan.self_test_names)))
+        tests.append(
+            CheckStep(
+                "harness.self-tests",
+                "harness self-tests",
+                tuple(test_args),
+                ("harness.llm-instructions", "harness.file-lengths"),
             )
-        else:
-            tests.append(
-                CheckStep(
-                    "harness.self-tests",
-                    "harness self-tests",
-                    (
-                        "pwsh",
-                        "-NoProfile",
-                        "-File",
-                        "scripts/tests/run-all.ps1",
-                        "-Names",
-                        ",".join(plan.self_test_names),
-                    ),
-                    ("harness.llm-instructions", "harness.file-lengths"),
-                )
-            )
+        )
     return tuple(quick), tuple(tests)
 
 
@@ -386,6 +401,25 @@ class Runner:
                 thread.start()
             for thread in threads:
                 thread.join()
+            # Completeness belt: every expected step must have a recorded
+            # result before the verdict is computed; a thread that died
+            # without recording counts as failed, never as absent success.
+            recorded = {result.name for result in self._results}
+            for step in steps:
+                if step.name not in recorded:
+                    result = StepResult(
+                        step.name,
+                        0.0,
+                        None,
+                        False,
+                        failure="no result recorded; the step crashed before reporting",
+                    )
+                    with self._results_lock:
+                        self._results.append(result)
+                    with self._print_lock:
+                        print(f"[fast-check] FAIL {step.name} ({result.seconds:.1f}s)")
+                        print(f"[fast-check] ---- {step.name} ----")
+                        print(result.failure)
 
         failed = [result for result in self._results if not result.ok]
         if not failed:
@@ -395,21 +429,37 @@ class Runner:
         return 0 if not failed else 1
 
     def _run_step(self, step: CheckStep) -> None:
-        for dependency in step.after:
-            if dependency in self._events:
-                self._events[dependency].wait()
-        result = self._execute(step)
-        with self._results_lock:
-            self._results.append(result)
-        self._events[step.name].set()
-        with self._print_lock:
-            if result.ok:
-                print(f"[fast-check] ok   {step.name} ({result.seconds:.1f}s)")
-            else:
-                print(f"[fast-check] FAIL {step.name} ({result.seconds:.1f}s)")
-                if result.failure:
-                    print(f"[fast-check] ---- {step.name} ----")
-                    print(result.failure)
+        try:
+            for dependency in step.after:
+                if dependency in self._events:
+                    self._events[dependency].wait()
+            result: StepResult
+            try:
+                result = self._execute(step)
+            except Exception as error:
+                # A crashed step must record a failure: a dead thread that
+                # records nothing would let the fast check report success.
+                result = StepResult(
+                    step.name,
+                    0.0,
+                    None,
+                    False,
+                    failure=f"the step crashed before reporting: {error!r}",
+                )
+            with self._results_lock:
+                self._results.append(result)
+            with self._print_lock:
+                if result.ok:
+                    print(f"[fast-check] ok   {step.name} ({result.seconds:.1f}s)")
+                else:
+                    print(f"[fast-check] FAIL {step.name} ({result.seconds:.1f}s)")
+                    if result.failure:
+                        print(f"[fast-check] ---- {step.name} ----")
+                        print(result.failure)
+        finally:
+            # The event releases on every path so waiting steps unblock and
+            # the phase's completeness belt records any unexecuted step.
+            self._events[step.name].set()
 
     def _execute(self, step: CheckStep) -> StepResult:
         try:

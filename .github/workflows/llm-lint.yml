@@ -85,6 +85,31 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Shallow by default: the scope step fetches a missing base commit
+          # itself, so a full history clone only spends runner time.
+          fetch-depth: 1
+
+      # The lints and the self-test scope run through the system Python
+      # (issue #171). Resolution validates that the interpreter actually
+      # executes: the Windows python3 App-Execution-Alias stub exists on
+      # PATH but is not a working interpreter, and silently falling back to
+      # a garbage verdict would turn every Windows run into the full suite.
+      - name: Resolve the Python interpreter
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHON=""
+          for candidate in python3 python; do
+            if command -v "${candidate}" >/dev/null 2>&1 && "${candidate}" -c "" 2>/dev/null; then
+              PYTHON="${candidate}"
+              break
+            fi
+          done
+          if [ -z "${PYTHON}" ]; then
+            echo "::error::no working Python 3 interpreter found"
+            exit 1
+          fi
+          echo "PYTHON=${PYTHON}" >> "${GITHUB_ENV}"
 
       # The lint job only installs prettier; caching the npm download skips
       # most of the install on every run on both operating systems. The lock
@@ -103,7 +128,8 @@ jobs:
         run: npm run format:md:check
 
       - name: Lint LLM instructions
-        run: pwsh -NoProfile -File scripts/lint-llm-instructions.ps1 -VerboseOutput
+        shell: bash
+        run: ${PYTHON} scripts/lint_llm_instructions.py --verbose-output
 
       - name: Enforce C# member ordering
         run: node scripts/lint-csharp-member-order.js --verbose
@@ -136,11 +162,9 @@ jobs:
           if [ -n "${BASE_SHA}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ] && ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
             git fetch --depth=1 origin "${BASE_SHA}" || true
           fi
-          # The verdict script is stdlib-only typed Python (issue #171); the
-          # system interpreter avoids a uv bootstrap on every runner.
-          if command -v python3 >/dev/null 2>&1; then PYTHON=python3; else PYTHON=python; fi
-          verdict="$("$PYTHON" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}")"
-          selection="$("$PYTHON" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}" --selection)"
+          # The verdict script is stdlib-only typed Python (issue #171).
+          verdict="$("${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}")"
+          selection="$("${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}" --selection)"
           echo "self-tests=${verdict}" >> "${GITHUB_OUTPUT}"
           echo "selection=${selection}" >> "${GITHUB_OUTPUT}"
 
@@ -155,21 +179,23 @@ jobs:
         run: |
           selection="${{ steps.self-test-scope.outputs.selection }}"
           if [ "${selection}" = "all" ] || [ -z "${selection}" ]; then
-            pwsh -NoProfile -File scripts/tests/run-all.ps1
+            "${PYTHON}" scripts/tests/run_all.py
           else
-            pwsh -NoProfile -File scripts/tests/run-all.ps1 -Names "${selection}"
+            "${PYTHON}" scripts/tests/run_all.py --names "${selection}"
           fi
 
       - name: Enforce .llm file length limit
-        run: pwsh -NoProfile -File scripts/lint-file-lengths.ps1 -VerboseOutput
+        shell: bash
+        run: ${PYTHON} scripts/lint_file_lengths.py --verbose-output
 
       - name: Fail on skills index drift
-        shell: pwsh
+        shell: bash
         run: |
-          pwsh -NoProfile -File scripts/generate-skills-index.ps1
-          $status = git status --porcelain -- .llm/skills/index.md
-          if ($status) {
-            Write-Host "::error::.llm/skills/index.md is stale; run scripts/generate-skills-index.ps1 and commit the result."
-            Write-Host $status
+          set -euo pipefail
+          ${PYTHON} scripts/generate_skills_index.py
+          status="$(git status --porcelain -- .llm/skills/index.md)"
+          if [ -n "${status}" ]; then
+            echo "::error::.llm/skills/index.md is stale; run uv run scripts/generate_skills_index.py and commit the result."
+            echo "${status}"
             exit 1
-          }
+          fi

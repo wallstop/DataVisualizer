@@ -4,7 +4,7 @@
 The output is ``run`` or ``skip``: whether the harness self-test suite must
 execute for the changes between ``--base-sha`` and HEAD. CI's llm-lint
 workflow consults this before spending its slowest step
-(``scripts/tests/run-all.ps1``) on a change that cannot affect any self-test
+(``scripts/tests/run_all.py``) on a change that cannot affect any self-test
 outcome. With ``--selection`` the script instead prints ``all`` or the
 comma-joined self-test file names that cover the changed paths, so CI can
 run the same scoped selection the local fast check runs. Every verdict
