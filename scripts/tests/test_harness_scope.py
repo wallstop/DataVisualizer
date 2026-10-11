@@ -260,7 +260,7 @@ def case_selection_unions_subjects_across_paths(python: str) -> None:
     probe = invoke_scope_probe(python, "scripts/release/verify-release.mjs,scripts/release/validate-unitypackage.mjs")
     assert_true(not probe["selection"]["all"], "mapped subjects must not select the full suite")
     assert_true(
-        ",".join(probe["selection"]["names"]) == "test-validate-unitypackage.ps1,test-verify-release.ps1",
+        ",".join(probe["selection"]["names"]) == "test_validate_unitypackage.py,test_verify_release.py",
         f"the release subjects must union their test files sorted, got: {','.join(probe['selection']['names'])}",
     )
 

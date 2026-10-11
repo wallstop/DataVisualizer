@@ -23,7 +23,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence, Tuple
 
 _failure_count_value = 0
 
@@ -150,6 +150,38 @@ def find_python() -> str:
         if completed.returncode == 0:
             return resolved
     raise RuntimeError("the harness self-tests require a working Python 3 interpreter (python3 or python)")
+
+
+def find_node() -> str:
+    """Resolve the node runtime for driving the release pipeline scripts.
+
+    The release pipeline scripts (issue #171's remaining surface) are still
+    node programs while their self-tests port to typed Python; the tests
+    only exercise local modes that execute no registry or network work.
+    """
+    resolved = shutil.which("node")
+    if resolved is None:
+        raise RuntimeError("the release self-tests require node on PATH")
+    return resolved
+
+
+def run_tool_output(command: Sequence[str]) -> Tuple[str, int]:
+    """Run a child tool with all output merged, returning ``(output, exit code)``.
+
+    This mirrors the PowerShell originals' ``*>&1 | Out-String``: stdout and
+    stderr land in one string the assertions search, and the exit code
+    travels beside it. Line endings stay as the child wrote them, so
+    ``\\r?\\n``-tolerant patterns keep working on every platform.
+    """
+    completed = subprocess.run(
+        list(command),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    return ((completed.stdout or "") + (completed.stderr or "")), completed.returncode
 
 
 def new_llm_fixture_root(package_version: str = "1.2.3") -> Path:
