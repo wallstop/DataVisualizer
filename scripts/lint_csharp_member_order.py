@@ -1403,23 +1403,60 @@ def display_for(file: Path) -> str:
         return str(file).replace(os.sep, "/")
 
 
+def scoped_scanned(argv: List[str]) -> Optional[List[str]]:
+    """Resolve an explicit ``--paths`` scan list of display paths, or None for the walk.
+
+    The fast check passes the changed C# files so a two-file edit scans two
+    files instead of the tree; whole-tree stays the default for CI and the
+    pre-commit hook. Names are repository-relative or absolute. The
+    exclusion prefixes still apply, so a scoped verdict is exactly the
+    whole-tree verdict restricted to the named files, and a name that is
+    not a readable C# file fails closed: the scan can never quietly verify
+    nothing.
+    """
+    if "--paths" not in argv:
+        return None
+    names: List[str] = []
+    for item in argv[argv.index("--paths") + 1 :]:
+        if item.startswith("--"):
+            break
+        names.append(item)
+    if not names:
+        print("[csharp-member-order] --paths needs at least one file.", file=sys.stderr)
+        raise SystemExit(2)
+    scanned: List[str] = []
+    for name in names:
+        full_path = Path(name) if os.path.isabs(name) else REPO_ROOT / name
+        if full_path.suffix != ".cs" or not full_path.is_file():
+            print(f"[csharp-member-order] --paths entry is not a readable C# file: {name}", file=sys.stderr)
+            raise SystemExit(2)
+        relative = display_for(full_path)
+        if any(relative.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
+            continue
+        scanned.append(relative)
+    return sorted(scanned)
+
+
 def main(argv: List[str]) -> int:
     """Scan the roots and report every C# source policy violation."""
     fix = "--fix" in argv
     verbose = "--verbose" in argv
 
-    files: List[Path] = []
-    for root in SCAN_ROOTS:
-        source_files(Path(root) if os.path.isabs(root) else REPO_ROOT / root, files)
-    scanned = sorted(
-        relative
-        for relative in (display_for(file) for file in files)
-        if not any(relative.startswith(prefix) for prefix in EXCLUDED_PREFIXES)
-    )
-
-    if len(scanned) == 0:
-        print("[csharp-member-order] no C# files found; the scan roots are wrong.", file=sys.stderr)
-        return 1
+    explicit = scoped_scanned(argv)
+    if explicit is None:
+        files: List[Path] = []
+        for root in SCAN_ROOTS:
+            source_files(Path(root) if os.path.isabs(root) else REPO_ROOT / root, files)
+        scanned = sorted(
+            relative
+            for relative in (display_for(file) for file in files)
+            if not any(relative.startswith(prefix) for prefix in EXCLUDED_PREFIXES)
+        )
+        if len(scanned) == 0:
+            print("[csharp-member-order] no C# files found; the scan roots are wrong.", file=sys.stderr)
+            return 1
+    else:
+        scanned = explicit
 
     remaining: List[str] = []
     fixed_files = 0

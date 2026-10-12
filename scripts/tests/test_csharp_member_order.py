@@ -558,6 +558,44 @@ public sealed class KeepLoops
         remove_temp_root(root)
 
 
+def case_paths_scans_only_the_named_files() -> None:
+    root = new_temp_root(prefix="member-order-")
+    try:
+        write_fixture_file(root, "Ordered.cs", ORDERED_FIXTURE)
+        # The scoped verdict is the whole-tree verdict restricted to the
+        # named files: a clean named file passes even when the tree holds a
+        # violation elsewhere, and the violation names its file and line.
+        output, exit_code = invoke_member_order_lint(root, ("--paths", str(root / "Ordered.cs"), "--verbose"))
+        assert_exit_code(0, f"the named ordered file must pass: {output}", exit_code)
+        assert_true(
+            re.search(r"1 file\(s\) clean", output) is not None,
+            f"the scoped scan must cover only the named file: {output}",
+        )
+        write_fixture_file(
+            root,
+            "Unordered.cs",
+            """public sealed class UnorderedFixture
+{
+    private int hidden;
+
+    public int surface;
+}
+""",
+        )
+        output, exit_code = invoke_member_order_lint(root, ("--paths", str(root / "Unordered.cs")))
+        assert_exit_code(1, f"the named violating file must fail: {output}", exit_code)
+        assert_true(
+            re.search(r"Unordered\.cs:\d+", output, re.IGNORECASE) is not None,
+            f"the scoped scan must report the violation: {output}",
+        )
+        # A name that is not a readable C# file fails closed: the scan can
+        # never quietly verify nothing.
+        output, exit_code = invoke_member_order_lint(root, ("--paths", str(root / "Missing.cs")))
+        assert_exit_code(2, f"a missing --paths entry must fail closed: {output}", exit_code)
+    finally:
+        remove_temp_root(root)
+
+
 def main() -> int:
     print("== C# member-order self-tests ==")
 
@@ -582,6 +620,7 @@ def main() -> int:
     run_case("FixesTierOrderByExactPermutation", case_fixes_tier_order_by_exact_permutation)
     run_case("Fails_OnCountedArrayLoopWithUnusedIndex", case_fails_on_counted_array_loop_with_unused_index)
     run_case("Passes_CountedLoopsWhenTheIndexIsNeeded", case_passes_counted_loops_when_the_index_is_needed)
+    run_case("Paths_ScansOnlyTheNamedFiles", case_paths_scans_only_the_named_files)
 
     if failure_count() > 0:
         return 1

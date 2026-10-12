@@ -212,6 +212,34 @@ def case_fix_declines_barrier_regions_without_rewriting() -> None:
         remove_temp_root(root)
 
 
+def case_paths_scans_only_the_named_files() -> None:
+    root = new_temp_root(prefix="usings-")
+    try:
+        write_fixture_file(root, "Compliant.cs", COMPLIANT_FIXTURE)
+        write_fixture_file(root, "Misplaced.cs", MISPLACED_FIXTURE)
+        # The scoped verdict is the whole-tree verdict restricted to the
+        # named files: a clean named file passes even when the tree holds a
+        # violation elsewhere, and the scan count covers the name only.
+        output, exit_code = invoke_using_lint(root, ("--paths", str(root / "Compliant.cs"), "--verbose"))
+        assert_exit_code(0, f"the named compliant file must pass: {output}", exit_code)
+        assert_true(
+            "1 file(s) scanned" in output,
+            f"the scoped scan must count only the named file: {output}",
+        )
+        output, exit_code = invoke_using_lint(root, ("--paths", str(root / "Misplaced.cs")))
+        assert_exit_code(1, f"the named violating file must fail: {output}", exit_code)
+        assert_true(
+            re.search(r"Misplaced\.cs:2", output, re.IGNORECASE) is not None,
+            f"the scoped scan must report the violation: {output}",
+        )
+        # A name that is not a readable C# file fails closed: the scan can
+        # never quietly verify nothing.
+        output, exit_code = invoke_using_lint(root, ("--paths", str(root / "Missing.cs")))
+        assert_exit_code(2, f"a missing --paths entry must fail closed: {output}", exit_code)
+    finally:
+        remove_temp_root(root)
+
+
 def main() -> int:
     print("== C# using-placement self-tests ==")
 
@@ -221,6 +249,7 @@ def main() -> int:
     run_case("Ignores_CommentsStringsAndNonCSharpFiles", case_ignores_comments_strings_and_non_csharp_files)
     run_case("Fix_MovesUsingsInsideNamespaceAndRepairsExitCode", case_fix_moves_usings_inside_namespace_and_repairs_exit_code)
     run_case("Fix_DeclinesBarrierRegionsWithoutRewriting", case_fix_declines_barrier_regions_without_rewriting)
+    run_case("Paths_ScansOnlyTheNamedFiles", case_paths_scans_only_the_named_files)
 
     failures = failure_count()
     if failures > 0:

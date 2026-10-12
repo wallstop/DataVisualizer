@@ -168,6 +168,34 @@ def case_ignores_comments_strings_and_non_csharp_files() -> None:
         remove_temp_root(root)
 
 
+def case_paths_scans_only_the_named_files() -> None:
+    root = new_temp_root(prefix="null-assertions-")
+    try:
+        write_fixture_file(root, "Clean.cs", CLEAN_FIXTURE)
+        write_fixture_file(root, "Banned.cs", VIOLATING_FIXTURE)
+        # The scoped verdict is the whole-tree verdict restricted to the
+        # named files: a clean named file passes even when the tree holds a
+        # violation elsewhere, and the scan count covers the name only.
+        output, exit_code = invoke_null_assertion_lint(root, ("--paths", str(root / "Clean.cs"), "--verbose"))
+        assert_exit_code(0, f"the named clean file must pass: {output}", exit_code)
+        assert_true(
+            "1 file(s) scanned" in output,
+            f"the scoped scan must count only the named file: {output}",
+        )
+        output, exit_code = invoke_null_assertion_lint(root, ("--paths", str(root / "Banned.cs")))
+        assert_exit_code(1, f"the named violating file must fail: {output}", exit_code)
+        assert_true(
+            re.search(r"Banned\.cs:\d+", output, re.IGNORECASE) is not None,
+            f"the scoped scan must report the violation: {output}",
+        )
+        # A name that is not a readable C# file fails closed: the scan can
+        # never quietly verify nothing.
+        output, exit_code = invoke_null_assertion_lint(root, ("--paths", str(root / "Missing.cs")))
+        assert_exit_code(2, f"a missing --paths entry must fail closed: {output}", exit_code)
+    finally:
+        remove_temp_root(root)
+
+
 def main() -> int:
     print("== C# null-assertion self-tests ==")
 
@@ -175,6 +203,7 @@ def main() -> int:
     run_case("Fails_OnAssertIsNullAndIsNotNullWithLocations", case_fails_on_assert_is_null_and_is_not_null_with_locations)
     run_case("Fails_OnViolationsInNestedDirectories", case_fails_on_violations_in_nested_directories)
     run_case("Ignores_CommentsStringsAndNonCSharpFiles", case_ignores_comments_strings_and_non_csharp_files)
+    run_case("Paths_ScansOnlyTheNamedFiles", case_paths_scans_only_the_named_files)
 
     failures = failure_count()
     if failures > 0:

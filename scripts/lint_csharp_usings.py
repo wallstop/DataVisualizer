@@ -26,8 +26,10 @@ fixture text that mentions a misplaced ``using`` cannot fail the scan.
 preserving order. It declines files whose pre-namespace region holds
 anything besides comments, usings, and blank lines (for example ``#if``
 blocks), leaving those as manual barriers. '--verbose' also prints the
-scanned file count when clean. Exit codes: 0 = clean (or fixed clean),
-1 = at least one misplaced using remains.
+scanned file count when clean. '--paths' scans only the named C# files
+(the fast check's per-iteration loop; whole-tree stays the default for CI
+and the pre-commit hook). Exit codes: 0 = clean (or fixed clean), 1 = at
+least one misplaced using remains, 2 = usage error.
 """
 
 from __future__ import annotations
@@ -155,6 +157,40 @@ def list_csharp_files(root: str) -> List[ScannedFile]:
     return sorted(files, key=lambda file: str(file.display))
 
 
+def scoped_files(argv: List[str]) -> Optional[List[ScannedFile]]:
+    """Resolve an explicit ``--paths`` scan list, or None for the whole-tree walk.
+
+    The fast check passes the changed C# files so a two-file edit scans two
+    files instead of the tree; whole-tree stays the default for CI and the
+    pre-commit hook. Names are repository-relative or absolute. The
+    exclusion prefixes still apply, so a scoped verdict is exactly the
+    whole-tree verdict restricted to the named files, and a name that is
+    not a readable C# file fails closed: the scan can never quietly verify
+    nothing.
+    """
+    if "--paths" not in argv:
+        return None
+    names: List[str] = []
+    for item in argv[argv.index("--paths") + 1 :]:
+        if item.startswith("--"):
+            break
+        names.append(item)
+    if not names:
+        print("[csharp-usings] --paths needs at least one file.", file=sys.stderr)
+        raise SystemExit(2)
+    files: List[ScannedFile] = []
+    for name in names:
+        full_path = Path(name) if os.path.isabs(name) else REPO_ROOT / name
+        if full_path.suffix != ".cs" or not full_path.is_file():
+            print(f"[csharp-usings] --paths entry is not a readable C# file: {name}", file=sys.stderr)
+            raise SystemExit(2)
+        display = display_for(full_path)
+        if any(display.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
+            continue
+        files.append(ScannedFile(full_path=full_path, display=display))
+    return sorted(files, key=lambda file: str(file.display))
+
+
 def find_misplaced_using_lines(masked_lines: List[str]) -> Optional[List[int]]:
     """Return the indexes of misplaced usings, or None when the shape is sanctioned.
 
@@ -222,26 +258,34 @@ def main() -> int:
     violations: List[str] = []
     fixes: List[str] = []
     scanned = 0
-    for root in SCAN_ROOTS:
-        for file in list_csharp_files(root):
-            if any(file.display.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
+    explicit = scoped_files(sys.argv)
+    scannable: List[ScannedFile] = (
+        explicit
+        if explicit is not None
+        else [
+            file
+            for root in SCAN_ROOTS
+            for file in list_csharp_files(root)
+            if not any(file.display.startswith(prefix) for prefix in EXCLUDED_PREFIXES)
+        ]
+    )
+    for file in scannable:
+        scanned += 1
+        text = file.full_path.read_text(encoding="utf-8")
+        masked_lines = mask_noise(text).split("\n")
+        misplaced = find_misplaced_using_lines(masked_lines)
+        if misplaced is None or len(misplaced) == 0:
+            continue
+        if fix:
+            fixed = fix_file(text, masked_lines)
+            if fixed is not None:
+                file.full_path.write_text(fixed, encoding="utf-8", newline="")
+                fixes.append(str(file.display))
                 continue
-            scanned += 1
-            text = file.full_path.read_text(encoding="utf-8")
-            masked_lines = mask_noise(text).split("\n")
-            misplaced = find_misplaced_using_lines(masked_lines)
-            if misplaced is None or len(misplaced) == 0:
-                continue
-            if fix:
-                fixed = fix_file(text, masked_lines)
-                if fixed is not None:
-                    file.full_path.write_text(fixed, encoding="utf-8", newline="")
-                    fixes.append(str(file.display))
-                    continue
-                violations.append(f"{file.display}:{misplaced[0] + 1} (manual barrier; fix declined)")
-                continue
-            for index in misplaced:
-                violations.append(f"{file.display}:{index + 1}")
+            violations.append(f"{file.display}:{misplaced[0] + 1} (manual barrier; fix declined)")
+            continue
+        for index in misplaced:
+            violations.append(f"{file.display}:{index + 1}")
 
     if fix and len(fixes) > 0:
         for fixed in fixes:
