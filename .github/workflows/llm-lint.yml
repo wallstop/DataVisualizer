@@ -122,29 +122,16 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          resolvable=0
-          if [ -n "${BASE_SHA:-}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
-            resolvable=1
-          elif [ -n "${BASE_SHA:-}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]; then
+          if [ -n "${BASE_SHA:-}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ] && ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
             git fetch --depth=1 origin "${BASE_SHA}" || true
-            if git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
-              resolvable=1
-            fi
           fi
-          # The verdict script is stdlib-only typed Python (issue #171).
-          verdict="$("${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}")"
-          selection="$("${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}" --selection)"
-          echo "self-tests=${verdict}" >> "${GITHUB_OUTPUT}"
-          echo "selection=${selection}" >> "${GITHUB_OUTPUT}"
-          # Prettier reads the checked Markdown files, its config/ignore, and
-          # its pinned version; a diff that touches none of them cannot change
-          # the verdict, so the npm steps are skipped. An unresolvable base
-          # runs the check.
-          markdown=run
-          if [ "${resolvable}" = "1" ] && [ -z "$(git diff --name-only "${BASE_SHA}" HEAD -- '*.md' .prettierrc.json .prettierignore package.json)" ]; then
-            markdown=skip
-          fi
-          echo "markdown=${markdown}" >> "${GITHUB_OUTPUT}"
+          # The verdict script is stdlib-only typed Python (issue #171). One
+          # call prints all three fail-safe key=value verdicts; Prettier reads
+          # the checked Markdown files, its config/ignore, and its pinned
+          # version, so a diff that touches none of them cannot change that
+          # verdict and the npm steps are skipped. An unresolvable base runs
+          # everything it guards.
+          "${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}" --ci-verdicts >> "${GITHUB_OUTPUT}"
 
       # The lint job only installs prettier; caching the npm download skips
       # most of the install on every run on both operating systems. The lock
@@ -165,37 +152,24 @@ jobs:
         if: steps.check-scope.outputs.markdown != 'skip'
         run: npm run format:md:check
 
-      - name: Lint LLM instructions
+      # One step runs the whole read-only lint ladder: every GitHub step pays
+      # runner shell and action overhead, and these nine lints were the job's
+      # widest block after the suite. The commands are unchanged and each
+      # still prints its own verdict; the first failure fails the step, so
+      # later lints are skipped exactly as separate steps did.
+      - name: Run the repository lints
         shell: bash
-        run: ${PYTHON} scripts/lint_llm_instructions.py --verbose-output
-
-      - name: Enforce C# member ordering
-        shell: bash
-        run: ${PYTHON} scripts/lint_csharp_member_order.py --verbose
-
-      - name: Enforce explicit null assertions
-        shell: bash
-        run: ${PYTHON} scripts/lint_csharp_null_assertions.py --verbose
-
-      - name: Enforce namespace-scoped usings
-        shell: bash
-        run: ${PYTHON} scripts/lint_csharp_usings.py --verbose
-
-      - name: Enforce the release credential contract
-        shell: bash
-        run: ${PYTHON} scripts/lint_release_secrets.py --verbose
-
-      - name: Enforce the line-ending contract
-        shell: bash
-        run: ${PYTHON} scripts/lint_line_endings.py --verbose
-
-      - name: Enforce the changelog entry length cap
-        shell: bash
-        run: ${PYTHON} scripts/lint_changelog_length.py --verbose
-
-      - name: Enforce assembly warning policy
-        shell: bash
-        run: ${PYTHON} scripts/lint_assembly_warnings.py
+        run: |
+          set -euo pipefail
+          ${PYTHON} scripts/lint_llm_instructions.py --verbose-output
+          ${PYTHON} scripts/lint_csharp_member_order.py --verbose
+          ${PYTHON} scripts/lint_csharp_null_assertions.py --verbose
+          ${PYTHON} scripts/lint_csharp_usings.py --verbose
+          ${PYTHON} scripts/lint_release_secrets.py --verbose
+          ${PYTHON} scripts/lint_line_endings.py --verbose
+          ${PYTHON} scripts/lint_changelog_length.py --verbose
+          ${PYTHON} scripts/lint_assembly_warnings.py
+          ${PYTHON} scripts/lint_file_lengths.py --verbose-output
 
       # The self-tests only verify the harness surface (scripts, .llm, CI and
       # devcontainer wiring, package manifests). Skip them when that surface is
@@ -212,10 +186,6 @@ jobs:
           else
             "${PYTHON}" scripts/tests/run_all.py --names "${selection}"
           fi
-
-      - name: Enforce .llm file length limit
-        shell: bash
-        run: ${PYTHON} scripts/lint_file_lengths.py --verbose-output
 
       - name: Fail on skills index drift
         shell: bash

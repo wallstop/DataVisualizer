@@ -67,11 +67,13 @@ def scope_commit(repo: Path, files: Dict[str, str]) -> None:
     _git_output(repo, ["commit", "-q", "-m", "change"])
 
 
-def invoke_should_run(repo: Path, python: str, base_sha: str, selection: bool = False) -> str:
+def invoke_should_run(repo: Path, python: str, base_sha: str, selection: bool = False, ci_verdicts: bool = False) -> str:
     """Run the verdict wrapper and return its trimmed output."""
     arguments = [str(WRAPPER_PATH), "--repo-root", str(repo), "--base-sha", base_sha]
     if selection:
         arguments.append("--selection")
+    if ci_verdicts:
+        arguments.append("--ci-verdicts")
     completed = subprocess.run(
         [python, *arguments],
         capture_output=True,
@@ -364,6 +366,89 @@ def case_selection_output_falls_back_to_all_for_an_unmapped_commit(python: str) 
         remove_temp_root(repo)
 
 
+def parse_ci_verdicts(output: str) -> Dict[str, str]:
+    """Parse the --ci-verdicts key=value lines into a mapping."""
+    lines = [line for line in output.splitlines() if line.strip()]
+    assert_true(
+        len(lines) == 3,
+        f"the ci-verdicts mode must print three key=value lines, got: {output}",
+    )
+    pairs = dict(line.split("=", 1) for line in lines)
+    assert_true(
+        sorted(pairs) == ["markdown", "selection", "self-tests"],
+        f"the ci-verdicts keys must be self-tests, selection, and markdown, got: {output}",
+    )
+    return pairs
+
+
+# The --ci-verdicts mode feeds CI's scope step in one invocation: the three
+# fail-safe verdicts must all match the single-purpose modes' behavior.
+def case_ci_verdicts_skip_a_docs_only_commit(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        scope_commit(repo, {"README.md": "changed\n"})
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
+        assert_true(verdicts["self-tests"] == "skip", "a docs-only commit must skip the suite")
+        assert_true(verdicts["selection"] == "all", "a docs-only commit must fail safe to the full selection")
+        assert_true(verdicts["markdown"] == "run", "a README change must select the Prettier check")
+    finally:
+        remove_temp_root(repo)
+
+
+def case_ci_verdicts_skip_markdown_for_a_csharp_only_commit(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        scope_commit(repo, {"Editor/Foo.cs": "class Foo { }\n"})
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
+        assert_true(verdicts["self-tests"] == "skip", "a C#-only commit must skip the suite")
+        assert_true(verdicts["markdown"] == "skip", "a C#-only commit must skip the npm and Prettier steps")
+    finally:
+        remove_temp_root(repo)
+
+
+def case_ci_verdicts_run_for_a_scripts_commit(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        scope_commit(repo, {"scripts/fast_check.py": "# changed\n"})
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
+        assert_true(verdicts["self-tests"] == "run", "a scripts commit must run the suite")
+        assert_true(
+            verdicts["selection"] == "test_fast_check.py",
+            f"the scripts commit must select its subject test, got: {verdicts['selection']}",
+        )
+        assert_true(verdicts["markdown"] == "skip", "a scripts commit must skip the npm and Prettier steps")
+    finally:
+        remove_temp_root(repo)
+
+
+def case_ci_verdicts_flag_a_working_tree_markdown_edit(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        # Uncommitted, so only the working-tree scan can see it; the verdict
+        # reuses the selection's scans instead of a committed-only diff.
+        write_fixture_file(repo, "README.md", "uncommitted\n")
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
+        assert_true(verdicts["self-tests"] == "skip", "a README edit must still skip the suite")
+        assert_true(verdicts["markdown"] == "run", "a working-tree README edit must select the Prettier check")
+    finally:
+        remove_temp_root(repo)
+
+
+def case_ci_verdicts_fail_safe_when_the_base_cannot_be_resolved(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, "not-a-commit", ci_verdicts=True))
+        assert_true(verdicts["self-tests"] == "run", "an unusable base must run the suite")
+        assert_true(verdicts["selection"] == "all", "an unusable base must select the full suite")
+        assert_true(verdicts["markdown"] == "run", "an unusable base must run the Prettier check")
+    finally:
+        remove_temp_root(repo)
+
+
 def main() -> int:
     print("== Harness scope self-tests ==")
 
@@ -414,6 +499,14 @@ def main() -> int:
     run_case(
         "SelectionOutput_FallsBackToAllForAnUnmappedCommit",
         lambda: case_selection_output_falls_back_to_all_for_an_unmapped_commit(python),
+    )
+    run_case("CiVerdicts_SkipADocsOnlyCommit", lambda: case_ci_verdicts_skip_a_docs_only_commit(python))
+    run_case("CiVerdicts_SkipMarkdownForACSharpOnlyCommit", lambda: case_ci_verdicts_skip_markdown_for_a_csharp_only_commit(python))
+    run_case("CiVerdicts_RunForAScriptsCommit", lambda: case_ci_verdicts_run_for_a_scripts_commit(python))
+    run_case("CiVerdicts_FlagAWorkingTreeMarkdownEdit", lambda: case_ci_verdicts_flag_a_working_tree_markdown_edit(python))
+    run_case(
+        "CiVerdicts_FailSafeWhenTheBaseCannotBeResolved",
+        lambda: case_ci_verdicts_fail_safe_when_the_base_cannot_be_resolved(python),
     )
 
     failures = failure_count()
