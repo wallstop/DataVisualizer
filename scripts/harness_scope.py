@@ -72,16 +72,24 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint-release-secrets.js": ("test_release_secrets.py",),
     "scripts/run_unity_validation.py": ("test_run_unity_validation.py",),
     "scripts/install_host_errorprone_analyzers.py": ("test_host_errorprone_analyzers.py",),
+    "scripts/release/verify_release.py": ("test_verify_release.py",),
+    "scripts/release/validate_unitypackage.py": ("test_validate_unitypackage.py",),
+    "scripts/release/build_unitypackage.py": ("test_build_unitypackage.py", "test_validate_unitypackage.py"),
+    "scripts/release/tag_release.py": ("test_tag_release.py",),
+    "scripts/release/prepare_release.py": ("test_prepare_release.py",),
+    "scripts/release/extract_release_notes.py": ("test_extract_release_notes.py",),
+    "scripts/LlmConfig.psm1": ("test_lint_llm_instructions.py", "test_file_lengths.py", "test_generate_skills_index.py"),
+    # Retired PowerShell surfaces (issue #171) keep their entries so a
+    # deletion still selects the tests that verify the contract they used to
+    # own, instead of failing safe to the full suite.
+    # Retired node release scripts (issue #171) select their ported test
+    # files the same way.
     "scripts/release/verify-release.mjs": ("test_verify_release.py",),
     "scripts/release/validate-unitypackage.mjs": ("test_validate_unitypackage.py",),
     "scripts/release/build-unitypackage.mjs": ("test_build_unitypackage.py", "test_validate_unitypackage.py"),
     "scripts/release/tag-release.mjs": ("test_tag_release.py",),
     "scripts/release/prepare-release.mjs": ("test_prepare_release.py",),
     "scripts/release/extract-release-notes.mjs": ("test_extract_release_notes.py",),
-    "scripts/LlmConfig.psm1": ("test_lint_llm_instructions.py", "test_file_lengths.py", "test_generate_skills_index.py"),
-    # Retired PowerShell surfaces (issue #171) keep their entries so a
-    # deletion still selects the tests that verify the contract they used to
-    # own, instead of failing safe to the full suite.
     "scripts/generate-skills-index.ps1": ("test_generate_skills_index.py",),
     "scripts/lint-llm-instructions.ps1": ("test_lint_llm_instructions.py",),
     "scripts/lint-file-lengths.ps1": ("test_file_lengths.py",),

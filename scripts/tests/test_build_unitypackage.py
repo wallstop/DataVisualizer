@@ -3,7 +3,7 @@
 
 Every case from the PowerShell original is kept with the same name and
 assertions; only the driver language changed. The cases drive
-``scripts/release/build-unitypackage.mjs`` through node and inspect the
+``scripts/release/build_unitypackage.py`` as a Python child process and inspect the
 built tar the same way.
 """
 
@@ -23,7 +23,7 @@ from _test_helpers import (
     assert_exit_code,
     assert_true,
     failure_count,
-    find_node,
+    find_python,
     new_temp_root,
     remove_temp_root,
     run_case,
@@ -33,7 +33,7 @@ from _test_helpers import (
 
 TESTS_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = TESTS_DIR.parent
-BUILD_SCRIPT = SCRIPTS_DIR / "release" / "build-unitypackage.mjs"
+BUILD_SCRIPT = SCRIPTS_DIR / "release" / "build_unitypackage.py"
 
 LONG_NAME = "L" + "o" * 76 + "ng.cs"
 
@@ -115,8 +115,8 @@ def new_build_fixture(version: str = "0.0.38", package_json: Optional[str] = Non
     return root
 
 
-def invoke_build(node: str, root: Path, arguments: Sequence[str]) -> Tuple[str, int]:
-    return run_tool_output([node, str(BUILD_SCRIPT), "--root", str(root), *arguments])
+def invoke_build(python: str, root: Path, arguments: Sequence[str]) -> Tuple[str, int]:
+    return run_tool_output([python, str(BUILD_SCRIPT), "--root", str(root), *arguments])
 
 
 def get_fixture_file_hash(path: Path) -> str:
@@ -139,12 +139,12 @@ def get_archive_members(archive: Path) -> List[str]:
     return [line.strip() for line in (completed.stdout or "").splitlines() if line.strip()]
 
 
-def case_builds_deterministic_archive(node: str) -> None:
+def case_builds_deterministic_archive(python: str) -> None:
     root = new_build_fixture()
     try:
         first_output = root / "out-first"
         second_output = root / "out-second"
-        output, exit_code = invoke_build(node, root, ["--output", str(first_output)])
+        output, exit_code = invoke_build(python, root, ["--output", str(first_output)])
         assert_exit_code(0, "a valid fixture should build", exit_code)
         assert_true(
             "package_file: com.test.fixture-0.0.38.unitypackage" in output,
@@ -211,7 +211,7 @@ def case_builds_deterministic_archive(node: str) -> None:
             )
 
         second_output_archive = second_output / "com.test.fixture-0.0.38.unitypackage"
-        _, exit_code = invoke_build(node, root, ["--output", str(second_output)])
+        _, exit_code = invoke_build(python, root, ["--output", str(second_output)])
         assert_exit_code(0, "a second build should succeed", exit_code)
         assert_true(
             get_fixture_file_hash(archive) == get_fixture_file_hash(second_output_archive),
@@ -227,10 +227,10 @@ def case_builds_deterministic_archive(node: str) -> None:
         remove_temp_root(root)
 
 
-def case_writes_the_default_output_under_root_dist(node: str) -> None:
+def case_writes_the_default_output_under_root_dist(python: str) -> None:
     root = new_build_fixture()
     try:
-        output, exit_code = invoke_build(node, root, [])
+        output, exit_code = invoke_build(python, root, [])
         assert_exit_code(0, "the default invocation should build", exit_code)
         assert_true(
             (root / "dist/com.test.fixture-0.0.38.unitypackage").exists(),
@@ -240,13 +240,13 @@ def case_writes_the_default_output_under_root_dist(node: str) -> None:
         remove_temp_root(root)
 
 
-def case_fails_when_payload_file_has_no_meta_companion(node: str) -> None:
+def case_fails_when_payload_file_has_no_meta_companion(python: str) -> None:
     root = new_build_fixture()
     try:
         write_fixture_file(root, "Editor/B.cs", "// missing meta")
         git_spawn(root, "add", "-A")
         git_spawn(root, "commit", "--quiet", "-m", "Add unmetaed file")
-        output, exit_code = invoke_build(node, root, [])
+        output, exit_code = invoke_build(python, root, [])
         assert_exit_code(1, "a payload file without .meta should fail closed", exit_code)
         assert_true("no committed '.meta' companion" in output, f"error should explain the missing meta companion, got: {output}")
         assert_true("B.cs" in output, f"error should name the offending file, got: {output}")
@@ -255,7 +255,7 @@ def case_fails_when_payload_file_has_no_meta_companion(node: str) -> None:
         remove_temp_root(root)
 
 
-def case_fails_when_meta_targets_no_tracked_file(node: str) -> None:
+def case_fails_when_meta_targets_no_tracked_file(python: str) -> None:
     cases = [
         {"name": "orphan file meta", "relative_path": "Editor/Orphan.meta"},
         {"name": "orphan deep meta", "relative_path": "Editor/Orphan/Child.meta"},
@@ -266,7 +266,7 @@ def case_fails_when_meta_targets_no_tracked_file(node: str) -> None:
             write_fixture_file(root, str(case["relative_path"]), "meta: orphan")
             git_spawn(root, "add", "-A")
             git_spawn(root, "commit", "--quiet", "-m", "Add orphan meta")
-            output, exit_code = invoke_build(node, root, [])
+            output, exit_code = invoke_build(python, root, [])
             assert_exit_code(1, f"an orphan meta ({case['name']}) should fail closed", exit_code)
             assert_true(
                 "target neither a tracked file nor a directory" in output,
@@ -276,7 +276,7 @@ def case_fails_when_meta_targets_no_tracked_file(node: str) -> None:
             remove_temp_root(root)
 
 
-def case_fails_when_package_json_is_invalid_or_selects_nothing(node: str) -> None:
+def case_fails_when_package_json_is_invalid_or_selects_nothing(python: str) -> None:
     cases = [
         {
             "name": "empty files",
@@ -292,7 +292,7 @@ def case_fails_when_package_json_is_invalid_or_selects_nothing(node: str) -> Non
     for case in cases:
         root = new_build_fixture(package_json=case["package_json"])
         try:
-            output, exit_code = invoke_build(node, root, [])
+            output, exit_code = invoke_build(python, root, [])
             assert_exit_code(1, f"invalid package.json ({case['name']}) should fail", exit_code)
             assert_true(
                 case["pattern"] in output,
@@ -302,17 +302,17 @@ def case_fails_when_package_json_is_invalid_or_selects_nothing(node: str) -> Non
             remove_temp_root(root)
 
 
-def case_fails_when_root_is_not_a_repository(node: str) -> None:
+def case_fails_when_root_is_not_a_repository(python: str) -> None:
     root = new_build_fixture(no_git=True)
     try:
-        output, exit_code = invoke_build(node, root, [])
+        output, exit_code = invoke_build(python, root, [])
         assert_exit_code(1, "a non-git root should fail closed", exit_code)
         assert_true("not a git work tree" in output, f"error should explain the non-git root, got: {output}")
     finally:
         remove_temp_root(root)
 
 
-def case_rejects_invalid_arguments(node: str) -> None:
+def case_rejects_invalid_arguments(python: str) -> None:
     cases = [
         {"name": "unknown flag", "arguments": ["--bump", "patch"]},
         {"name": "flag without value", "arguments": ["--output"]},
@@ -320,20 +320,20 @@ def case_rejects_invalid_arguments(node: str) -> None:
     for case in cases:
         root = new_build_fixture()
         try:
-            output, exit_code = invoke_build(node, root, case["arguments"])
+            output, exit_code = invoke_build(python, root, case["arguments"])
             assert_exit_code(1, f"invalid arguments ({case['name']}) should fail", exit_code)
             assert_true("error: " in output, f"output should carry the error prefix ({case['name']}), got: {output}")
         finally:
             remove_temp_root(root)
 
 
-def case_fails_when_used_meta_carries_no_guid_field(node: str) -> None:
+def case_fails_when_used_meta_carries_no_guid_field(python: str) -> None:
     root = new_build_fixture()
     try:
         write_fixture_file(root, "Editor/A.cs.meta", "meta without guid")
         git_spawn(root, "add", "-A")
         git_spawn(root, "commit", "--quiet", "-m", "Drop guid field")
-        output, exit_code = invoke_build(node, root, [])
+        output, exit_code = invoke_build(python, root, [])
         assert_exit_code(1, "a used meta without a guid field should fail closed", exit_code)
         assert_true("no well-formed 'guid:' field" in output, f"error should explain the missing guid field, got: {output}")
         assert_true("A.cs.meta" in output, f"error should name the offending meta, got: {output}")
@@ -341,13 +341,13 @@ def case_fails_when_used_meta_carries_no_guid_field(node: str) -> None:
         remove_temp_root(root)
 
 
-def case_fails_when_two_metas_carry_the_same_guid(node: str) -> None:
+def case_fails_when_two_metas_carry_the_same_guid(python: str) -> None:
     root = new_build_fixture()
     try:
         write_fixture_file(root, "Editor/A.cs.meta", new_meta_content(README_META_GUID))
         git_spawn(root, "add", "-A")
         git_spawn(root, "commit", "--quiet", "-m", "Duplicate a guid")
-        output, exit_code = invoke_build(node, root, [])
+        output, exit_code = invoke_build(python, root, [])
         assert_exit_code(1, "a duplicated guid should fail closed", exit_code)
         assert_true("reuses guid" in output, f"error should explain the duplicate guid, got: {output}")
         assert_true(README_META_GUID in output, f"error should name the duplicated guid, got: {output}")
@@ -358,17 +358,17 @@ def case_fails_when_two_metas_carry_the_same_guid(node: str) -> None:
 def main() -> int:
     print("== build-unitypackage self-tests ==")
 
-    node = find_node()
+    python = find_python()
 
-    run_case("Builds_DeterministicArchive_WithStandardGuidEntries", lambda: case_builds_deterministic_archive(node))
-    run_case("Writes_The_Default_Output_Under_Root_Dist", lambda: case_writes_the_default_output_under_root_dist(node))
-    run_case("Fails_When_PayloadFileHasNoMetaCompanion", lambda: case_fails_when_payload_file_has_no_meta_companion(node))
-    run_case("Fails_When_MetaTargetsNoTrackedFileOrDirectory", lambda: case_fails_when_meta_targets_no_tracked_file(node))
-    run_case("Fails_When_PackageJsonIsInvalidOrSelectsNothing", lambda: case_fails_when_package_json_is_invalid_or_selects_nothing(node))
-    run_case("Fails_When_RootIsNotARepository", lambda: case_fails_when_root_is_not_a_repository(node))
-    run_case("Rejects_InvalidArguments", lambda: case_rejects_invalid_arguments(node))
-    run_case("Fails_When_UsedMetaCarriesNoGuidField", lambda: case_fails_when_used_meta_carries_no_guid_field(node))
-    run_case("Fails_When_TwoMetasCarryTheSameGuid", lambda: case_fails_when_two_metas_carry_the_same_guid(node))
+    run_case("Builds_DeterministicArchive_WithStandardGuidEntries", lambda: case_builds_deterministic_archive(python))
+    run_case("Writes_The_Default_Output_Under_Root_Dist", lambda: case_writes_the_default_output_under_root_dist(python))
+    run_case("Fails_When_PayloadFileHasNoMetaCompanion", lambda: case_fails_when_payload_file_has_no_meta_companion(python))
+    run_case("Fails_When_MetaTargetsNoTrackedFileOrDirectory", lambda: case_fails_when_meta_targets_no_tracked_file(python))
+    run_case("Fails_When_PackageJsonIsInvalidOrSelectsNothing", lambda: case_fails_when_package_json_is_invalid_or_selects_nothing(python))
+    run_case("Fails_When_RootIsNotARepository", lambda: case_fails_when_root_is_not_a_repository(python))
+    run_case("Rejects_InvalidArguments", lambda: case_rejects_invalid_arguments(python))
+    run_case("Fails_When_UsedMetaCarriesNoGuidField", lambda: case_fails_when_used_meta_carries_no_guid_field(python))
+    run_case("Fails_When_TwoMetasCarryTheSameGuid", lambda: case_fails_when_two_metas_carry_the_same_guid(python))
 
     failures = failure_count()
     print(f"== build-unitypackage: {failures} failure(s) ==")

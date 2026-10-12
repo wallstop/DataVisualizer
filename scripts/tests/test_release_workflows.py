@@ -4,7 +4,7 @@
 Every case from the PowerShell original is kept with the same name and
 assertions; only the driver language changed. The workflow text is read
 once at start like the original, and the end-to-end release-chain case
-drives the same node scripts over a git fixture.
+drives the same release scripts over a git fixture.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from _test_helpers import (
     assert_exit_code,
     assert_true,
     failure_count,
-    find_node,
+    find_python,
     new_temp_root,
     remove_temp_root,
     run_case,
@@ -62,9 +62,9 @@ def git_spawn(root: Path, *arguments: str) -> int:
     return completed.returncode
 
 
-def node_spawn(node: str, script: Path, *arguments: str) -> int:
+def python_spawn(python: str, script: Path, *arguments: str) -> int:
     """Run a release script whose output flows to the test log, like the original."""
-    completed = subprocess.run([node, str(script), *arguments], check=False)
+    completed = subprocess.run([python, str(script), *arguments], check=False)
     return completed.returncode
 
 
@@ -103,14 +103,14 @@ def case_rehearses_without_publishing() -> None:
 def case_validates_prepared_tree_even_during_dry_run() -> None:
     assert_true(re.search(r"args\+=\(--dry-run\)", prep, re.IGNORECASE) is None, "Runner must validate the bumped tree in a rehearsal.")
     assert_true(
-        "extract-release-notes.mjs" in prep and "validate-unitypackage.mjs" in prep,
+        "extract_release_notes.py" in prep and "validate_unitypackage.py" in prep,
         "Preparation must validate the future release notes and Unity archive.",
     )
     assert_true("later release-automation slices" not in prep, "Release PR must describe the implemented chain.")
     assert_true("--body-file" in prep, "Release PR body must use a file.")
 
 
-def case_prepares_tags_and_builds_a_complete_release(node: str) -> None:
+def case_prepares_tags_and_builds_a_complete_release(python: str) -> None:
     root = new_temp_root(prefix="release-chain-")
     try:
         write_fixture_file(
@@ -131,29 +131,29 @@ def case_prepares_tags_and_builds_a_complete_release(node: str) -> None:
         git_spawn(root, "add", "-A")
         exit_code = git_spawn(root, "commit", "--quiet", "-m", "Initial fixture")
         assert_exit_code(0, "fixture commit", exit_code)
-        exit_code = node_spawn(node, RELEASE_SCRIPTS / "prepare-release.mjs", "--root", str(root), "--bump", "patch")
+        exit_code = python_spawn(python, RELEASE_SCRIPTS / "prepare_release.py", "--root", str(root), "--bump", "patch")
         assert_exit_code(0, "prepare candidate", exit_code)
         git_spawn(root, "add", "-A")
         exit_code = git_spawn(root, "commit", "--quiet", "-m", "Prepare release")
         assert_exit_code(0, "candidate commit", exit_code)
-        exit_code = node_spawn(node, RELEASE_SCRIPTS / "tag-release.mjs", "--root", str(root), "--branch", "release/v1.2.4")
+        exit_code = python_spawn(python, RELEASE_SCRIPTS / "tag_release.py", "--root", str(root), "--branch", "release/v1.2.4")
         assert_exit_code(0, "create annotated release tag", exit_code)
         kind, _ = git_capture(root, "cat-file", "-t", "refs/tags/v1.2.4")
         assert_true(kind == "tag", "Release tag must be annotated.")
-        exit_code = node_spawn(node, RELEASE_SCRIPTS / "verify-release.mjs", "--root", str(root), "--tag", "v1.2.4")
+        exit_code = python_spawn(python, RELEASE_SCRIPTS / "verify_release.py", "--root", str(root), "--tag", "v1.2.4")
         assert_exit_code(0, "pack and validate npm payload", exit_code)
         dist = root / "dist"
-        exit_code = node_spawn(node, RELEASE_SCRIPTS / "build-unitypackage.mjs", "--root", str(root), "--output", str(dist))
+        exit_code = python_spawn(python, RELEASE_SCRIPTS / "build_unitypackage.py", "--root", str(root), "--output", str(dist))
         assert_exit_code(0, "build Unity archive", exit_code)
         archive = dist / "com.test.fixture-1.2.4.unitypackage"
-        exit_code = node_spawn(node, RELEASE_SCRIPTS / "validate-unitypackage.mjs", "--root", str(root), "--archive", str(archive))
+        exit_code = python_spawn(python, RELEASE_SCRIPTS / "validate_unitypackage.py", "--root", str(root), "--archive", str(archive))
         assert_exit_code(0, "validate Unity archive against tracked tree", exit_code)
         first_hash = sha256_text(archive)
-        exit_code = node_spawn(node, RELEASE_SCRIPTS / "build-unitypackage.mjs", "--root", str(root), "--output", str(dist))
+        exit_code = python_spawn(python, RELEASE_SCRIPTS / "build_unitypackage.py", "--root", str(root), "--output", str(dist))
         assert_exit_code(0, "repeat archive build", exit_code)
         assert_true(sha256_text(archive).lower() == first_hash.lower(), "Rebuilding the same release must reproduce its Unity archive.")
         notes = dist / "release-notes.md"
-        exit_code = node_spawn(node, RELEASE_SCRIPTS / "extract-release-notes.mjs", "--root", str(root), "--version", "1.2.4", "--output", str(notes))
+        exit_code = python_spawn(python, RELEASE_SCRIPTS / "extract_release_notes.py", "--root", str(root), "--version", "1.2.4", "--output", str(notes))
         assert_exit_code(0, "extract release notes", exit_code)
         assert_true("Fix asset selection" in notes.read_text(encoding="utf-8"), "GitHub notes must contain the rotated changelog entry.")
         assert_true((root / "com.test.fixture-1.2.4.tgz").exists(), "npm archive must be ready for publication.")
@@ -163,13 +163,13 @@ def case_prepares_tags_and_builds_a_complete_release(node: str) -> None:
 
 
 def main() -> int:
-    node = find_node()
+    python = find_python()
 
     run_case("Uses_OneReleaseWorkflow_WithBuiltInAuthentication", case_uses_one_release_workflow)
     run_case("Validates_AllArtifacts_BeforeNpmPublication", case_validates_all_artifacts_before_npm_publication)
     run_case("Rehearses_WithoutPublishing", case_rehearses_without_publishing)
     run_case("Validates_PreparedTree_EvenDuringDryRun", case_validates_prepared_tree_even_during_dry_run)
-    run_case("Prepares_Tags_AndBuilds_ACompleteRelease", lambda: case_prepares_tags_and_builds_a_complete_release(node))
+    run_case("Prepares_Tags_AndBuilds_ACompleteRelease", lambda: case_prepares_tags_and_builds_a_complete_release(python))
 
     if failure_count() > 0:
         return 1

@@ -90,7 +90,7 @@ jobs:
           else
             args+=(--bump "${BUMP}")
           fi
-          output="$(node scripts/release/prepare-release.mjs "${args[@]}")"
+          output="$(python3 scripts/release/prepare_release.py "${args[@]}")"
           printf '%s\n' "${output}"
           previous_version="$(printf '%s\n' "${output}" | sed -n 's/^previous-version: //p')"
           version="$(printf '%s\n' "${output}" | sed -n 's/^next-version: //p')"
@@ -110,11 +110,11 @@ jobs:
           npm run lint:llm
           npm pack --dry-run
           candidate_dir="$(mktemp -d "${RUNNER_TEMP}/release-candidate.XXXXXX")"
-          node scripts/release/build-unitypackage.mjs --output "${candidate_dir}"
+          python3 scripts/release/build_unitypackage.py --output "${candidate_dir}"
           archive="${candidate_dir}/$(node -p "require('./package.json').name + '-' + require('./package.json').version + '.unitypackage'")"
-          node scripts/release/validate-unitypackage.mjs --archive "${archive}"
+          python3 scripts/release/validate_unitypackage.py --archive "${archive}"
           version="$(node -p "require('./package.json').version")"
-          node scripts/release/extract-release-notes.mjs --version "${version}" --output "${candidate_dir}/release-notes.md"
+          python3 scripts/release/extract_release_notes.py --version "${version}" --output "${candidate_dir}/release-notes.md"
 
       - name: Commit and push the release branch
         if: ${{ inputs.dry_run == false }}
@@ -267,7 +267,7 @@ jobs:
               exit 1
             }
           else
-            node scripts/release/tag-release.mjs --branch "${BRANCH}"
+            python3 scripts/release/tag_release.py --branch "${BRANCH}"
           fi
           git push origin "refs/tags/${TAG}"
 
@@ -280,7 +280,7 @@ jobs:
           TAG: ${{ steps.resolve.outputs.tag }}
         run: |
           set -euo pipefail
-          output="$(node scripts/release/verify-release.mjs --tag "${TAG}")"
+          output="$(python3 scripts/release/verify_release.py --tag "${TAG}")"
           printf '%s\n' "${output}"
           for key in pkg version npm_tag package_file entries; do
             value="$(printf '%s\n' "${output}" | sed -n "s/^${key}: //p")"
@@ -306,7 +306,7 @@ jobs:
       - name: Build the release .unitypackage
         run: |
           set -euo pipefail
-          node scripts/release/build-unitypackage.mjs --output dist
+          python3 scripts/release/build_unitypackage.py --output dist
           ls dist
 
       - name: Validate the release .unitypackage
@@ -317,7 +317,7 @@ jobs:
             echo "::error::The builder produced no .unitypackage."
             exit 1
           fi
-          node scripts/release/validate-unitypackage.mjs --archive "${archive}"
+          python3 scripts/release/validate_unitypackage.py --archive "${archive}"
 
       - name: Prepare release notes and the npm tarball checksum
         id: artifacts
@@ -327,7 +327,7 @@ jobs:
           PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
         run: |
           set -euo pipefail
-          node scripts/release/extract-release-notes.mjs --version "${VERSION}" --output dist/release-notes.md
+          python3 scripts/release/extract_release_notes.py --version "${VERSION}" --output dist/release-notes.md
           if [ ! -f "${PACKAGE_FILE}" ]; then
             echo "::error::Expected the npm tarball '${PACKAGE_FILE}' in the repository root."
             exit 1

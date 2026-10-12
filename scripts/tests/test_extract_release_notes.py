@@ -3,7 +3,7 @@
 
 Every case from the PowerShell original is kept with the same name and
 assertions; only the driver language changed. The cases drive
-``scripts/release/extract-release-notes.mjs`` through node the same way.
+``scripts/release/extract_release_notes.py`` as Python child processes the same way.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from _test_helpers import (
     assert_exit_code,
     assert_true,
     failure_count,
-    find_node,
+    find_python,
     new_temp_root,
     remove_temp_root,
     run_case,
@@ -29,7 +29,7 @@ from _test_helpers import (
 
 TESTS_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = TESTS_DIR.parent
-EXTRACT_SCRIPT = SCRIPTS_DIR / "release" / "extract-release-notes.mjs"
+EXTRACT_SCRIPT = SCRIPTS_DIR / "release" / "extract_release_notes.py"
 
 VALID_CHANGELOG = (
     "# Changelog\n"
@@ -64,14 +64,14 @@ def new_notes_fixture(changelog: str) -> Path:
     return root
 
 
-def invoke_extract(node: str, root: Path, arguments: Sequence[str]) -> Tuple[str, int]:
-    return run_tool_output([node, str(EXTRACT_SCRIPT), "--root", str(root), *arguments])
+def invoke_extract(python: str, root: Path, arguments: Sequence[str]) -> Tuple[str, int]:
+    return run_tool_output([python, str(EXTRACT_SCRIPT), "--root", str(root), *arguments])
 
 
-def case_extracts_exact_version_body(node: str) -> None:
+def case_extracts_exact_version_body(python: str) -> None:
     root = new_notes_fixture(VALID_CHANGELOG)
     try:
-        output, exit_code = invoke_extract(node, root, ["--version", "0.0.38"])
+        output, exit_code = invoke_extract(python, root, ["--version", "0.0.38"])
         assert_exit_code(0, "a present version section should extract", exit_code)
         assert_true("The released feature." in output, f"should include the added bullet, got: {output}")
         assert_true("A repair." in output, f"should include the fixed bullet, got: {output}")
@@ -81,20 +81,20 @@ def case_extracts_exact_version_body(node: str) -> None:
         remove_temp_root(root)
 
 
-def case_fails_closed_on_missing_section(node: str) -> None:
+def case_fails_closed_on_missing_section(python: str) -> None:
     root = new_notes_fixture(VALID_CHANGELOG)
     try:
-        output, exit_code = invoke_extract(node, root, ["--version", "9.9.9"])
+        output, exit_code = invoke_extract(python, root, ["--version", "9.9.9"])
         assert_exit_code(1, "a missing section should fail", exit_code)
         assert_true("no '## [9.9.9]' section" in output, f"should name the missing section, got: {output}")
     finally:
         remove_temp_root(root)
 
 
-def case_fails_closed_on_duplicate_section(node: str) -> None:
+def case_fails_closed_on_duplicate_section(python: str) -> None:
     root = new_notes_fixture(VALID_CHANGELOG + "\n## [0.0.38] - 2026-10-03\n\nDuplicate.\n")
     try:
-        output, exit_code = invoke_extract(node, root, ["--version", "0.0.38"])
+        output, exit_code = invoke_extract(python, root, ["--version", "0.0.38"])
         assert_exit_code(1, "a duplicated section should fail", exit_code)
         assert_true(
             re.search(r"2 .## \[0\.0\.38\]. sections", output) is not None,
@@ -104,30 +104,30 @@ def case_fails_closed_on_duplicate_section(node: str) -> None:
         remove_temp_root(root)
 
 
-def case_fails_closed_on_empty_section(node: str) -> None:
+def case_fails_closed_on_empty_section(python: str) -> None:
     root = new_notes_fixture("## [0.0.38] - 2026-10-02\n\n## [0.0.37] - 2026-09-10\n")
     try:
-        output, exit_code = invoke_extract(node, root, ["--version", "0.0.38"])
+        output, exit_code = invoke_extract(python, root, ["--version", "0.0.38"])
         assert_exit_code(1, "an empty section should fail", exit_code)
         assert_true("is empty" in output, f"should report the empty section, got: {output}")
     finally:
         remove_temp_root(root)
 
 
-def case_rejects_leading_v(node: str) -> None:
+def case_rejects_leading_v(python: str) -> None:
     root = new_notes_fixture(VALID_CHANGELOG)
     try:
-        output, exit_code = invoke_extract(node, root, ["--version", "v0.0.38"])
+        output, exit_code = invoke_extract(python, root, ["--version", "v0.0.38"])
         assert_exit_code(1, "a v-prefixed version should fail", exit_code)
         assert_true("bare package version" in output, f"should explain the expected shape, got: {output}")
     finally:
         remove_temp_root(root)
 
 
-def case_writes_notes_to_output_file(node: str) -> None:
+def case_writes_notes_to_output_file(python: str) -> None:
     root = new_notes_fixture(VALID_CHANGELOG)
     try:
-        _, exit_code = invoke_extract(node, root, ["--version", "0.0.38", "--output", "release-notes.md"])
+        _, exit_code = invoke_extract(python, root, ["--version", "0.0.38", "--output", "release-notes.md"])
         assert_exit_code(0, "an output path should write successfully", exit_code)
         notes_path = root / "release-notes.md"
         assert_true(notes_path.exists(), "the notes file should exist")
@@ -140,14 +140,14 @@ def case_writes_notes_to_output_file(node: str) -> None:
 def main() -> int:
     print("== extract-release-notes self-tests ==")
 
-    node = find_node()
+    python = find_python()
 
-    run_case("Extracts_ExactVersionBody", lambda: case_extracts_exact_version_body(node))
-    run_case("FailsClosed_OnMissingSection", lambda: case_fails_closed_on_missing_section(node))
-    run_case("FailsClosed_OnDuplicateSection", lambda: case_fails_closed_on_duplicate_section(node))
-    run_case("FailsClosed_OnEmptySection", lambda: case_fails_closed_on_empty_section(node))
-    run_case("Rejects_LeadingV", lambda: case_rejects_leading_v(node))
-    run_case("WritesNotesToOutputFile", lambda: case_writes_notes_to_output_file(node))
+    run_case("Extracts_ExactVersionBody", lambda: case_extracts_exact_version_body(python))
+    run_case("FailsClosed_OnMissingSection", lambda: case_fails_closed_on_missing_section(python))
+    run_case("FailsClosed_OnDuplicateSection", lambda: case_fails_closed_on_duplicate_section(python))
+    run_case("FailsClosed_OnEmptySection", lambda: case_fails_closed_on_empty_section(python))
+    run_case("Rejects_LeadingV", lambda: case_rejects_leading_v(python))
+    run_case("WritesNotesToOutputFile", lambda: case_writes_notes_to_output_file(python))
     return failure_count()
 
 
