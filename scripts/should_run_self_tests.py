@@ -50,6 +50,7 @@ from harness_scope import (
     available_test_files,
     committed_changed_files,
     is_surface_path,
+    markdown_paths_changed,
     self_test_selection,
     working_tree_changed_files,
 )
@@ -108,14 +109,6 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     return options
 
 
-def _markdown_paths_changed(paths: Sequence[str]) -> bool:
-    """Return whether any changed path can affect the checked Markdown formatting."""
-    for path in paths:
-        if path.endswith(".md") or path in (".prettierrc.json", ".prettierignore", "package.json"):
-            return True
-    return False
-
-
 def print_ci_verdicts(repo_root: Path, base_sha: Optional[str]) -> None:
     """Print the three key=value verdicts CI's llm-lint scope step consumes.
 
@@ -135,7 +128,7 @@ def print_ci_verdicts(repo_root: Path, base_sha: Optional[str]) -> None:
     selection = self_test_selection(paths, available_test_files())
     print("self-tests=run" if any(is_surface_path(path) for path in paths) else "self-tests=skip")
     print("selection=all" if selection.all else "selection=" + ",".join(selection.names))
-    print("markdown=run" if _markdown_paths_changed(paths) else "markdown=skip")
+    print("markdown=run" if markdown_paths_changed(paths) else "markdown=skip")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

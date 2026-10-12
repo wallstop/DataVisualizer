@@ -168,6 +168,22 @@ def normalize_relative_path(path: str) -> str:
     return normalized.lstrip("/")
 
 
+def markdown_paths_changed(paths: Sequence[str]) -> bool:
+    """Return whether any changed path can affect the checked Markdown formatting.
+
+    Any changed ``.md`` file counts, plus the Prettier configuration, ignore
+    list, and the package manifest that pins the formatter. CI's llm-lint
+    scope step and the gate's Markdown-format step share this predicate so a
+    change that cannot affect the checked Markdown skips the formatter in
+    both places with identical semantics.
+    """
+    for path in paths:
+        normalized = normalize_relative_path(path)
+        if normalized.endswith(".md") or normalized in (".prettierrc.json", ".prettierignore", "package.json"):
+            return True
+    return False
+
+
 def is_surface_path(path: str) -> bool:
     """Return whether a path sits on the surface the self-tests verify."""
     normalized = normalize_relative_path(path)
