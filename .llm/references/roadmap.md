@@ -144,9 +144,9 @@ Done when: one local command regenerates the documented image inventory with rep
 Delivered: MkDocs Material foundation with strict build and Pages publishing workflow (#130), guide pages for search/filtering, asset management, organizing, and extending (#134).
 
 - [x] README hero imagery from the capture pipeline (#140, #143); README stays concise and links into the site.
-- [ ] Troubleshooting page (incomplete indexing, stale metadata, missing scripts, small windows, capture limits, host/container paths).
+- [x] Troubleshooting page (incomplete indexing, stale metadata, missing scripts, small windows, capture limits, host/container paths) (#145).
 - [ ] Measured performance section once T01 produces numbers; captures embedded with captions and alt text, validated against the manifest.
-- [ ] Odin behavior documented separately from the default inspector contract.
+- [x] Odin behavior documented separately from the default inspector contract (docs/extending.md, #134).
 
 Done when: the published site is accurate with working examples and complete screenshots; unavailable publication access is reported explicitly.
 
