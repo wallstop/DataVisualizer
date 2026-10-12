@@ -42,6 +42,12 @@ scripts/                         PowerShell automation for this .llm harness
 .devcontainer/                   VS Code devcontainer (agent CLIs, Z.ai backends, MCP sync)
 ```
 
+## Known host churn
+
+- The nine tracked `docs/images/**` SVG `.meta` files rewrite on every Unity 6000.5 host session: the host flips them to its full Vector Graphics `ScriptedImporter` form, while the
+  committed `DefaultImporter` form stays because the package floor is Unity 2021.3 (#193). This is accepted host churn, like the `__pycache__.meta` note in `.gitignore`: restore
+  the files (`git checkout -- docs/`) instead of committing the rewrite.
+
 ## Skills Reference
 
 See the generated [Skills Index](./skills/index.md). Regenerate it after adding or editing any skill with `uv run scripts/generate_skills_index.py` (validated by
