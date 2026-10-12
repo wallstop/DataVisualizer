@@ -32,7 +32,7 @@ versions keep working (bounded offline checks with `--offline-ok`).
 
 ## Credentials: `.env.local` first
 
-Secrets live in a gitignored `.env.local` at the workspace root (template: `.env.local.example`). `on-create.sh` bootstraps it (auto-generating `UNITY_MCP_TOKEN`) and sources it
+Secrets live in a gitignored `.env.local` at the workspace root (template: `.env.local.example`). `on_create.py` bootstraps it (auto-generating `UNITY_MCP_TOKEN`) and sources it
 into every interactive shell via a marker- delimited `~/.bashrc` block. The gateway launchers additionally **self-load `.env.local`** (workspace root beside the script, then the
 current directory, or `AI_BACKENDS_ENV_FILE`), so agent Bash tools, tasks, and CI — which skip rc files — resolve credentials too. Variables already exported in the environment
 always win over the file. `remoteEnv` additionally forwards `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_TOKEN`, `ZAI_API_KEY`, and `OPENROUTER_API_KEY` from the host shell as

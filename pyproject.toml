@@ -10,7 +10,7 @@ dependencies = []
 # review gate (scripts/gate.py) is the first member.
 
 [tool.pyright]
-include = ["scripts"]
+include = ["scripts", ".devcontainer"]
 typeCheckingMode = "strict"
 pythonVersion = "3.9"
 reportMissingImports = true
