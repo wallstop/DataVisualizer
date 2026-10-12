@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 """Runner contract self-tests (typed Python port of ``test-run-all.ps1``, issue #171).
 
-The runner discovers ``test_*.py`` beside the remaining ``test-*.ps1``
-files, runs each in a child interpreter, and fails safe on unknown names;
-these cases pin that contract against sandbox trees with stub suites. The
-PowerShell originals' cases are kept case-for-case, with the pwsh
-requirement now scoped to selections that actually contain a ``.ps1`` file:
-a Python-only selection must run on hosts that never had pwsh, and a
-PowerShell selection must still fail closed without it.
+The runner discovers ``test_*.py`` files, runs each in a child
+interpreter, and fails safe on unknown names; these cases pin that
+contract against sandbox trees with stub suites. The spawned-worker path
+stays fail closed: a worker that cannot start records a failed result
+and can never let the verdict report success.
 """
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -58,24 +55,6 @@ def invoke_runner(root: Path, python: str, names: Sequence[str]) -> Tuple[str, i
         encoding="utf-8",
         errors="replace",
         check=False,
-    )
-    output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
-    return output, completed.returncode
-
-
-def invoke_runner_with_path(root: Path, python: str, names: Sequence[str]) -> Tuple[str, int]:
-    """Run the sandboxed runner with an empty PATH, as the stripped-PATH cases do."""
-    arguments = [str(root / "scripts" / "tests" / "run_all.py")]
-    if names:
-        arguments.extend(["--names", ",".join(names)])
-    completed = subprocess.run(
-        [python, *arguments],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-        env=dict(os.environ, PATH=""),
     )
     output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
     return output, completed.returncode
@@ -171,42 +150,6 @@ def case_spawn_failure_counts_as_failed(python: str) -> None:
         remove_temp_root(root)
 
 
-# Without pwsh the runner cannot run a PowerShell test file and must fail
-# closed instead of reporting an empty pass (mirrors the gate's
-# stripped-PATH case).
-def case_missing_pwsh_fails_closed(python: str) -> None:
-    root = new_temp_root(prefix="run-all-")
-    tests_directory = root / "scripts" / "tests"
-    tests_directory.mkdir(parents=True)
-    (tests_directory / "run_all.py").write_text(RUNNER_SOURCE.read_text(encoding="utf-8"), encoding="utf-8")
-    write_fixture_file(root, "scripts/tests/test-powershell-suite.ps1", "exit 0\n")
-    try:
-        output, exit_code = invoke_runner_with_path(root, python, ["test-powershell-suite.ps1"])
-        assert_exit_code(1, "a missing pwsh must fail the run", exit_code)
-        assert_true(
-            "pwsh is required" in output,
-            f"the error must name the missing requirement, got: {output}",
-        )
-        assert_true("passed" not in output, "a run that started nothing must not report success")
-    finally:
-        remove_temp_root(root)
-
-
-# The pwsh requirement is scoped to the files that need it: a Python-only
-# selection runs on hosts that never had pwsh.
-def case_missing_pwsh_still_runs_python_suites(python: str) -> None:
-    root = new_runner_fixture()
-    try:
-        output, exit_code = invoke_runner_with_path(root, python, ["test_alpha_passes.py"])
-        assert_exit_code(0, "a Python-only selection must run without pwsh", exit_code)
-        assert_true(
-            "all 1 test file(s) passed" in output,
-            f"the Python selection must pass without pwsh, got: {output}",
-        )
-    finally:
-        remove_temp_root(root)
-
-
 def main() -> int:
     print("== run-all self-tests ==")
 
@@ -218,8 +161,6 @@ def main() -> int:
     run_case("UnknownNames_FailSafeToTheFullSuite", lambda: case_unknown_names_fail_safe_to_the_full_suite(python))
     run_case("EmptyNames_RunEverything", lambda: case_empty_names_run_everything(python))
     run_case("SpawnFailure_CountsAsFailed", lambda: case_spawn_failure_counts_as_failed(python))
-    run_case("MissingPwsh_FailsClosedForPowerShellSuites", lambda: case_missing_pwsh_fails_closed(python))
-    run_case("MissingPwsh_StillRunsPythonSuites", lambda: case_missing_pwsh_still_runs_python_suites(python))
 
     failures = failure_count()
     if failures > 0:
