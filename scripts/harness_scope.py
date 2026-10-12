@@ -109,6 +109,12 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     ".devcontainer/ai-backends.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/env-local.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/recycle-stale-opencode-service.sh": ("test_opencode_service_recycle.py",),
+    # The lifecycle entry points' contract suite (issue #171 port).
+    ".devcontainer/_lifecycle_common.py": ("test_devcontainer_lifecycle.py",),
+    ".devcontainer/on_create.py": ("test_devcontainer_lifecycle.py",),
+    ".devcontainer/post_create.py": ("test_devcontainer_lifecycle.py",),
+    ".devcontainer/post_start.py": ("test_devcontainer_lifecycle.py",),
+    ".devcontainer/update_content.py": ("test_devcontainer_lifecycle.py",),
 }
 
 # Coarse subjects for tooling trees whose files share one contract suite.
@@ -120,6 +126,7 @@ SUBJECT_PREFIXES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
         ".devcontainer/",
         (
             "test_ai_backends.py",
+            "test_devcontainer_lifecycle.py",
             "test_env_local_precedence.py",
             "test_mcp_credentials.py",
             "test_mcp_sync.py",
