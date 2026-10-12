@@ -111,10 +111,46 @@ jobs:
           fi
           echo "PYTHON=${PYTHON}" >> "${GITHUB_ENV}"
 
+      # One diff-scope step classifies the change for the two expensible
+      # phases: which self-tests to run, and whether the npm install and the
+      # Prettier check can be affected at all. Both verdicts fail safe: an
+      # unresolvable base runs everything it guards.
+      - name: Resolve the check scope
+        id: check-scope
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          resolvable=0
+          if [ -n "${BASE_SHA:-}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            resolvable=1
+          elif [ -n "${BASE_SHA:-}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --depth=1 origin "${BASE_SHA}" || true
+            if git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+              resolvable=1
+            fi
+          fi
+          # The verdict script is stdlib-only typed Python (issue #171).
+          verdict="$("${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}")"
+          selection="$("${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}" --selection)"
+          echo "self-tests=${verdict}" >> "${GITHUB_OUTPUT}"
+          echo "selection=${selection}" >> "${GITHUB_OUTPUT}"
+          # Prettier reads the checked Markdown files, its config/ignore, and
+          # its pinned version; a diff that touches none of them cannot change
+          # the verdict, so the npm steps are skipped. An unresolvable base
+          # runs the check.
+          markdown=run
+          if [ "${resolvable}" = "1" ] && [ -z "$(git diff --name-only "${BASE_SHA}" HEAD -- '*.md' .prettierrc.json .prettierignore package.json)" ]; then
+            markdown=skip
+          fi
+          echo "markdown=${markdown}" >> "${GITHUB_OUTPUT}"
+
       # The lint job only installs prettier; caching the npm download skips
       # most of the install on every run on both operating systems. The lock
       # file is intentionally ignored, so the key hashes package.json.
       - name: Cache npm packages
+        if: steps.check-scope.outputs.markdown != 'skip'
         uses: actions/cache@v6
         with:
           path: ~/.npm
@@ -122,9 +158,11 @@ jobs:
           restore-keys: npm-${{ runner.os }}-
 
       - name: Install npm dependencies
+        if: steps.check-scope.outputs.markdown != 'skip'
         run: npm install --no-audit --no-fund
 
       - name: Check Markdown formatting
+        if: steps.check-scope.outputs.markdown != 'skip'
         run: npm run format:md:check
 
       - name: Lint LLM instructions
@@ -159,32 +197,16 @@ jobs:
         shell: bash
         run: ${PYTHON} scripts/lint_assembly_warnings.py
 
-      - name: Resolve the harness self-test scope
-        id: self-test-scope
-        shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          set -euo pipefail
-          if [ -n "${BASE_SHA}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ] && ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
-            git fetch --depth=1 origin "${BASE_SHA}" || true
-          fi
-          # The verdict script is stdlib-only typed Python (issue #171).
-          verdict="$("${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}")"
-          selection="$("${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}" --selection)"
-          echo "self-tests=${verdict}" >> "${GITHUB_OUTPUT}"
-          echo "selection=${selection}" >> "${GITHUB_OUTPUT}"
-
       # The self-tests only verify the harness surface (scripts, .llm, CI and
       # devcontainer wiring, package manifests). Skip them when that surface is
       # untouched; otherwise run the same scoped selection the local fast check
       # runs. The selection fails safe: unmapped or shared surface paths resolve
       # to 'all', which runs the full suite.
       - name: Run harness self-tests
-        if: steps.self-test-scope.outputs.self-tests != 'skip'
+        if: steps.check-scope.outputs.self-tests != 'skip'
         shell: bash
         run: |
-          selection="${{ steps.self-test-scope.outputs.selection }}"
+          selection="${{ steps.check-scope.outputs.selection }}"
           if [ "${selection}" = "all" ] || [ -z "${selection}" ]; then
             "${PYTHON}" scripts/tests/run_all.py
           else
