@@ -33,7 +33,7 @@ Current behavior:
   into the other as before.
 - `npm run mcp:repair` reconciles a divergent pair: it probes each name against the real endpoint and copies the one that authenticates over the other, in place (never appending a
   duplicate key). It **refuses to write** when neither name authenticates rather than guessing, and never prints a credential.
-- `post-start.sh` runs the repair automatically on container start, before `mcp:sync`, so a divergence is resolved on the next start instead of producing an opaque 401.
+- `post_start.py` runs the repair automatically on container start, before `mcp:sync`, so a divergence is resolved on the next start instead of producing an opaque 401.
 
 A credential rotated in `.env.local` also has to reach already-running agents. Two separate layers cache the old value, and both need handling:
 
@@ -42,7 +42,7 @@ A credential rotated in `.env.local` also has to reach already-running agents. T
 2. **OpenCode's background service.** Every `opencode` session attaches to ONE shared server (`opencode serve --service`), discovered via `~/.local/state/opencode/service.json`. It
    inherits the environment of whichever client happened to start it and holds it for its entire life, so **new sessions stay broken too** — the session is fine, the singleton
    behind it is not. `.devcontainer/recycle-stale-opencode-service.sh` compares the running service's credentials against `.env.local` and, on a mismatch, recycles it so the next
-   session respawns a healthy one. It is a no-op when the service matches, when there is no `.env.local`, or when no service is running. `post-start.sh` runs it on every container
+   session respawns a healthy one. It is a no-op when the service matches, when there is no `.env.local`, or when no service is running. `post_start.py` runs it on every container
    start.
 
 ```bash
