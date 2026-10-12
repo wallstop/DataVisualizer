@@ -238,6 +238,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
         ):
             quick.append(CheckStep(name, name, ("node", script), ("csharp.format",)))
 
+
     if plan.markdown:
         quick.append(
             CheckStep("markdown.format", "Prettier format", ("npx", "--no-install", "prettier", "--write", *plan.markdown))
@@ -247,7 +248,7 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
                 CheckStep(
                     "markdown.changelog",
                     "changelog length",
-                    ("node", "scripts/lint-changelog-length.js"),
+                    (*_PYTHON_LAUNCHER, "scripts/lint_changelog_length.py"),
                     ("markdown.format",),
                 )
             )
@@ -303,10 +304,14 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
         )
 
     if plan.release_surface:
-        quick.append(CheckStep("release.secrets", "release credential lint", ("node", "scripts/lint-release-secrets.js")))
+        quick.append(
+            CheckStep("release.secrets", "release credential lint", (*_PYTHON_LAUNCHER, "scripts/lint_release_secrets.py"))
+        )
 
     if plan.line_endings:
-        quick.append(CheckStep("line-endings.check", "line-ending lint", ("node", "scripts/lint-line-endings.js")))
+        quick.append(
+            CheckStep("line-endings.check", "line-ending lint", (*_PYTHON_LAUNCHER, "scripts/lint_line_endings.py"))
+        )
 
     tests: List[CheckStep] = []
     if plan.harness:

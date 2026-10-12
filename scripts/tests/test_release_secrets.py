@@ -19,7 +19,7 @@ from _test_helpers import (
     assert_exit_code,
     assert_true,
     failure_count,
-    find_node,
+    find_python,
     new_temp_root,
     remove_temp_root,
     run_case,
@@ -30,7 +30,7 @@ from _test_helpers import (
 TESTS_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = TESTS_DIR.parent
 REPO_ROOT = SCRIPTS_DIR.parent
-LINT_SCRIPT = SCRIPTS_DIR / "lint-release-secrets.js"
+LINT_SCRIPT = SCRIPTS_DIR / "lint_release_secrets.py"
 
 
 def invoke_release_lint(workflow_dir: str, document: str, lint_arguments: Sequence[str] = ()) -> Tuple[str, int]:
@@ -42,7 +42,7 @@ def invoke_release_lint(workflow_dir: str, document: str, lint_arguments: Sequen
     try:
         os.environ["RELEASE_SECRETS_WORKFLOW_DIR"] = workflow_dir
         os.environ["RELEASE_SECRETS_DOC"] = document
-        return run_tool_output([find_node(), str(LINT_SCRIPT), *lint_arguments])
+        return run_tool_output([find_python(), str(LINT_SCRIPT), *lint_arguments])
     finally:
         if had_workflow_dir:
             os.environ["RELEASE_SECRETS_WORKFLOW_DIR"] = previous_workflow_dir or ""

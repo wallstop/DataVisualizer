@@ -21,7 +21,7 @@ from _test_helpers import (
     assert_exit_code,
     assert_true,
     failure_count,
-    find_node,
+    find_python,
     new_temp_root,
     remove_temp_root,
     run_case,
@@ -32,7 +32,7 @@ from _test_helpers import (
 TESTS_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = TESTS_DIR.parent
 REPO_ROOT = SCRIPTS_DIR.parent
-LINT_SCRIPT = SCRIPTS_DIR / "lint-line-endings.js"
+LINT_SCRIPT = SCRIPTS_DIR / "lint_line_endings.py"
 
 
 def invoke_line_ending_lint(
@@ -48,7 +48,7 @@ def invoke_line_ending_lint(
     try:
         os.environ["LINE_ENDINGS_EDITORCONFIG"] = editor_config
         os.environ["LINE_ENDINGS_GITATTRIBUTES"] = git_attributes
-        return run_tool_output([find_node(), str(LINT_SCRIPT), *lint_arguments])
+        return run_tool_output([find_python(), str(LINT_SCRIPT), *lint_arguments])
     finally:
         if had_editor_config:
             os.environ["LINE_ENDINGS_EDITORCONFIG"] = previous_editor_config or ""

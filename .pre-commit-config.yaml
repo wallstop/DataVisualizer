@@ -43,21 +43,21 @@ repos:
         description: Moves `using` directives inside the namespace; file-level usings stay sanctioned for assembly-attribute preambles.
       - id: lint-release-secrets
         name: Enforce the release credential contract
-        entry: node scripts/lint-release-secrets.js
+        entry: uv run scripts/lint_release_secrets.py
         language: system
         pass_filenames: false
         files: ^(\.llm/references/RELEASING\.md|\.github/workflows/release\.yml)$
         description: Fails when a release workflow reads an undocumented secret, or a documented secret is read by no release workflow.
       - id: lint-line-endings
         name: Enforce the line-ending contract
-        entry: node scripts/lint-line-endings.js
+        entry: uv run scripts/lint_line_endings.py
         language: system
         pass_filenames: false
         files: ^(\.editorconfig|\.gitattributes)$
         description: Fails when .editorconfig and .gitattributes disagree about the line ending CSharpier writes and git checks out.
       - id: lint-changelog-length
         name: Enforce the changelog entry length cap
-        entry: node scripts/lint-changelog-length.js
+        entry: uv run scripts/lint_changelog_length.py
         language: system
         pass_filenames: false
         files: ^CHANGELOG\.md$

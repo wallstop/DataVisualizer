@@ -141,13 +141,16 @@ jobs:
         run: node scripts/lint-csharp-usings.js --verbose
 
       - name: Enforce the release credential contract
-        run: node scripts/lint-release-secrets.js --verbose
+        shell: bash
+        run: ${PYTHON} scripts/lint_release_secrets.py --verbose
 
       - name: Enforce the line-ending contract
-        run: node scripts/lint-line-endings.js --verbose
+        shell: bash
+        run: ${PYTHON} scripts/lint_line_endings.py --verbose
 
       - name: Enforce the changelog entry length cap
-        run: node scripts/lint-changelog-length.js --verbose
+        shell: bash
+        run: ${PYTHON} scripts/lint_changelog_length.py --verbose
 
       - name: Enforce assembly warning policy
         shell: bash
