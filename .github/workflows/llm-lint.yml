@@ -89,13 +89,23 @@ jobs:
           # itself, so a full history clone only spends runner time.
           fetch-depth: 1
 
-      # The lints and the self-test scope run through the system Python
-      # (issue #171). Resolution validates that the interpreter actually
-      # executes: the Windows python3 App-Execution-Alias stub exists on
-      # PATH but is not a working interpreter, and silently falling back to
-      # a garbage verdict would turn every Windows run into the full suite.
-      - name: Resolve the Python interpreter
+      # One step resolves the interpreter and classifies the change for the
+      # two expensible phases: which self-tests to run, and whether the npm
+      # install and the Prettier check can be affected at all. Both verdicts
+      # fail safe: an unresolvable base runs everything it guarded.
+      #
+      # Resolution validates that the interpreter actually executes: the
+      # Windows python3 App-Execution-Alias stub exists on PATH but is not a
+      # working interpreter, and silently falling back to a garbage verdict
+      # would turn every Windows run into the full suite. The two concerns
+      # share one step because every GitHub step pays runner shell and
+      # action overhead on both operating systems, and the scope step is the
+      # first consumer of the interpreter it resolves.
+      - name: Resolve the interpreter and the check scope
+        id: check-scope
         shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
           PYTHON=""
@@ -110,18 +120,6 @@ jobs:
             exit 1
           fi
           echo "PYTHON=${PYTHON}" >> "${GITHUB_ENV}"
-
-      # One diff-scope step classifies the change for the two expensible
-      # phases: which self-tests to run, and whether the npm install and the
-      # Prettier check can be affected at all. Both verdicts fail safe: an
-      # unresolvable base runs everything it guards.
-      - name: Resolve the check scope
-        id: check-scope
-        shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          set -euo pipefail
           if [ -n "${BASE_SHA:-}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ] && ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
             git fetch --depth=1 origin "${BASE_SHA}" || true
           fi
@@ -156,7 +154,11 @@ jobs:
       # runner shell and action overhead, and these nine lints were the job's
       # widest block after the suite. The commands are unchanged and each
       # still prints its own verdict; the first failure fails the step, so
-      # later lints are skipped exactly as separate steps did.
+      # later lints are skipped exactly as separate steps did. The skills
+      # index regeneration and its drift check close the ladder in the same
+      # relative order they ran as their own step (lints, then index): a
+      # failed lint still skips them because the job already failed, and a
+      # stale index still fails the run through the ::error annotation.
       - name: Run the repository lints
         shell: bash
         run: |
@@ -170,6 +172,13 @@ jobs:
           ${PYTHON} scripts/lint_changelog_length.py --verbose
           ${PYTHON} scripts/lint_assembly_warnings.py
           ${PYTHON} scripts/lint_file_lengths.py --verbose-output
+          ${PYTHON} scripts/generate_skills_index.py
+          status="$(git status --porcelain -- .llm/skills/index.md)"
+          if [ -n "${status}" ]; then
+            echo "::error::.llm/skills/index.md is stale; run uv run scripts/generate_skills_index.py and commit the result."
+            echo "${status}"
+            exit 1
+          fi
 
       # The self-tests only verify the harness surface (scripts, .llm, CI and
       # devcontainer wiring, package manifests). Skip them when that surface is
@@ -185,16 +194,4 @@ jobs:
             "${PYTHON}" scripts/tests/run_all.py
           else
             "${PYTHON}" scripts/tests/run_all.py --names "${selection}"
-          fi
-
-      - name: Fail on skills index drift
-        shell: bash
-        run: |
-          set -euo pipefail
-          ${PYTHON} scripts/generate_skills_index.py
-          status="$(git status --porcelain -- .llm/skills/index.md)"
-          if [ -n "${status}" ]; then
-            echo "::error::.llm/skills/index.md is stale; run uv run scripts/generate_skills_index.py and commit the result."
-            echo "${status}"
-            exit 1
           fi
