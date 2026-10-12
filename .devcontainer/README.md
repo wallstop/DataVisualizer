@@ -27,7 +27,7 @@ versions keep working (bounded offline checks with `--offline-ok`).
   everything is current.
 - Named volumes persist npm + uv caches and every agent's auth home (`~/.codex`, `~/.claude`, `~/.claude-zai`, `~/.claude-openrouter`, `~/.local/share/opencode`,
   `~/.config/nanocoder`) across **full rebuilds**: log in once. The image pre-creates those mount targets with `vscode` ownership so fresh volumes start writable (Docker seeds a
-  new volume from the image path when it exists, and from `root:root` when it does not); `post-start.sh` and the launchers additionally self-heal any root-owned volume in place via
+  new volume from the image path when it exists, and from `root:root` when it does not); `post_start.py` and the launchers additionally self-heal any root-owned volume in place via
   passwordless sudo.
 
 ## Credentials: `.env.local` first

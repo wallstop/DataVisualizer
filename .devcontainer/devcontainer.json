@@ -164,10 +164,10 @@
     // interpreter the image guarantees instead of `uv run` so container boot
     // never depends on a uv environment sync succeeding.
     "onCreateCommand": "python3 .devcontainer/on_create.py \"${containerWorkspaceFolder}\"",
-    "postCreateCommand": "bash .devcontainer/post-create.sh \"${containerWorkspaceFolder}\"",
+    "postCreateCommand": "python3 .devcontainer/post_create.py \"${containerWorkspaceFolder}\"",
     // updateContentCommand runs after git pull/clone operations.
     "updateContentCommand": "python3 .devcontainer/update_content.py \"${containerWorkspaceFolder}\"",
     // Refresh moving npm CLIs and regenerate machine-local MCP configs on start.
-    "postStartCommand": "bash .devcontainer/post-start.sh \"${containerWorkspaceFolder}\"",
+    "postStartCommand": "python3 .devcontainer/post_start.py \"${containerWorkspaceFolder}\"",
     "remoteUser": "vscode"
 }
