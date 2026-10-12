@@ -73,12 +73,12 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint-release-secrets.js": ("test-lint-release-secrets.ps1",),
     "scripts/run-unity-validation.ps1": ("test-run-unity-validation.ps1",),
     "scripts/install-host-errorprone-analyzers.ps1": ("test-host-errorprone-analyzers.ps1",),
-    "scripts/release/verify-release.mjs": ("test-verify-release.ps1",),
-    "scripts/release/validate-unitypackage.mjs": ("test-validate-unitypackage.ps1",),
-    "scripts/release/build-unitypackage.mjs": ("test-build-unitypackage.ps1", "test-validate-unitypackage.ps1"),
-    "scripts/release/tag-release.mjs": ("test-tag-release.ps1",),
-    "scripts/release/prepare-release.mjs": ("test-prepare-release.ps1",),
-    "scripts/release/extract-release-notes.mjs": ("test-extract-release-notes.ps1",),
+    "scripts/release/verify-release.mjs": ("test_verify_release.py",),
+    "scripts/release/validate-unitypackage.mjs": ("test_validate_unitypackage.py",),
+    "scripts/release/build-unitypackage.mjs": ("test_build_unitypackage.py", "test_validate_unitypackage.py"),
+    "scripts/release/tag-release.mjs": ("test_tag_release.py",),
+    "scripts/release/prepare-release.mjs": ("test_prepare_release.py",),
+    "scripts/release/extract-release-notes.mjs": ("test_extract_release_notes.py",),
     "scripts/LlmConfig.psm1": ("test_lint_llm_instructions.py", "test_file_lengths.py", "test_generate_skills_index.py"),
     # Retired PowerShell surfaces (issue #171) keep their entries so a
     # deletion still selects the tests that verify the contract they used to
@@ -108,7 +108,7 @@ SUBJECT_PREFIXES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
         ),
     ),
     (".llm/", ("test_lint_llm_instructions.py", "test_file_lengths.py", "test_generate_skills_index.py")),
-    (".github/", ("test-release-workflows.ps1", "test-lint-release-secrets.ps1")),
+    (".github/", ("test_release_workflows.py", "test-lint-release-secrets.ps1")),
 )
 
 SHARED_PREFIXES: Tuple[str, ...] = (
