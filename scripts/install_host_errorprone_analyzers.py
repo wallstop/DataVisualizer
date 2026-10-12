@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+REPOSITORY_ROOT = Path(os.path.abspath(__file__)).parent.parent
 
 ANALYZERS_PARENT_RELATIVE_DIRECTORY = "Assets/Analyzers"
 ANALYZERS_PARENT_GUID = "6db6ad37e2934a59a09b9f97f924a13d"
@@ -157,7 +157,13 @@ def sha256_file(path: Path) -> str:
 
 
 def resolve_full_path(path: str, description: str, must_exist: bool = False) -> Path:
-    """Resolve an absolute path, optionally requiring it to exist."""
+    """Resolve an absolute path, optionally requiring it to exist.
+
+    ``os.path.abspath`` is the lexical ``GetFullPath`` equivalent the
+    PowerShell original used: it never rewrites short (8.3) path segments
+    or resolves symlinks, so every path in one run keeps the same textual
+    form and the containment comparison below compares like with like.
+    """
     if not path or not path.strip():
         raise ValueError(f"{description} must not be empty.")
     resolved = Path(os.path.abspath(path))
