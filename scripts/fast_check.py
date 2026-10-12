@@ -230,13 +230,18 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
             )
         )
         # The three source lints are independent read-only scans of the same
-        # C# tree, so they run side by side after the format.
+        # C# tree, so they run side by side after the format. They are
+        # per-file policies, so they scan only the changed files: an
+        # unchanged file cannot newly violate one, and the per-edit loop
+        # stays at scan-the-diff cost instead of whole-tree cost.
         for name, script in (
             ("csharp.member-order", "scripts/lint_csharp_member_order.py"),
             ("csharp.null-assertions", "scripts/lint_csharp_null_assertions.py"),
             ("csharp.usings", "scripts/lint_csharp_usings.py"),
         ):
-            quick.append(CheckStep(name, name, (*_PYTHON_LAUNCHER, script), ("csharp.format",)))
+            quick.append(
+                CheckStep(name, name, (*_PYTHON_LAUNCHER, script, "--paths", *plan.csharp), ("csharp.format",))
+            )
 
 
     if plan.markdown:

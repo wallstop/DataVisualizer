@@ -21,8 +21,10 @@ fixture text that mentions the banned forms cannot fail the scan.
 Interpolated strings are masked whole, which can only hide a violation
 inside a hole, never fabricate one.
 
-'--verbose' also prints the scanned file count when clean. Exit codes:
-0 = clean, 1 = at least one banned assertion remains.
+'--verbose' also prints the scanned file count when clean. '--paths'
+scans only the named C# files (the fast check's per-iteration loop;
+whole-tree stays the default for CI and the pre-commit hook). Exit codes:
+0 = clean, 1 = at least one banned assertion remains, 2 = usage error.
 """
 
 from __future__ import annotations
@@ -149,21 +151,80 @@ def list_csharp_files(root: str) -> List[ScannedFile]:
     return sorted(files, key=lambda file: str(file.display))
 
 
+def in_scan_roots(display: str) -> bool:
+    """Whether a display path sits under a scan root.
+
+    The whole-tree walk only ever sees files under the roots, so scoped
+    mode applies the same membership or its verdict could diverge from the
+    walk's on an out-of-root file (a code sample, for example) that CI
+    never checks.
+    """
+    for root in SCAN_ROOTS:
+        root_display = display_for(Path(root) if os.path.isabs(root) else REPO_ROOT / root)
+        if display == root_display or display.startswith(root_display + "/"):
+            return True
+    return False
+
+
+def scoped_files(argv: List[str]) -> Optional[List[ScannedFile]]:
+    """Resolve an explicit ``--paths`` scan list, or None for the whole-tree walk.
+
+    The fast check passes the changed C# files so a two-file edit scans two
+    files instead of the tree; whole-tree stays the default for CI and the
+    pre-commit hook. Names are repository-relative or absolute. Root
+    membership and the exclusion prefixes still apply, so a scoped verdict
+    is exactly the whole-tree verdict restricted to the named files, and a
+    name that is not a readable C# file fails closed: the scan can never
+    quietly verify nothing.
+    """
+    if "--paths" not in argv:
+        return None
+    names: List[str] = []
+    for item in argv[argv.index("--paths") + 1 :]:
+        if item.startswith("--"):
+            break
+        names.append(item)
+    if not names:
+        print("[csharp-null-assertions] --paths needs at least one file.", file=sys.stderr)
+        raise SystemExit(2)
+    files: List[ScannedFile] = []
+    for name in names:
+        full_path = Path(name) if os.path.isabs(name) else REPO_ROOT / name
+        if full_path.suffix != ".cs" or not full_path.is_file():
+            print(f"[csharp-null-assertions] --paths entry is not a readable C# file: {name}", file=sys.stderr)
+            raise SystemExit(2)
+        display = display_for(full_path)
+        if not in_scan_roots(display):
+            continue
+        if any(display.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
+            continue
+        files.append(ScannedFile(full_path=full_path, display=display))
+    return sorted(files, key=lambda file: str(file.display))
+
+
 def main() -> int:
     """Scan the roots for banned null assertions."""
     verbose = "--verbose" in sys.argv
     violations: List[str] = []
     scanned = 0
-    for root in SCAN_ROOTS:
-        for file in list_csharp_files(root):
-            if any(file.display.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
-                continue
-            scanned += 1
-            text = file.full_path.read_text(encoding="utf-8")
-            masked = mask_noise(text)
-            for line_index, line in enumerate(masked.split("\n")):
-                if BANNED_ASSERTION.search(line) or BANNED_CONSTRAINT.search(line):
-                    violations.append(f"{file.display}:{line_index + 1}")
+    explicit = scoped_files(sys.argv)
+    scannable: List[ScannedFile] = (
+        explicit
+        if explicit is not None
+        else [
+            file
+            for root in SCAN_ROOTS
+            for file in list_csharp_files(root)
+            if not any(file.display.startswith(prefix) for prefix in EXCLUDED_PREFIXES)
+        ]
+    )
+    for file in scannable:
+        scanned += 1
+        text = file.full_path.read_text(encoding="utf-8")
+        masked = mask_noise(text)
+        for line_index, line in enumerate(masked.split("\n")):
+            if BANNED_ASSERTION.search(line) or BANNED_CONSTRAINT.search(line):
+                violations.append(f"{file.display}:{line_index + 1}")
 
     if violations:
         print(
@@ -176,7 +237,8 @@ def main() -> int:
         )
         for violation in violations:
             print(f"  {violation}", file=sys.stderr)
-        print(f"\n{len(violations)} banned assertion(s) in {', '.join(SCAN_ROOTS)}.", file=sys.stderr)
+        scope = "the --paths selection" if explicit is not None else ", ".join(SCAN_ROOTS)
+        print(f"\n{len(violations)} banned assertion(s) in {scope}.", file=sys.stderr)
         return 1
     if verbose:
         print(f"Null-assertion policy clean: {scanned} file(s) scanned.")
