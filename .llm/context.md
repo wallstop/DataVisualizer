@@ -82,7 +82,7 @@ lands there as annotated, stdlib-first Python; `uvx pyright` validates types loc
 18. Keep tests, docs imagery, and agent/dev files out of the npm tarball: `package.json` `files` whitelists only `Editor`, `Runtime`, and their `.meta` companions (docs imagery
     ships via GitHub, not npm). Static analyzer binaries, Unity metadata/labels, notices, and `-analyzer` response-file arguments must not exist in this package repository; install
     development-only analyzers in the host Unity project instead. Install or verify the pinned analyzer sets with
-    `scripts/install-host-errorprone-analyzers.ps1 -HostProject <path>` (`-AnalyzerSet SonarAnalyzer|All` selects sets; add `-VerifyOnly` for an offline integrity check).
+    `scripts/install_host_errorprone_analyzers.py --host-project <path>` (`--analyzer-set SonarAnalyzer|All` selects sets; add `--verify-only` for an offline integrity check).
 19. Write explicit ordered comparisons with `<` or `<=`, reversing operands instead of using `>` or `>=`. Relational patterns retain the operator required by C# syntax. Keep `!=`
     when expressing genuine inequality or null checks; do not wrap `==` in a negation merely to avoid it. Before reversing user-defined operators, verify the swapped operands and
     paired operator preserve behavior.

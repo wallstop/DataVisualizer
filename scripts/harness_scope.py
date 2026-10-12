@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Single source of truth for which repository paths can change a self-test outcome.
 
-The harness self-tests (``scripts/tests/test_*.py``, plus the remaining
-``scripts/tests/test-*.ps1`` files during the issue #171 migration) verify
+The harness self-tests (``scripts/tests/test_*.py``) verify
 this repository's agent tooling: lint scripts, the release pipeline, MCP
 configuration, and the devcontainer. Both the CI lint workflow (through
 ``scripts/should_run_self_tests.py``) and the local fast check
@@ -52,8 +51,8 @@ SURFACE_FILES: Tuple[str, ...] = (
 # subject (shared manifests, the suite's own helpers, or anything unmapped)
 # selects every test file, so a subject without a mapping still gets coverage.
 # The tests that drive typed Python scripts are typed Python themselves
-# (issue #171); only the host-analyzer installer keeps its .ps1 test name
-# until its tranche port.
+# (issue #171); the migration's last .ps1 test file ported with the
+# host-analyzer installer tranche.
 SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/fast_check.py": ("test_fast_check.py",),
     "scripts/gate.py": ("test_gate.py",),
@@ -72,7 +71,7 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint-line-endings.js": ("test_line_endings.py",),
     "scripts/lint-release-secrets.js": ("test_release_secrets.py",),
     "scripts/run_unity_validation.py": ("test_run_unity_validation.py",),
-    "scripts/install-host-errorprone-analyzers.ps1": ("test-host-errorprone-analyzers.ps1",),
+    "scripts/install_host_errorprone_analyzers.py": ("test_host_errorprone_analyzers.py",),
     "scripts/release/verify-release.mjs": ("test_verify_release.py",),
     "scripts/release/validate-unitypackage.mjs": ("test_validate_unitypackage.py",),
     "scripts/release/build-unitypackage.mjs": ("test_build_unitypackage.py", "test_validate_unitypackage.py"),
@@ -88,6 +87,7 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint-file-lengths.ps1": ("test_file_lengths.py",),
     "scripts/lint-assembly-warnings.ps1": ("test_assembly_warnings.py",),
     "scripts/run-unity-validation.ps1": ("test_run_unity_validation.py",),
+    "scripts/install-host-errorprone-analyzers.ps1": ("test_host_errorprone_analyzers.py",),
     ".devcontainer/ai-backends.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/env-local.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/recycle-stale-opencode-service.sh": ("test_opencode_service_recycle.py",),

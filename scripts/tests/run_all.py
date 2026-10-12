@@ -4,11 +4,10 @@
 Typed Python port of ``scripts/tests/run-all.ps1``: every self-test file
 next to this script runs in a child interpreter with its output captured
 and replayed in name order, so the log shape is identical to the PowerShell
-runner. The suite is migrating to typed Python (issue #171): ``test_*.py``
-files run under this process's own interpreter, while the not-yet-ported
-``test-*.ps1`` files keep running in a child pwsh, so a tranche can port
-its files without a flag day. pwsh is required only when a selected file
-is still a ``.ps1``; a Python-only selection runs on any interpreter.
+runner. The suite is typed Python after the issue #171 migration:
+``test_*.py`` files run under this process's own interpreter, and a
+Python-only selection runs on any interpreter. The retired ``.ps1``
+handling stays only until the migration's cleanup removes it.
 
 ``--names`` takes the same comma-separated test file names the fast check's
 surface selection produces; an unknown name fails safe to the full suite,

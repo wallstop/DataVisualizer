@@ -5,8 +5,8 @@ Typed Python port of ``TestHelpers.ps1``: the same temp-root lifecycle,
 fixture writers, case runner, and interpreter resolution with the same
 output shapes (``PASS:``/``FAIL:`` lines and the per-file failure summary),
 so the suite runner's replayed log stays stable across the migration. The
-PowerShell original remains until the last ``test-*.ps1`` file ports; the
-two helpers must behave identically while both exist.
+PowerShell original retired with the last ``test-*.ps1`` port; this module
+is the helpers' single owner now.
 
 The leading underscore keeps this module outside the runner's ``test_*.py``
 discovery: helper modules never match the test-file pattern by design, so
