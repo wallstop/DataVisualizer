@@ -151,7 +151,7 @@ function ensureZaiKeyAlias() {
     return "aliased";
 }
 
-// The GitHub credential has the same two-name problem: on-create.sh's template
+// The GitHub credential has the same two-name problem: on_create.py's template
 // and every generated config reference GITHUB_PERSONAL_ACCESS_TOKEN, while
 // some machines only define GITHUB_MCP_PAT. An empty reference makes the
 // hosted GitHub MCP return 401 in the devcontainer even though the PAT is

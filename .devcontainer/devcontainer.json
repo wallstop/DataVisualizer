@@ -159,11 +159,14 @@
         // GitHub CLI for PR workflows (digest-pinned; see devcontainer-lock.json)
         "ghcr.io/devcontainers/features/github-cli:1": {}
     },
-    // onCreateCommand runs BEFORE extensions are activated.
-    "onCreateCommand": "bash .devcontainer/on-create.sh \"${containerWorkspaceFolder}\"",
+    // onCreateCommand runs BEFORE extensions are activated. The lifecycle
+    // scripts are stdlib-only typed Python (issue #171); they run with the
+    // interpreter the image guarantees instead of `uv run` so container boot
+    // never depends on a uv environment sync succeeding.
+    "onCreateCommand": "python3 .devcontainer/on_create.py \"${containerWorkspaceFolder}\"",
     "postCreateCommand": "bash .devcontainer/post-create.sh \"${containerWorkspaceFolder}\"",
     // updateContentCommand runs after git pull/clone operations.
-    "updateContentCommand": "bash .devcontainer/update-content.sh \"${containerWorkspaceFolder}\"",
+    "updateContentCommand": "python3 .devcontainer/update_content.py \"${containerWorkspaceFolder}\"",
     // Refresh moving npm CLIs and regenerate machine-local MCP configs on start.
     "postStartCommand": "bash .devcontainer/post-start.sh \"${containerWorkspaceFolder}\"",
     "remoteUser": "vscode"
