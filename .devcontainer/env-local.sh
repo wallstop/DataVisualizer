@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # BOM/CRLF-tolerant loader for the gitignored .env.local credential store.
 #
-# Sourced from ~/.bashrc (see on-create.sh / post-start.sh) so every
+# Sourced from ~/.bashrc (the block on_create.py writes) so every
 # interactive shell — and any agent CLI launched from one (opencode, claude,
 # codex, nanocoder, vscode) — inherits the MCP credentials without requiring
 # the gateway launchers in ai-backends.sh.
