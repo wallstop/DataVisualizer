@@ -277,6 +277,159 @@ def case_lane_crash_surfaces_the_reason_in_console_and_report(python: str) -> No
         remove_temp_root(temp_root)
 
 
+def run_gate_driver(python: str, statements: List[str]) -> Tuple[str, int]:
+    """Run a driver that imports the gate module and executes the given statements.
+
+    The generated driver inserts the scripts directory on ``sys.path`` so the
+    gate's internals are reachable in-process; the driver's JSON stdout is the
+    case's evidence, and no toolchain beyond the interpreter is touched.
+    """
+    scripts_source = TESTS_DIR.parent
+    temp_root = new_temp_root(prefix="gate-scope-")
+    path_line = f'sys.path.insert(0, r"{scripts_source}")'
+    driver = "\n".join(["import sys, json", path_line, "import gate", *statements])
+    driver_path = temp_root / "scope-driver.py"
+    write_fixture_file(temp_root, "scope-driver.py", driver + "\n")
+    try:
+        completed = subprocess.run(
+            [python, str(driver_path)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
+        return output, completed.returncode
+    finally:
+        remove_temp_root(temp_root)
+
+
+def case_scoped_lane_table_rewrites_the_three_lint_steps(python: str) -> None:
+    output, exit_code = run_gate_driver(
+        python,
+        [
+            'scoped = gate.scoped_lanes(("Editor/A.cs", "Runtime/B.cs"))',
+            "steps = {step.name: list(step.args) for _, lane in scoped for step in lane}",
+            "static = {step.name: list(step.args) for _, lane in gate.LANES for step in lane}",
+            'print(json.dumps({"order": steps["csharp.member-order"], "null": steps["csharp.null-assertions"], "usings": steps["csharp.usings"], "restore": steps["csharp.tool-restore"] == static["csharp.tool-restore"], "format": steps["csharp.format"] == static["csharp.format"], "total": len(steps), "static_total": len(static)}))',
+        ],
+    )
+    assert_exit_code(0, f"the driver must succeed (got {exit_code}): {output}", exit_code)
+    result = json.loads(output)
+    for name in ("order", "null", "usings"):
+        args = result[name]
+        assert_true(
+            args[-3:] == ["--paths", "Editor/A.cs", "Runtime/B.cs"] and "lint_csharp_" in " ".join(args),
+            f"the {name} step must scan exactly the changed files, got {args}",
+        )
+    assert_true(result["restore"] is True, "the tool-restore step must stay whole-tree")
+    assert_true(result["format"] is True, "the format step must stay whole-tree")
+    assert_true(result["total"] == result["static_total"], "scoping must not drop steps when C# changed")
+
+
+def case_scoped_lane_table_drops_the_lint_steps_when_no_csharp_changed(python: str) -> None:
+    output, exit_code = run_gate_driver(
+        python,
+        [
+            "scoped = gate.scoped_lanes(())",
+            "steps = [step.name for _, lane in scoped for step in lane]",
+            "dropped = [name for name in gate.CSHARP_LINT_STEPS if name not in steps]",
+            'print(json.dumps({"steps": steps, "dropped": dropped, "lanes": [name for name, _ in scoped]}))',
+        ],
+    )
+    assert_exit_code(0, f"the driver must succeed (got {exit_code}): {output}", exit_code)
+    result = json.loads(output)
+    assert_true(
+        sorted(result["dropped"]) == ["csharp.member-order", "csharp.null-assertions", "csharp.usings"],
+        f"all three lint steps must be scoped out, got {result['dropped']}",
+    )
+    assert_true("csharp.tool-restore" in result["steps"] and "csharp.format" in result["steps"], "the restore and format steps must stay")
+    assert_true("tests.self-tests" in result["steps"], "the suite must stay")
+
+
+def case_scoped_lane_table_keeps_whole_tree_without_a_base(python: str) -> None:
+    output, exit_code = run_gate_driver(
+        python,
+        [
+            "scoped = gate.scoped_lanes(None)",
+            'same = [(name, [(step.name, list(step.args)) for step in lane]) for name, lane in scoped] == [(name, [(step.name, list(step.args)) for step in lane]) for name, lane in gate.LANES]',
+            'print(json.dumps({"same": same}))',
+        ],
+    )
+    assert_exit_code(0, f"the driver must succeed (got {exit_code}): {output}", exit_code)
+    assert_true(json.loads(output)["same"] is True, "a missing base must keep the whole-tree ladder byte for byte")
+
+
+def case_execution_scopes_the_lint_steps_to_the_scanned_diff(python: str) -> None:
+    scripts_source = TESTS_DIR.parent
+    temp_root = new_temp_root(prefix="gate-scopeexec-")
+    path_line = f'sys.path.insert(0, r"{scripts_source}")'
+    changed = "Editor/DataVisualizer/Utilities/AssetGuidDiscovery.cs"
+    driver = "\n".join(
+        [
+            "import sys",
+            path_line,
+            "import gate",
+            f'gate.scan_changed_csharp = lambda base_sha: ("{changed}",)',
+            'sys.exit(gate.main(["--only", "csharp.member-order"]))',
+        ]
+    )
+    write_fixture_file(temp_root, "scope-exec-driver.py", driver + "\n")
+    try:
+        completed = subprocess.run(
+            [python, str(temp_root / "scope-exec-driver.py")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
+        assert_exit_code(0, f"the scoped lint run must pass: {output}", completed.returncode)
+        assert_true(
+            "csharp lints: scoped to 1 changed file(s)" in output,
+            f"the console must announce the scoped scan, got: {output}",
+        )
+        assert_true("[gate] ok   csharp.member-order" in output, f"the scoped step must run and pass, got: {output}")
+    finally:
+        remove_temp_root(temp_root)
+
+
+def case_execution_skips_the_lint_steps_when_no_csharp_changed(python: str) -> None:
+    scripts_source = TESTS_DIR.parent
+    temp_root = new_temp_root(prefix="gate-scopeskip-")
+    path_line = f'sys.path.insert(0, r"{scripts_source}")'
+    driver = "\n".join(
+        [
+            "import sys",
+            path_line,
+            "import gate",
+            "gate.scan_changed_csharp = lambda base_sha: ()",
+            'sys.exit(gate.main(["--only", "csharp.member-order"]))',
+        ]
+    )
+    write_fixture_file(temp_root, "scope-skip-driver.py", driver + "\n")
+    try:
+        completed = subprocess.run(
+            [python, str(temp_root / "scope-skip-driver.py")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
+        assert_exit_code(0, f"the skipped step must not fail the gate: {output}", completed.returncode)
+        assert_true(
+            "csharp lints: skipped, no C# changed" in output,
+            f"the console must announce the skip, got: {output}",
+        )
+        assert_true("passed: 0 step(s)" in output, f"the summary must show the empty run, got: {output}")
+    finally:
+        remove_temp_root(temp_root)
+
+
 def main() -> int:
     print("== Gate plan self-tests ==")
 
@@ -308,6 +461,26 @@ def main() -> int:
     run_case(
         "LaneCrash_SurfacesTheReasonInConsoleAndReport",
         lambda: case_lane_crash_surfaces_the_reason_in_console_and_report(python),
+    )
+    run_case(
+        "ScopedLaneTable_RewritesTheThreeLintSteps",
+        lambda: case_scoped_lane_table_rewrites_the_three_lint_steps(python),
+    )
+    run_case(
+        "ScopedLaneTable_DropsTheLintStepsWhenNoCSharpChanged",
+        lambda: case_scoped_lane_table_drops_the_lint_steps_when_no_csharp_changed(python),
+    )
+    run_case(
+        "ScopedLaneTable_KeepsWholeTreeWithoutABase",
+        lambda: case_scoped_lane_table_keeps_whole_tree_without_a_base(python),
+    )
+    run_case(
+        "Execution_ScopesTheLintStepsToTheScannedDiff",
+        lambda: case_execution_scopes_the_lint_steps_to_the_scanned_diff(python),
+    )
+    run_case(
+        "Execution_SkipsTheLintStepsWhenNoCSharpChanged",
+        lambda: case_execution_skips_the_lint_steps_when_no_csharp_changed(python),
     )
 
     failures = failure_count()
