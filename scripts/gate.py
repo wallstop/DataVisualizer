@@ -111,7 +111,7 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "markdown.changelog",
                 "Changelog length lint",
-                ("node", "scripts/lint-changelog-length.js"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_changelog_length.py"),
                 ("markdown.format",),
             ),
         ),
@@ -157,13 +157,13 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "harness.release-secrets",
                 "Release credential lint",
-                ("node", "scripts/lint-release-secrets.js"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_release_secrets.py"),
                 ("harness.skills-index",),
             ),
             Step(
                 "harness.line-endings",
                 "Line-ending lint",
-                ("node", "scripts/lint-line-endings.js"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_line_endings.py"),
                 ("harness.skills-index",),
             ),
         ),

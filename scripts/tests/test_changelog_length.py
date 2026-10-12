@@ -21,7 +21,7 @@ from _test_helpers import (
     assert_exit_code,
     assert_true,
     failure_count,
-    find_node,
+    find_python,
     new_temp_root,
     remove_temp_root,
     run_case,
@@ -32,7 +32,7 @@ from _test_helpers import (
 TESTS_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = TESTS_DIR.parent
 REPO_ROOT = SCRIPTS_DIR.parent
-LINT_SCRIPT = SCRIPTS_DIR / "lint-changelog-length.js"
+LINT_SCRIPT = SCRIPTS_DIR / "lint_changelog_length.py"
 
 DEFAULT_RELEASED_ENTRY = "Released entry that stays unmeasured."
 
@@ -43,7 +43,7 @@ def invoke_changelog_length_lint(changelog_path: Path, lint_arguments: Sequence[
     previous_override = os.environ.get("CHANGELOG_LENGTH_CHANGELOG")
     try:
         os.environ["CHANGELOG_LENGTH_CHANGELOG"] = str(changelog_path)
-        return run_tool_output([find_node(), str(LINT_SCRIPT), *lint_arguments])
+        return run_tool_output([find_python(), str(LINT_SCRIPT), *lint_arguments])
     finally:
         if had_override:
             os.environ["CHANGELOG_LENGTH_CHANGELOG"] = previous_override or ""
