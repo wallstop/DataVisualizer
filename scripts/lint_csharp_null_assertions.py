@@ -151,16 +151,31 @@ def list_csharp_files(root: str) -> List[ScannedFile]:
     return sorted(files, key=lambda file: str(file.display))
 
 
+def in_scan_roots(display: str) -> bool:
+    """Whether a display path sits under a scan root.
+
+    The whole-tree walk only ever sees files under the roots, so scoped
+    mode applies the same membership or its verdict could diverge from the
+    walk's on an out-of-root file (a code sample, for example) that CI
+    never checks.
+    """
+    for root in SCAN_ROOTS:
+        root_display = display_for(Path(root) if os.path.isabs(root) else REPO_ROOT / root)
+        if display == root_display or display.startswith(root_display + "/"):
+            return True
+    return False
+
+
 def scoped_files(argv: List[str]) -> Optional[List[ScannedFile]]:
     """Resolve an explicit ``--paths`` scan list, or None for the whole-tree walk.
 
     The fast check passes the changed C# files so a two-file edit scans two
     files instead of the tree; whole-tree stays the default for CI and the
-    pre-commit hook. Names are repository-relative or absolute. The
-    exclusion prefixes still apply, so a scoped verdict is exactly the
-    whole-tree verdict restricted to the named files, and a name that is
-    not a readable C# file fails closed: the scan can never quietly verify
-    nothing.
+    pre-commit hook. Names are repository-relative or absolute. Root
+    membership and the exclusion prefixes still apply, so a scoped verdict
+    is exactly the whole-tree verdict restricted to the named files, and a
+    name that is not a readable C# file fails closed: the scan can never
+    quietly verify nothing.
     """
     if "--paths" not in argv:
         return None
@@ -179,6 +194,8 @@ def scoped_files(argv: List[str]) -> Optional[List[ScannedFile]]:
             print(f"[csharp-null-assertions] --paths entry is not a readable C# file: {name}", file=sys.stderr)
             raise SystemExit(2)
         display = display_for(full_path)
+        if not in_scan_roots(display):
+            continue
         if any(display.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
             continue
         files.append(ScannedFile(full_path=full_path, display=display))

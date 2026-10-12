@@ -592,6 +592,16 @@ def case_paths_scans_only_the_named_files() -> None:
         # never quietly verify nothing.
         output, exit_code = invoke_member_order_lint(root, ("--paths", str(root / "Missing.cs")))
         assert_exit_code(2, f"a missing --paths entry must fail closed: {output}", exit_code)
+        # An out-of-root entry is invisible to the policy, exactly like the
+        # whole-tree walk that never enters it: skipped, not an error.
+        outside = new_temp_root(prefix="member-order-outside-")
+        try:
+            write_fixture_file(outside, "Outside.cs", ORDERED_FIXTURE)
+            output, exit_code = invoke_member_order_lint(root, ("--paths", str(outside / "Outside.cs"), "--verbose"))
+            assert_exit_code(0, f"an out-of-root entry must be skipped like the walk does: {output}", exit_code)
+            assert_true("0 file(s) clean" in output, f"the skipped entry must not be counted: {output}")
+        finally:
+            remove_temp_root(outside)
     finally:
         remove_temp_root(root)
 
