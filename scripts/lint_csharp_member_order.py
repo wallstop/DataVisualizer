@@ -1422,8 +1422,9 @@ def scoped_scanned(argv: List[str]) -> Optional[List[str]]:
     """Resolve an explicit ``--paths`` scan list of display paths, or None for the walk.
 
     The fast check passes the changed C# files so a two-file edit scans two
-    files instead of the tree; whole-tree stays the default for CI and the
-    pre-commit hook. Names are repository-relative or absolute. Root
+    files instead of the tree, and the pre-commit hook passes the staged C#
+    files; whole-tree stays the default for CI. Names are
+    repository-relative or absolute. Root
     membership and the exclusion prefixes still apply, so a scoped verdict
     is exactly the whole-tree verdict restricted to the named files, and a
     name that is not a readable C# file fails closed: the scan can never

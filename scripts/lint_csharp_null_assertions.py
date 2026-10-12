@@ -22,9 +22,10 @@ Interpolated strings are masked whole, which can only hide a violation
 inside a hole, never fabricate one.
 
 '--verbose' also prints the scanned file count when clean. '--paths'
-scans only the named C# files (the fast check's per-iteration loop;
-whole-tree stays the default for CI and the pre-commit hook). Exit codes:
-0 = clean, 1 = at least one banned assertion remains, 2 = usage error.
+scans only the named C# files (the fast check's per-iteration loop and
+the pre-commit hook's staged files; whole-tree stays the default for
+CI). Exit codes: 0 = clean, 1 = at least one banned assertion remains,
+2 = usage error.
 """
 
 from __future__ import annotations

@@ -22,23 +22,20 @@ repos:
         description: CSharpier is an opinionated C# formatter inspired by Prettier.
       - id: lint-csharp-member-order
         name: Enforce C# source policy
-        entry: uv run scripts/lint_csharp_member_order.py
+        entry: uv run scripts/lint_csharp_member_order.py --paths
         language: system
-        pass_filenames: false
         files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
         description: Enforces comment style, method naming, member tiers, access ordering, and nested-type placement.
       - id: lint-csharp-null-assertions
         name: Enforce explicit null assertions
-        entry: uv run scripts/lint_csharp_null_assertions.py
+        entry: uv run scripts/lint_csharp_null_assertions.py --paths
         language: system
-        pass_filenames: false
         files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
         description: Bans Assert.IsNull/Assert.IsNotNull so UnityEngine.Object null checks use the overloaded == and != operators.
       - id: lint-csharp-usings
         name: Enforce namespace-scoped usings
-        entry: uv run scripts/lint_csharp_usings.py
+        entry: uv run scripts/lint_csharp_usings.py --paths
         language: system
-        pass_filenames: false
         files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
         description: Moves `using` directives inside the namespace; file-level usings stay sanctioned for assembly-attribute preambles.
       - id: lint-release-secrets
