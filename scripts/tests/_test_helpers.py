@@ -152,19 +152,6 @@ def find_python() -> str:
     raise RuntimeError("the harness self-tests require a working Python 3 interpreter (python3 or python)")
 
 
-def find_node() -> str:
-    """Resolve the node runtime for driving the release pipeline scripts.
-
-    The release pipeline scripts (issue #171's remaining surface) are still
-    node programs while their self-tests port to typed Python; the tests
-    only exercise local modes that execute no registry or network work.
-    """
-    resolved = shutil.which("node")
-    if resolved is None:
-        raise RuntimeError("the release self-tests require node on PATH")
-    return resolved
-
-
 def run_tool_output(command: Sequence[str]) -> Tuple[str, int]:
     """Run a child tool with all output merged, returning ``(output, exit code)``.
 

@@ -178,15 +178,12 @@ def is_surface_path(path: str) -> bool:
 def available_test_files() -> Tuple[str, ...]:
     """List the self-test file names the suite currently discovers.
 
-    Both migration patterns count (``test_*.py`` and the remaining
-    ``test-*.ps1``), so a mapped name is only considered available when the
-    runner would actually discover it; a stale mapping therefore fails safe
-    to the full suite instead of narrowing to a file that does not exist.
+    A mapped name is only considered available when the runner would
+    actually discover it; a stale mapping therefore fails safe to the full
+    suite instead of narrowing to a file that does not exist.
     """
     tests_dir = Path(__file__).resolve().parent / "tests"
-    names = [path.name for path in tests_dir.glob("test_*.py")]
-    names.extend(path.name for path in tests_dir.glob("test-*.ps1"))
-    return tuple(sorted(names))
+    return tuple(sorted(path.name for path in tests_dir.glob("test_*.py")))
 
 
 def _git_lines(repo_root: Path, args: Sequence[str]) -> List[str]:
