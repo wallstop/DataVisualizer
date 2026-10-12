@@ -52,8 +52,8 @@ SURFACE_FILES: Tuple[str, ...] = (
 # subject (shared manifests, the suite's own helpers, or anything unmapped)
 # selects every test file, so a subject without a mapping still gets coverage.
 # The tests that drive typed Python scripts are typed Python themselves
-# (issue #171); only the two Unity-driver subjects keep their .ps1 test names
-# until their tranche ports.
+# (issue #171); only the host-analyzer installer keeps its .ps1 test name
+# until its tranche port.
 SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/fast_check.py": ("test_fast_check.py",),
     "scripts/gate.py": ("test_gate.py",),
@@ -71,7 +71,7 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint-changelog-length.js": ("test_changelog_length.py",),
     "scripts/lint-line-endings.js": ("test_line_endings.py",),
     "scripts/lint-release-secrets.js": ("test_release_secrets.py",),
-    "scripts/run-unity-validation.ps1": ("test-run-unity-validation.ps1",),
+    "scripts/run_unity_validation.py": ("test_run_unity_validation.py",),
     "scripts/install-host-errorprone-analyzers.ps1": ("test-host-errorprone-analyzers.ps1",),
     "scripts/release/verify-release.mjs": ("test_verify_release.py",),
     "scripts/release/validate-unitypackage.mjs": ("test_validate_unitypackage.py",),
@@ -87,6 +87,7 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint-llm-instructions.ps1": ("test_lint_llm_instructions.py",),
     "scripts/lint-file-lengths.ps1": ("test_file_lengths.py",),
     "scripts/lint-assembly-warnings.ps1": ("test_assembly_warnings.py",),
+    "scripts/run-unity-validation.ps1": ("test_run_unity_validation.py",),
     ".devcontainer/ai-backends.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/env-local.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/recycle-stale-opencode-service.sh": ("test_opencode_service_recycle.py",),
