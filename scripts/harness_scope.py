@@ -52,8 +52,7 @@ SURFACE_FILES: Tuple[str, ...] = (
 # subject (shared manifests, the suite's own helpers, or anything unmapped)
 # selects every test file, so a subject without a mapping still gets coverage.
 # The tests that drive typed Python scripts are typed Python themselves
-# (issue #171), and the node-lint subjects' tests ported the same way; the
-# remaining devcontainer and Unity-driver subjects keep their .ps1 test names
+# (issue #171); only the two Unity-driver subjects keep their .ps1 test names
 # until their tranche ports.
 SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/fast_check.py": ("test_fast_check.py",),
@@ -88,24 +87,24 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint-llm-instructions.ps1": ("test_lint_llm_instructions.py",),
     "scripts/lint-file-lengths.ps1": ("test_file_lengths.py",),
     "scripts/lint-assembly-warnings.ps1": ("test_assembly_warnings.py",),
-    ".devcontainer/ai-backends.sh": ("test-ai-backends.ps1", "test-env-local-precedence.ps1"),
-    ".devcontainer/env-local.sh": ("test-ai-backends.ps1", "test-env-local-precedence.ps1"),
-    ".devcontainer/recycle-stale-opencode-service.sh": ("test-opencode-service-recycle.ps1",),
+    ".devcontainer/ai-backends.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
+    ".devcontainer/env-local.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
+    ".devcontainer/recycle-stale-opencode-service.sh": ("test_opencode_service_recycle.py",),
 }
 
 # Coarse subjects for tooling trees whose files share one contract suite.
 # Specific prefixes win over the coarse trees, so order matters; the mcp
 # subtree verifies the MCP contract suite, not the .llm content lints.
 SUBJECT_PREFIXES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
-    (".llm/mcp/", ("test-mcp-credentials.ps1", "test-mcp-sync.ps1")),
+    (".llm/mcp/", ("test_mcp_credentials.py", "test_mcp_sync.py")),
     (
         ".devcontainer/",
         (
-            "test-ai-backends.ps1",
-            "test-env-local-precedence.ps1",
-            "test-mcp-credentials.ps1",
-            "test-mcp-sync.ps1",
-            "test-opencode-service-recycle.ps1",
+            "test_ai_backends.py",
+            "test_env_local_precedence.py",
+            "test_mcp_credentials.py",
+            "test_mcp_sync.py",
+            "test_opencode_service_recycle.py",
         ),
     ),
     (".llm/", ("test_lint_llm_instructions.py", "test_file_lengths.py", "test_generate_skills_index.py")),
