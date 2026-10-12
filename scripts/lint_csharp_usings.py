@@ -27,9 +27,9 @@ preserving order. It declines files whose pre-namespace region holds
 anything besides comments, usings, and blank lines (for example ``#if``
 blocks), leaving those as manual barriers. '--verbose' also prints the
 scanned file count when clean. '--paths' scans only the named C# files
-(the fast check's per-iteration loop; whole-tree stays the default for CI
-and the pre-commit hook). Exit codes: 0 = clean (or fixed clean), 1 = at
-least one misplaced using remains, 2 = usage error.
+(the fast check's per-iteration loop and the pre-commit hook's staged
+files; whole-tree stays the default for CI). Exit codes: 0 = clean (or
+fixed clean), 1 = at least one misplaced using remains, 2 = usage error.
 """
 
 from __future__ import annotations
