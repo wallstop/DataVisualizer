@@ -52,8 +52,9 @@ SURFACE_FILES: Tuple[str, ...] = (
 # subject (shared manifests, the suite's own helpers, or anything unmapped)
 # selects every test file, so a subject without a mapping still gets coverage.
 # The tests that drive typed Python scripts are typed Python themselves
-# (issue #171); subjects still driving PowerShell or node tools keep their
-# .ps1 test names until their tranche ports.
+# (issue #171), and the node-lint subjects' tests ported the same way; the
+# remaining devcontainer and Unity-driver subjects keep their .ps1 test names
+# until their tranche ports.
 SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/fast_check.py": ("test_fast_check.py",),
     "scripts/gate.py": ("test_gate.py",),
@@ -65,12 +66,12 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint_llm_instructions.py": ("test_lint_llm_instructions.py",),
     "scripts/lint_file_lengths.py": ("test_file_lengths.py",),
     "scripts/lint_assembly_warnings.py": ("test_assembly_warnings.py",),
-    "scripts/lint-csharp-member-order.js": ("test-csharp-member-order.ps1",),
-    "scripts/lint-csharp-null-assertions.js": ("test-lint-csharp-null-assertions.ps1",),
-    "scripts/lint-csharp-usings.js": ("test-lint-csharp-usings.ps1",),
-    "scripts/lint-changelog-length.js": ("test-lint-changelog-length.ps1",),
-    "scripts/lint-line-endings.js": ("test-lint-line-endings.ps1",),
-    "scripts/lint-release-secrets.js": ("test-lint-release-secrets.ps1",),
+    "scripts/lint-csharp-member-order.js": ("test_csharp_member_order.py",),
+    "scripts/lint-csharp-null-assertions.js": ("test_csharp_null_assertions.py",),
+    "scripts/lint-csharp-usings.js": ("test_csharp_usings.py",),
+    "scripts/lint-changelog-length.js": ("test_changelog_length.py",),
+    "scripts/lint-line-endings.js": ("test_line_endings.py",),
+    "scripts/lint-release-secrets.js": ("test_release_secrets.py",),
     "scripts/run-unity-validation.ps1": ("test-run-unity-validation.ps1",),
     "scripts/install-host-errorprone-analyzers.ps1": ("test-host-errorprone-analyzers.ps1",),
     "scripts/release/verify-release.mjs": ("test_verify_release.py",),
@@ -108,7 +109,7 @@ SUBJECT_PREFIXES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
         ),
     ),
     (".llm/", ("test_lint_llm_instructions.py", "test_file_lengths.py", "test_generate_skills_index.py")),
-    (".github/", ("test_release_workflows.py", "test-lint-release-secrets.ps1")),
+    (".github/", ("test_release_workflows.py", "test_release_secrets.py")),
 )
 
 SHARED_PREFIXES: Tuple[str, ...] = (
