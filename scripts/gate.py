@@ -189,7 +189,7 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
 ALL_STEPS: Tuple[Step, ...] = tuple(step for _, lane_steps in LANES for step in lane_steps)
 STEP_NAMES: frozenset[str] = frozenset(step.name for step in ALL_STEPS)
 
-# The self-test suite spawns one pwsh child per test file and saturates the
+# The self-test suite spawns one interpreter per test file and saturates the
 # machine, so it runs as its own phase after the quick lanes and keeps its
 # full throughput instead of sharing it with the formatting and lint steps.
 TEST_LANE_NAMES: frozenset[str] = frozenset({"tests"})
