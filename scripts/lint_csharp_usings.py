@@ -122,6 +122,20 @@ def mask_noise(text: str) -> str:
     return "".join(out)
 
 
+def display_for(full_path: Path) -> str:
+    """Show a repo-relative path, or an absolute one when it cannot be relativized.
+
+    A self-test fixture root can live on another Windows drive; relpath then
+    raises where the original returned a drive-absolute path, which is kept
+    so the display never shows a fabricated relative chain.
+    """
+    try:
+        relative = os.path.relpath(full_path, REPO_ROOT).replace(os.sep, "/")
+    except ValueError:
+        return str(full_path).replace(os.sep, "/")
+    return str(full_path).replace(os.sep, "/") if relative.startswith("..") else relative
+
+
 def list_csharp_files(root: str) -> List[ScannedFile]:
     """Walk one scan root and return its C# files in display order."""
     files: List[ScannedFile] = []
@@ -137,9 +151,7 @@ def list_csharp_files(root: str) -> List[ScannedFile]:
                 stack.append(full_path)
                 continue
             if entry.is_file() and entry.name.endswith(".cs"):
-                relative = os.path.relpath(full_path, REPO_ROOT).replace(os.sep, "/")
-                display = str(full_path).replace(os.sep, "/") if relative.startswith("..") else relative
-                files.append(ScannedFile(full_path=full_path, display=display))
+                files.append(ScannedFile(full_path=full_path, display=display_for(full_path)))
     return sorted(files, key=lambda file: str(file.display))
 
 
