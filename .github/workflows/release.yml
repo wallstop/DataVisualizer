@@ -107,7 +107,11 @@ jobs:
       - name: Validate the release tree
         run: |
           set -euo pipefail
-          npm run lint:llm
+          # The lint runs with the image-guaranteed python3 like every other
+          # script in this workflow: `npm run lint:llm` shells out to uv,
+          # which a fresh runner never has, so every preparation dispatch
+          # died here with exit 127 before anything else could run.
+          python3 scripts/lint_llm_instructions.py
           npm pack --dry-run
           candidate_dir="$(mktemp -d "${RUNNER_TEMP}/release-candidate.XXXXXX")"
           python3 scripts/release/build_unitypackage.py --output "${candidate_dir}"
@@ -272,7 +276,9 @@ jobs:
           git push origin "refs/tags/${TAG}"
 
       - name: Run non-Unity repository validation
-        run: npm run lint:llm
+        # Same uv-free interpreter as the preparation job (see above): the
+        # npm script shells out to uv, which runners never have.
+        run: python3 scripts/lint_llm_instructions.py
 
       - name: Verify the release tag and packed payload
         id: verify
