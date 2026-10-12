@@ -80,14 +80,14 @@ GitHub Release API fails.
 
 ## Validation
 
-| Script                      | Rejects                                                                                                 |
-| --------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `prepare-release.mjs`       | unsupported versions, missing or empty Unreleased notes, invalid changelog rotation                     |
-| `tag-release.mjs`           | branch/version disagreement, missing or duplicated dated notes, an existing tag, a dirty tree           |
-| `verify-release.mjs`        | tag/version disagreement, packed files outside the allowlist, missing payload files                     |
-| `build-unitypackage.mjs`    | unsafe paths, missing metadata, duplicate or malformed GUIDs                                            |
-| `validate-unitypackage.mjs` | corrupt archives, unsafe or duplicate members, checksum failures, disagreement with the tracked payload |
-| `extract-release-notes.mjs` | missing, empty, or duplicated version notes                                                             |
+| Script                     | Rejects                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `prepare_release.py`       | unsupported versions, missing or empty Unreleased notes, invalid changelog rotation                     |
+| `tag_release.py`           | branch/version disagreement, missing or duplicated dated notes, an existing tag, a dirty tree           |
+| `verify_release.py`        | tag/version disagreement, packed files outside the allowlist, missing payload files                     |
+| `build_unitypackage.py`    | unsafe paths, missing metadata, duplicate or malformed GUIDs                                            |
+| `validate_unitypackage.py` | corrupt archives, unsafe or duplicate members, checksum failures, disagreement with the tracked payload |
+| `extract_release_notes.py` | missing, empty, or duplicated version notes                                                             |
 
 Both archives, checksums, and release notes must be ready before npm publication. Pinned action revisions are tracked by Dependabot. Workflow contract tests run with the
 cross-platform script suite.

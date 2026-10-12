@@ -3,7 +3,7 @@
 
 Every case from the PowerShell original is kept with the same name and
 assertions; only the driver language changed. The cases drive
-``scripts/release/validate-unitypackage.mjs`` through node and build the
+``scripts/release/validate_unitypackage.py`` as a Python child process and build the
 same hand-made tar fixtures.
 """
 
@@ -24,7 +24,7 @@ from _test_helpers import (
     assert_exit_code,
     assert_true,
     failure_count,
-    find_node,
+    find_python,
     new_temp_root,
     remove_temp_root,
     run_case,
@@ -34,8 +34,8 @@ from _test_helpers import (
 
 TESTS_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = TESTS_DIR.parent
-BUILD_SCRIPT = SCRIPTS_DIR / "release" / "build-unitypackage.mjs"
-VALIDATE_SCRIPT = SCRIPTS_DIR / "release" / "validate-unitypackage.mjs"
+BUILD_SCRIPT = SCRIPTS_DIR / "release" / "build_unitypackage.py"
+VALIDATE_SCRIPT = SCRIPTS_DIR / "release" / "validate_unitypackage.py"
 
 LONG_NAME = "L" + "o" * 76 + "ng.cs"
 
@@ -162,17 +162,17 @@ def new_validator_fixture(no_git: bool = False) -> Path:
     return root
 
 
-def invoke_validator(node: str, root: Path, archive: Path) -> Tuple[str, int]:
-    return run_tool_output([node, str(VALIDATE_SCRIPT), "--root", str(root), "--archive", str(archive)])
+def invoke_validator(python: str, root: Path, archive: Path) -> Tuple[str, int]:
+    return run_tool_output([python, str(VALIDATE_SCRIPT), "--root", str(root), "--archive", str(archive)])
 
 
-def invoke_validator_raw(node: str, arguments: Sequence[str]) -> Tuple[str, int]:
-    return run_tool_output([node, str(VALIDATE_SCRIPT), *arguments])
+def invoke_validator_raw(python: str, arguments: Sequence[str]) -> Tuple[str, int]:
+    return run_tool_output([python, str(VALIDATE_SCRIPT), *arguments])
 
 
-def build_test_archive(node: str, root: Path, output: Path) -> Path:
+def build_test_archive(python: str, root: Path, output: Path) -> Path:
     completed = subprocess.run(
-        [node, str(BUILD_SCRIPT), "--root", str(root), "--output", str(output)],
+        [python, str(BUILD_SCRIPT), "--root", str(root), "--output", str(output)],
         capture_output=True,
         check=False,
     )
@@ -262,22 +262,22 @@ def remove_asset_meta_member(members: Dict[str, str]) -> None:
     members.pop(f"{PACKAGE_META_GUID}/asset.meta")
 
 
-def invoke_hand_built_failure_case(node: str, root: Path, members: Dict[str, str], name: str, pattern: str) -> None:
+def invoke_hand_built_failure_case(python: str, root: Path, members: Dict[str, str], name: str, pattern: str) -> None:
     work = root / "work"
     file_name = "hand-" + re.sub(r"[^a-z0-9]+", "-", name) + ".unitypackage"
     archive = work / file_name
     new_hand_built_archive(work / "stage", archive, members, sorted(members))
     write_checksum_sidecar(archive)
-    output, exit_code = invoke_validator(node, root, archive)
+    output, exit_code = invoke_validator(python, root, archive)
     assert_exit_code(1, f"the hand-built archive ({name}) should fail closed", exit_code)
     assert_true(re.search(pattern, output, re.IGNORECASE) is not None, f"error should explain the failure ({name}) with '{pattern}', got: {output}")
 
 
-def case_validates_a_builder_archive(node: str) -> None:
+def case_validates_a_builder_archive(python: str) -> None:
     root = new_validator_fixture()
     try:
-        archive = build_test_archive(node, root, root / "dist")
-        output, exit_code = invoke_validator(node, root, archive)
+        archive = build_test_archive(python, root, root / "dist")
+        output, exit_code = invoke_validator(python, root, archive)
         assert_exit_code(0, "a builder-produced archive should validate", exit_code)
         assert_true("pkg: com.test.fixture" in output, f"output should report the package name, got: {output}")
         assert_true("version: 0.0.38" in output, f"output should report the package version, got: {output}")
@@ -289,7 +289,7 @@ def case_validates_a_builder_archive(node: str) -> None:
         remove_temp_root(root)
 
 
-def case_validates_a_hand_built_standard_tar(node: str) -> None:
+def case_validates_a_hand_built_standard_tar(python: str) -> None:
     root = new_validator_fixture()
     try:
         work = root / "work"
@@ -297,14 +297,14 @@ def case_validates_a_hand_built_standard_tar(node: str) -> None:
         archive = work / "hand-built.unitypackage"
         new_hand_built_archive(work / "stage", archive, members, sorted(members))
         write_checksum_sidecar(archive)
-        output, exit_code = invoke_validator(node, root, archive)
+        output, exit_code = invoke_validator(python, root, archive)
         assert_exit_code(0, "a standards-conformant hand-built tar should validate", exit_code)
         assert_true("entries: 5" in output, f"output should report the same entry count as the builder, got: {output}")
     finally:
         remove_temp_root(root)
 
 
-def case_fails_when_the_checksum_sidecar_disagrees(node: str) -> None:
+def case_fails_when_the_checksum_sidecar_disagrees(python: str) -> None:
     cases = [
         SidecarCase(
             name="stale hash",
@@ -325,9 +325,9 @@ def case_fails_when_the_checksum_sidecar_disagrees(node: str) -> None:
     for case in cases:
         root = new_validator_fixture()
         try:
-            archive = build_test_archive(node, root, root / "dist")
+            archive = build_test_archive(python, root, root / "dist")
             case.mutate(archive)
-            output, exit_code = invoke_validator(node, root, archive)
+            output, exit_code = invoke_validator(python, root, archive)
             assert_exit_code(1, f"a disagreeing checksum sidecar ({case.name}) should fail closed", exit_code)
             assert_true(
                 re.search(case.pattern, output, re.IGNORECASE) is not None,
@@ -337,7 +337,7 @@ def case_fails_when_the_checksum_sidecar_disagrees(node: str) -> None:
             remove_temp_root(root)
 
 
-def case_fails_when_the_archive_is_corrupt_or_empty(node: str) -> None:
+def case_fails_when_the_archive_is_corrupt_or_empty(python: str) -> None:
     cases = [
         ArchiveCase(name="zero-byte file", payload=b"", pattern="Cannot read a non-empty archive"),
         ArchiveCase(name="non-tar garbage", payload="this is not a tarball".encode("utf-8"), pattern="Cannot list the archive"),
@@ -350,7 +350,7 @@ def case_fails_when_the_archive_is_corrupt_or_empty(node: str) -> None:
             archive = root / file_name
             archive.write_bytes(case.payload)
             write_checksum_sidecar(archive)
-            output, exit_code = invoke_validator(node, root, archive)
+            output, exit_code = invoke_validator(python, root, archive)
             assert_exit_code(1, f"a corrupt or empty archive ({case.name}) should fail closed", exit_code)
             assert_true(
                 re.search(case.pattern, output, re.IGNORECASE) is not None,
@@ -360,7 +360,7 @@ def case_fails_when_the_archive_is_corrupt_or_empty(node: str) -> None:
             remove_temp_root(root)
 
 
-def case_fails_when_the_archive_carries_malformed_members(node: str) -> None:
+def case_fails_when_the_archive_carries_malformed_members(python: str) -> None:
     cases = [
         MemberCase(
             name="member outside guid directories",
@@ -393,12 +393,12 @@ def case_fails_when_the_archive_carries_malformed_members(node: str) -> None:
         try:
             members = get_fixture_members(root)
             case.mutate(members)
-            invoke_hand_built_failure_case(node, root, members, case.name, case.pattern)
+            invoke_hand_built_failure_case(python, root, members, case.name, case.pattern)
         finally:
             remove_temp_root(root)
 
 
-def case_fails_when_the_archive_carries_duplicate_members(node: str) -> None:
+def case_fails_when_the_archive_carries_duplicate_members(python: str) -> None:
     root = new_validator_fixture()
     try:
         members = get_fixture_members(root)
@@ -408,14 +408,14 @@ def case_fails_when_the_archive_carries_duplicate_members(node: str) -> None:
         archive = work / "hand-duplicate.unitypackage"
         new_hand_built_archive(work / "stage", archive, members, order)
         write_checksum_sidecar(archive)
-        output, exit_code = invoke_validator(node, root, archive)
+        output, exit_code = invoke_validator(python, root, archive)
         assert_exit_code(1, "a duplicated member should fail closed", exit_code)
         assert_true("duplicate member" in output, f"error should explain the duplicate member, got: {output}")
     finally:
         remove_temp_root(root)
 
 
-def case_fails_when_the_archive_disagrees_with_the_repository(node: str) -> None:
+def case_fails_when_the_archive_disagrees_with_the_repository(python: str) -> None:
     def rename_to_stray(members: Dict[str, str]) -> None:
         for suffix in ("pathname", "asset", "asset.meta"):
             members[f"{STRAY_GUID}/{suffix}"] = members[f"{SCRIPT_META_GUID}/{suffix}"]
@@ -454,12 +454,12 @@ def case_fails_when_the_archive_disagrees_with_the_repository(node: str) -> None
         try:
             members = get_fixture_members(root)
             case.mutate(members)
-            invoke_hand_built_failure_case(node, root, members, case.name, case.pattern)
+            invoke_hand_built_failure_case(python, root, members, case.name, case.pattern)
         finally:
             remove_temp_root(root)
 
 
-def case_fails_when_the_tree_drifts_after_build(node: str) -> None:
+def case_fails_when_the_tree_drifts_after_build(python: str) -> None:
     cases = [
         DriftCase(name="tracked file without meta", relative_path="Editor/B.cs", content="// drift", pattern="no committed '\\.meta' companion"),
         DriftCase(name="orphan meta", relative_path="Editor/Orphan.meta", content="meta: orphan", pattern="target neither a tracked file nor a directory"),
@@ -469,13 +469,13 @@ def case_fails_when_the_tree_drifts_after_build(node: str) -> None:
     for case in cases:
         root = new_validator_fixture()
         try:
-            archive = build_test_archive(node, root, root / "dist")
+            archive = build_test_archive(python, root, root / "dist")
             write_fixture_file(root, case.relative_path, case.content)
             git_spawn(root, "add", "-A")
             exit_code = git_spawn(root, "commit", "--quiet", "-m", "Drift the tree")
             if exit_code != 0:
                 raise RuntimeError("git commit failed for drift fixture")
-            output, exit_code = invoke_validator(node, root, archive)
+            output, exit_code = invoke_validator(python, root, archive)
             assert_exit_code(1, f"tree drift ({case.name}) should fail closed", exit_code)
             assert_true(
                 re.search(case.pattern, output, re.IGNORECASE) is not None,
@@ -485,7 +485,7 @@ def case_fails_when_the_tree_drifts_after_build(node: str) -> None:
             remove_temp_root(root)
 
 
-def case_fails_when_the_root_is_not_a_repository(node: str) -> None:
+def case_fails_when_the_root_is_not_a_repository(python: str) -> None:
     root = new_validator_fixture(no_git=True)
     try:
         members = get_fixture_members(root)
@@ -493,14 +493,14 @@ def case_fails_when_the_root_is_not_a_repository(node: str) -> None:
         archive = work / "hand-built.unitypackage"
         new_hand_built_archive(work / "stage", archive, members, sorted(members))
         write_checksum_sidecar(archive)
-        output, exit_code = invoke_validator(node, root, archive)
+        output, exit_code = invoke_validator(python, root, archive)
         assert_exit_code(1, "a non-git root should fail closed", exit_code)
         assert_true("not a git work tree" in output, f"error should explain the non-git root, got: {output}")
     finally:
         remove_temp_root(root)
 
 
-def case_rejects_invalid_arguments(node: str) -> None:
+def case_rejects_invalid_arguments(python: str) -> None:
     root = new_validator_fixture()
     try:
         cases = [
@@ -508,7 +508,7 @@ def case_rejects_invalid_arguments(node: str) -> None:
             {"name": "missing required archive flag", "arguments": ["--root", str(root)]},
         ]
         for case in cases:
-            output, exit_code = invoke_validator_raw(node, case["arguments"])
+            output, exit_code = invoke_validator_raw(python, case["arguments"])
             assert_exit_code(1, f"invalid arguments ({case['name']}) should fail", exit_code)
             assert_true("error: " in output, f"output should carry the error prefix ({case['name']}), got: {output}")
     finally:
@@ -518,18 +518,18 @@ def case_rejects_invalid_arguments(node: str) -> None:
 def main() -> int:
     print("== validate-unitypackage self-tests ==")
 
-    node = find_node()
+    python = find_python()
 
-    run_case("Validates_A_BuilderArchive_AgainstTheTrackedTree", lambda: case_validates_a_builder_archive(node))
-    run_case("Validates_A_HandBuiltStandardTar", lambda: case_validates_a_hand_built_standard_tar(node))
-    run_case("Fails_When_TheChecksumSidecarDisagrees", lambda: case_fails_when_the_checksum_sidecar_disagrees(node))
-    run_case("Fails_When_TheArchiveIsCorruptOrEmpty", lambda: case_fails_when_the_archive_is_corrupt_or_empty(node))
-    run_case("Fails_When_TheArchiveCarriesMalformedMembers", lambda: case_fails_when_the_archive_carries_malformed_members(node))
-    run_case("Fails_When_TheArchiveCarriesDuplicateMembers", lambda: case_fails_when_the_archive_carries_duplicate_members(node))
-    run_case("Fails_When_TheArchiveDisagreesWithTheRepository", lambda: case_fails_when_the_archive_disagrees_with_the_repository(node))
-    run_case("Fails_When_TheTreeDriftsAfterBuild", lambda: case_fails_when_the_tree_drifts_after_build(node))
-    run_case("Fails_When_TheRootIsNotARepository", lambda: case_fails_when_the_root_is_not_a_repository(node))
-    run_case("Rejects_InvalidArguments", lambda: case_rejects_invalid_arguments(node))
+    run_case("Validates_A_BuilderArchive_AgainstTheTrackedTree", lambda: case_validates_a_builder_archive(python))
+    run_case("Validates_A_HandBuiltStandardTar", lambda: case_validates_a_hand_built_standard_tar(python))
+    run_case("Fails_When_TheChecksumSidecarDisagrees", lambda: case_fails_when_the_checksum_sidecar_disagrees(python))
+    run_case("Fails_When_TheArchiveIsCorruptOrEmpty", lambda: case_fails_when_the_archive_is_corrupt_or_empty(python))
+    run_case("Fails_When_TheArchiveCarriesMalformedMembers", lambda: case_fails_when_the_archive_carries_malformed_members(python))
+    run_case("Fails_When_TheArchiveCarriesDuplicateMembers", lambda: case_fails_when_the_archive_carries_duplicate_members(python))
+    run_case("Fails_When_TheArchiveDisagreesWithTheRepository", lambda: case_fails_when_the_archive_disagrees_with_the_repository(python))
+    run_case("Fails_When_TheTreeDriftsAfterBuild", lambda: case_fails_when_the_tree_drifts_after_build(python))
+    run_case("Fails_When_TheRootIsNotARepository", lambda: case_fails_when_the_root_is_not_a_repository(python))
+    run_case("Rejects_InvalidArguments", lambda: case_rejects_invalid_arguments(python))
 
     failures = failure_count()
     print(f"== validate-unitypackage: {failures} failure(s) ==")
