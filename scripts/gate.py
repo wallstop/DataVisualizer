@@ -87,19 +87,19 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
             Step(
                 "csharp.member-order",
                 "C# member-order lint",
-                ("node", "scripts/lint-csharp-member-order.js"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_csharp_member_order.py"),
                 ("csharp.format",),
             ),
             Step(
                 "csharp.null-assertions",
                 "C# null-assertions lint",
-                ("node", "scripts/lint-csharp-null-assertions.js"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_csharp_null_assertions.py"),
                 ("csharp.format",),
             ),
             Step(
                 "csharp.usings",
                 "C# usings lint",
-                ("node", "scripts/lint-csharp-usings.js"),
+                (*_PYTHON_LAUNCHER, "scripts/lint_csharp_usings.py"),
                 ("csharp.format",),
             ),
         ),

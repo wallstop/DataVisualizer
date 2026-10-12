@@ -19,7 +19,7 @@ from _test_helpers import (
     assert_exit_code,
     assert_true,
     failure_count,
-    find_node,
+    find_python,
     fixture_path,
     new_temp_root,
     remove_temp_root,
@@ -30,7 +30,7 @@ from _test_helpers import (
 
 TESTS_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = TESTS_DIR.parent
-LINT_SCRIPT = SCRIPTS_DIR / "lint-csharp-usings.js"
+LINT_SCRIPT = SCRIPTS_DIR / "lint_csharp_usings.py"
 
 
 def invoke_using_lint(root: Path, lint_arguments: Sequence[str] = ()) -> Tuple[str, int]:
@@ -39,7 +39,7 @@ def invoke_using_lint(root: Path, lint_arguments: Sequence[str] = ()) -> Tuple[s
     previous = os.environ.get("CSHARP_USINGS_ROOTS")
     try:
         os.environ["CSHARP_USINGS_ROOTS"] = str(root)
-        return run_tool_output([find_node(), str(LINT_SCRIPT), *lint_arguments])
+        return run_tool_output([find_python(), str(LINT_SCRIPT), *lint_arguments])
     finally:
         if had_previous:
             os.environ["CSHARP_USINGS_ROOTS"] = previous or ""

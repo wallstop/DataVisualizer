@@ -232,11 +232,11 @@ def build_steps(plan: FastCheckPlan) -> Tuple[Tuple[CheckStep, ...], Tuple[Check
         # The three source lints are independent read-only scans of the same
         # C# tree, so they run side by side after the format.
         for name, script in (
-            ("csharp.member-order", "scripts/lint-csharp-member-order.js"),
-            ("csharp.null-assertions", "scripts/lint-csharp-null-assertions.js"),
-            ("csharp.usings", "scripts/lint-csharp-usings.js"),
+            ("csharp.member-order", "scripts/lint_csharp_member_order.py"),
+            ("csharp.null-assertions", "scripts/lint_csharp_null_assertions.py"),
+            ("csharp.usings", "scripts/lint_csharp_usings.py"),
         ):
-            quick.append(CheckStep(name, name, ("node", script), ("csharp.format",)))
+            quick.append(CheckStep(name, name, (*_PYTHON_LAUNCHER, script), ("csharp.format",)))
 
 
     if plan.markdown:
