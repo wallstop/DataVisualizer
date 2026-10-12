@@ -132,13 +132,16 @@ jobs:
         run: ${PYTHON} scripts/lint_llm_instructions.py --verbose-output
 
       - name: Enforce C# member ordering
-        run: node scripts/lint-csharp-member-order.js --verbose
+        shell: bash
+        run: ${PYTHON} scripts/lint_csharp_member_order.py --verbose
 
       - name: Enforce explicit null assertions
-        run: node scripts/lint-csharp-null-assertions.js --verbose
+        shell: bash
+        run: ${PYTHON} scripts/lint_csharp_null_assertions.py --verbose
 
       - name: Enforce namespace-scoped usings
-        run: node scripts/lint-csharp-usings.js --verbose
+        shell: bash
+        run: ${PYTHON} scripts/lint_csharp_usings.py --verbose
 
       - name: Enforce the release credential contract
         shell: bash
