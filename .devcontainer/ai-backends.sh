@@ -90,7 +90,7 @@ resolve_timeout_ms() {
 
 # Creates and secures a private config directory. Root-owned Docker named
 # volumes (created before the image pre-built the mount target) are repaired in
-# place via passwordless sudo, mirroring post-start.sh's uv cache repair; the
+# place via passwordless sudo, mirroring post_start.py's uv cache repair; the
 # script only fails with remediation guidance when neither path works.
 prepare_config_dir() {
     local dir="$1"
