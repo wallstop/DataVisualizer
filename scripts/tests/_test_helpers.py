@@ -130,26 +130,14 @@ def assert_exit_code(expected: int, description: str, actual: int) -> None:
 
 
 def find_python() -> str:
-    """Resolve a working Python 3 interpreter for driving the typed scripts.
+    """Reuse the interpreter already running this stdlib-only contract suite.
 
-    The typed Python harness scripts (issue #171) need any working Python 3
-    interpreter; the self-tests only exercise modes that execute no
-    toolchain.
+    Probing PATH per fixture adds processes and can select another Python
+    or a non-working Windows alias. The active executable is already proven.
     """
-    candidates = ["python", "python3"] if sys.platform == "win32" else ["python3", "python"]
-    for candidate in candidates:
-        resolved = shutil.which(candidate)
-        if resolved is None:
-            continue
-        completed = subprocess.run(
-            [resolved, "--version"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if completed.returncode == 0:
-            return resolved
-    raise RuntimeError("the harness self-tests require a working Python 3 interpreter (python3 or python)")
+    if sys.executable:
+        return sys.executable
+    raise RuntimeError("the harness self-tests require an executable Python interpreter")
 
 
 def run_tool_output(command: Sequence[str]) -> Tuple[str, int]:
