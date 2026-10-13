@@ -216,7 +216,7 @@ def main(argv: Sequence[str]) -> int:
 
     refresh_npm_tools(workspace)
     repair_agent_config_ownership(home)
-    run_child_strict(["bash", ".devcontainer/ai-backends.sh", "install"], workspace)
+    run_child_strict([sys.executable, ".devcontainer/ai_backends.py", "install"], workspace)
     replace_bashrc_block(home, workspace)
     repair_cache_ownership(home)
 

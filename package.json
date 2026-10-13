@@ -61,7 +61,7 @@
     "unity:mcp:host": "node .llm/mcp/unity-mcp-host.mjs",
     "unity:mcp:doctor": "uv run scripts/unity_mcp_doctor.py",
     "tools:install": "uv run .devcontainer/install_npm_tools.py",
-    "ai:backends:install": "bash .devcontainer/ai-backends.sh install",
+    "ai:backends:install": "uv run .devcontainer/ai_backends.py install",
     "format:md": "prettier --write \"**/*.md\"",
     "format:md:check": "prettier --check \"**/*.md\""
   },
