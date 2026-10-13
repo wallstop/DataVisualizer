@@ -150,6 +150,18 @@ class InstallerTests(unittest.TestCase):
         self.install_code = 7
         self.assertEqual(tool.main([]), 7)
 
+    def test_cleanup_spawn_failure_preserves_install_failure(self) -> None:
+        self.latest, self.install_code = "2.0", 7
+
+        def cleanup_failure(command: Sequence[str], timeout: Optional[int] = None) -> subprocess.CompletedProcess[str]:
+            if list(command)[:3] == ["npm", "cache", "clean"]:
+                raise OSError("cleanup spawn failed")
+            return self.fake_run(command, timeout)
+
+        with patch.object(tool, "run", side_effect=cleanup_failure):
+            self.assertEqual(tool.main([]), 7)
+        self.assertIn("cleanup spawn failed", self.stderr.getvalue())
+
     def test_signal_exits_keep_shell_convention(self) -> None:
         with patch.object(tool.subprocess, "run", return_value=subprocess.CompletedProcess(["fixture"], -15, "", "")):
             self.assertEqual(self.original_run(["fixture"]).returncode, 143)

@@ -52,6 +52,8 @@ def checked(command: Sequence[str]) -> str:
     if result.returncode:
         replay(result)
         raise ToolFailure(f"Command failed: {' '.join(command)}", result.returncode)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr, end="" if result.stderr.endswith("\n") else "\n")
     return result.stdout.strip()
 
 
@@ -69,6 +71,8 @@ def retry(command: Sequence[str], attempts: int) -> subprocess.CompletedProcess[
 
 def installed_versions() -> Dict[str, str]:
     result = run(["npm", "list", "--global", "--depth=0", "--json"])
+    if result.stderr:
+        print(result.stderr, file=sys.stderr, end="" if result.stderr.endswith("\n") else "\n")
     try:
         parsed: object = json.loads(result.stdout)
         if not isinstance(parsed, dict):
@@ -109,7 +113,13 @@ def check_writable_paths(prefix: Path, cache: Path) -> None:
 
 
 def clean_cache(required: bool) -> None:
-    result = run(["npm", "cache", "clean", "--force"])
+    try:
+        result = run(["npm", "cache", "clean", "--force"])
+    except OSError as error:
+        if required:
+            raise
+        print(f"⚠️  npm cache cleanup could not start: {error}", file=sys.stderr)
+        return
     replay(result)
     if required and result.returncode:
         raise ToolFailure("npm cache cleanup failed.", result.returncode)
@@ -147,6 +157,8 @@ def refresh(offline_ok: bool, attempts: int) -> None:
                 registry_unverified = True
                 continue
             raise ToolFailure(f"Unable to resolve {package}@latest from npm.")
+        if result.stderr:
+            print(result.stderr, file=sys.stderr, end="" if result.stderr.endswith("\n") else "\n")
         latest = result.stdout.strip()
         if version == latest and executable(prefix / "bin" / command):
             print(f"   Current: {package}@{version}")
