@@ -42,6 +42,21 @@ STUB_RECORD = (
 )
 FAILING_STUB = STUB_RECORD.replace("exit 0\n", "exit 1\n")
 
+# The npm tool refresh is typed Python (issue #171), so its stub is a Python
+# child that records the same marker line shape the bash stubs write.
+PYTHON_STUB_RECORD = (
+    "#!/usr/bin/env python3\n"
+    "import os, sys\n"
+    "name = os.path.basename(sys.argv[0])\n"
+    "args = ''.join(f' {argument}' for argument in sys.argv[1:])\n"
+    "value = os.environ.get('GITHUB_PERSONAL_ACCESS_TOKEN')\n"
+    "env = f'GITHUB_PERSONAL_ACCESS_TOKEN={value};' if value is not None else ''\n"
+    "with open(os.environ['MARKER'], 'a') as stream:\n"
+    "    stream.write(f'STUB {name}|{args} |ENV:{env}\\n')\n"
+    "raise SystemExit(0)\n"
+)
+PYTHON_FAILING_STUB = PYTHON_STUB_RECORD.replace("raise SystemExit(0)\n", "raise SystemExit(1)\n")
+
 DOTNET_STUB = (
     "#!/usr/bin/env bash\n"
     'if [ "$1" = "tool" ] && [ "$2" = "restore" ]; then\n'
@@ -77,8 +92,9 @@ class Sandbox:
             directory.mkdir(parents=True)
         self.marker = self.root / "marker.log"
         shutil.copy(LIFECYCLE_DIR / "env-local.sh", self.ws / ".devcontainer" / "env-local.sh")
-        for relative in (".devcontainer/install-npm-tools.sh", ".devcontainer/ai-backends.sh", ".llm/mcp/sync-mcp.sh"):
+        for relative in (".devcontainer/ai-backends.sh", ".llm/mcp/sync-mcp.sh"):
             self.write_stub(self.ws / relative, STUB_RECORD)
+        self.write_stub(self.ws / ".devcontainer/install_npm_tools.py", PYTHON_STUB_RECORD)
         self.write_stub(self.stubs / "node", STUB_RECORD)
         # Credential-shaped variables are scrubbed from the child environment:
         # a devcontainer session forwards real secrets, and the stubs record
@@ -210,7 +226,7 @@ def case_on_create_bootstraps_and_is_idempotent() -> None:
         assert_true(
             stub_calls(sandbox.marker_lines())
             == [
-                "STUB install-npm-tools.sh| --offline-ok",
+                "STUB install_npm_tools.py| --offline-ok",
                 "STUB ai-backends.sh| install",
                 f"STUB sync-mcp.sh| {sandbox.ws}",
             ],
@@ -233,7 +249,7 @@ def case_on_create_bootstraps_and_is_idempotent() -> None:
 def case_on_create_tolerates_npm_failure_only() -> None:
     sandbox = Sandbox()
     try:
-        sandbox.write_stub(sandbox.ws / ".devcontainer/install-npm-tools.sh", FAILING_STUB)
+        sandbox.write_stub(sandbox.ws / ".devcontainer/install_npm_tools.py", PYTHON_FAILING_STUB)
         code, output = sandbox.run("on_create.py")
         assert_exit_code(0, "on_create should tolerate the npm tool refresh failing", code)
         assert_true(
@@ -312,7 +328,7 @@ def case_post_start_replaces_block_and_loads_env() -> None:
         envs = stub_envs(sandbox.marker_lines())
         assert_true(len(calls) >= 4, f"expected the install, backend, doctor, and sync calls, got {calls}")
         assert_true(
-            calls[0].startswith("STUB install-npm-tools.sh|") and calls[1].startswith("STUB ai-backends.sh|"),
+            calls[0].startswith("STUB install_npm_tools.py|") and calls[1].startswith("STUB ai-backends.sh|"),
             f"the npm and backend installs run before the load, got {calls}",
         )
         assert_true("STUB node| .llm/mcp/mcp-doctor.mjs --repair" in calls[2], f"the doctor runs before the sync, got {calls}")

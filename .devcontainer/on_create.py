@@ -110,7 +110,7 @@ def refresh_npm_tools(workspace: Path) -> None:
     attempts = os.environ.get("DATAVIZ_NPM_CREATE_ATTEMPTS") or "3"
     env: Dict[str, str] = dict(os.environ)
     env["DATAVIZ_NPM_INSTALL_ATTEMPTS"] = attempts
-    code = run_child(["bash", ".devcontainer/install-npm-tools.sh", "--offline-ok"], workspace, env)
+    code = run_child(["python3", ".devcontainer/install_npm_tools.py", "--offline-ok"], workspace, env)
     if code != 0:
         print("⚠️  npm tool refresh failed at create time; image-baked versions remain installed.", file=sys.stderr)
 

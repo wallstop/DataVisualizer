@@ -60,7 +60,7 @@
     "mcp:repair": "node .llm/mcp/mcp-doctor.mjs --repair",
     "unity:mcp:host": "node .llm/mcp/unity-mcp-host.mjs",
     "unity:mcp:doctor": "node .llm/mcp/unity-mcp-doctor.mjs",
-    "tools:install": "bash .devcontainer/install-npm-tools.sh",
+    "tools:install": "python3 .devcontainer/install_npm_tools.py",
     "ai:backends:install": "bash .devcontainer/ai-backends.sh install",
     "format:md": "prettier --write \"**/*.md\"",
     "format:md:check": "prettier --check \"**/*.md\""

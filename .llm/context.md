@@ -209,7 +209,7 @@ runs everything, including the Prettier Markdown check, on ubuntu and windows. C
 ### Dev Container, MCP, and Agent Tooling
 
 - The devcontainer (`.devcontainer/`) installs the four coding CLIs as the non-root user and refreshes them on create/start; **never** suggest `sudo npm` — rerun
-  `bash .devcontainer/install-npm-tools.sh` or rebuild instead.
+  `python3 .devcontainer/install_npm_tools.py` or rebuild instead.
 - Gateway launchers (`codex-zai`, `claude-zai`, `codex-openrouter`, `claude-openrouter`) come from `.devcontainer/ai-backends.sh`. They self-load the gitignored `.env.local` for
   keys not already exported (preexisting environment variables win), so they work in non-interactive shells too; contract tests live in `.devcontainer/tests/`.
 - `npm run mcp:sync` regenerates machine-local MCP configs for Claude Code, Codex, OpenCode, Nanocoder, VS Code, and Cursor from `.llm/mcp/configure.mjs`. Those outputs are

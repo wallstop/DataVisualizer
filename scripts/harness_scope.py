@@ -109,6 +109,10 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint-release-secrets.js": ("test_release_secrets.py",),
     ".devcontainer/ai-backends.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/env-local.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
+    ".devcontainer/install_npm_tools.py": ("test_devcontainer_lifecycle.py",),
+    # Retired bash helpers (issue #171) keep their entries so a deletion still
+    # selects the tests that verify the contract they used to own.
+    ".devcontainer/install-npm-tools.sh": ("test_devcontainer_lifecycle.py",),
     ".devcontainer/recycle_stale_opencode_service.py": ("test_opencode_service_recycle.py",),
     # The lifecycle entry points' contract suite (issue #171 port).
     ".devcontainer/_lifecycle_common.py": ("test_devcontainer_lifecycle.py",),

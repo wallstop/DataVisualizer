@@ -102,7 +102,7 @@ ENV DOTNET_RUNNING_IN_CONTAINER=true \
 
 # Install the current Node.js LTS and npm coding tools as the non-root user. The
 # base image's shared NVM directory is group-writable by the vscode/nvm user.
-COPY --chmod=0755 --chown=vscode:nvm install-npm-tools.sh /usr/local/bin/dataviz-install-npm-tools
+COPY --chmod=0755 --chown=vscode:nvm install_npm_tools.py /usr/local/bin/dataviz-install-npm-tools
 USER vscode
 RUN set -eux; \
     source "${NVM_DIR}/nvm.sh"; \
