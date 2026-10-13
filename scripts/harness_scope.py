@@ -108,7 +108,7 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint-release-secrets.js": ("test_release_secrets.py",),
     ".devcontainer/ai-backends.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/env-local.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
-    ".devcontainer/recycle-stale-opencode-service.sh": ("test_opencode_service_recycle.py",),
+    ".devcontainer/recycle_stale_opencode_service.py": ("test_opencode_service_recycle.py",),
     # The lifecycle entry points' contract suite (issue #171 port).
     ".devcontainer/_lifecycle_common.py": ("test_devcontainer_lifecycle.py",),
     ".devcontainer/on_create.py": ("test_devcontainer_lifecycle.py",),

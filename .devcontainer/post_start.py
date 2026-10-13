@@ -190,7 +190,7 @@ def recycle_stale_service(workspace: Path) -> None:
     sessions still broken - they are fine, the singleton behind them is not. A
     matching service is never touched, and a missing .env.local is a no-op.
     """
-    run_child(["bash", str(workspace / ".devcontainer" / "recycle-stale-opencode-service.sh")], workspace)
+    run_child([sys.executable, str(workspace / ".devcontainer" / "recycle_stale_opencode_service.py")], workspace)
 
 
 def warm_opencode_service() -> None:
