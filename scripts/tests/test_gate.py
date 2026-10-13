@@ -569,7 +569,7 @@ def case_execution_scopes_the_suite_to_the_selected_files(python: str) -> None:
             (
                 "gate.scan_diff_scope = lambda base_sha: gate.DiffScope("
                 'changed_csharp=(), markdown_changed=False, package_changed=False, '
-                'self_test_selection=("test_harness_scope.py",))'
+                'self_test_selection=("test_env_local_precedence.py",))'
             ),
             'sys.exit(gate.main(["--only", "tests.self-tests"]))',
         ]
