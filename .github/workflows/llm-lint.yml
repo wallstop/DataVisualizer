@@ -131,9 +131,12 @@ jobs:
           # everything it guards.
           "${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}" --ci-verdicts >> "${GITHUB_OUTPUT}"
 
-      # The lint job only installs prettier; caching the npm download skips
-      # most of the install on every run on both operating systems. The lock
-      # file is intentionally ignored, so the key hashes package.json.
+      # The lint job only installs prettier. Caching the installed tree lets a
+      # package.json hit skip the install entirely — the extraction, not the
+      # download, dominates the Windows install — while the npm download cache
+      # still covers a changed package.json (an exact-key miss reinstalls over
+      # the restored tree). The lock file is intentionally ignored, so both
+      # keys hash package.json.
       - name: Cache npm packages
         if: steps.check-scope.outputs.markdown != 'skip'
         uses: actions/cache@v6
@@ -142,8 +145,17 @@ jobs:
           key: npm-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: npm-${{ runner.os }}-
 
-      - name: Install npm dependencies
+      - name: Cache the installed toolchain
         if: steps.check-scope.outputs.markdown != 'skip'
+        id: toolchain-cache
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: node-modules-${{ runner.os }}-
+
+      - name: Install npm dependencies
+        if: steps.check-scope.outputs.markdown != 'skip' && steps.toolchain-cache.outputs.cache-hit != 'true'
         run: npm install --no-audit --no-fund
 
       - name: Check Markdown formatting
