@@ -21,7 +21,7 @@ class DoctorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.project = self.root / 'Project'
         (self.project / 'ProjectSettings').mkdir(parents=True)
         (self.project / 'ProjectSettings' / 'ProjectVersion.txt').write_text('6000.5', encoding='utf-8')
