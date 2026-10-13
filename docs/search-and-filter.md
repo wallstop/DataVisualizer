@@ -15,7 +15,7 @@ The search box sits in the window header row, above all three panels. It is not 
 Type a term and a popover opens with the matches. Each result shows the object's name and its type name. When the term matched something other than the name, type name, or GUID,
 the result also shows up to two `field: value` lines naming the fields that matched, so you can tell why an asset is in the list.
 
-![Global search popover over the header search field, listing the matched assets with their types](images/data-visualizer-search.png) _Global search over every tracked type.
+![Global search popover over the header search field, listing the matched assets with their types](images/data-visualizer-search.webp) _Global search over every tracked type.
 Regenerated from the live window by the docs capture pipeline._
 
 ### What it matches
