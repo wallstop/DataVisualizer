@@ -90,6 +90,17 @@ class Sandbox:
         self.write_stub_cli("codex")
 
     def write_stub_cli(self, name: str) -> None:
+        """
+            Windows cannot exec a shebang script, so the interpreter-level cases
+            that need a running stub are POSIX-only; Windows still needs the stub
+            to be FOUND on PATH (shutil.which resolves PATHEXT there), so a stub
+            that merely exits cleanly keeps the launcher's failure points where
+            the cases expect them.
+        """
+        if os.name == "nt":
+            stub = self.bin / f"{name}.bat"
+            stub.write_text("@echo off\r\nexit 0\r\n", encoding="utf-8", newline="")
+            return
         stub = self.bin / name
         stub.write_text(STUB_SCRIPT, encoding="utf-8", newline="")
         stub.chmod(0o755)
