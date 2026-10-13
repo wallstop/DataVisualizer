@@ -50,20 +50,14 @@ from harness_scope import (
 PLAN_SCHEMA_VERSION = 1
 
 
-def _python_launcher() -> Tuple[str, ...]:
-    """Prefix that runs the harness's own Python scripts on this machine.
-
-    ``uv run`` is the documented path because it provisions the project
-    environment on machines that have uv; anywhere uv is absent the plan
-    degrades to the interpreter running this script, so the built steps
-    always describe commands that can actually execute on this host.
-    """
-    if shutil.which("uv") is not None:
-        return ("uv", "run")
-    return (sys.executable,)
-
-
-_PYTHON_LAUNCHER: Tuple[str, ...] = _python_launcher()
+# Child steps run the interpreter that is already executing this driver: the
+# harness scripts are standard library only, so no environment provisioning is
+# needed, the step commands cannot drift from the driver's own runtime, and
+# the per-step ``uv run`` resolution cost (measured at about 0.15s per spawn
+# on a bind-mounted checkout) plus its lockfile-drift failure mode leave the
+# per-edit loop. The documented outer entries (``npm run check:fast``,
+# ``uv run scripts/fast_check.py``) are unchanged.
+_PYTHON_LAUNCHER: Tuple[str, ...] = (sys.executable,)
 
 
 def _git_text(repo_root: Path, args: Sequence[str]) -> str:
