@@ -16,9 +16,7 @@ set -euo pipefail
 
 readonly PROFILE_NAME="devcontainer-zai"
 readonly OPENROUTER_PROFILE_NAME="devcontainer-openrouter"
-readonly ZAI_RESPONSES_URL="https://api.z.ai/api/v1"
 readonly ZAI_ANTHROPIC_URL="https://api.z.ai/api/anthropic"
-readonly OPENROUTER_API_URL="https://openrouter.ai/api/v1"
 readonly OPENROUTER_ANTHROPIC_URL="https://openrouter.ai/api"
 
 LAUNCHER_SCRIPT_PATH="$(realpath "${BASH_SOURCE[0]}")"
@@ -161,129 +159,37 @@ preflight_claude_subprocess_scrub() {
     fi
 }
 
-install_codex_profile() {
-    local codex_home catalog_file catalog_path_toml catalog_tmp profile_file profile_tmp
-    codex_home="${CODEX_HOME:-${HOME}/.codex}"
-    catalog_file="${codex_home}/${PROFILE_NAME}-models.json"
-    profile_file="${codex_home}/${PROFILE_NAME}.config.toml"
-    catalog_path_toml="${catalog_file//\\/\\\\}"
-    catalog_path_toml="${catalog_path_toml//\"/\\\"}"
-
-    prepare_config_dir "${codex_home}"
-
-    catalog_tmp="$(mktemp "${codex_home}/.${PROFILE_NAME}-models.XXXXXX")"
-    profile_tmp="$(mktemp "${codex_home}/.${PROFILE_NAME}-profile.XXXXXX")"
-    trap 'rm -f "${catalog_tmp:-}" "${profile_tmp:-}"' RETURN
-
-    # Model metadata follows Z.ai's current Codex Responses integration contract.
-    cat >"${catalog_tmp}" <<'JSON'
-{
-  "models": [
-    {
-      "slug": "glm-5.3",
-      "display_name": "glm-5.3",
-      "description": "Z.ai flagship coding model",
-      "default_reasoning_level": "max",
-      "supported_reasoning_levels": [
-        {
-          "effort": "low",
-          "description": "Light reasoning"
-        },
-        {
-          "effort": "high",
-          "description": "Enhanced reasoning"
-        },
-        {
-          "effort": "max",
-          "description": "Deep reasoning"
-        }
-      ],
-      "shell_type": "shell_command",
-      "visibility": "list",
-      "supported_in_api": true,
-      "priority": 0,
-      "base_instructions": "",
-      "supports_reasoning_summaries": true,
-      "default_reasoning_summary": "none",
-      "support_verbosity": false,
-      "apply_patch_tool_type": "freeform",
-      "truncation_policy": {
-        "mode": "bytes",
-        "limit": 10000
-      },
-      "context_window": 1048576,
-      "max_context_window": 1048576,
-      "effective_context_window_percent": 95,
-      "supports_parallel_tool_calls": true,
-      "experimental_supported_tools": [],
-      "input_modalities": [
-        "text"
-      ]
-    }
-  ]
+# The image has python3; host shells may only have python, or a Windows
+# python3 alias that cannot execute. Resolve once for this launch process.
+backend_state_python=""
+run_backend_state() {
+    local candidate
+    if [ -z "${backend_state_python}" ]; then
+        for candidate in "${PYTHON:-}" python3 python; do
+            if [ -n "${candidate}" ] && command -v "${candidate}" >/dev/null 2>&1 \
+                && "${candidate}" -c "" >/dev/null 2>&1; then
+                backend_state_python="${candidate}"
+                break
+            fi
+        done
+        if [ -z "${backend_state_python}" ]; then
+            printf '[ai-backends] ERROR: A working Python 3 interpreter is required for backend state writes.\n' >&2
+            return 1
+        fi
+    fi
+    "${backend_state_python}" "${WORKSPACE_ROOT}/.devcontainer/backend_state.py" "$@"
 }
-JSON
 
-    cat >"${profile_tmp}" <<TOML
-model_provider = "ZAI"
-model = "glm-5.3"
-model_reasoning_effort = "max"
-model_catalog_json = "${catalog_path_toml}"
-
-[model_providers.ZAI]
-name = "ZAI"
-base_url = "${ZAI_RESPONSES_URL}"
-env_key = "ZAI_API_KEY"
-wire_api = "responses"
-request_max_retries = 4
-stream_max_retries = 5
-stream_idle_timeout_ms = 300000
-
-[shell_environment_policy]
-filters = { ZAI_API_KEY = "exclude", Z_AI_API_KEY = "exclude" }
-TOML
-
-    chmod 600 "${catalog_tmp}" "${profile_tmp}"
-    mv "${catalog_tmp}" "${catalog_file}"
-    mv "${profile_tmp}" "${profile_file}"
-    trap - RETURN
+install_codex_profile() {
+    local codex_home="${CODEX_HOME:-${HOME}/.codex}"
+    prepare_config_dir "${codex_home}"
+    run_backend_state profile zai --config-dir "${codex_home}"
 }
 
 install_codex_openrouter_profile() {
-    local codex_home profile_file profile_tmp
-    codex_home="${CODEX_HOME:-${HOME}/.codex}"
-    profile_file="${codex_home}/${OPENROUTER_PROFILE_NAME}.config.toml"
-
+    local codex_home="${CODEX_HOME:-${HOME}/.codex}"
     prepare_config_dir "${codex_home}"
-
-    profile_tmp="$(mktemp "${codex_home}/.${OPENROUTER_PROFILE_NAME}-profile.XXXXXX")"
-    trap 'rm -f "${profile_tmp:-}"' RETURN
-
-    # OpenRouter Codex contract (openrouter.ai/docs/cookbook/coding-agents/codex-cli):
-    # command-backed auth prints the bearer token to stdout and unlocks the
-    # OpenRouter model catalog; base_url is the OpenAI-compatible Responses API
-    # that Codex's wire protocol consumes. Raw OpenRouter keys stay excluded
-    # from shells Codex spawns.
-    cat >"${profile_tmp}" <<TOML
-model_provider = "OPENROUTER"
-model = "~openai/gpt-latest"
-model_reasoning_effort = "high"
-
-[model_providers.OPENROUTER]
-name = "OpenRouter"
-base_url = "${OPENROUTER_API_URL}"
-
-[model_providers.OPENROUTER.auth]
-command = "sh"
-args = ["-c", "echo \$OPENROUTER_API_KEY"]
-
-[shell_environment_policy]
-filters = { OPENROUTER_API_KEY = "exclude", OPEN_ROUTER_API_KEY = "exclude" }
-TOML
-
-    chmod 600 "${profile_tmp}"
-    mv "${profile_tmp}" "${profile_file}"
-    trap - RETURN
+    run_backend_state profile openrouter --config-dir "${codex_home}"
 }
 
 install_launchers() {
@@ -318,46 +224,12 @@ install_launchers() {
 # project .mcp.json server shows "Pending approval" in claude-zai /
 # claude-openrouter because they never read ~/.claude.json.
 seed_claude_approvals() {
-    local config_dir="$1" mcp_config state_file tmp
+    local config_dir="$1" mcp_config
     mcp_config="${AI_BACKENDS_MCP_CONFIG:-${WORKSPACE_ROOT}/.mcp.json}"
-    state_file="${config_dir}/.claude.json"
     [ -f "${mcp_config}" ] || return 0
     prepare_config_dir "${config_dir}" || return 1
-    [ -s "${state_file}" ] || printf '{}\n' >"${state_file}" || return 1
-    tmp="$(mktemp "${state_file}.XXXXXX")" || return 1
-    if command -v jq >/dev/null 2>&1; then
-        jq --arg project "${WORKSPACE_ROOT}" --slurpfile mcp "${mcp_config}" '
-            ($mcp[0].mcpServers // {} | keys | sort) as $names
-            | (.projects // {}) as $projects
-            | ($projects[$project] // {}) as $entry
-            | (($entry.enabledMcpjsonServers // []) + $names | unique) as $enabled
-            | ($entry + {hasTrustDialogAccepted: true, enabledMcpjsonServers: $enabled}) as $desired
-            | if $entry == $desired then . else (. + {projects: ($projects + {($project): $desired})}) end
-        ' "${state_file}" >"${tmp}" 2>/dev/null
-    elif command -v node >/dev/null 2>&1; then
-        node - "${state_file}" "${mcp_config}" "${WORKSPACE_ROOT}" >"${tmp}" 2>/dev/null <<'NODE'
-const fs = require("node:fs");
-
-const [stateFile, mcpFile, project] = process.argv.slice(2);
-const state = JSON.parse(fs.readFileSync(stateFile, "utf8"));
-const mcp = JSON.parse(fs.readFileSync(mcpFile, "utf8"));
-const projects = state.projects && typeof state.projects === "object" ? state.projects : {};
-const entry = projects[project] && typeof projects[project] === "object" ? projects[project] : {};
-const names = Object.keys(mcp.mcpServers && typeof mcp.mcpServers === "object" ? mcp.mcpServers : {});
-const existing = Array.isArray(entry.enabledMcpjsonServers) ? entry.enabledMcpjsonServers : [];
-const enabledMcpjsonServers = [...new Set([...existing, ...names])].sort();
-projects[project] = { ...entry, hasTrustDialogAccepted: true, enabledMcpjsonServers };
-process.stdout.write(`${JSON.stringify({ ...state, projects }, null, 2)}\n`);
-NODE
-    else
-        rm -f "${tmp}"
-        return 0
-    fi
-    if [ -s "${tmp}" ] && chmod 600 "${tmp}" && mv "${tmp}" "${state_file}"; then
-        return 0
-    fi
-    rm -f "${tmp}"
-    return 1
+    run_backend_state approve \
+        --config-dir "${config_dir}" --project "${WORKSPACE_ROOT}" --mcp-config "${mcp_config}"
 }
 
 install_backend_support() {

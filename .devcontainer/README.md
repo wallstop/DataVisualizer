@@ -42,8 +42,8 @@ Regenerate the machine-local MCP configs any time with `npm run mcp:sync`.
 
 ## Native and gateway backends
 
-`codex` and `claude` keep their native OpenAI/Anthropic backends. The gateway launchers are per-process opt-ins installed by `bash .devcontainer/ai-backends.sh install` (run at
-create and start):
+`codex` and `claude` keep their native OpenAI/Anthropic backends. Profile and approval-file writes are handled by typed `backend_state.py`; the shell owns credential loading and
+launches. The gateway launchers are per-process opt-ins installed by `bash .devcontainer/ai-backends.sh install` (run at create and start):
 
 - `codex-zai` uses a `devcontainer-zai` profile against Z.ai's Responses API with a pinned glm-5.3 model catalog.
 - `claude-zai` uses Z.ai's Anthropic-compatible endpoint with a separate `~/.claude-zai` state directory, so native credentials and sessions stay isolated. The launcher keeps

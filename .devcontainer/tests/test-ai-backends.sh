@@ -19,6 +19,26 @@ if [ ! -f "${LAUNCHER}" ]; then
     exit 1
 fi
 
+# Keep credential isolation while allowing the Python state writer to run.
+# The wrapper supplies its validated interpreter; direct runs can resolve
+# one before the fixture replaces PATH. Windows native runtimes also need
+# SystemRoot in an explicitly replaced environment (Python subprocess docs).
+RUNTIME_ENV=()
+if [ -n "${AI_BACKENDS_TEST_PYTHON:-}" ]; then
+    RUNTIME_ENV+=("PYTHON=${AI_BACKENDS_TEST_PYTHON}")
+else
+    for candidate in "${PYTHON:-}" python3 python; do
+        if [ -n "${candidate}" ] && command -v "${candidate}" >/dev/null 2>&1 \
+            && "${candidate}" -c "" >/dev/null 2>&1; then
+            RUNTIME_ENV+=("PYTHON=$(command -v "${candidate}")")
+            break
+        fi
+    done
+fi
+if [ -n "${SYSTEMROOT:-${SystemRoot:-}}" ]; then
+    RUNTIME_ENV+=("SystemRoot=${SYSTEMROOT:-${SystemRoot:-}}")
+fi
+
 PASS=0
 FAIL=0
 SANDBOX=""
@@ -95,6 +115,10 @@ make_sandbox() {
     SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/ai-backends-test.XXXXXX")"
     mkdir -p "${SANDBOX}/bin" "${SANDBOX}/home" "${SANDBOX}/codex-home" "${SANDBOX}/workdir"
     cp "${REPO_ROOT}/.devcontainer/env-local.sh" "${SANDBOX}/bin/env-local.sh"
+    # MSYS can copy a launcher instead of making a native symlink. Its
+    # computed workspace is then the sandbox, so stage the state companion.
+    mkdir -p "${SANDBOX}/.devcontainer"
+    cp "${REPO_ROOT}/.devcontainer/backend_state.py" "${SANDBOX}/.devcontainer/backend_state.py"
     for launcher in codex-zai claude-zai codex-openrouter claude-openrouter; do
         ln -sfn "${LAUNCHER}" "${SANDBOX}/bin/${launcher}"
     done
@@ -138,7 +162,7 @@ run_launcher() {
         esac
     done
     (cd "${SANDBOX}/workdir" && \
-        env -i \
+        env -i "${RUNTIME_ENV[@]}" \
             PATH="${SANDBOX}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
             HOME="${SANDBOX}/home" \
             CODEX_HOME="${SANDBOX}/codex-home" \
@@ -381,7 +405,7 @@ test_install_creates_all_launchers() {
     make_sandbox
     mkdir -p "${SANDBOX}/install-bin"
     (cd "${SANDBOX}/workdir" && \
-        env -i \
+        env -i "${RUNTIME_ENV[@]}" \
             PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
             HOME="${SANDBOX}/home" \
             CODEX_HOME="${SANDBOX}/codex-home" \
@@ -423,7 +447,7 @@ test_install_seeds_isolated_claude_approvals() {
         test_path="${test_path}:${node_dir}"
     fi
     (cd "${SANDBOX}/workdir" && \
-        env -i \
+        env -i "${RUNTIME_ENV[@]}" \
             PATH="${test_path}" \
             HOME="${SANDBOX}/home" \
             CODEX_HOME="${SANDBOX}/codex-home" \
@@ -443,6 +467,26 @@ test_install_seeds_isolated_claude_approvals() {
             "install seeds managed server approvals for ${config_dir_name}" \
             "${state_file}" '"unity"'
     done
+    destroy_sandbox
+}
+
+test_missing_python_keeps_optional_claude_approvals_best_effort() {
+    make_sandbox
+    write_env_file 'ZAI_API_KEY=z-fixture-key\nOPENROUTER_API_KEY=or-fixture-key\n'
+    printf '%s\n' '{"mcpServers":{"unity":{}}}' >"${SANDBOX}/.mcp.json"
+    for candidate in python3 python; do
+        printf '%s\n' '#!/usr/bin/env bash' 'exit 1' >"${SANDBOX}/bin/${candidate}"
+        chmod +x "${SANDBOX}/bin/${candidate}"
+    done
+    for launcher in claude-zai claude-openrouter; do
+        run_launcher "${launcher}" "PYTHON=${SANDBOX}/bin/python3" \
+            "AI_BACKENDS_MCP_CONFIG=${SANDBOX}/.mcp.json" --version
+        assert_exit_zero "${launcher} continues without optional approval writer"
+        assert_dump_line "${launcher} reaches exec" "cmd: claude"
+    done
+    run_launcher codex-zai "PYTHON=${SANDBOX}/bin/python3" --version
+    assert_exit_nonzero "required Codex profile writer still fails without Python"
+    assert_stderr_contains "required writer names missing interpreter" "A working Python 3 interpreter is required"
     destroy_sandbox
 }
 
@@ -470,7 +514,8 @@ for test_fn in \
     test_config_dir_root_owned_is_self_healed_with_sudo \
     test_config_dir_failure_is_actionable \
     test_install_creates_all_launchers \
-    test_install_seeds_isolated_claude_approvals; do
+    test_install_seeds_isolated_claude_approvals \
+    test_missing_python_keeps_optional_claude_approvals_best_effort; do
     "${test_fn}"
 done
 
