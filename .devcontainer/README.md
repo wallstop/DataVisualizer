@@ -16,14 +16,14 @@ A fast, reliable VS Code devcontainer for working on this Unity UPM package, wit
 ## Why `npm install` never needs sudo
 
 The npm coding CLIs are installed **as the `vscode` user** during the image build. The base image's NVM directory is group-writable through the stable `nvm` group, and the global
-npm prefix is `chgrp nvm` + `chmod g+rws` so the tree survives Dev Containers' UID remapping. `install-npm-tools.sh` verifies every required path is writable before doing anything
+npm prefix is `chgrp nvm` + `chmod g+rws` so the tree survives Dev Containers' UID remapping. `install_npm_tools.py` verifies every required path is writable before doing anything
 and **fails with a remediation message instead of invoking sudo** or creating mixed-ownership installs. If npm is temporarily unreachable at container start, the image-baked
 versions keep working (bounded offline checks with `--offline-ok`).
 
 ## Open speed and rebuilds
 
 - The Dockerfile builds with Docker layer cache **enabled** (unlike NovaSharp's `--no-cache` setup): cold builds take a few minutes, rebuilds are seconds.
-- The moving npm `latest` dist-tags are resolved at container create/start by `install-npm-tools.sh`, which only installs tools whose installed version differs — a no-op when
+- The moving npm `latest` dist-tags are resolved at container create/start by `install_npm_tools.py`, which only installs tools whose installed version differs — a no-op when
   everything is current.
 - Named volumes persist npm + uv caches and every agent's auth home (`~/.codex`, `~/.claude`, `~/.claude-zai`, `~/.claude-openrouter`, `~/.local/share/opencode`,
   `~/.config/nanocoder`) across **full rebuilds**: log in once. The image pre-creates those mount targets with `vscode` ownership so fresh volumes start writable (Docker seeds a
