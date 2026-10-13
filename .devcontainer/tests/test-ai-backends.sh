@@ -115,6 +115,10 @@ make_sandbox() {
     SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/ai-backends-test.XXXXXX")"
     mkdir -p "${SANDBOX}/bin" "${SANDBOX}/home" "${SANDBOX}/codex-home" "${SANDBOX}/workdir"
     cp "${REPO_ROOT}/.devcontainer/env-local.sh" "${SANDBOX}/bin/env-local.sh"
+    # MSYS can copy a launcher instead of making a native symlink. Its
+    # computed workspace is then the sandbox, so stage the state companion.
+    mkdir -p "${SANDBOX}/.devcontainer"
+    cp "${REPO_ROOT}/.devcontainer/backend_state.py" "${SANDBOX}/.devcontainer/backend_state.py"
     for launcher in codex-zai claude-zai codex-openrouter claude-openrouter; do
         ln -sfn "${LAUNCHER}" "${SANDBOX}/bin/${launcher}"
     done
