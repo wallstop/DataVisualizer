@@ -58,6 +58,8 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     # Unity metadata cannot affect unrelated Python subjects. Keep this
     # companion on the same docs contract; unknown metadata stays fail-safe.
     "scripts/tests/test_build_docs.py.meta": ("test_build_docs.py",),
+    "scripts/unity_mcp_doctor.py": ("test_unity_mcp_doctor.py",),
+    ".llm/mcp/unity-mcp-doctor.mjs": ("test_unity_mcp_doctor.py",),
     "scripts/fast_check.py": ("test_fast_check.py",),
     "scripts/gate.py": ("test_gate.py",),
     "pyproject.toml": ("test_gate.py",),
