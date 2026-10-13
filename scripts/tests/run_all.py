@@ -97,15 +97,24 @@ def run_tests(selected: Sequence[str], python_executable: str) -> int:
             results.append((name, None, "[run-all] ERROR: no result recorded; the worker crashed before reporting"))
 
     failed = 0
+    failed_names: List[str] = []
     for name, exit_code, output in sorted(results):
         print(f"\nRunning {name}...")
         print(output)
         if exit_code != 0:
             failed += 1
+            failed_names.append(name)
 
     print()
     if failed > 0:
         print(f"Self-tests: {failed} of {len(selected)} test file(s) failed.")
+        """
+            Name the failed files in the summary block: a full-suite run on a
+            shared-surface change produces a log whose head is truncated, and the
+            failing file's own output can be cut off with it, while this final
+            line always survives.
+        """
+        print(f"Failing file(s): {', '.join(failed_names)}")
         return 1
     print(f"Self-tests: all {len(selected)} test file(s) passed.")
     return 0
