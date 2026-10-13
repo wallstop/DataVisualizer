@@ -315,7 +315,7 @@ def case_selection_falls_back_to_all_for_shared_suite_paths(python: str) -> None
 
 
 def case_selection_falls_back_to_all_for_unmapped_subjects(python: str) -> None:
-    probe = invoke_scope_probe(python, "scripts/build_docs.py")
+    probe = invoke_scope_probe(python, "scripts/unmapped_subject.py")
     assert_true(probe["selection"]["all"], "an unmapped surface path must select the full suite")
 
 
@@ -359,7 +359,7 @@ def case_selection_output_falls_back_to_all_for_an_unmapped_commit(python: str) 
     repo = new_scope_repo()
     try:
         base = _git_output(repo, ["rev-parse", "HEAD"])
-        scope_commit(repo, {"scripts/build_docs.py": "# changed\n"})
+        scope_commit(repo, {"scripts/unmapped_subject.py": "# changed\n"})
         output = invoke_should_run(repo, python, base, selection=True)
         assert_true(output == "all", f"an unmapped subject must select the full suite, got: {output}")
     finally:

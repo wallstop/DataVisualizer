@@ -54,6 +54,7 @@ SURFACE_FILES: Tuple[str, ...] = (
 # (issue #171); the migration's last .ps1 test file ported with the
 # host-analyzer installer tranche.
 SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
+    "scripts/build_docs.py": ("test_build_docs.py",),
     "scripts/fast_check.py": ("test_fast_check.py",),
     "scripts/gate.py": ("test_gate.py",),
     "pyproject.toml": ("test_gate.py",),

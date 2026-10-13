@@ -60,6 +60,9 @@ No subscriptions, no paid upgrades, no feature-gated tiers. The full source is M
 C# is formatted with [CSharpier](https://csharpier.com/) using the default configuration. Run it on changed files before you open a pull request, either through an editor plugin or
 the [pre-commit hook](https://pre-commit.com/#3-install-the-git-hook-scripts).
 
+Build the documentation with `uv run scripts/build_docs.py`; add `--serve` for a local preview. The driver reuses `.docs-venv` and checks pinned dependencies with uv. Python-only
+hosts use pip; `--installer pip` selects that path explicitly. Both build paths keep strict link and configuration checks.
+
 ## License
 
 [MIT](LICENSE).
