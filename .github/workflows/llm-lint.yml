@@ -150,35 +150,11 @@ jobs:
         if: steps.check-scope.outputs.markdown != 'skip'
         run: npm run format:md:check
 
-      # One step runs the whole read-only lint ladder: every GitHub step pays
-      # runner shell and action overhead, and these nine lints were the job's
-      # widest block after the suite. The commands are unchanged and each
-      # still prints its own verdict; the first failure fails the step, so
-      # later lints are skipped exactly as separate steps did. The skills
-      # index regeneration and its drift check close the ladder in the same
-      # relative order they ran as their own step (lints, then index): a
-      # failed lint still skips them because the job already failed, and a
-      # stale index still fails the run through the ::error annotation.
+      # One Python process runs the same ordered lints and index drift check.
+      # Each script keeps its CLI arguments, diagnostics and first-failure exit.
       - name: Run the repository lints
         shell: bash
-        run: |
-          set -euo pipefail
-          ${PYTHON} scripts/lint_llm_instructions.py --verbose-output
-          ${PYTHON} scripts/lint_csharp_member_order.py --verbose
-          ${PYTHON} scripts/lint_csharp_null_assertions.py --verbose
-          ${PYTHON} scripts/lint_csharp_usings.py --verbose
-          ${PYTHON} scripts/lint_release_secrets.py --verbose
-          ${PYTHON} scripts/lint_line_endings.py --verbose
-          ${PYTHON} scripts/lint_changelog_length.py --verbose
-          ${PYTHON} scripts/lint_assembly_warnings.py
-          ${PYTHON} scripts/lint_file_lengths.py --verbose-output
-          ${PYTHON} scripts/generate_skills_index.py
-          status="$(git status --porcelain -- .llm/skills/index.md)"
-          if [ -n "${status}" ]; then
-            echo "::error::.llm/skills/index.md is stale; run uv run scripts/generate_skills_index.py and commit the result."
-            echo "${status}"
-            exit 1
-          fi
+        run: '"${PYTHON}" scripts/run_ci_lints.py'
 
       # The self-tests only verify the harness surface (scripts, .llm, CI and
       # devcontainer wiring, package manifests). Skip them when that surface is
