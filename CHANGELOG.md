@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Publish a measured-performance page with the first recorded window-open, search, and selection timings, produced by a new reproducible measurement driver (#114).
 - Add a captured global-search image to the search and filtering docs page, regenerated from the live window by the docs capture pipeline (#114).
 - Show the asset-creation controls opening in the managing-assets guide.
 
