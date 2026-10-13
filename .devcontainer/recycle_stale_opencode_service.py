@@ -38,6 +38,10 @@ Safety properties, each covered by a contract test:
 * Missing evidence fails safe: a missing loader, an unreadable environment, or
   an empty file value leaves a key unjudged, and an unjudged key never kills.
 
+The recycler is a Linux devcontainer component: it reads the service's
+environment from ``/proc`` and runs its bash children with POSIX paths, which
+is the shape the container guarantees.
+
 Usage:
     python3 recycle_stale_opencode_service.py [--dry-run] [--state-dir DIR]
                                               [--env-file FILE]

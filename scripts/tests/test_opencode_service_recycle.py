@@ -14,6 +14,12 @@ failure. One adaptation is deliberate: bash read the marker's ``$$`` and
 compared it against its own ``$!``, which Python cannot reproduce across the
 MSYS/Windows pid boundary, so readiness is proven by the marker naming a pid
 that is alive in the bash namespace the tool itself uses.
+
+The fixture-backed cases run on POSIX hosts only, the same gate and skip
+reason the devcontainer lifecycle suite uses: the fixture needs bash
+children, POSIX permission semantics, and a /proc process view, and the
+recycler itself is a Linux devcontainer component. The two cases that need
+neither (a missing record, a dead recorded pid) run everywhere.
 """
 
 from __future__ import annotations
@@ -24,7 +30,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 sys.dont_write_bytecode = True
 
@@ -43,6 +49,17 @@ from _test_helpers import (
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
 RECYCLE_SCRIPT = REPO_ROOT / ".devcontainer" / "recycle_stale_opencode_service.py"
+
+
+def _posix_bash_available() -> bool:
+    """Whether the fixture-backed contract cases can run on this host.
+
+    The fixture needs bash children, POSIX permission semantics, and a
+    /proc-based process view, and the recycler itself is a Linux devcontainer
+    component; non-POSIX hosts skip the fixture-backed cases the same way the
+    devcontainer lifecycle suite does.
+    """
+    return os.name == "posix" and shutil.which("bash") is not None
 
 # Synthetic, obviously-fake placeholders. NOT credentials.
 STALE = "ghp_0000000000000000000000000000000000"
@@ -451,30 +468,32 @@ def case_never_prints_credential_values(python: str) -> None:
 def main() -> int:
     print("== opencode-service-recycle contract tests ==")
 
-    if shutil.which("bash") is None:
-        print("    SKIP: bash not found on PATH; opencode-service-recycle tests require a POSIX shell.")
-        print("== opencode-service-recycle: 0 failure(s) ==")
-        return 0
+    posix = _posix_bash_available()
+    if not posix:
+        print(
+            "    SKIP: fixture-backed cases need a POSIX host with bash children and /proc;"
+            " the recycler is a Linux devcontainer component."
+        )
 
     # The recycle script is typed Python; any working interpreter drives it.
     python = find_python()
 
-    run_case("Recycles_ServiceWithStaleCredential", lambda: case_recycles_service_with_stale_credential(python))
-    run_case("Removes_StaleDiscoveryRecord", lambda: case_removes_stale_discovery_record(python))
-    run_case("Leaves_MatchingServiceAlone", lambda: case_leaves_matching_service_alone(python))
-    run_case("DryRun_ReportsWithoutKilling", lambda: case_dry_run_reports_without_killing(python))
+    def fixture_case(name: str, body: Callable[[str], None]) -> None:
+        if posix:
+            run_case(name, lambda: body(python))
+        else:
+            print(f"  SKIP: {name}")
+
+    fixture_case("Recycles_ServiceWithStaleCredential", case_recycles_service_with_stale_credential)
+    fixture_case("Removes_StaleDiscoveryRecord", case_removes_stale_discovery_record)
+    fixture_case("Leaves_MatchingServiceAlone", case_leaves_matching_service_alone)
+    fixture_case("DryRun_ReportsWithoutKilling", case_dry_run_reports_without_killing)
     run_case("MissingServiceRecord_IsANoOp", lambda: case_missing_service_record_is_a_no_op(python))
     run_case("DeadPid_IsCleanedUp", lambda: case_dead_pid_is_cleaned_up(python))
-    run_case("NoEnvFile_IsANoOp", lambda: case_no_env_file_is_a_no_op(python))
-    run_case(
-        "QuotedAndCrlfEnvFile_IsParsedLikeTheLoader",
-        lambda: case_quoted_and_crlf_env_file_is_parsed_like_the_loader(python),
-    )
-    run_case(
-        "InheritedEnv_IsNotMistakenForAFileValue",
-        lambda: case_inherited_env_is_not_mistaken_for_a_file_value(python),
-    )
-    run_case("Never_PrintsCredentialValues", lambda: case_never_prints_credential_values(python))
+    fixture_case("NoEnvFile_IsANoOp", case_no_env_file_is_a_no_op)
+    fixture_case("QuotedAndCrlfEnvFile_IsParsedLikeTheLoader", case_quoted_and_crlf_env_file_is_parsed_like_the_loader)
+    fixture_case("InheritedEnv_IsNotMistakenForAFileValue", case_inherited_env_is_not_mistaken_for_a_file_value)
+    fixture_case("Never_PrintsCredentialValues", case_never_prints_credential_values)
 
     failures = failure_count()
     print(f"== opencode-service-recycle: {failures} failure(s) ==")
