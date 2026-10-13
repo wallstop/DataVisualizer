@@ -172,7 +172,10 @@ run_backend_state() {
                 break
             fi
         done
-        [ -n "${backend_state_python}" ] || die "A working Python 3 interpreter is required for backend state writes."
+        if [ -z "${backend_state_python}" ]; then
+            printf '[ai-backends] ERROR: A working Python 3 interpreter is required for backend state writes.\n' >&2
+            return 1
+        fi
     fi
     "${backend_state_python}" "${WORKSPACE_ROOT}/.devcontainer/backend_state.py" "$@"
 }

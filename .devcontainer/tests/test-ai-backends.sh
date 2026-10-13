@@ -470,6 +470,26 @@ test_install_seeds_isolated_claude_approvals() {
     destroy_sandbox
 }
 
+test_missing_python_keeps_optional_claude_approvals_best_effort() {
+    make_sandbox
+    write_env_file 'ZAI_API_KEY=z-fixture-key\nOPENROUTER_API_KEY=or-fixture-key\n'
+    printf '%s\n' '{"mcpServers":{"unity":{}}}' >"${SANDBOX}/.mcp.json"
+    for candidate in python3 python; do
+        printf '%s\n' '#!/usr/bin/env bash' 'exit 1' >"${SANDBOX}/bin/${candidate}"
+        chmod +x "${SANDBOX}/bin/${candidate}"
+    done
+    for launcher in claude-zai claude-openrouter; do
+        run_launcher "${launcher}" "PYTHON=${SANDBOX}/bin/python3" \
+            "AI_BACKENDS_MCP_CONFIG=${SANDBOX}/.mcp.json" --version
+        assert_exit_zero "${launcher} continues without optional approval writer"
+        assert_dump_line "${launcher} reaches exec" "cmd: claude"
+    done
+    run_launcher codex-zai "PYTHON=${SANDBOX}/bin/python3" --version
+    assert_exit_nonzero "required Codex profile writer still fails without Python"
+    assert_stderr_contains "required writer names missing interpreter" "A working Python 3 interpreter is required"
+    destroy_sandbox
+}
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -494,7 +514,8 @@ for test_fn in \
     test_config_dir_root_owned_is_self_healed_with_sudo \
     test_config_dir_failure_is_actionable \
     test_install_creates_all_launchers \
-    test_install_seeds_isolated_claude_approvals; do
+    test_install_seeds_isolated_claude_approvals \
+    test_missing_python_keeps_optional_claude_approvals_best_effort; do
     "${test_fn}"
 done
 
