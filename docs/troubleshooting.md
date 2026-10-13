@@ -67,7 +67,7 @@ The pane widths and the Data Folder are not part of that state; they stay with t
 
 ## Recreating the documentation images
 
-The five images in `docs/images/` are generated from the live window, not hand-taken. The capture driver lives at `Tests/Editor/DocsImageCapture.cs` and arranges a known window
+The six images in `docs/images/` are generated from the live window, not hand-taken. The capture driver lives at `Tests/Editor/DocsImageCapture.cs` and arranges a known window
 state before each shot.
 
 Regenerate all shots with a batch-mode Unity invocation:

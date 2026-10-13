@@ -134,8 +134,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             Assert.That(
                 DocsImageCapture.ShotNames,
-                Is.EqualTo(new[] { "layout", "instance-actions", "create", "import", "settings" }),
-                "The manifest must carry the README's documented shots."
+                Is.EqualTo(new[] { "layout", "instance-actions", "create", "import", "search", "settings" }),
+                "The manifest must carry the documented shots."
             );
             for (int index = 0; index < DocsImageCapture.ShotNames.Count; index++)
             {
@@ -389,7 +389,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void ShouldFailClosedWhenAShotSubjectElementIsMissing([Values("create", "import", "settings")] string shotName)
+        public void ShouldFailClosedWhenAShotSubjectElementIsMissing([Values("create", "import", "search", "settings")] string shotName)
         {
             using TestCleanupScope cleanup = new();
             EditorSurfaceCaptureHostWindow window = ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
@@ -470,6 +470,38 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldComputeSearchCropFromFieldAndPopoverUnionClampedToWindow()
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window = ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(0f, 0f, 400f, 240f);
+            EditorSurfaceCapture.ShowPopup(window);
+            VisualElement root = window.rootVisualElement;
+
+            VisualElement popover = new() { name = "search-popover" };
+            popover.style.position = Position.Absolute;
+            popover.style.left = 30f;
+            popover.style.top = 30f;
+            popover.style.width = 220f;
+            popover.style.height = 90f;
+            root.Add(popover);
+
+            VisualElement field = new() { name = "global-search-field" };
+            field.style.position = Position.Absolute;
+            field.style.left = 20f;
+            field.style.top = 5f;
+            field.style.width = 160f;
+            field.style.height = 20f;
+            root.Add(field);
+            EditorSurfaceCapture.SettleLayout(window);
+
+            bool cropped = DocsImageCapture.TryComputeCropRect(window, "search", out Rect cropRect);
+            Assert.That(cropped, Is.True, "The search shot crops to its field and popover.");
+            Assert.That(cropRect, Is.EqualTo(Rect.MinMaxRect(12f, 0f, 258f, 128f)), "The crop covers the union of field and popover, padded and clamped to " + "the window.");
+        }
+
+        [Test]
         public void ShouldKeepTheLayoutShotFullWindow()
         {
             using TestCleanupScope cleanup = new();
@@ -486,7 +518,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void ShouldFailClosedWhenCropSubjectIsMissing([Values("instance-actions", "create", "import", "settings")] string shotName)
+        public void ShouldFailClosedWhenCropSubjectIsMissing([Values("instance-actions", "create", "import", "search", "settings")] string shotName)
         {
             using TestCleanupScope cleanup = new();
             EditorSurfaceCaptureHostWindow window = ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
