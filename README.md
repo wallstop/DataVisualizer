@@ -13,7 +13,7 @@ pick, and the inspector for the asset you selected. You edit, reorder, and batch
 
 Documentation: <https://wallstop.github.io/DataVisualizer/>
 
-![DxVisualizer layout with namespace, object, and inspector columns](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-layout.png)
+![DxVisualizer layout with namespace, object, and inspector columns](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-layout.webp)
 
 _Captured from the live window by the docs capture pipeline._
 

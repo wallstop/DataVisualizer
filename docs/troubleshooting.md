@@ -85,6 +85,16 @@ unity -projectPath <project> -batchmode -quit -executeMethod \
 - Each capture is validated against the laid-out window: regions Unity's offscreen renderer should have painted are measured in the PNG, and a capture that omits them fails closed
   instead of saving a misleading image.
 
+After reviewing the captured PNGs, copy them into `docs/images/` and export the smaller copies used by the README and site:
+
+```sh
+uv run scripts/export_docs_webp.py
+```
+
+The exporter checks that every decoded WebP pixel matches its PNG and that every copy is smaller. It validates the complete capture set before writing, and keeps unchanged files
+intact. Keep the reviewed PNGs in `docs/images/` as capture sources. Run `uv run scripts/export_docs_webp.py --check` to verify the committed copies. Pillow is pinned by the export
+script and installed only for that local command; the site build uses the committed images.
+
 Known capture limit, recorded on [#114](https://github.com/wallstop/DataVisualizer/issues/114): Unity's offscreen panel renderer on macOS 6000.4 omitted several inspector and list
 subtrees (the same window paints them fully on screen and on Windows 6000.5). The driver detects that host gap and fails closed rather than publishing blanked imagery; every
 committed PNG was produced and pixel-verified on Windows 6000.5.
