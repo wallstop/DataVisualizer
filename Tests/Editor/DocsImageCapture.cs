@@ -193,6 +193,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        public static void CaptureCreationFramesFromCommandLine()
+        {
+            string outputDirectory = ResolveOutputDirectory(Environment.GetCommandLineArgs(), Environment.GetEnvironmentVariable(OutputDirectoryEnvironmentVariable));
+            CaptureFrame(LayoutShotName, outputDirectory, crop: false);
+            CaptureFrame(CreateShotName, outputDirectory, crop: false);
+            Debug.Log($"[DocsImageCapture] Creation frames written to {outputDirectory}.");
+        }
+
         /*
             Captures every shot in the manifest into outputDirectory. Fails closed on the
             first error; completed shots stay on disk for inspection, and every teardown
@@ -212,6 +220,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         internal static EditorSurfaceCaptureResult CaptureShot(string shotName, string outputDirectory)
         {
+            return CaptureFrame(shotName, outputDirectory, crop: true);
+        }
+
+        internal static EditorSurfaceCaptureResult CaptureFrame(string shotName, string outputDirectory, bool crop)
+        {
             if (!IsKnownShot(shotName))
             {
                 throw new ArgumentException($"Unknown shot '{shotName}'. Known shots: {string.Join(", ", ManifestShotNames)}.", nameof(shotName));
@@ -225,7 +238,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 );
             }
 
-            string fileName = $"data-visualizer-{shotName}.png";
+            string suffix = crop ? string.Empty : "-frame";
+            string fileName = $"data-visualizer-{shotName}{suffix}.png";
             string capturePath = Path.Combine(outputDirectory, fileName);
 
             WindowPreferenceSnapshot preferences = WindowPreferenceSnapshot.Capture();
@@ -253,11 +267,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 VerifySelectedType(controller);
                 SelectObject(window, LoadFirstFixtureAsset());
                 VerifySelectedObject(window);
+                if (!crop)
+                {
+                    EditorSurfaceCapture.SettleLayout(window);
+                }
+
                 ArrangeShotState(window, shotName);
 
                 EditorSurfaceCaptureResult result = EditorSurfaceCapture.Capture(window, capturePath);
                 ValidateCapturedRegions(window, capturePath, shotName);
-                return CropCapturedShot(window, shotName, capturePath, result);
+                return crop ? CropCapturedShot(window, shotName, capturePath, result) : result;
             }
             finally
             {

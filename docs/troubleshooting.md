@@ -99,6 +99,21 @@ Known capture limit, recorded on [#114](https://github.com/wallstop/DataVisualiz
 subtrees (the same window paints them fully on screen and on Windows 6000.5). The driver detects that host gap and fails closed rather than publishing blanked imagery; every
 committed PNG was produced and pixel-verified on Windows 6000.5.
 
+## Regenerate the creation-controls animation
+
+The animation uses two full-window frames, before and after opening Create. Run the same capture command above with
+`-executeMethod WallstopStudios.DataVisualizer.Tests.Editor.DocsImageCapture.CaptureCreationFramesFromCommandLine` and a staging directory such as `.docs-animation/`. Review both
+`data-visualizer-layout-frame.png` and `data-visualizer-create-frame.png`, then encode them from the repository root:
+
+```bash
+uv run scripts/export_docs_gif.py --frames .docs-animation
+uv run scripts/export_docs_gif.py --frames .docs-animation --check
+```
+
+Commit the GIF and its `.meta` file. Keep the PNG frames in the staging directory; they are full-color capture sources, whereas GIF uses a shared 256-color palette. The exporter
+checks both frame dimensions, decoded quantized pixels, loop, and 1.2/1.8-second timing before replacing the published file. The codec is a pinned local dependency; CI does not
+install it. `--check` verifies the reviewed captures against the published GIF without writing. Unchanged exports preserve the file timestamp.
+
 ## Working from a container
 
 When the package checkout is edited inside a container while Unity runs on the host, the host picks up container-side edits through the mounted folder and recompiles on focus. Do

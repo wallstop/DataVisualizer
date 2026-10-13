@@ -21,6 +21,9 @@ a Data Folder of `Assets/Data`, the asset lands in `Assets/Data/MyGame/Items/Wea
 
 If the name is already taken, nothing is written. When the existing asset is the same type it is selected and shown, and the dialog says so.
 
+![The creation controls open beside the plus button in the object list header](images/data-visualizer-create.gif) _The animation alternates between the window and its Create
+controls; it does not create an asset. [Static view](images/data-visualizer-create.png)._
+
 ## Clone
 
 **Clone** copies the selected asset into the same folder as the original, and inserts the copy directly after the original in the list, then selects it.

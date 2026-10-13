@@ -9,8 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Add a captured global-search image to the search and filtering docs page, regenerated from the live window by the docs capture pipeline (#114).
+- Show the asset-creation controls opening in the managing-assets guide.
+
 - Add the Migration and Roadmap pages, and move the repository branding in-repo: the DxVisualizer mark, favicon, and banner from the rebrand kit now live under `docs/images/` and
   the site and README use them (#149, #150).
+
+- Show the asset-creation controls opening in the managing-assets guide.
 
 ### Changed
 
