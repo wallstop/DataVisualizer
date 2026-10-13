@@ -77,7 +77,7 @@ class Sandbox:
             directory.mkdir(parents=True)
         self.marker = self.root / "marker.log"
         shutil.copy(LIFECYCLE_DIR / "env-local.sh", self.ws / ".devcontainer" / "env-local.sh")
-        for relative in (".devcontainer/install-npm-tools.sh", ".devcontainer/ai-backends.sh", ".llm/mcp/sync-mcp.sh"):
+        for relative in (".devcontainer/install_npm_tools.py", ".devcontainer/ai-backends.sh", ".llm/mcp/sync-mcp.sh"):
             self.write_stub(self.ws / relative, STUB_RECORD)
         self.write_stub(self.stubs / "node", STUB_RECORD)
         # Credential-shaped variables are scrubbed from the child environment:
@@ -104,6 +104,16 @@ class Sandbox:
         self.env["UNITY_MCP_HTTP_PORT"] = "1"
 
     def write_stub(self, path: Path, content: str) -> Path:
+        if path.suffix == ".py":
+            exit_code = 1 if content == FAILING_STUB else 0
+            content = (
+                "import os, sys\nfrom pathlib import Path\n"
+                "value = os.environ.get('GITHUB_PERSONAL_ACCESS_TOKEN')\n"
+                "env = 'GITHUB_PERSONAL_ACCESS_TOKEN=' + value + ';' if value is not None else ''\n"
+                "with Path(os.environ['MARKER']).open('a') as marker:\n"
+                "    marker.write('STUB ' + Path(__file__).name + '|' + ''.join(' ' + arg for arg in sys.argv[1:]) + ' |ENV:' + env + '\\n')\n"
+                f"sys.exit({exit_code})\n"
+            )
         path.write_text(content)
         path.chmod(0o755)
         return path
@@ -210,7 +220,7 @@ def case_on_create_bootstraps_and_is_idempotent() -> None:
         assert_true(
             stub_calls(sandbox.marker_lines())
             == [
-                "STUB install-npm-tools.sh| --offline-ok",
+                "STUB install_npm_tools.py| --offline-ok",
                 "STUB ai-backends.sh| install",
                 f"STUB sync-mcp.sh| {sandbox.ws}",
             ],
@@ -233,7 +243,7 @@ def case_on_create_bootstraps_and_is_idempotent() -> None:
 def case_on_create_tolerates_npm_failure_only() -> None:
     sandbox = Sandbox()
     try:
-        sandbox.write_stub(sandbox.ws / ".devcontainer/install-npm-tools.sh", FAILING_STUB)
+        sandbox.write_stub(sandbox.ws / ".devcontainer/install_npm_tools.py", FAILING_STUB)
         code, output = sandbox.run("on_create.py")
         assert_exit_code(0, "on_create should tolerate the npm tool refresh failing", code)
         assert_true(
@@ -312,7 +322,7 @@ def case_post_start_replaces_block_and_loads_env() -> None:
         envs = stub_envs(sandbox.marker_lines())
         assert_true(len(calls) >= 4, f"expected the install, backend, doctor, and sync calls, got {calls}")
         assert_true(
-            calls[0].startswith("STUB install-npm-tools.sh|") and calls[1].startswith("STUB ai-backends.sh|"),
+            calls[0].startswith("STUB install_npm_tools.py|") and calls[1].startswith("STUB ai-backends.sh|"),
             f"the npm and backend installs run before the load, got {calls}",
         )
         assert_true("STUB node| .llm/mcp/mcp-doctor.mjs --repair" in calls[2], f"the doctor runs before the sync, got {calls}")

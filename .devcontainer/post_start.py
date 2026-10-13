@@ -52,7 +52,7 @@ def refresh_npm_tools(workspace: Path) -> None:
     env["DATAVIZ_NPM_INSTALL_ATTEMPTS"] = os.environ.get("DATAVIZ_NPM_START_ATTEMPTS") or "2"
     env["NPM_CONFIG_FETCH_RETRIES"] = os.environ.get("DATAVIZ_NPM_START_FETCH_RETRIES") or "1"
     env["NPM_CONFIG_FETCH_TIMEOUT"] = os.environ.get("DATAVIZ_NPM_START_FETCH_TIMEOUT_MS") or "10000"
-    run_child_strict(["bash", ".devcontainer/install-npm-tools.sh", "--offline-ok"], workspace, env)
+    run_child_strict([sys.executable, ".devcontainer/install_npm_tools.py", "--offline-ok"], workspace, env)
 
 
 def repair_agent_config_ownership(home: Path) -> None:
