@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["Pillow==12.3.0"]
 # ///
-"""Export the five Unity-captured PNGs as pixel-verified lossless WebP copies.
+"""Export Unity-captured PNGs as pixel-verified lossless WebP copies.
 
 Run with ``uv run scripts/export_docs_webp.py`` after reviewing fresh captures.
 Pillow belongs only to this optional local export, not to docs CI or the
@@ -19,7 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
-SHOTS: Tuple[str, ...] = ("layout", "instance-actions", "create", "import", "settings")
+REQUIRED_SHOTS: Tuple[str, ...] = ("layout", "instance-actions", "create", "import", "settings")
 DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "docs" / "images"
 
 
@@ -47,10 +47,13 @@ def encode_verified(source: Path) -> bytes:
 
 
 def export(source_dir: Path, output_dir: Path, check: bool) -> int:
-    sources = [source_dir / f"data-visualizer-{shot}.png" for shot in SHOTS]
-    for source in sources:
+    required = [source_dir / f"data-visualizer-{shot}.png" for shot in REQUIRED_SHOTS]
+    for source in required:
         if not source.is_file():
             raise ValueError(f"Missing capture: {source}")
+    # Include additional reviewed shots introduced by the capture manifest.
+    # The original inventory stays mandatory, so partial batches fail closed.
+    sources = sorted(source_dir.glob("data-visualizer-*.png"), key=lambda path: path.name)
     pending: List[Tuple[Path, bytes]] = []
     total_source = total_webp = 0
     # Validate the complete set before creating or replacing any output.
@@ -78,7 +81,7 @@ def export(source_dir: Path, output_dir: Path, check: bool) -> int:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Export pixel-identical, smaller WebP copies of the five documentation captures.")
+    parser = argparse.ArgumentParser(description="Export pixel-identical, smaller WebP copies of the documentation captures.")
     parser.add_argument("--source-dir", type=Path, default=DEFAULT_SOURCE, help="directory containing reviewed Unity PNG captures")
     parser.add_argument("--output-dir", type=Path, help="destination (default: source directory)")
     parser.add_argument("--check", action="store_true", help="verify existing copies without writing")

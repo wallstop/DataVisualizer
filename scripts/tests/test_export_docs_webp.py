@@ -27,16 +27,28 @@ class ExportTests(unittest.TestCase):
     def test_complete_set_is_validated_before_publication(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for shot in exporter.SHOTS:
+            for shot in exporter.REQUIRED_SHOTS:
                 (root / f"data-visualizer-{shot}.png").touch()
             with patch.object(exporter, "encode_verified", side_effect=[b"first", ValueError("corrupt capture")]):
                 self.assertEqual(exporter.main(["--source-dir", directory]), 1)
             self.assertEqual(list(root.glob("*.webp")), [])
 
+    def test_additional_capture_is_exported_and_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for shot in (*exporter.REQUIRED_SHOTS, "search"):
+                (root / f"data-visualizer-{shot}.png").touch()
+            with patch.object(exporter, "encode_verified", return_value=b"verified-image"):
+                self.assertEqual(exporter.main(["--source-dir", directory]), 0)
+                self.assertEqual(len(list(root.glob("*.webp"))), 6)
+                self.assertEqual(exporter.main(["--source-dir", directory, "--check"]), 0)
+                (root / "data-visualizer-search.webp").unlink()
+                self.assertEqual(exporter.main(["--source-dir", directory, "--check"]), 1)
+
     def test_check_write_and_repeat_preserve_unchanged_files(self) -> None:
         with tempfile.TemporaryDirectory(prefix="webp with spaces ") as directory:
             root = Path(directory)
-            for shot in exporter.SHOTS:
+            for shot in exporter.REQUIRED_SHOTS:
                 (root / f"data-visualizer-{shot}.png").touch()
             with patch.object(exporter, "encode_verified", return_value=b"verified-image"):
                 self.assertEqual(exporter.main(["--source-dir", directory, "--check"]), 1)
