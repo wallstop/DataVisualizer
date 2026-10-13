@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import stat
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -81,6 +83,29 @@ class StateTests(unittest.TestCase):
             self.assertEqual(foreign.read_text(), "profile")
             self.assertEqual(stat.S_IMODE(foreign.stat().st_mode), 0o644)
             self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
+
+    @unittest.skipUnless(os.name == "posix" and shutil.which("bash") is not None, "fixture executables require POSIX bash")
+    def test_launcher_falls_back_when_python3_cannot_execute(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "bin"
+            binary.mkdir()
+            broken = binary / "python3"
+            broken.write_text("#!/bin/sh\nexit 1\n")
+            broken.chmod(0o755)
+            (binary / "python").symlink_to(sys.executable)
+            env = {
+                "PATH": str(binary) + os.pathsep + os.environ["PATH"],
+                "HOME": str(root / "home"),
+                "CODEX_HOME": str(root / "codex"),
+                "AI_BACKENDS_ENV_FILE": str(root / "missing.env"),
+                "AI_BACKENDS_MCP_CONFIG": str(root / "missing-mcp.json"),
+                "AI_BACKENDS_BIN_DIR": str(binary),
+            }
+            launcher = Path(__file__).resolve().parents[2] / ".devcontainer" / "ai-backends.sh"
+            result = subprocess.run(["bash", str(launcher), "install"], env=env, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((root / "codex" / "devcontainer-zai.config.toml").is_file())
 
     def test_replace_failure_keeps_original_and_removes_staging(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

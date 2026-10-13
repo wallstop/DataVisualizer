@@ -159,18 +159,34 @@ preflight_claude_subprocess_scrub() {
     fi
 }
 
-# CI exports its validated interpreter as PYTHON (avoids the Windows alias).
-# The devcontainer image guarantees python3 for ordinary launcher sessions.
+# The image has python3; host shells may only have python, or a Windows
+# python3 alias that cannot execute. Resolve once for this launch process.
+backend_state_python=""
+run_backend_state() {
+    local candidate
+    if [ -z "${backend_state_python}" ]; then
+        for candidate in "${PYTHON:-}" python3 python; do
+            if [ -n "${candidate}" ] && command -v "${candidate}" >/dev/null 2>&1 \
+                && "${candidate}" -c "" >/dev/null 2>&1; then
+                backend_state_python="${candidate}"
+                break
+            fi
+        done
+        [ -n "${backend_state_python}" ] || die "A working Python 3 interpreter is required for backend state writes."
+    fi
+    "${backend_state_python}" "${WORKSPACE_ROOT}/.devcontainer/backend_state.py" "$@"
+}
+
 install_codex_profile() {
     local codex_home="${CODEX_HOME:-${HOME}/.codex}"
     prepare_config_dir "${codex_home}"
-    "${PYTHON:-python3}" "${WORKSPACE_ROOT}/.devcontainer/backend_state.py" profile zai --config-dir "${codex_home}"
+    run_backend_state profile zai --config-dir "${codex_home}"
 }
 
 install_codex_openrouter_profile() {
     local codex_home="${CODEX_HOME:-${HOME}/.codex}"
     prepare_config_dir "${codex_home}"
-    "${PYTHON:-python3}" "${WORKSPACE_ROOT}/.devcontainer/backend_state.py" profile openrouter --config-dir "${codex_home}"
+    run_backend_state profile openrouter --config-dir "${codex_home}"
 }
 
 install_launchers() {
@@ -209,7 +225,7 @@ seed_claude_approvals() {
     mcp_config="${AI_BACKENDS_MCP_CONFIG:-${WORKSPACE_ROOT}/.mcp.json}"
     [ -f "${mcp_config}" ] || return 0
     prepare_config_dir "${config_dir}" || return 1
-    "${PYTHON:-python3}" "${WORKSPACE_ROOT}/.devcontainer/backend_state.py" approve \
+    run_backend_state approve \
         --config-dir "${config_dir}" --project "${WORKSPACE_ROOT}" --mcp-config "${mcp_config}"
 }
 
