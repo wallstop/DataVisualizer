@@ -81,7 +81,7 @@ serves the Responses API (403 `model_access_denied` for chat completions).
 
 Claude project-scope servers also get their approval + folder trust recorded in `~/.claude.json` (same state the interactive dialogs write), so servers are usable without a
 first-run approval prompt. The isolated Claude state directories used by the `claude-zai` / `claude-openrouter` launchers (`~/.claude-zai`, `~/.claude-openrouter`) are seeded with
-the same trust + approvals by `bash .devcontainer/ai-backends.sh install` (and on every launcher start), because Claude only reads that state from the config dir its
+the same trust + approvals by `python3 .devcontainer/ai_backends.py install` (and on every launcher start), because Claude only reads that state from the config dir its
 `CLAUDE_CONFIG_DIR` points at.
 
 Windsurf and other host GUI clients are not writable from the container; run the official configurator on the host instead (see below).

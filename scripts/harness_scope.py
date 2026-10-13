@@ -125,7 +125,7 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     ".devcontainer/install_npm_tools.py": ("test_install_npm_tools.py",),
     ".devcontainer/install-npm-tools.sh": ("test_install_npm_tools.py",),
     "scripts/tests/test_install_npm_tools.py.meta": ("test_install_npm_tools.py",),
-    ".devcontainer/ai-backends.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
+    ".devcontainer/ai_backends.py": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/env-local.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/backend_state.py": ("test_backend_state.py", "test_ai_backends.py", "test_env_local_precedence.py"),
     "scripts/tests/test_backend_state.py.meta": ("test_backend_state.py",),

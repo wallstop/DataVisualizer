@@ -77,7 +77,7 @@ class Sandbox:
             directory.mkdir(parents=True)
         self.marker = self.root / "marker.log"
         shutil.copy(LIFECYCLE_DIR / "env-local.sh", self.ws / ".devcontainer" / "env-local.sh")
-        for relative in (".devcontainer/install_npm_tools.py", ".devcontainer/ai-backends.sh", ".llm/mcp/sync-mcp.sh"):
+        for relative in (".devcontainer/install_npm_tools.py", ".devcontainer/ai_backends.py", ".llm/mcp/sync-mcp.sh"):
             self.write_stub(self.ws / relative, STUB_RECORD)
         self.write_stub(self.stubs / "node", STUB_RECORD)
         # Credential-shaped variables are scrubbed from the child environment:
@@ -221,7 +221,7 @@ def case_on_create_bootstraps_and_is_idempotent() -> None:
             stub_calls(sandbox.marker_lines())
             == [
                 "STUB install_npm_tools.py| --offline-ok",
-                "STUB ai-backends.sh| install",
+                "STUB ai_backends.py| install",
                 f"STUB sync-mcp.sh| {sandbox.ws}",
             ],
             f"on_create should call the three children with the documented arguments, got {stub_calls(sandbox.marker_lines())}",
@@ -252,7 +252,7 @@ def case_on_create_tolerates_npm_failure_only() -> None:
         )
         assert_true("STUB sync-mcp.sh" in "\n".join(sandbox.marker_lines()), "the sync should still run after the npm warning")
 
-        sandbox.write_stub(sandbox.ws / ".devcontainer/ai-backends.sh", FAILING_STUB)
+        sandbox.write_stub(sandbox.ws / ".devcontainer/ai_backends.py", FAILING_STUB)
         code, output = sandbox.run("on_create.py")
         assert_exit_code(1, "a backend install failure must abort on_create with its exit code", code)
         print(output)
@@ -322,7 +322,7 @@ def case_post_start_replaces_block_and_loads_env() -> None:
         envs = stub_envs(sandbox.marker_lines())
         assert_true(len(calls) >= 4, f"expected the install, backend, doctor, and sync calls, got {calls}")
         assert_true(
-            calls[0].startswith("STUB install_npm_tools.py|") and calls[1].startswith("STUB ai-backends.sh|"),
+            calls[0].startswith("STUB install_npm_tools.py|") and calls[1].startswith("STUB ai_backends.py|"),
             f"the npm and backend installs run before the load, got {calls}",
         )
         assert_true("STUB node| .llm/mcp/mcp-doctor.mjs --repair" in calls[2], f"the doctor runs before the sync, got {calls}")

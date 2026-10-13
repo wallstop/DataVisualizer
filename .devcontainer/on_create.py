@@ -146,7 +146,7 @@ def main(argv: Sequence[str]) -> int:
     print()
     print("🤖 Step 3/4: Refreshing npm coding tools and Z.ai backends...")
     refresh_npm_tools(workspace)
-    run_child_strict(["bash", ".devcontainer/ai-backends.sh", "install"], workspace)
+    run_child_strict([sys.executable, ".devcontainer/ai_backends.py", "install"], workspace)
 
     print()
     print("🔌 Step 4/4: Configuring MCP servers (claude, codex, opencode, nanocoder, vscode)...")

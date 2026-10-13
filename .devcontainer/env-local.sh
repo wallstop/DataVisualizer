@@ -4,9 +4,9 @@
 # Sourced from ~/.bashrc (the block on_create.py writes) so every
 # interactive shell — and any agent CLI launched from one (opencode, claude,
 # codex, nanocoder, vscode) — inherits the MCP credentials without requiring
-# the gateway launchers in ai-backends.sh.
+# the gateway launchers in ai_backends.py.
 #
-# Parsing mirrors load_env_local in ai-backends.sh and readEnvLocal in
+# Parsing mirrors load_env_local in ai_backends.py and readEnvLocal in
 # .llm/mcp/*.mjs: KEY=VALUE, `export ` prefix, symmetric quotes, blanks and
 # comments skipped, UTF-8 BOM and CRLF tolerated.
 #

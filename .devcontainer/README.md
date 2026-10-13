@@ -42,8 +42,8 @@ Regenerate the machine-local MCP configs any time with `npm run mcp:sync`.
 
 ## Native and gateway backends
 
-`codex` and `claude` keep their native OpenAI/Anthropic backends. Profile and approval-file writes are handled by typed `backend_state.py`; the shell owns credential loading and
-launches. The gateway launchers are per-process opt-ins installed by `bash .devcontainer/ai-backends.sh install` (run at create and start):
+`codex` and `claude` keep their native OpenAI/Anthropic backends. Profile and approval-file writes are handled by typed `backend_state.py`; the launcher owns credential loading and
+launches. The gateway launchers are per-process opt-ins installed by `python3 .devcontainer/ai_backends.py install` (run at create and start):
 
 - `codex-zai` uses a `devcontainer-zai` profile against Z.ai's Responses API with a pinned glm-5.3 model catalog.
 - `claude-zai` uses Z.ai's Anthropic-compatible endpoint with a separate `~/.claude-zai` state directory, so native credentials and sessions stay isolated. The launcher keeps
@@ -58,8 +58,8 @@ launches. The gateway launchers are per-process opt-ins installed by `bash .devc
 - Z.ai overrides: `CODEX_ZAI_MODEL`, `CODEX_ZAI_REASONING_EFFORT` (`low|high|max`), `ZAI_API_TIMEOUT_MS`, `CLAUDE_ZAI_CONFIG_DIR`, `CLAUDE_ZAI_{SONNET,OPUS,HAIKU}_MODEL`.
 - OpenRouter overrides: `CODEX_OPENROUTER_MODEL`, `CODEX_OPENROUTER_REASONING_EFFORT` (`low|medium|high|xhigh|max`), `OPENROUTER_API_TIMEOUT_MS`, `CLAUDE_OPENROUTER_CONFIG_DIR`,
   `CLAUDE_OPENROUTER_{FABLE,SONNET,OPUS,HAIKU}_MODEL`, `CLAUDE_OPENROUTER_SUBAGENT_MODEL`, `CLAUDE_OPENROUTER_GATEWAY_DISCOVERY`.
-- Contract tests live in `.devcontainer/tests/test-ai-backends.sh` (stubs, no network) and `.devcontainer/tests/test-mcp-sync.sh` (syncs into a throwaway workspace; asserts fleet
-  parity across frontends and that no secrets land on disk). Both run via `scripts/tests/run_all.py` in CI.
+- Contract tests live in `scripts/tests/test_ai_backends.py` (stubs, no network) and `.devcontainer/tests/test-mcp-sync.sh` (syncs into a throwaway workspace; asserts fleet parity
+  across frontends and that no secrets land on disk). Both run via `scripts/tests/run_all.py` in CI.
 
 Inside the container Claude's experimental Linux subprocess scrubber is disabled by default (`AI_BACKENDS_CLAUDE_SUBPROCESS_ENV_SCRUB=0`; legacy `CLAUDE_ZAI_SUBPROCESS_ENV_SCRUB`
 stays honored): Docker's seccomp profile blocks bubblewrap's namespaces, and the outer devcontainer is already the isolation boundary. Outside a container the stronger scrubber is
