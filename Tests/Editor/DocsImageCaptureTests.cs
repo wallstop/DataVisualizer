@@ -130,6 +130,43 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldStageSortedSearchResultsAndQueryAsTypedInput()
+        {
+            using TestCleanupScope cleanup = new();
+            TestDataObject later = ScriptableObject.CreateInstance<TestDataObject>();
+            cleanup.Defer(() => Object.DestroyImmediate(later));
+            later.name = "Zulu";
+            TestDataObject editor = ScriptableObject.CreateInstance<TestDataObject>();
+            cleanup.Defer(() => Object.DestroyImmediate(editor));
+            editor.name = "Alpha";
+            WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject runtime =
+                ScriptableObject.CreateInstance<WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject>();
+            cleanup.Defer(() => Object.DestroyImmediate(runtime));
+            runtime.name = "Alpha";
+            List<ScriptableObject> cache = new() { later, runtime, editor };
+            EditorSurfaceCaptureHostWindow window = ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(0f, 0f, 400f, 120f);
+            EditorSurfaceCapture.ShowPopup(window);
+            TextField field = new() { value = "Search..." };
+            window.rootVisualElement.Add(field);
+            EditorSurfaceCapture.SettleLayout(window);
+            field.AddToClassList(TextField.ussClassName + "__placeholder");
+            string observed = null;
+            field.RegisterValueChangedCallback(change => observed = change.newValue);
+            field.RegisterCallback<FocusOutEvent>(_ => field.SetValueWithoutNotify("Search..."));
+
+            DocsImageCapture.StageSearchInput(cache, field, "a");
+
+            CollectionAssert.AreEqual(new ScriptableObject[] { editor, runtime, later }, cache);
+            Assert.That(field.ClassListContains(TextField.ussClassName + "__placeholder"), Is.False);
+            Assert.AreEqual("a", field.value);
+            Assert.AreEqual("a", observed, "The production change callback must receive the staged query.");
+            field.Blur();
+            Assert.AreEqual("a", field.value, "Moving the capture tree to another panel must not restore placeholder text.");
+        }
+
+        [Test]
         public void ShouldExposeManifestShotNames()
         {
             Assert.That(

@@ -275,6 +275,27 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        internal static void StageSearchInput(List<ScriptableObject> cache, TextField field, string query)
+        {
+            cache.Sort(
+                static (left, right) =>
+                {
+                    int name = string.Compare(left.name, right.name, StringComparison.Ordinal);
+                    return name != 0 ? name : string.Compare(left.GetType().FullName, right.GetType().FullName, StringComparison.Ordinal);
+                }
+            );
+            /*
+                Offscreen capture moves the tree to another panel, which emits a synthetic
+                blur. Keep the real typed query instead of restoring placeholder text.
+                This callback lives only on the capture window, which the driver closes.
+            */
+            field.RegisterCallback<FocusOutEvent>(SuppressCaptureBlur, TrickleDown.TrickleDown);
+            field.Focus();
+            field.RemoveFromClassList(TextField.ussClassName + "__placeholder");
+            field.value = query;
+            field.Blur();
+        }
+
         internal static string ResolveOutputDirectory(string[] arguments, string environmentValue)
         {
             for (int index = 0; index < arguments.Length - 1; index++)
@@ -943,6 +964,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        private static void SuppressCaptureBlur(FocusOutEvent change)
+        {
+            change.StopImmediatePropagation();
+        }
+
         /*
             Stages the global search the way a user sees it after typing a query. The
             search cache is injected with the fixture assets and marked populated instead
@@ -987,20 +1013,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new InvalidOperationException("The DataVisualizer window exposes no search text field; the capture " + "driver cannot stage the search results.");
             }
 
-            searchField.value = SearchQuery;
+            StageSearchInput(cache, searchField, SearchQuery);
             if (typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, ReflectedInstanceMembers)?.GetValue(window) is not List<VisualElement> results || results.Count == 0)
             {
                 throw new InvalidOperationException($"The staged query '{SearchQuery}' matched no fixture asset; the search shot " + "would document an empty popover.");
             }
 
-            StagePopoverForCapture(window, SearchPopoverFieldName, SearchFieldFieldName);
+            EditorSurfaceCapture.SettleLayout(window);
+            StagePopoverForCapture(window, SearchPopoverFieldName, SearchFieldFieldName, shouldFocus: false);
         }
 
         /*
             Reveals a popover through the extracted production step OpenPopover schedules,
             so the shot shows the same placement and visibility a user gets.
         */
-        private static void StagePopoverForCapture(DataVisualizerWindow window, string popoverFieldName, string triggerFieldName)
+        private static void StagePopoverForCapture(DataVisualizerWindow window, string popoverFieldName, string triggerFieldName, bool shouldFocus = true)
         {
             VisualElement popover = ReadWindowElement(window, popoverFieldName);
             VisualElement trigger = ReadWindowElement(window, triggerFieldName);
@@ -1018,7 +1045,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 );
             }
 
-            positionAndDisplay.Invoke(window, new object[] { popover, trigger, false, true });
+            positionAndDisplay.Invoke(window, new object[] { popover, trigger, false, shouldFocus });
         }
 
         private static void InvokeWindowMethod(DataVisualizerWindow window, string methodName, Type[] parameterTypes, object[] arguments)
