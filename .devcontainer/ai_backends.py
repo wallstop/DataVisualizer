@@ -380,6 +380,10 @@ def install_launchers() -> None:
         os.symlink(str(_SCRIPT_PATH), str(target))
 
 
+class _StateWriteFailure(Exception):
+    """The backend-state writer exited nonzero (bash: a function return)."""
+
+
 def seed_claude_approvals(config_dir: Path) -> None:
     """Seed folder trust + MCP server approvals into an isolated config dir.
 
@@ -403,14 +407,19 @@ def seed_claude_approvals(config_dir: Path) -> None:
             mcp_config,
         ]
     ) != 0:
-        raise SystemExit(1)
+        raise _StateWriteFailure
 
 
 def _best_effort_seed(config_dir: Path) -> None:
-    """Seed approvals, swallowing every failure the bash ``|| true`` swallowed."""
+    """Seed approvals, swallowing only the writer's failure.
+
+    bash's ``|| true`` cannot catch a function-internal ``exit``: a config-dir
+    repair failure aborts the whole launcher exactly as it did before the port,
+    and only the state writer's nonzero return is swallowed here.
+    """
     try:
         seed_claude_approvals(config_dir)
-    except (SystemExit, OSError):
+    except _StateWriteFailure:
         pass
 
 

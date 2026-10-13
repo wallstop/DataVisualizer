@@ -65,6 +65,27 @@ with open(os.environ["AI_BACKENDS_TEST_DUMP"], "w", encoding="utf-8", newline=""
 sys.exit(0)
 """
 
+# Credential-shaped and launcher-config keys scrubbed from the inherited
+# Windows environment: a devcontainer session forwards real secrets, and the
+# sandbox must resolve keys only from its own fixtures.
+_HOST_SCRUBBED_KEYS = frozenset(
+    {
+        "ZAI_API_KEY",
+        "Z_AI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "OPEN_ROUTER_API_KEY",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "GITHUB_MCP_PAT",
+        "GITHUB_TOKEN",
+        "UNITY_MCP_TOKEN",
+        "CONTEXT7_API_KEY",
+        "CLAUDE_ZAI_CONFIG_DIR",
+        "CLAUDE_OPENROUTER_CONFIG_DIR",
+        "CLAUDE_CONFIG_DIR",
+        "DATAVIZ_ENV_LOCAL_PRECEDENCE",
+    }
+)
+
 
 class Sandbox:
     """Hermetic fixture tree for one launcher case."""
@@ -148,6 +169,13 @@ class Sandbox:
             path_value = f"{self.bin}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         if os.name == "nt":
             env: Dict[str, str] = dict(os.environ)
+            # Inheriting the full environment brings the host's credentials and
+            # config overrides along; scrub every launcher-relevant key so a
+            # missing-key case can never see an exported key and a config-dir
+            # case can never be pulled off the fixture.
+            for key in list(env):
+                if key.startswith("AI_BACKENDS_") or key in _HOST_SCRUBBED_KEYS:
+                    del env[key]
             # Windows children need the full shell context (TEMP, COMSPEC,
             # SystemRoot) for tempfile and .bat resolution; the sandbox-owned
             # keys below still override everything they control. USERPROFILE
@@ -701,6 +729,42 @@ def case_broken_state_writer_keeps_optional_claude_approvals_best_effort() -> No
     sandbox.destroy()
 
 
+def case_config_dir_failure_aborts_despite_best_effort_approvals() -> None:
+    # bash parity: the launcher's `|| true` cannot catch a function-internal
+    # `exit`, so a config-dir repair failure aborts claude-zai even though the
+    # approval seeding is best-effort. The copied pair points the workspace at
+    # the sandbox, where the state writer is broken AND the config parent is
+    # read-only, so the writer failure (swallowed) and the config failure
+    # (fatal) are both live in one case.
+    if os.name != "posix":
+        skip("exec-path case requires a POSIX host")
+        return
+    sandbox = Sandbox()
+    sandbox.write_env_file("ZAI_API_KEY=z-fixture-key\n")
+    sandbox.mcp_config.write_text('{"mcpServers":{"unity":{}}}\n', encoding="utf-8", newline="")
+    sandbox.copy_launcher_pair(broken_state_writer=True)
+    copied_launcher = sandbox.root / ".devcontainer" / "ai_backends.py"
+    read_only_parent = sandbox.home / "locked"
+    read_only_parent.mkdir()
+    read_only_parent.chmod(0o555)
+    try:
+        sandbox.run(
+            "claude-zai",
+            ["--version"],
+            extra_env={
+                "CLAUDE_ZAI_CONFIG_DIR": str(read_only_parent / "child"),
+                "AI_BACKENDS_MCP_CONFIG": str(sandbox.mcp_config),
+            },
+            command=[sys.executable, str(copied_launcher), "claude-zai", "--version"],
+        )
+        assert_exit_code(1, "a config-dir failure aborts despite best-effort approvals", sandbox.last_exit)
+        assert_stderr_contains(sandbox, "error includes chown remediation", "chown")
+        assert_true(not sandbox.dump.is_file(), "the launch must not reach exec after a config-dir failure")
+    finally:
+        read_only_parent.chmod(0o755)
+    sandbox.destroy()
+
+
 def case_direct_invocation_runs_help_and_unknown_action_fails() -> None:
     sandbox = Sandbox()
     sandbox.run("help", command=[sys.executable, str(LAUNCHER)])
@@ -790,6 +854,7 @@ CASES = (
     case_install_seeds_isolated_claude_approvals,
     case_broken_state_writer_keeps_optional_claude_approvals_best_effort,
     case_state_writer_falls_back_when_early_candidates_cannot_execute,
+    case_config_dir_failure_aborts_despite_best_effort_approvals,
     case_direct_invocation_runs_help_and_unknown_action_fails,
 )
 
