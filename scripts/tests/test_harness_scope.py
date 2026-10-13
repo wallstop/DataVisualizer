@@ -250,12 +250,17 @@ def case_surface_path_matches_the_declared_surface_only(python: str) -> None:
 # The selection maps a changed surface path onto the test files that verify
 # it. Unmapped, shared, or stale names fail safe to the full suite.
 def case_selection_selects_the_mapped_subject_tests(python: str) -> None:
-    probe = invoke_scope_probe(python, "scripts/fast_check.py")
-    assert_true(not probe["selection"]["all"], "a mapped subject must not select the full suite")
-    assert_true(
-        ",".join(probe["selection"]["names"]) == "test_fast_check.py",
-        f"the fast-check subject must select its test file, got: {','.join(probe['selection']['names'])}",
-    )
+    for subject, expected in (
+        ("scripts/fast_check.py", "test_fast_check.py"),
+        ("scripts/build_docs.py", "test_build_docs.py"),
+        ("scripts/tests/test_build_docs.py.meta", "test_build_docs.py"),
+    ):
+        probe = invoke_scope_probe(python, subject)
+        assert_true(not probe["selection"]["all"], "a mapped subject must not select the full suite")
+        assert_true(
+            ",".join(probe["selection"]["names"]) == expected,
+            f"{subject} must select its contract, got: {','.join(probe['selection']['names'])}",
+        )
 
 
 def case_selection_unions_subjects_across_paths(python: str) -> None:
@@ -309,7 +314,7 @@ def case_selection_maps_the_migrated_trio_surface(python: str) -> None:
 
 
 def case_selection_falls_back_to_all_for_shared_suite_paths(python: str) -> None:
-    for path in ("scripts/tests/_test_helpers.py", "scripts/tests/run_all.py", "package.json", ".config/dotnet-tools.json"):
+    for path in ("scripts/tests/_test_helpers.py", "scripts/tests/run_all.py", "scripts/tests/test_unknown.py.meta", "package.json", ".config/dotnet-tools.json"):
         probe = invoke_scope_probe(python, path)
         assert_true(probe["selection"]["all"], f"the shared path {path} must select the full suite")
 

@@ -55,6 +55,9 @@ SURFACE_FILES: Tuple[str, ...] = (
 # host-analyzer installer tranche.
 SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/build_docs.py": ("test_build_docs.py",),
+    # Unity metadata cannot affect unrelated Python subjects. Keep this
+    # companion on the same docs contract; unknown metadata stays fail-safe.
+    "scripts/tests/test_build_docs.py.meta": ("test_build_docs.py",),
     "scripts/fast_check.py": ("test_fast_check.py",),
     "scripts/gate.py": ("test_gate.py",),
     "pyproject.toml": ("test_gate.py",),
