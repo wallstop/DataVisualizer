@@ -41,17 +41,17 @@ A credential rotated in `.env.local` also has to reach already-running agents. T
    value over a stale exported copy. A new shell picks the change up with no rebuild.
 2. **OpenCode's background service.** Every `opencode` session attaches to ONE shared server (`opencode serve --service`), discovered via `~/.local/state/opencode/service.json`. It
    inherits the environment of whichever client happened to start it and holds it for its entire life, so **new sessions stay broken too** — the session is fine, the singleton
-   behind it is not. `.devcontainer/recycle-stale-opencode-service.sh` compares the running service's credentials against `.env.local` and, on a mismatch, recycles it so the next
+   behind it is not. `.devcontainer/recycle_stale_opencode_service.py` compares the running service's credentials against `.env.local` and, on a mismatch, recycles it so the next
    session respawns a healthy one. It is a no-op when the service matches, when there is no `.env.local`, or when no service is running. `post_start.py` runs it on every container
    start.
 
 ```bash
-bash .devcontainer/recycle-stale-opencode-service.sh --dry-run   # report only
-bash .devcontainer/recycle-stale-opencode-service.sh             # recycle
+python3 .devcontainer/recycle_stale_opencode_service.py --dry-run   # report only
+python3 .devcontainer/recycle_stale_opencode_service.py             # recycle
 ```
 
 Contract tests: `.devcontainer/tests/test-mcp-credentials.sh` (credential aliasing, divergence detection, repair), `.devcontainer/tests/test-env-local-precedence.sh` (loader
-precedence), and `.devcontainer/tests/test-opencode-service-recycle.sh` (service recycling).
+precedence), and `scripts/tests/test_opencode_service_recycle.py` (service recycling).
 
 ## One command to wire everything
 
