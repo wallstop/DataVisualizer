@@ -64,6 +64,8 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/run_ci_lints.py.meta": ("test_run_ci_lints.py",),
     "scripts/tests/test_run_ci_lints.py.meta": ("test_run_ci_lints.py",),
     "scripts/export_docs_gif.py": ("test_export_docs_gif.py",),
+    "scripts/export_docs_gif.py.meta": ("test_export_docs_gif.py",),
+    "scripts/tests/test_export_docs_gif.py.meta": ("test_export_docs_gif.py",),
     "scripts/fast_check.py": ("test_fast_check.py",),
     "scripts/gate.py": ("test_gate.py",),
     "pyproject.toml": ("test_gate.py",),

@@ -12,6 +12,7 @@ from unittest.mock import patch
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from export_docs_gif import FRAME_NAMES, publish
+from harness_scope import self_test_selection
 
 
 class GifPublicationTests(unittest.TestCase):
@@ -50,6 +51,15 @@ class GifPublicationTests(unittest.TestCase):
         self.assertEqual(self.output.read_bytes(), b'old')
         self.output.write_bytes(self.encode([self.root / name for name in FRAME_NAMES]))
         self.assertFalse(publish(self.root, self.output, True, self.encode))
+
+    def test_export_and_metadata_select_every_affected_contract(self) -> None:
+        expected = ('test_export_docs_gif.py', 'test_fast_check.py', 'test_harness_scope.py')
+        paths = ['scripts/export_docs_gif.py', 'scripts/export_docs_gif.py.meta',
+                 'scripts/tests/test_export_docs_gif.py', 'scripts/tests/test_export_docs_gif.py.meta',
+                 'scripts/harness_scope.py']
+        selection = self_test_selection(paths, expected)
+        self.assertFalse(selection.all)
+        self.assertEqual(selection.names, expected)
 
     def test_missing_later_frame_never_calls_encoder(self) -> None:
         (self.root / FRAME_NAMES[1]).unlink()
