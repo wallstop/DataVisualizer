@@ -149,8 +149,8 @@ Security: the bridge listens on all interfaces by default (Linux Docker cannot r
   shell exported the variable — so VS Code entries for credential servers are generated as wrappers that source `.env.local` at spawn time.
 - **GitHub MCP 401 in the devcontainer.** See [Credential pairs](#credential-pairs-github_personal_access_token--github_mcp_pat).
 - **Health check:** `npm run mcp:doctor` verifies credentials, config flavor, endpoint auth (github, zai-web-search), stdio spawn paths (zai-vision, zai-image), and unity bridge
-  reachability — from the host or the container. `npm run unity:mcp:doctor` goes deeper on the unity bridge (project pin, pipeline package, tools roundtrip, wrong-editor canary).
-  Exit code 1 means action required.
+  reachability — from the host or the container. `npm run unity:mcp:doctor` (`uv run scripts/unity_mcp_doctor.py`) goes deeper on the unity bridge (project pin, pipeline package,
+  tools roundtrip, wrong-editor canary). Exit code 1 means action required.
 - **Tools drive the wrong project.** An unpinned `unity mcp` attaches to whichever Editor happens to be running. `UNITY_MCP_PROJECT` must be the project **root** (contains
   `ProjectSettings/ProjectVersion.txt`); pointing it at `<project>/Packages` or the package repo silently unpins. The bridge now self-heals to the enclosing project with a warning,
   and the `/healthz` `cli` line shows the exact spawned command.
