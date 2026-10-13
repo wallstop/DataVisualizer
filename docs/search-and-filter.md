@@ -15,6 +15,9 @@ The search box sits in the window header row, above all three panels. It is not 
 Type a term and a popover opens with the matches. Each result shows the object's name and its type name. When the term matched something other than the name, type name, or GUID,
 the result also shows up to two `field: value` lines naming the fields that matched, so you can tell why an asset is in the list.
 
+![Global search popover over the header search field, listing the matched assets with their types](images/data-visualizer-search.webp) _Global search over every tracked type.
+Regenerated from the live window by the docs capture pipeline._
+
 ### What it matches
 
 Each space-separated term is matched on its own, and an object matches when any one of its terms matches somewhere. A term is checked against, in order:
@@ -97,3 +100,25 @@ Label editing is package-driven asset editing, so it is refused during the Play 
 - [Managing assets](managing-assets.md) — create, rename, move, clone, delete, and run processors.
 - [Organizing your data](organizing.md) — ordering, layout, and persistence.
 - [Extending the window](extending.md) — attributes, `BaseDataObject`, processors, and custom inspector content.
+
+### Refresh the published search image
+
+After reviewing a regenerated `docs/images/data-visualizer-search.png`, refresh its WebP companion from the repository root. This verifies every decoded pixel before writing:
+
+```bash
+uv run --with Pillow==12.3.0 python - <<'PY'
+from io import BytesIO
+from pathlib import Path
+from PIL import Image
+source = Path("docs/images/data-visualizer-search.png")
+with Image.open(source) as image:
+    pixels = image.convert("RGBA")
+    encoded = BytesIO()
+    pixels.save(encoded, format="WEBP", lossless=True, exact=True, quality=100, method=6)
+    with Image.open(BytesIO(encoded.getvalue())) as decoded:
+        assert decoded.size == pixels.size
+        assert decoded.convert("RGBA").tobytes() == pixels.tobytes()
+    assert len(encoded.getvalue()) < source.stat().st_size
+    source.with_suffix(".webp").write_bytes(encoded.getvalue())
+PY
+```

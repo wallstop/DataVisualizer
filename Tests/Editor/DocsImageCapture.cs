@@ -23,17 +23,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         documented shots through EditorSurfaceCapture, so imagery is regenerated from code
         instead of hand-staged screen captures.
 
-        The manifest carries five shots. The layout shot is the full window. The other
-        four serve the README sections that the hand-taken video-frame JPGs used to
-        illustrate: instance-actions focuses the objects pane whose rows carry the
-        clone/rename/move/delete controls, create opens the create popover that asks for
-        a new asset name, import opens the manage-visible-types popover (the namespace
-        search dropdown with the project's types), and settings opens the settings
-        popover with its persistence toggles and data folder field. The three popovers
-        are in-panel VisualElements, so the offscreen panel render composites them; each
-        is opened through the window's own popover flow, then cropped shots cut the
-        captured PNG down to the subject bounds recorded from the live window, so a
-        section image shows the state it documents instead of duplicating the hero.
+        The manifest carries six shots. The layout shot is the full window. The other
+        five serve the README and docs-site sections that the hand-taken video-frame
+        JPGs used to illustrate: instance-actions focuses the objects pane whose rows
+        carry the clone/rename/move/delete controls, create opens the create popover
+        that asks for a new asset name, import opens the manage-visible-types popover
+        (the namespace search dropdown with the project's types), search opens the
+        global search popover with a typed query and its highlighted matches, and
+        settings opens the settings popover with its persistence toggles and data
+        folder field. The popovers are in-panel VisualElements, so the offscreen panel
+        render composites them; each is opened through the window's own popover flow,
+        then cropped shots cut the captured PNG down to the subject bounds recorded
+        from the live window, so a section image shows the state it documents instead
+        of duplicating the hero.
 
         The driver never writes into docs/ by default; callers name an output directory and
         review the results before committing them. Fixture assets are created under
@@ -100,6 +102,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string InstanceActionsShotName = "instance-actions";
         private const string CreateShotName = "create";
         private const string ImportShotName = "import";
+        private const string SearchShotName = "search";
         private const string SettingsShotName = "settings";
 
         private const string SettingsPopoverFieldName = "_settingsPopover";
@@ -108,12 +111,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string TypeAddButtonFieldName = "_addTypeButton";
         private const string CreatePopoverFieldName = "_createPopover";
         private const string CreateButtonFieldName = "_createObjectButton";
+        private const string SearchPopoverFieldName = "_searchPopover";
+        private const string SearchFieldFieldName = "_searchField";
 
         private const string SettingsPopoverElementName = "settings-popover";
         private const string TypeAddPopoverElementName = "type-add-popover";
         private const string CreatePopoverElementName = "create-popover";
         private const string CreateButtonElementName = "create-object-button";
         private const string TypeAddButtonElementName = "add-type-button";
+        private const string SearchPopoverElementName = "search-popover";
+        private const string SearchFieldElementName = "global-search-field";
+        private const string SearchResultsFieldName = "_currentSearchResultItems";
+        private const string SearchCacheFieldName = "_allManagedObjectsCache";
+        private const string SearchCachePopulatedFieldName = "_isSearchCachePopulated";
+        private const string SearchQuery = "a";
         private const string ObjectColumnElementName = "object-column";
         private const string ObjectItemActionsClass = "object-item-actions";
 
@@ -150,7 +161,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             "Damage Table",
         };
 
-        private static readonly IReadOnlyList<string> ManifestShotNames = new[] { LayoutShotName, InstanceActionsShotName, CreateShotName, ImportShotName, SettingsShotName };
+        private static readonly IReadOnlyList<string> ManifestShotNames = new[]
+        {
+            LayoutShotName,
+            InstanceActionsShotName,
+            CreateShotName,
+            ImportShotName,
+            SearchShotName,
+            SettingsShotName,
+        };
 
         private static readonly BindingFlags ReflectedInstanceMembers = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
@@ -256,6 +275,27 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        internal static void StageSearchInput(List<ScriptableObject> cache, TextField field, string query)
+        {
+            cache.Sort(
+                static (left, right) =>
+                {
+                    int name = string.Compare(left.name, right.name, StringComparison.Ordinal);
+                    return name != 0 ? name : string.Compare(left.GetType().FullName, right.GetType().FullName, StringComparison.Ordinal);
+                }
+            );
+            /*
+                Offscreen capture moves the tree to another panel, which emits a synthetic
+                blur. Keep the real typed query instead of restoring placeholder text.
+                This callback lives only on the capture window, which the driver closes.
+            */
+            field.RegisterCallback<FocusOutEvent>(SuppressCaptureBlur, TrickleDown.TrickleDown);
+            field.Focus();
+            field.RemoveFromClassList(TextField.ussClassName + "__placeholder");
+            field.value = query;
+            field.Blur();
+        }
+
         internal static string ResolveOutputDirectory(string[] arguments, string environmentValue)
         {
             for (int index = 0; index < arguments.Length - 1; index++)
@@ -352,6 +392,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     cropRect = PaddedToRootBounds(
                         root,
                         Union(RequiredElementBounds(root, TypeAddPopoverElementName, shotName), RequiredElementBounds(root, TypeAddButtonElementName, shotName))
+                    );
+                    return true;
+                case SearchShotName:
+                    cropRect = PaddedToRootBounds(
+                        root,
+                        Union(RequiredElementBounds(root, SearchPopoverElementName, shotName), RequiredElementBounds(root, SearchFieldElementName, shotName))
                     );
                     return true;
                 case SettingsShotName:
@@ -684,6 +730,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 case ImportShotName:
                     AddRequiredRegion(root, regions, TypeAddPopoverElementName, shotName);
                     break;
+                case SearchShotName:
+                    AddRequiredRegion(root, regions, SearchPopoverElementName, shotName);
+                    break;
                 case SettingsShotName:
                     AddRequiredRegion(root, regions, SettingsPopoverElementName, shotName);
                     break;
@@ -905,6 +954,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     InvokeWindowMethod(window, "BuildTypeAddList", new[] { typeof(string) }, new object[] { null });
                     StagePopoverForCapture(window, TypeAddPopoverFieldName, TypeAddButtonFieldName);
                     break;
+                case SearchShotName:
+                    StageSearchState(window);
+                    break;
                 case SettingsShotName:
                     InvokeWindowMethod(window, "BuildSettingsPopoverContent", Type.EmptyTypes, Array.Empty<object>());
                     StagePopoverForCapture(window, SettingsPopoverFieldName, SettingsButtonFieldName);
@@ -912,11 +964,70 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        private static void SuppressCaptureBlur(FocusOutEvent change)
+        {
+            change.StopImmediatePropagation();
+        }
+
+        /*
+            Stages the global search the way a user sees it after typing a query. The
+            search cache is injected with the fixture assets and marked populated instead
+            of awaited: the async population ticks on editor updates the capture's
+            synchronous flow never runs, and injecting exactly the fixtures keeps the
+            shot deterministic whatever else the host project contains. The query then
+            goes through the field itself so the production change callback builds the
+            highlighted results, the popover is revealed through the shared positioning
+            step, and a result-less match fails closed instead of documenting an empty
+            popover.
+        */
+        private static void StageSearchState(DataVisualizerWindow window)
+        {
+            FieldInfo cacheField = typeof(DataVisualizerWindow).GetField(SearchCacheFieldName, ReflectedInstanceMembers);
+            if (cacheField?.GetValue(window) is not List<ScriptableObject> cache)
+            {
+                throw new InvalidOperationException("The DataVisualizer window exposes no search cache; the capture " + "driver cannot stage the search results.");
+            }
+
+            FieldInfo populatedField = typeof(DataVisualizerWindow).GetField(SearchCachePopulatedFieldName, ReflectedInstanceMembers);
+            if (populatedField == null)
+            {
+                throw new InvalidOperationException("The DataVisualizer window exposes no search-cache flag; the capture " + "driver cannot stage the search results.");
+            }
+
+            cache.Clear();
+            for (int index = 0; index < FixtureTitles.Length; index++)
+            {
+                PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>($"{FixtureFolder}/{FixtureTitles[index]}.asset");
+                if (asset == null)
+                {
+                    throw new InvalidOperationException($"The fixture asset '{FixtureTitles[index]}' did not load; the search shot " + "would capture an empty index.");
+                }
+
+                cache.Add(asset);
+            }
+
+            populatedField.SetValue(window, true);
+            TextField searchField = ReadWindowElement(window, SearchFieldFieldName) as TextField;
+            if (searchField == null)
+            {
+                throw new InvalidOperationException("The DataVisualizer window exposes no search text field; the capture " + "driver cannot stage the search results.");
+            }
+
+            StageSearchInput(cache, searchField, SearchQuery);
+            if (typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, ReflectedInstanceMembers)?.GetValue(window) is not List<VisualElement> results || results.Count == 0)
+            {
+                throw new InvalidOperationException($"The staged query '{SearchQuery}' matched no fixture asset; the search shot " + "would document an empty popover.");
+            }
+
+            EditorSurfaceCapture.SettleLayout(window);
+            StagePopoverForCapture(window, SearchPopoverFieldName, SearchFieldFieldName, shouldFocus: false);
+        }
+
         /*
             Reveals a popover through the extracted production step OpenPopover schedules,
             so the shot shows the same placement and visibility a user gets.
         */
-        private static void StagePopoverForCapture(DataVisualizerWindow window, string popoverFieldName, string triggerFieldName)
+        private static void StagePopoverForCapture(DataVisualizerWindow window, string popoverFieldName, string triggerFieldName, bool shouldFocus = true)
         {
             VisualElement popover = ReadWindowElement(window, popoverFieldName);
             VisualElement trigger = ReadWindowElement(window, triggerFieldName);
@@ -934,7 +1045,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 );
             }
 
-            positionAndDisplay.Invoke(window, new object[] { popover, trigger, false, true });
+            positionAndDisplay.Invoke(window, new object[] { popover, trigger, false, shouldFocus });
         }
 
         private static void InvokeWindowMethod(DataVisualizerWindow window, string methodName, Type[] parameterTypes, object[] arguments)
