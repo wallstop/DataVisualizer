@@ -9,7 +9,7 @@ This page covers the operations that change assets on disk, and the processors t
 
 **Clone**, **Rename**, **Move**, and **Delete** are the four buttons on the right of each object row, and they act on that row's object without selecting it first.
 
-![Clone, rename, move, and delete controls on the object rows](images/data-visualizer-instance-actions.png) _Per-row asset management controls. Regenerated from the live window by
+![Clone, rename, move, and delete controls on the object rows](images/data-visualizer-instance-actions.webp) _Per-row asset management controls. Regenerated from the live window by
 the docs capture pipeline._
 
 ## Create

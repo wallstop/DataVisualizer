@@ -63,7 +63,7 @@ editor preferences.
 
 The **Settings** popover opens from the **…** button in the header row.
 
-![Settings popover with persistence toggles and data folder field](images/data-visualizer-settings.png) _Settings popover. Regenerated from the live window by the docs capture
+![Settings popover with persistence toggles and data folder field](images/data-visualizer-settings.webp) _Settings popover. Regenerated from the live window by the docs capture
 pipeline._
 
 - **Select Active Object** mirrors your DxVisualizer selection in Unity's own Inspector, for cross-referencing assets in other editor windows.
