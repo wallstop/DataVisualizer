@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Builds the documentation site (typed Python port of ``build-docs.ps1``, issue #171).
 
-Creates (or reuses) the ``.docs-venv`` virtual environment, installs the
-docs requirements into it, and runs a strict mkdocs build — or the preview
-server with ``--serve``. Verdicts, exit codes, and the ``[docs]`` message
+Creates (or reuses) the ``.docs-venv`` virtual environment, checks the
+docs requirements with uv (pip when uv is absent), and runs a strict
+mkdocs build — or the preview server with ``--serve``. Verdicts, exit codes, and the ``[docs]`` message
 shapes match the PowerShell original, so callers and CI logs keep their
 meaning.
 """
@@ -41,11 +41,6 @@ def invoke_checked(python_path: Path, arguments: Sequence[str], description: str
         raise RuntimeError(f"{description} failed with exit code {completed.returncode}")
 
 
-def resolve_python_launcher() -> Optional[str]:
-    """Find a bootstrap interpreter (python3 or python) on PATH."""
-    return shutil.which("python3") or shutil.which("python")
-
-
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="build-docs",
@@ -53,6 +48,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--root", default="", help="repository root (default: the checkout holding this script)")
     parser.add_argument("--serve", action="store_true", help="run the mkdocs preview server instead of building")
+    parser.add_argument("--installer", choices=("auto", "uv", "pip"), default="auto", help="dependency installer (default: uv when available, otherwise pip)")
     options = parser.parse_args(argv)
 
     try:
@@ -67,33 +63,33 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print(f"[docs] ERROR: required file '{required}' does not exist")
                 return 1
 
+        uv_path = shutil.which("uv") if options.installer != "pip" else None
+        if options.installer == "uv" and uv_path is None:
+            print("[docs] ERROR: requested uv installer is not on PATH")
+            return 1
+
         venv_root = repo_root / ".docs-venv"
         python_path = venv_python_path(venv_root)
         if not python_path.is_file():
-            launcher = resolve_python_launcher()
-            if launcher is None:
-                print("[docs] ERROR: no python3 or python executable is on PATH")
-                return 1
             print(f"[docs] creating the virtual environment at {venv_root}")
-            invoke_checked(Path(launcher), ["-m", "venv", str(venv_root)], "python -m venv")
+            invoke_checked(Path(sys.executable), ["-m", "venv", str(venv_root)], "python -m venv")
             python_path = venv_python_path(venv_root)
             if not python_path.is_file():
                 print(f"[docs] ERROR: the virtual environment has no interpreter at {python_path}")
                 return 1
 
-        invoke_checked(
-            python_path,
-            [
-                "-m",
-                "pip",
-                "install",
-                "--quiet",
-                "--disable-pip-version-check",
-                "--requirement",
-                str(requirements_path),
-            ],
-            "pip install -r requirements-docs.txt",
-        )
+        if uv_path is not None:
+            invoke_checked(
+                Path(uv_path),
+                ["pip", "install", "--quiet", "--python", str(python_path), "--requirement", str(requirements_path)],
+                "uv pip install -r requirements-docs.txt",
+            )
+        else:
+            invoke_checked(
+                python_path,
+                ["-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--requirement", str(requirements_path)],
+                "pip install -r requirements-docs.txt",
+            )
 
         if options.serve:
             invoke_checked(python_path, ["-m", "mkdocs", "serve", "--config-file", str(config_path)], "mkdocs serve")
@@ -106,7 +102,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         print("[docs] OK: strict build succeeded")
         return 0
-    except RuntimeError as error:
+    except (RuntimeError, OSError) as error:
         print(f"[docs] ERROR: {error}")
         return 1
 
