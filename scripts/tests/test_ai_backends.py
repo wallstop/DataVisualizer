@@ -146,18 +146,38 @@ class Sandbox:
             path_value = f"{self.bin}{os.pathsep}{os.environ.get('PATH', '')}"
         else:
             path_value = f"{self.bin}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-        env: Dict[str, str] = {
-            "PATH": path_value,
-            "HOME": str(self.home),
-            "CODEX_HOME": str(self.codex_home),
-            "AI_BACKENDS_TEST_DUMP": str(self.dump),
-            "AI_BACKENDS_TEST_ENV_KEYS": " ".join(TEST_ENV_KEYS),
-            "AI_BACKENDS_ENV_FILE": str(self.env_file),
-            "AI_BACKENDS_CLAUDE_SUBPROCESS_ENV_SCRUB": "0",
-            "PYTHON": sys.executable,
-        }
-        if os.name == "nt" and os.environ.get("SystemRoot"):
-            env["SystemRoot"] = os.environ["SystemRoot"]
+        if os.name == "nt":
+            env: Dict[str, str] = dict(os.environ)
+            # Windows children need the full shell context (TEMP, COMSPEC,
+            # SystemRoot) for tempfile and .bat resolution; the sandbox-owned
+            # keys below still override everything they control. USERPROFILE
+            # follows the sandbox home so Path.home() stays inside the fixture.
+            env.update(
+                {
+                    "PATH": path_value,
+                    "HOME": str(self.home),
+                    "USERPROFILE": str(self.home),
+                    "CODEX_HOME": str(self.codex_home),
+                    "AI_BACKENDS_TEST_DUMP": str(self.dump),
+                    "AI_BACKENDS_TEST_ENV_KEYS": " ".join(TEST_ENV_KEYS),
+                    "AI_BACKENDS_ENV_FILE": str(self.env_file),
+                    "AI_BACKENDS_CLAUDE_SUBPROCESS_ENV_SCRUB": "0",
+                    "PYTHON": sys.executable,
+                }
+            )
+            appdata = self.home / "AppData" / "Roaming"
+            env["APPDATA"] = str(appdata)
+        else:
+            env = {
+                "PATH": path_value,
+                "HOME": str(self.home),
+                "CODEX_HOME": str(self.codex_home),
+                "AI_BACKENDS_TEST_DUMP": str(self.dump),
+                "AI_BACKENDS_TEST_ENV_KEYS": " ".join(TEST_ENV_KEYS),
+                "AI_BACKENDS_ENV_FILE": str(self.env_file),
+                "AI_BACKENDS_CLAUDE_SUBPROCESS_ENV_SCRUB": "0",
+                "PYTHON": sys.executable,
+            }
         if extra_env:
             env.update(extra_env)
         if command is None:
