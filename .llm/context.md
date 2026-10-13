@@ -177,9 +177,9 @@ lanes run concurrently and the self-test suite runs alone as a second phase, bec
 post-format `check` steps are dropped locally as redundant (a successful format already proves the invariant; CI still runs both checks), and the gate adds the release-credential
 and line-ending checks the old ladder only ran in CI. Unity suites stay a separate, host-dependent gate.
 
-Layers: the pre-commit framework hook runs CSharpier, C# member-order, null-assertions, and the fast `.llm` checks on staged files; `npm run check:fast` is the per-iteration loop;
-`npm run check:gate` is the review gate; CI (`.github/workflows/llm-lint.yml`) runs everything, including the Prettier Markdown check, on ubuntu and windows. CSharpier and member
-ordering run via the pre-commit config on staged `.cs` files.
+Layers: the pre-commit framework hook runs CSharpier, the combined C# source-policy lint (`scripts/lint_csharp_source_policy.py`: member-order, null-assertions, and usings in one
+process), and the fast `.llm` checks on staged files; `npm run check:fast` is the per-iteration loop; `npm run check:gate` is the review gate; CI (`.github/workflows/llm-lint.yml`)
+runs everything, including the Prettier Markdown check, on ubuntu and windows. CSharpier and member ordering run via the pre-commit config on staged `.cs` files.
 
 ### Testing
 

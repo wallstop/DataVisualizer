@@ -67,6 +67,7 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/lint_csharp_member_order.py": ("test_csharp_member_order.py",),
     "scripts/lint_csharp_null_assertions.py": ("test_csharp_null_assertions.py",),
     "scripts/lint_csharp_usings.py": ("test_csharp_usings.py",),
+    "scripts/lint_csharp_source_policy.py": ("test_csharp_source_policy.py",),
     "scripts/lint_changelog_length.py": ("test_changelog_length.py",),
     "scripts/lint_line_endings.py": ("test_line_endings.py",),
     "scripts/lint_release_secrets.py": ("test_release_secrets.py",),

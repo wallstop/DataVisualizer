@@ -10,8 +10,6 @@ repos:
         stages:
           - pre-commit
           - pre-push
-          - post-checkout
-          - post-rewrite
         description: Install the .NET tools listed at .config/dotnet-tools.json.
       - id: csharpier
         name: Run CSharpier on C# files
@@ -20,24 +18,12 @@ repos:
         types:
           - c#
         description: CSharpier is an opinionated C# formatter inspired by Prettier.
-      - id: lint-csharp-member-order
+      - id: lint-csharp-source-policy
         name: Enforce C# source policy
-        entry: uv run scripts/lint_csharp_member_order.py --paths
+        entry: uv run scripts/lint_csharp_source_policy.py --paths
         language: system
         files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
-        description: Enforces comment style, method naming, member tiers, access ordering, and nested-type placement.
-      - id: lint-csharp-null-assertions
-        name: Enforce explicit null assertions
-        entry: uv run scripts/lint_csharp_null_assertions.py --paths
-        language: system
-        files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
-        description: Bans Assert.IsNull/Assert.IsNotNull so UnityEngine.Object null checks use the overloaded == and != operators.
-      - id: lint-csharp-usings
-        name: Enforce namespace-scoped usings
-        entry: uv run scripts/lint_csharp_usings.py --paths
-        language: system
-        files: ^(Editor|Runtime|Tests|Generator~)/.*\.cs$
-        description: Moves `using` directives inside the namespace; file-level usings stay sanctioned for assembly-attribute preambles.
+        description: Runs the member-order, null-assertion, and using-placement lints in one interpreter over the staged C# files.
       - id: lint-release-secrets
         name: Enforce the release credential contract
         entry: uv run scripts/lint_release_secrets.py
