@@ -7,10 +7,12 @@ only the driver language changed.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 
@@ -29,7 +31,10 @@ def case_runs_when_bash_is_available() -> None:
     test_script = REPO_ROOT / ".devcontainer/tests/test-ai-backends.sh"
     assert_true(test_script.is_file(), f"launcher test script missing: {test_script}")
 
-    output, exit_code = run_tool_output([bash, str(test_script)])
+    # The shell fixture deliberately strips PATH to system directories. Pass
+    # this validated interpreter explicitly, including on Windows runners.
+    with patch.dict(os.environ, {"AI_BACKENDS_TEST_PYTHON": Path(sys.executable).as_posix()}):
+        output, exit_code = run_tool_output([bash, str(test_script)])
     print(output)
     assert_exit_code(0, "ai-backends contract suite should pass", exit_code)
     assert_true(

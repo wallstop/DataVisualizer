@@ -19,6 +19,26 @@ if [ ! -f "${LAUNCHER}" ]; then
     exit 1
 fi
 
+# Keep credential isolation while allowing the Python state writer to run.
+# The wrapper supplies its validated interpreter; direct runs can resolve
+# one before the fixture replaces PATH. Windows native runtimes also need
+# SystemRoot in an explicitly replaced environment (Python subprocess docs).
+RUNTIME_ENV=()
+if [ -n "${AI_BACKENDS_TEST_PYTHON:-}" ]; then
+    RUNTIME_ENV+=("PYTHON=${AI_BACKENDS_TEST_PYTHON}")
+else
+    for candidate in "${PYTHON:-}" python3 python; do
+        if [ -n "${candidate}" ] && command -v "${candidate}" >/dev/null 2>&1 \
+            && "${candidate}" -c "" >/dev/null 2>&1; then
+            RUNTIME_ENV+=("PYTHON=$(command -v "${candidate}")")
+            break
+        fi
+    done
+fi
+if [ -n "${SYSTEMROOT:-${SystemRoot:-}}" ]; then
+    RUNTIME_ENV+=("SystemRoot=${SYSTEMROOT:-${SystemRoot:-}}")
+fi
+
 PASS=0
 FAIL=0
 SANDBOX=""
@@ -138,7 +158,7 @@ run_launcher() {
         esac
     done
     (cd "${SANDBOX}/workdir" && \
-        env -i \
+        env -i "${RUNTIME_ENV[@]}" \
             PATH="${SANDBOX}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
             HOME="${SANDBOX}/home" \
             CODEX_HOME="${SANDBOX}/codex-home" \
@@ -381,7 +401,7 @@ test_install_creates_all_launchers() {
     make_sandbox
     mkdir -p "${SANDBOX}/install-bin"
     (cd "${SANDBOX}/workdir" && \
-        env -i \
+        env -i "${RUNTIME_ENV[@]}" \
             PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
             HOME="${SANDBOX}/home" \
             CODEX_HOME="${SANDBOX}/codex-home" \
@@ -423,7 +443,7 @@ test_install_seeds_isolated_claude_approvals() {
         test_path="${test_path}:${node_dir}"
     fi
     (cd "${SANDBOX}/workdir" && \
-        env -i \
+        env -i "${RUNTIME_ENV[@]}" \
             PATH="${test_path}" \
             HOME="${SANDBOX}/home" \
             CODEX_HOME="${SANDBOX}/codex-home" \
