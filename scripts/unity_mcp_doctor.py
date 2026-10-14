@@ -223,7 +223,7 @@ class Doctor:
                             or self.local.get('UNITY_MCP_PROJECT') or self.local.get('UNITY_PROJECT_PATH') or '') if self.remote else str(self.project or '')
                 # Windows host paths are opaque to Linux. Compare them with
                 # Windows rules instead of resolving C:\\... under /workspaces.
-                normalize = ntpath.normcase if ntpath.splitdrive(driven)[0] else os.path.normpath
+                normalize: Callable[[str], str] = (lambda value: ntpath.normcase(ntpath.normpath(value))) if ntpath.splitdrive(driven)[0] else os.path.normpath
                 actual = normalize(driven)
                 if expected and actual == normalize(expected):
                     self.ok(f'editor_status drives the pinned project: {driven}')

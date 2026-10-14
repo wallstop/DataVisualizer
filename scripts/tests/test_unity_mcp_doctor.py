@@ -5,6 +5,8 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -152,10 +154,25 @@ class DoctorTests(unittest.TestCase):
 
     def test_container_uses_host_bridge_and_windows_project_paths(self) -> None:
         self.responses['tools/call'] = {'result': {'content': [{'text': json.dumps({'projectPath': 'C:/Code/Project'})}]}}
-        doctor, code, output = self.run_doctor({'DATAVIZ_IN_CONTAINER': '1', 'UNITY_MCP_PROJECT': 'c:\\code\\project'})
-        self.assertEqual((code, doctor.failures), (0, 0))
-        self.assertTrue(self.urls[0].startswith('http://host.docker.internal:9020/'))
-        self.assertNotIn('Unity CLI on PATH', output)
+        for pin in [r'c:\code\project', 'C:/Code/Project/', r'C:\Code\.\Project', r'C:\Code\other\..\Project']:
+            with self.subTest(pin=pin):
+                doctor, code, output = self.run_doctor({'DATAVIZ_IN_CONTAINER': '1', 'UNITY_MCP_PROJECT': pin})
+                self.assertEqual((code, doctor.failures), (0, 0), output)
+                self.assertTrue(self.urls[0].startswith('http://host.docker.internal:9020/'))
+                self.assertNotIn('Unity CLI on PATH', output)
+
+    @unittest.skipUnless(shutil.which('node'), 'node is required')
+    def test_js_doctor_normalizes_endpoint_before_health_probe(self) -> None:
+        source = (Path(__file__).resolve().parents[2] / '.llm/mcp/mcp-doctor.mjs').read_text(encoding='utf-8')
+        section = source.split('console.log("--- Unity bridge ---");', 1)[1].split('} // end SKIP_NETWORK_PROBES guard', 1)[0]
+        for endpoint in ['http://bridge:9021/mcp', 'http://bridge:9021/mcp///']:
+            with self.subTest(endpoint=endpoint):
+                bootstrap = ('const urls=[]; const env=name=>name==="UNITY_MCP_HTTP_URL"?' + json.dumps(endpoint) + ':"";'
+                             'const ok=()=>{}; const fail=message=>{throw Error(message)};'
+                             'const fetch=async url=>{urls.push(url);return {ok:true,json:async()=>({result:{serverInfo:{name:"fixture"}}})}};')
+                result = subprocess.run([str(shutil.which('node')), '--input-type=module'], input=bootstrap + section + '\nconsole.log(JSON.stringify(urls));',
+                                        capture_output=True, text=True, encoding='utf-8', timeout=10, check=True)
+                self.assertEqual(json.loads(result.stdout.splitlines()[-1]), ['http://bridge:9021/healthz', 'http://bridge:9021/mcp'])
 
     def test_custom_endpoint_and_rpc_errors_fail(self) -> None:
         for method in ['initialize', 'tools/list', 'tools/call']:

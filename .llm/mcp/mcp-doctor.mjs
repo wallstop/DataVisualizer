@@ -431,7 +431,7 @@ await spawnProbe("zai-image", "node", [".llm/mcp/zai-image-mcp.mjs"], {
 // ---------------------------------------------------------------------------
 console.log("--- Unity bridge ---");
 const port = Number(env("UNITY_MCP_HTTP_PORT")) || 9020;
-const bridgeUrl = env("UNITY_MCP_HTTP_URL") || `http://host.docker.internal:${port}/mcp`;
+const bridgeUrl = (env("UNITY_MCP_HTTP_URL") || `http://host.docker.internal:${port}/mcp`).replace(/\/+$/, "");
 const bridgeBase = bridgeUrl.slice(0, bridgeUrl.lastIndexOf("/"));
 try {
     const res = await fetch(`${bridgeBase}/healthz`, {
