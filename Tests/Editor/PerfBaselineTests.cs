@@ -71,13 +71,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual(expected, PerfBaseline.JsonEscape(input));
         }
 
-        [Test]
-        public void ShouldNameFixturesDeterministically()
+        [TestCase(0, "Player Save")]
+        [TestCase(7, "Damage Table")]
+        [TestCase(8, "Player Save 000001")]
+        [TestCase(9, "World Settings 000001")]
+        [TestCase(15, "Damage Table 000001")]
+        [TestCase(16, "Player Save 000002")]
+        [TestCase(9999, "Damage Table 001249")]
+        public void ShouldNameFixturesDeterministically(int index, string expected)
         {
-            Assert.AreEqual("Player Save", PerfBaseline.FixtureName(0));
-            Assert.AreEqual("Damage Table", PerfBaseline.FixtureName(7));
-            Assert.AreEqual("Player Save 000001", PerfBaseline.FixtureName(8));
-            Assert.AreEqual("World Settings 000002", PerfBaseline.FixtureName(9));
+            Assert.AreEqual(expected, PerfBaseline.FixtureName(index));
         }
 
         [Test]

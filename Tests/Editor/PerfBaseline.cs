@@ -950,14 +950,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private enum Phase
         {
-            Idle,
-            WaitingColdReady,
-            InteractionSamples,
-            WaitingSearchResults,
-            WarmOpen,
-            WaitingWarmReady,
-            BetweenWarmRepetitions,
-            Finished,
+            [Obsolete("Please use a valid value")]
+            None = 0,
+
+            // RunState explicitly initializes Idle; phases are never persisted.
+            Idle = 8,
+            WaitingColdReady = 1,
+            InteractionSamples = 2,
+            WaitingSearchResults = 3,
+            WarmOpen = 4,
+            WaitingWarmReady = 5,
+            BetweenWarmRepetitions = 6,
+            Finished = 7,
         }
     }
 }
