@@ -17,7 +17,8 @@ timers, so no tool transport ever pollutes a sample. The current driver runs 100
 - **Selection** measures the production `SelectObject` call for a mid-list fixture asset.
 
 The run writes one JSON report (schema 1) recording the environment block, every raw sample, and the repetition counts, so two runs compare without reinterpreting prose. A
-25-minute watchdog fails the run closed, removing its fixtures and windows on every exit path.
+45-minute watchdog is checked on editor ticks and fails the run closed. It cannot interrupt synchronous fixture staging; teardown runs when control returns to the driver and
+removes its fixtures and windows.
 
 ## Recorded environment
 
