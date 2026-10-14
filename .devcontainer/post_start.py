@@ -222,7 +222,7 @@ def main(argv: Sequence[str]) -> int:
 
     env = child_env_with_env_local(workspace)
     repair_credential_aliases(workspace, env)
-    run_child_strict(["bash", ".llm/mcp/sync-mcp.sh", str(workspace)], workspace, env)
+    run_child_strict([sys.executable, ".llm/mcp/sync_mcp.py", str(workspace)], workspace, env)
 
     if shutil.which("opencode") is not None:
         recycle_stale_service(workspace)

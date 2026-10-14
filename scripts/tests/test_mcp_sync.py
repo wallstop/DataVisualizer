@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """mcp-sync contract tests (typed Python port of ``test-mcp-sync.sh``, issue #171).
 
-Every case from the bash original is kept with the same assertions; only
-the driver language changed. The subject stays the sync entry
-(``sync-mcp.sh`` driving ``configure.mjs``), so each case still syncs into
+Every case from the bash original is kept with the same assertions.
+The Python sync entry drives the unchanged Node configurator
+(``sync_mcp.py`` driving ``configure.mjs``), so each case still syncs into
 a throwaway workspace with throwaway HOME and CODEX_HOME, and asserts
 that every supported agent frontend receives the same server fleet with
 placeholder-only credentials (no secrets on disk). The bash suite's ``jq``
 probes become stdlib ``json`` reads, which also removes the jq dependency
 the old suite silently required.
 
-Cases skip when bash or node is unavailable, like the previous wrapper's
-bash guard.
+Integration cases require node; the wrapper itself requires only Python.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 
 sys.dont_write_bytecode = True
 
@@ -31,7 +30,7 @@ from _test_helpers import assert_true, failure_count, new_temp_root, remove_temp
 
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
-SYNC = REPO_ROOT / ".llm" / "mcp" / "sync-mcp.sh"
+SYNC = REPO_ROOT / ".llm" / "mcp" / "sync_mcp.py"
 
 # The unity bridge URL port is configurable: unity-mcp-host.mjs binds a dynamic
 # port when 9020 is busy and persists UNITY_MCP_HTTP_PORT to .env.local. Export
@@ -40,15 +39,6 @@ UNITY_MCP_HTTP_PORT = os.environ.get("UNITY_MCP_HTTP_PORT") or "9020"
 
 SCRUBBED_KEYS = ("GITHUB_PERSONAL_ACCESS_TOKEN", "GITHUB_MCP_PAT", "GITHUB_TOKEN", "ZAI_API_KEY", "Z_AI_API_KEY")
 
-
-def bash_path(path: Path) -> str:
-    """Render a path bash accepts on every host.
-
-    Windows-created fixture paths reach Git Bash through MSYS, which reads
-    drive-letter paths with forward slashes; the forward form is used
-    everywhere (a no-op on POSIX).
-    """
-    return str(path).replace("\\", "/")
 
 LEGACY_OPENCODE_JSON = """{
   "$schema": "https://opencode.ai/config.json",
@@ -79,8 +69,6 @@ class Sandbox:
         self.stderr = ""
 
     def run_sync(self) -> None:
-        bash = shutil.which("bash")
-        assert_true(bash is not None, "bash must be on PATH; the sync subject is a bash script")
         env = dict(os.environ)
         for key in SCRUBBED_KEYS:
             env.pop(key, None)
@@ -98,10 +86,7 @@ class Sandbox:
             # names pointing inside the sandbox.
             env["USERPROFILE"] = str(self.home)
         completed = subprocess.run(
-            # Resolve bash through PATH explicitly: on Windows a bare "bash"
-            # in CreateProcess's search order hits System32's WSL launcher
-            # before any PATH entry, and WSL without a distro fails the sync.
-            [bash, bash_path(SYNC), bash_path(self.root)],
+            [sys.executable, str(SYNC), str(self.root)],
             cwd=str(self.root),
             env=env,
             capture_output=True,
@@ -306,13 +291,76 @@ CASES = (
 )
 
 
+def case_wrapper_forwards_workspace_flags_and_exit_status() -> None:
+    root = new_temp_root(prefix="mcp sync wrapper-")
+    try:
+        script_dir = root / ".llm" / "mcp"
+        script_dir.mkdir(parents=True)
+        wrapper = script_dir / SYNC.name
+        shutil.copyfile(SYNC, wrapper)
+        (script_dir / "configure.mjs").write_text(
+            "console.log(JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),"
+            "workspace:process.env.DATAVIZ_MCP_WORKSPACE}));process.exit(7);\n",
+            encoding="utf-8",
+        )
+        other = root / "other workspace"
+        other.mkdir()
+        for arguments, working_directory, expected_workspace, flags in (
+            ([], other, root, []),
+            (["--check"], other, root, ["--check"]),
+            (["other workspace", "--check", "two words"], root, other, ["--check", "two words"]),
+            ([""], other, root, [""]),
+        ):
+            completed = subprocess.run(
+                [sys.executable, str(wrapper), *arguments],
+                cwd=working_directory,
+                env={**os.environ, "DATAVIZ_MCP_WORKSPACE": "ignored inherited workspace"},
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+            assert_eq(f"wrapper exit for {arguments}", 7, completed.returncode, completed.stderr)
+            record = json.loads(completed.stdout)
+            assert_eq("configurator flags", flags, record["args"])
+            assert_eq("configurator cwd", expected_workspace.resolve(), Path(record["cwd"]).resolve())
+            assert_eq("workspace environment", expected_workspace.resolve(), Path(record["workspace"]).resolve())
+        failed = subprocess.run(
+            [sys.executable, str(wrapper), str(root / "missing workspace")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        assert_eq("missing workspace exits one", 1, failed.returncode)
+        assert_true("Cannot sync MCP configuration:" in failed.stderr, failed.stderr)
+        assert_true("Traceback" not in failed.stderr, failed.stderr)
+    finally:
+        remove_temp_root(root)
+
+
+def case_wrapper_fails_without_node() -> None:
+    completed = subprocess.run(
+        [sys.executable, str(SYNC), "--check"],
+        env={**os.environ, "PATH": ""},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert_eq("missing node exits one", 1, completed.returncode)
+    assert_true("node is required to sync MCP configuration." in completed.stderr, completed.stderr)
+
+
 def main() -> int:
     assert_true(SYNC.is_file(), f"sync script not found at {SYNC}")
     print("== mcp-sync contract tests ==")
-    missing = shutil.which("bash") is None or shutil.which("node") is None
+    run_case("case_wrapper_fails_without_node", case_wrapper_fails_without_node)
+    missing = shutil.which("node") is None
     if missing:
-        print("    SKIP: bash and node are both required to drive the sync entry.")
-        return 0
+        print("    SKIP: node is required to drive the configurator.")
+        return 1 if failure_count() else 0
+    run_case("case_wrapper_forwards_workspace_flags_and_exit_status", case_wrapper_forwards_workspace_flags_and_exit_status)
     for case in CASES:
         run_case(case.__name__, case)
     failures = failure_count()

@@ -138,8 +138,8 @@ Security: the bridge listens on all interfaces by default (Linux Docker cannot r
 - **Port already in use / dynamic ports.** Re-running the bridge is a no-op while a healthy instance holds the port; if something else owns it, the bridge binds the next free port,
   persists `UNITY_MCP_HTTP_PORT` to `.env.local`, and re-syncs every frontend config automatically. No fixed port is required anywhere: `configure.mjs`, the devcontainer health
   check, and the doctors all read the persisted value.
-- **`npm run mcp:sync` on the host.** It runs `configure.mjs` directly (pure node, cross-platform); the bash wrapper `sync-mcp.sh` remains for container hooks. `hasCommand` uses
-  `where` on Windows so `uvx`-gated servers register on the host too.
+- **`npm run mcp:sync` on the host.** It runs `configure.mjs` directly (pure node, cross-platform); container hooks use the typed Python wrapper `sync_mcp.py`
+  (`uv run .llm/mcp/sync_mcp.py [workspace_dir] [flags...]`). `hasCommand` uses `where` on Windows so `uvx`-gated servers register on the host too.
 - **Shared configs are environment-agnostic.** Sync produces identical files from the host and the container (verified by hash): the unity bridge URL always uses
   `host.docker.internal` (resolves on the host under Docker Desktop too), and zai-image uses PATH-resolved `node` with a workspace-relative script. Never reintroduce `127.0.0.1` or
   absolute binaries into shared entries — they silently break the other environment.

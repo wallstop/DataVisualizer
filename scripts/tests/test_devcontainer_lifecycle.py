@@ -77,7 +77,7 @@ class Sandbox:
             directory.mkdir(parents=True)
         self.marker = self.root / "marker.log"
         shutil.copy(LIFECYCLE_DIR / "env-local.sh", self.ws / ".devcontainer" / "env-local.sh")
-        for relative in (".devcontainer/install_npm_tools.py", ".devcontainer/ai_backends.py", ".llm/mcp/sync-mcp.sh"):
+        for relative in (".devcontainer/install_npm_tools.py", ".devcontainer/ai_backends.py", ".llm/mcp/sync_mcp.py"):
             self.write_stub(self.ws / relative, STUB_RECORD)
         self.write_stub(self.stubs / "node", STUB_RECORD)
         # Credential-shaped variables are scrubbed from the child environment:
@@ -222,7 +222,7 @@ def case_on_create_bootstraps_and_is_idempotent() -> None:
             == [
                 "STUB install_npm_tools.py| --offline-ok",
                 "STUB ai_backends.py| install",
-                f"STUB sync-mcp.sh| {sandbox.ws}",
+                f"STUB sync_mcp.py| {sandbox.ws}",
             ],
             f"on_create should call the three children with the documented arguments, got {stub_calls(sandbox.marker_lines())}",
         )
@@ -250,7 +250,7 @@ def case_on_create_tolerates_npm_failure_only() -> None:
             "⚠️  npm tool refresh failed at create time; image-baked versions remain installed." in output,
             f"the npm failure should warn, got:\n{output}",
         )
-        assert_true("STUB sync-mcp.sh" in "\n".join(sandbox.marker_lines()), "the sync should still run after the npm warning")
+        assert_true("STUB sync_mcp.py" in "\n".join(sandbox.marker_lines()), "the sync should still run after the npm warning")
 
         sandbox.write_stub(sandbox.ws / ".devcontainer/ai_backends.py", FAILING_STUB)
         code, output = sandbox.run("on_create.py")
@@ -326,7 +326,7 @@ def case_post_start_replaces_block_and_loads_env() -> None:
             f"the npm and backend installs run before the load, got {calls}",
         )
         assert_true("STUB node| .llm/mcp/mcp-doctor.mjs --repair" in calls[2], f"the doctor runs before the sync, got {calls}")
-        assert_true(calls[3].startswith("STUB sync-mcp.sh|"), f"the sync runs after the doctor, got {calls}")
+        assert_true(calls[3].startswith("STUB sync_mcp.py|"), f"the sync runs after the doctor, got {calls}")
         assert_true("GITHUB_PERSONAL_ACCESS_TOKEN=stale-value;" in envs[0], f"children before the load see the exported value, got {envs[0]}")
         assert_true("GITHUB_PERSONAL_ACCESS_TOKEN=file-value;" in envs[3], f"children after the load see the file value, got {envs[3]}")
         print(output)
@@ -340,7 +340,7 @@ def case_update_content_restores_and_syncs_only_when_present() -> None:
         code, output = sandbox.run("update_content.py")
         assert_exit_code(0, "update_content should succeed in a sandbox", code)
         assert_true(
-            stub_calls(sandbox.marker_lines()) == [f"STUB sync-mcp.sh| {sandbox.ws}"],
+            stub_calls(sandbox.marker_lines()) == [f"STUB sync_mcp.py| {sandbox.ws}"],
             f"update_content should only sync without the dotnet manifest, got {stub_calls(sandbox.marker_lines())}",
         )
 
@@ -353,7 +353,7 @@ def case_update_content_restores_and_syncs_only_when_present() -> None:
         lines = sandbox.marker_lines()
         assert_true(len(lines) == 2, f"update_content should restore and then sync, got {lines}")
         assert_true(lines[0] == "dotnet tool restore attempt 1", f"the restore should be recorded first, got {lines}")
-        assert_true(lines[1].startswith(f"STUB sync-mcp.sh| {sandbox.ws} |ENV:"), f"the sync should be recorded second, got {lines}")
+        assert_true(lines[1].startswith(f"STUB sync_mcp.py| {sandbox.ws} |ENV:"), f"the sync should be recorded second, got {lines}")
 
         sandbox.env["PATH"] = "/bin"
         sandbox.marker.unlink()
