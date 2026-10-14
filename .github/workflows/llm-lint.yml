@@ -136,12 +136,16 @@ jobs:
       # download, dominates the Windows install — while the npm download cache
       # still covers a changed package.json (an exact-key miss reinstalls over
       # the restored tree). The lock file is intentionally ignored, so both
-      # keys hash package.json.
+      # keys hash package.json. The download cache path is per-OS: npm keeps
+      # it in ~/.npm on POSIX but in %LocalAppData%\npm-cache on Windows, and
+      # a single ~/.npm path never exists there (the save logs "Path
+      # Validation Error" and every markdown-surface run pays a cold
+      # download).
       - name: Cache npm packages
         if: steps.check-scope.outputs.markdown != 'skip'
         uses: actions/cache@v6
         with:
-          path: ~/.npm
+          path: ${{ runner.os == 'Windows' && '~\AppData\Local\npm-cache' || '~/.npm' }}
           key: npm-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: npm-${{ runner.os }}-
 
