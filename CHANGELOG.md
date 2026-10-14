@@ -15,8 +15,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Add the Migration and Roadmap pages, and move the repository branding in-repo: the DxVisualizer mark, favicon, and banner from the rebrand kit now live under `docs/images/` and
   the site and README use them (#149, #150).
 
-- Show the asset-creation controls opening in the managing-assets guide.
-
 ### Changed
 
 - Renamed to DxVisualizer: display name, window title, and menu paths (**Tools → Wallstop Studios → DxVisualizer**). Namespaces, types, package name, saved state, and theme tokens
