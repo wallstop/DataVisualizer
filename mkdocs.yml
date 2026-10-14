@@ -90,6 +90,7 @@ nav:
       - Managing assets: managing-assets.md
       - Organizing your data: organizing.md
   - Extending: extending.md
+  - Performance: performance.md
   - Troubleshooting: troubleshooting.md
   - Migration: migration.md
   - Roadmap: roadmap.md
