@@ -50,10 +50,11 @@ class DoctorTests(unittest.TestCase):
             self.calls.append(payload)
         if method == self.error_method:
             raise OSError('offline fixture')
-        return self.responses[method]
+        return self.responses.get(method, {})
 
     def run_doctor(self, environment: Optional[Dict[str, str]] = None) -> tuple[Doctor, int, str]:
-        env = {'UNITY_MCP_PROJECT': str(self.project)} if environment is None else environment
+        env = {'UNITY_MCP_PROJECT': str(self.project)} if environment is None else dict(environment)
+        env.setdefault('DATAVIZ_IN_CONTAINER', '0')
         doctor = Doctor(self.root, self.root / 'home', env, self.command, self.request)
         stream = io.StringIO()
         with contextlib.redirect_stdout(stream):
@@ -64,10 +65,10 @@ class DoctorTests(unittest.TestCase):
         (self.root / '.env.local').write_text('UNITY_MCP_TOKEN=local-secret\nUNITY_MCP_HTTP_PORT=9001', encoding='utf-8')
         doctor, code, output = self.run_doctor({'UNITY_MCP_PROJECT': str(self.project), 'UNITY_MCP_TOKEN': 'process-secret', 'UNITY_MCP_HTTP_PORT': '9002'})
         self.assertEqual((doctor.failures, doctor.warnings, code), (0, 0, 0))
-        self.assertEqual([call['method'] for call in self.calls], ['initialize', 'tools/list', 'tools/call'])
-        self.assertEqual([call['id'] for call in self.calls], [1, 2, 3])
+        self.assertEqual([call['method'] for call in self.calls], ['initialize', 'notifications/initialized', 'tools/list', 'tools/call'])
+        self.assertEqual([call['id'] for call in self.calls if 'id' in call], [1, 2, 3])
         self.assertEqual(self.calls[0]['params'], {'protocolVersion': '2025-03-26', 'capabilities': {}, 'clientInfo': {'name': 'unity-mcp-doctor', 'version': '0.1.0'}})
-        self.assertEqual(self.calls[2]['params'], {'name': 'editor_status', 'arguments': {}})
+        self.assertEqual(self.calls[3]['params'], {'name': 'editor_status', 'arguments': {}})
         self.assertEqual(self.headers[0], {})
         self.assertTrue(all(headers['authorization'] == 'Bearer process-secret' for headers in self.headers[1:]))
         self.assertTrue(all(url.startswith('http://127.0.0.1:9002/') for url in self.urls))
@@ -77,10 +78,11 @@ class DoctorTests(unittest.TestCase):
     def test_project_and_environment_precedence(self) -> None:
         home = self.root / 'home' / '.unity-mcp'
         home.mkdir(parents=True)
-        (self.root / '.env.local').write_text('UNITY_MCP_PROJECT=missing\nUNITY_MCP_HTTP_PORT=9001', encoding='utf-8')
-        (home / '.env.local').write_text(f'UNITY_MCP_PROJECT="{self.project}"\nUNITY_MCP_HTTP_PORT=9003', encoding='utf-8')
+        (self.root / '.env.local').write_text(f'UNITY_MCP_PROJECT="{self.project}"\nUNITY_MCP_HTTP_PORT=9001', encoding='utf-8')
+        (home / '.env.local').write_text('UNITY_MCP_PROJECT=missing\nUNITY_MCP_HTTP_PORT=9003\nUNITY_MCP_TOKEN=stale-home-token', encoding='utf-8')
         self.assertEqual(self.run_doctor({})[0].project, self.project)
-        self.assertTrue(self.urls[0].startswith('http://127.0.0.1:9003/'))
+        self.assertTrue(self.urls[0].startswith('http://127.0.0.1:9001/'))
+        self.assertTrue(all('authorization' not in headers for headers in self.headers))
         self.assertEqual(self.run_doctor({'UNITY_PROJECT_PATH': str(self.project / 'Packages')})[0].project, self.project)
         doctor, code, output = self.run_doctor({'UNITY_MCP_PROJECT': str(self.root / 'missing'), 'UNITY_PROJECT_PATH': str(self.project)})
         self.assertEqual(code, 1)
@@ -99,7 +101,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIsNone(enclosing_project(self.root))
 
     def test_offline_and_rpc_failure_severity(self) -> None:
-        for method, code, failures, warnings in [('health', 0, 0, 0), ('initialize', 1, 1, 0), ('tools/list', 1, 1, 0), ('tools/call', 0, 0, 1)]:
+        for method, code, failures, warnings in [('health', 1, 1, 0), ('initialize', 1, 1, 0), ('tools/list', 1, 1, 0), ('tools/call', 1, 1, 0)]:
             with self.subTest(method=method):
                 self.error_method = method
                 doctor, result, _ = self.run_doctor()
@@ -117,16 +119,16 @@ class DoctorTests(unittest.TestCase):
         self.manifest.unlink()
         self.responses['tools/call'] = {'error': {'message': 'not running'}}
         doctor, code, _ = self.run_doctor()
-        self.assertEqual((code, doctor.failures, doctor.warnings), (0, 0, 2))
+        self.assertEqual((code, doctor.failures, doctor.warnings), (1, 1, 1))
         self.manifest.write_text('{"dependencies":{}}', encoding='utf-8')
         self.assertEqual(self.run_doctor()[1], 1)
 
     def test_cli_failure_is_reported_without_stopping_bridge_checks(self) -> None:
-        doctor = Doctor(self.root, self.root, {'UNITY_MCP_PROJECT': str(self.project)}, self.raise_command_error, self.request)
+        doctor = Doctor(self.root, self.root, {'UNITY_MCP_PROJECT': str(self.project), 'DATAVIZ_IN_CONTAINER': '0'}, self.raise_command_error, self.request)
         with contextlib.redirect_stdout(io.StringIO()):
             code = doctor.run()
         self.assertEqual((code, doctor.failures, doctor.warnings), (1, 1, 1))
-        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(len(self.calls), 4)
 
     def raise_command_error(self, arguments: List[str]) -> str:
         raise OSError('missing')
@@ -145,8 +147,33 @@ class DoctorTests(unittest.TestCase):
     def test_environment_parser_preserves_literal_values(self) -> None:
         path = self.root / '.env.local'
         self.assertEqual(read_env_local(path), {})
-        path.write_text('# comment\n bad\n=invalid\n A = "x=y"\nB=\'quoted\'\nC=literal # text', encoding='utf-8')
+        path.write_text('\ufeff# comment\n bad\n=invalid\n export A = "x=y"\nB=\'quoted\'\nC=literal # text', encoding='utf-8')
         self.assertEqual(read_env_local(path), {'A': 'x=y', 'B': 'quoted', 'C': 'literal # text'})
+
+    def test_container_uses_host_bridge_and_windows_project_paths(self) -> None:
+        self.responses['tools/call'] = {'result': {'content': [{'text': json.dumps({'projectPath': 'C:/Code/Project'})}]}}
+        doctor, code, output = self.run_doctor({'DATAVIZ_IN_CONTAINER': '1', 'UNITY_MCP_PROJECT': 'c:\\code\\project'})
+        self.assertEqual((code, doctor.failures), (0, 0))
+        self.assertTrue(self.urls[0].startswith('http://host.docker.internal:9020/'))
+        self.assertNotIn('Unity CLI on PATH', output)
+
+    def test_custom_endpoint_and_rpc_errors_fail(self) -> None:
+        for method in ['initialize', 'tools/list', 'tools/call']:
+            with self.subTest(method=method):
+                original = self.responses[method]
+                self.responses[method] = {'error': {'code': -32000, 'message': 'CLI unavailable'}}
+                doctor, code, output = self.run_doctor({'DATAVIZ_IN_CONTAINER': '1', 'UNITY_MCP_HTTP_URL': 'http://bridge:9999/custom'})
+                self.assertEqual(code, 1)
+                self.assertTrue(doctor.failures)
+                self.assertIn('CLI unavailable', output)
+                self.assertEqual(self.urls[0], 'http://bridge:9999/healthz')
+                self.responses[method] = original
+
+    def test_editor_tool_error_and_missing_server_info_fail(self) -> None:
+        self.responses['tools/call'] = {'result': {'isError': True, 'content': [{'text': 'not running'}]}}
+        self.assertEqual(self.run_doctor()[1], 1)
+        self.responses['initialize'] = {'result': {}}
+        self.assertEqual(self.run_doctor()[1], 1)
 
 
 if __name__ == '__main__':

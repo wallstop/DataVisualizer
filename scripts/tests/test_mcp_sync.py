@@ -37,7 +37,7 @@ SYNC = REPO_ROOT / ".llm" / "mcp" / "sync_mcp.py"
 # it so the sandboxed configure.mjs run and these assertions stay in lockstep.
 UNITY_MCP_HTTP_PORT = os.environ.get("UNITY_MCP_HTTP_PORT") or "9020"
 
-SCRUBBED_KEYS = ("GITHUB_PERSONAL_ACCESS_TOKEN", "GITHUB_MCP_PAT", "GITHUB_TOKEN", "ZAI_API_KEY", "Z_AI_API_KEY")
+SCRUBBED_KEYS = ("GITHUB_PERSONAL_ACCESS_TOKEN", "GITHUB_MCP_PAT", "GITHUB_TOKEN", "ZAI_API_KEY", "Z_AI_API_KEY", "UNITY_MCP_TOKEN", "UNITY_MCP_HTTP_URL")
 
 
 LEGACY_OPENCODE_JSON = """{
@@ -265,7 +265,7 @@ def case_generated_configs_contain_no_literal_secrets() -> None:
     )
     assert_file_contains(sandbox, ".mcp.json", '"X-MCP-Toolsets": "all"', "claude github enables all toolsets")
     assert_file_contains(sandbox, "codex-home/config.toml", '"X-MCP-Toolsets" = "all"', "codex github enables all toolsets")
-    assert_file_contains(sandbox, ".cursor/mcp.json", '"command": "unity"', "cursor unity launches the official CLI (host stdio)")
+    assert_eq("cursor shares the pinned bridge", sandbox.load_json(".mcp.json")["mcpServers"]["unity"]["url"], sandbox.load_json(".cursor/mcp.json")["mcpServers"]["unity"]["url"])
     assert_file_contains(sandbox, "opencode.json", "Bearer {env:ZAI_API_KEY}", "opencode zai auth uses env placeholder")
     assert_file_contains(
         sandbox,
@@ -289,6 +289,32 @@ CASES = (
     case_claude_project_servers_are_preapproved,
     case_generated_configs_contain_no_literal_secrets,
 )
+
+
+def case_unity_auth_and_url_are_consistent() -> None:
+    sandbox = Sandbox()
+    try:
+        sandbox.path('.env.local').write_text('UNITY_MCP_HTTP_URL=http://bridge:9988/mcp\n', encoding='utf-8')
+        sandbox.run_sync()
+        assert_eq('open bridge sync succeeds', 0, sandbox.last_exit, sandbox.run_failure_context())
+        assert_true('UNITY_MCP_TOKEN=' not in sandbox.path('.env.local').read_text(encoding='utf-8'), 'sync does not change host authentication')
+        assert_true('bearer_token_env_var = "UNITY_MCP_TOKEN"' not in sandbox.path('codex-home/config.toml').read_text(encoding='utf-8'), 'open bridge does not require a token in Codex')
+        for relative, key in [('.mcp.json', 'mcpServers'), ('.cursor/mcp.json', 'mcpServers'), ('.nanocoder/mcp.json', 'mcpServers')]:
+            entry = sandbox.load_json(relative)[key]['unity']
+            assert_eq(f'{relative} honors local endpoint', 'http://bridge:9988/mcp', entry['url'])
+            assert_true('headers' not in entry, f'{relative} omits auth for open bridge')
+        sandbox.path('.env.local').write_text('UNITY_MCP_HTTP_URL=http://bridge:9988/mcp\nUNITY_MCP_TOKEN=fixture-token\n', encoding='utf-8')
+        sandbox.run_sync()
+        assert_eq('authenticated bridge sync succeeds', 0, sandbox.last_exit, sandbox.run_failure_context())
+        vscode = sandbox.load_json('.vscode/mcp.json')['servers']['unity']['args'][-1]
+        for name, definition in sandbox.load_json('.vscode/mcp.json')['servers'].items():
+            if 'command' in definition:
+                assert_true(isinstance(definition['command'], str), f'VS Code {name} has a command string')
+        assert_true('Authorization: Bearer ${UNITY_MCP_TOKEN}' in vscode, 'VS Code sends the bearer scheme')
+        assert_true('fixture-token' not in vscode, 'VS Code loads credentials at spawn')
+        assert_file_contains(sandbox, 'codex-home/config.toml', 'bearer_token_env_var = "UNITY_MCP_TOKEN"', 'authenticated Codex uses token reference')
+    finally:
+        sandbox.destroy()
 
 
 def case_wrapper_forwards_workspace_flags_and_exit_status() -> None:
@@ -370,6 +396,7 @@ def main() -> int:
     if missing:
         print("    SKIP: node is required to drive the configurator.")
         return 1 if failure_count() else 0
+    run_case('case_unity_auth_and_url_are_consistent', case_unity_auth_and_url_are_consistent)
     run_case("case_wrapper_forwards_workspace_flags_and_exit_status", case_wrapper_forwards_workspace_flags_and_exit_status)
     for case in CASES:
         run_case(case.__name__, case)

@@ -63,6 +63,12 @@
                 "sst-dev.opencode"
             ],
             "settings": {
+                // Unity runs on the host. Reverse tunnels can shadow its
+                // wildcard bridge listener with a broken loopback listener.
+                // Keep deliberate forwarding available through the Ports view.
+                "remote.autoForwardPorts": false,
+                "remote.restoreForwardedPorts": false,
+                "remote.forwardOnOpen": false,
                 // ============================================================
                 // Appearance
                 // ============================================================

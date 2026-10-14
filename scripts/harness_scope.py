@@ -59,6 +59,7 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     # companion on the same docs contract; unknown metadata stays fail-safe.
     "scripts/tests/test_build_docs.py.meta": ("test_build_docs.py",),
     "scripts/unity_mcp_doctor.py": ("test_unity_mcp_doctor.py",),
+    ".llm/mcp/unity-mcp-host.mjs": ("test_unity_mcp_host.py",),
     ".llm/mcp/unity-mcp-doctor.mjs": ("test_unity_mcp_doctor.py",),
     "scripts/run_ci_lints.py": ("test_run_ci_lints.py",),
     "scripts/run_ci_lints.py.meta": ("test_run_ci_lints.py",),

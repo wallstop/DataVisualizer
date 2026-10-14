@@ -216,4 +216,5 @@ runs everything, including the Prettier Markdown check, on ubuntu and windows. C
   gitignored and must never be committed.
 - Secrets live in gitignored `.env.local` (template: `.env.local.example`); config files reference env vars instead of embedding credentials.
 - Unity MCP: the **official Unity CLI** MCP server (`unity mcp`, ~140 tools). Container agents reach it through the host HTTP bridge (`npm run unity:mcp:host` →
-  `host.docker.internal:<port>`, default 9020 via `UNITY_MCP_HTTP_PORT`); host GUI clients use `unity mcp configure <client>` directly. See [mcp/README.md](./mcp/README.md).
+  `host.docker.internal:<port>`, default 9020 via `UNITY_MCP_HTTP_PORT`); all six managed frontends share this bridge. Unmanaged host clients can use `unity mcp configure <client>`
+  directly. See [mcp/README.md](./mcp/README.md).
