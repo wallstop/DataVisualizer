@@ -24,7 +24,7 @@ from _test_helpers import (
     find_python,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     write_fixture_file,
 )
 
@@ -308,36 +308,19 @@ def main() -> int:
     # interpreter because the fixtures never touch a toolchain.
     python = find_python()
 
-    run_case("Passes_ForRepositoryAssemblies", lambda: case_passes_for_repository_assemblies(python))
-    run_case(
-        "Passes_When_EveryAssemblyHasWarningsAsErrors",
-        lambda: case_passes_when_every_assembly_has_warnings_as_errors(python),
-    )
-    run_case("Fails_WhenAssemblyHasNoRuleset", lambda: case_fails_when_assembly_has_no_ruleset(python))
-    run_case(
-        "Fails_WhenAssemblyHasNoCompilerResponseFile",
-        lambda: case_fails_when_assembly_has_no_compiler_response_file(python),
-    )
-    run_case(
-        "Fails_WhenAssemblyHasAmbiguousCompilerResponseFiles",
-        lambda: case_fails_when_assembly_has_ambiguous_compiler_response_files(python),
-    )
-    for response_file_case in RESPONSE_FILE_CASES:
-        run_case(response_file_case.name, lambda case=response_file_case: run_response_file_case(python, case))
-    run_case("Fails_WhenAssemblyHasMultipleRulesets", lambda: case_fails_when_assembly_has_multiple_rulesets(python))
-    run_case("Fails_WhenRulesetIsMalformed", lambda: case_fails_when_ruleset_is_malformed(python))
-    run_case(
-        "Fails_WhenIncludeAllDoesNotPromoteWarnings",
-        lambda: case_fails_when_include_all_does_not_promote_warnings(python),
-    )
-    run_case(
-        "Fails_WhenRepositoryContainsLabeledAnalyzer",
-        lambda: case_fails_when_repository_contains_labeled_analyzer(python),
-    )
-    run_case(
-        "Fails_WhenRepositoryContainsKnownAnalyzerPayload",
-        lambda: case_fails_when_repository_contains_known_analyzer_payload(python),
-    )
+    run_cases([
+        ("Passes_ForRepositoryAssemblies", lambda: case_passes_for_repository_assemblies(python)),
+        ("Passes_When_EveryAssemblyHasWarningsAsErrors", lambda: case_passes_when_every_assembly_has_warnings_as_errors(python)),
+        ("Fails_WhenAssemblyHasNoRuleset", lambda: case_fails_when_assembly_has_no_ruleset(python)),
+        ("Fails_WhenAssemblyHasNoCompilerResponseFile", lambda: case_fails_when_assembly_has_no_compiler_response_file(python)),
+        ("Fails_WhenAssemblyHasAmbiguousCompilerResponseFiles", lambda: case_fails_when_assembly_has_ambiguous_compiler_response_files(python)),
+        *[(response_file_case.name, lambda case=response_file_case: run_response_file_case(python, case)) for response_file_case in RESPONSE_FILE_CASES],
+        ("Fails_WhenAssemblyHasMultipleRulesets", lambda: case_fails_when_assembly_has_multiple_rulesets(python)),
+        ("Fails_WhenRulesetIsMalformed", lambda: case_fails_when_ruleset_is_malformed(python)),
+        ("Fails_WhenIncludeAllDoesNotPromoteWarnings", lambda: case_fails_when_include_all_does_not_promote_warnings(python)),
+        ("Fails_WhenRepositoryContainsLabeledAnalyzer", lambda: case_fails_when_repository_contains_labeled_analyzer(python)),
+        ("Fails_WhenRepositoryContainsKnownAnalyzerPayload", lambda: case_fails_when_repository_contains_known_analyzer_payload(python)),
+    ])
 
     failures = failure_count()
     print(f"== assembly warnings policy: {failures} failure(s) ==")

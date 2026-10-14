@@ -23,7 +23,7 @@ from _test_helpers import (
     fixture_path,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     run_tool_output,
     write_fixture_file,
 )
@@ -34,17 +34,10 @@ LINT_SCRIPT = SCRIPTS_DIR / "lint_csharp_member_order.py"
 
 
 def invoke_member_order_lint(root: Path, lint_arguments: Sequence[str] = ()) -> Tuple[str, int]:
-    """Run the lint with the roots override env var set, then restore it."""
-    had_previous = "CSHARP_MEMBER_ORDER_ROOTS" in os.environ
-    previous = os.environ.get("CSHARP_MEMBER_ORDER_ROOTS")
-    try:
-        os.environ["CSHARP_MEMBER_ORDER_ROOTS"] = str(root)
-        return run_tool_output([find_python(), str(LINT_SCRIPT), *lint_arguments])
-    finally:
-        if had_previous:
-            os.environ["CSHARP_MEMBER_ORDER_ROOTS"] = previous or ""
-        else:
-            os.environ.pop("CSHARP_MEMBER_ORDER_ROOTS", None)
+    """Run the lint with private child-environment overrides."""
+    env = dict(os.environ)
+    env["CSHARP_MEMBER_ORDER_ROOTS"] = str(root)
+    return run_tool_output([find_python(), str(LINT_SCRIPT), *lint_arguments], env=env)
 
 
 ORDERED_FIXTURE = """using System;
@@ -609,28 +602,27 @@ def case_paths_scans_only_the_named_files() -> None:
 def main() -> int:
     print("== C# member-order self-tests ==")
 
-    run_case("Passes_CanonicalOrder", case_passes_canonical_order)
-    run_case("Fails_OnTierAndAccessInversions", case_fails_on_tier_and_access_inversions)
-    run_case("Fails_OnUnderscoredMethodName", case_fails_on_underscored_method_name)
-    run_case("Fails_OnUnderscoredGenericMethodName", case_fails_on_underscored_generic_method_name)
-    run_case("Fails_OnConsecutiveOrdinaryLineComments", case_fails_on_consecutive_ordinary_line_comments)
-    run_case(
-        "Fails_OnLeadingBomConsecutiveOrdinaryLineComments",
-        case_fails_on_leading_bom_consecutive_ordinary_line_comments,
-    )
-    run_case("Passes_SupportedCommentForms", case_passes_supported_comment_forms)
-    run_case("Fails_OnRuntimeLinqImportsAndQualifiedCalls", case_fails_on_runtime_linq_imports_and_qualified_calls)
-    run_case("Passes_RuntimeLinqTextInCommentsAndStrings", case_passes_runtime_linq_text_in_comments_and_strings)
-    run_case("Fails_OnPersistedStateModelLinqDependency", case_fails_on_persisted_state_model_linq_dependency)
-    run_case("Fails_OnSearchModelLinqDependency", case_fails_on_search_model_linq_dependency)
-    run_case("Fails_OnAssetPostprocessingLinqDependency", case_fails_on_asset_postprocessing_linq_dependency)
-    run_case("Fails_OnNamespaceDiscoveryLinqDependency", case_fails_on_namespace_discovery_linq_dependency)
-    run_case("Passes_OtherEditorLinqDependency", case_passes_other_editor_linq_dependency)
-    run_case("Fails_WhenNestedTypeIsInterspersed", case_fails_when_nested_type_is_interspersed)
-    run_case("FixesTierOrderByExactPermutation", case_fixes_tier_order_by_exact_permutation)
-    run_case("Fails_OnCountedArrayLoopWithUnusedIndex", case_fails_on_counted_array_loop_with_unused_index)
-    run_case("Passes_CountedLoopsWhenTheIndexIsNeeded", case_passes_counted_loops_when_the_index_is_needed)
-    run_case("Paths_ScansOnlyTheNamedFiles", case_paths_scans_only_the_named_files)
+    run_cases([
+        ("Passes_CanonicalOrder", case_passes_canonical_order),
+        ("Fails_OnTierAndAccessInversions", case_fails_on_tier_and_access_inversions),
+        ("Fails_OnUnderscoredMethodName", case_fails_on_underscored_method_name),
+        ("Fails_OnUnderscoredGenericMethodName", case_fails_on_underscored_generic_method_name),
+        ("Fails_OnConsecutiveOrdinaryLineComments", case_fails_on_consecutive_ordinary_line_comments),
+        ("Fails_OnLeadingBomConsecutiveOrdinaryLineComments", case_fails_on_leading_bom_consecutive_ordinary_line_comments),
+        ("Passes_SupportedCommentForms", case_passes_supported_comment_forms),
+        ("Fails_OnRuntimeLinqImportsAndQualifiedCalls", case_fails_on_runtime_linq_imports_and_qualified_calls),
+        ("Passes_RuntimeLinqTextInCommentsAndStrings", case_passes_runtime_linq_text_in_comments_and_strings),
+        ("Fails_OnPersistedStateModelLinqDependency", case_fails_on_persisted_state_model_linq_dependency),
+        ("Fails_OnSearchModelLinqDependency", case_fails_on_search_model_linq_dependency),
+        ("Fails_OnAssetPostprocessingLinqDependency", case_fails_on_asset_postprocessing_linq_dependency),
+        ("Fails_OnNamespaceDiscoveryLinqDependency", case_fails_on_namespace_discovery_linq_dependency),
+        ("Passes_OtherEditorLinqDependency", case_passes_other_editor_linq_dependency),
+        ("Fails_WhenNestedTypeIsInterspersed", case_fails_when_nested_type_is_interspersed),
+        ("FixesTierOrderByExactPermutation", case_fixes_tier_order_by_exact_permutation),
+        ("Fails_OnCountedArrayLoopWithUnusedIndex", case_fails_on_counted_array_loop_with_unused_index),
+        ("Passes_CountedLoopsWhenTheIndexIsNeeded", case_passes_counted_loops_when_the_index_is_needed),
+        ("Paths_ScansOnlyTheNamedFiles", case_paths_scans_only_the_named_files),
+    ])
 
     if failure_count() > 0:
         return 1

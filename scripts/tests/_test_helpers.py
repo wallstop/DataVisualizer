@@ -24,7 +24,7 @@ import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, List, Mapping, Optional, Sequence, Tuple
 
 _failure_count_value = 0
 
@@ -200,7 +200,7 @@ def find_python() -> str:
     raise RuntimeError("the harness self-tests require an executable Python interpreter")
 
 
-def run_tool_output(command: Sequence[str]) -> Tuple[str, int]:
+def run_tool_output(command: Sequence[str], *, env: Optional[Mapping[str, str]] = None) -> Tuple[str, int]:
     """Run a child tool with all output merged, returning ``(output, exit code)``.
 
     This mirrors the PowerShell originals' ``*>&1 | Out-String``: stdout and
@@ -210,6 +210,7 @@ def run_tool_output(command: Sequence[str]) -> Tuple[str, int]:
     """
     completed = subprocess.run(
         list(command),
+        env=env,
         capture_output=True,
         text=True,
         encoding="utf-8",

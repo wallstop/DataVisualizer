@@ -24,7 +24,7 @@ from typing import Dict, List, Sequence, Tuple
 
 sys.dont_write_bytecode = True
 
-from _test_helpers import assert_exit_code, assert_true, failure_count, run_case
+from _test_helpers import assert_exit_code, assert_true, failure_count, run_cases
 
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
@@ -388,13 +388,15 @@ def main() -> int:
         print("== devcontainer lifecycle: 0 failure(s) ==")
         return 0
 
-    run_case("OnCreate_BootstrapsEnvLocalAndIsIdempotent", case_on_create_bootstraps_and_is_idempotent)
-    run_case("OnCreate_ToleratesNpmRefreshFailureOnly", case_on_create_tolerates_npm_failure_only)
-    run_case("PostCreate_RetriesUntilTheThirdAttemptSucceeds", case_post_create_retries_until_success)
-    run_case("PostCreate_InstallsPreCommitHooksBestEffort", case_post_create_installs_pre_commit_hooks)
-    run_case("PostStart_ReplacesBashrcBlockAndLoadsEnvWithFilePrecedence", case_post_start_replaces_block_and_loads_env)
-    run_case("UpdateContent_RestoresAndSyncsOnlyWhenPresent", case_update_content_restores_and_syncs_only_when_present)
-    run_case("Lifecycle_MissingWorkspaceFailsForEveryEntry", case_missing_workspace_fails_for_every_entry)
+    run_cases([
+        ("OnCreate_BootstrapsEnvLocalAndIsIdempotent", case_on_create_bootstraps_and_is_idempotent),
+        ("OnCreate_ToleratesNpmRefreshFailureOnly", case_on_create_tolerates_npm_failure_only),
+        ("PostCreate_RetriesUntilTheThirdAttemptSucceeds", case_post_create_retries_until_success),
+        ("PostCreate_InstallsPreCommitHooksBestEffort", case_post_create_installs_pre_commit_hooks),
+        ("PostStart_ReplacesBashrcBlockAndLoadsEnvWithFilePrecedence", case_post_start_replaces_block_and_loads_env),
+        ("UpdateContent_RestoresAndSyncsOnlyWhenPresent", case_update_content_restores_and_syncs_only_when_present),
+        ("Lifecycle_MissingWorkspaceFailsForEveryEntry", case_missing_workspace_fails_for_every_entry),
+    ])
 
     failures = failure_count()
     print(f"== devcontainer lifecycle: {failures} failure(s) ==")

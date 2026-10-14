@@ -24,7 +24,7 @@ from _test_helpers import (
     find_python,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     run_tool_output,
     write_fixture_file,
 )
@@ -38,17 +38,10 @@ DEFAULT_RELEASED_ENTRY = "Released entry that stays unmeasured."
 
 
 def invoke_changelog_length_lint(changelog_path: Path, lint_arguments: Sequence[str] = ()) -> Tuple[str, int]:
-    """Run the lint with the changelog override env var set, then restore it."""
-    had_override = "CHANGELOG_LENGTH_CHANGELOG" in os.environ
-    previous_override = os.environ.get("CHANGELOG_LENGTH_CHANGELOG")
-    try:
-        os.environ["CHANGELOG_LENGTH_CHANGELOG"] = str(changelog_path)
-        return run_tool_output([find_python(), str(LINT_SCRIPT), *lint_arguments])
-    finally:
-        if had_override:
-            os.environ["CHANGELOG_LENGTH_CHANGELOG"] = previous_override or ""
-        else:
-            os.environ.pop("CHANGELOG_LENGTH_CHANGELOG", None)
+    """Run the lint with private child-environment overrides."""
+    env = dict(os.environ)
+    env["CHANGELOG_LENGTH_CHANGELOG"] = str(changelog_path)
+    return run_tool_output([find_python(), str(LINT_SCRIPT), *lint_arguments], env=env)
 
 
 def invoke_fixture_lint(root: Path, lint_arguments: Sequence[str] = ()) -> Tuple[str, int]:
@@ -319,12 +312,13 @@ def case_passes_against_the_repository_itself() -> None:
 def main() -> int:
     print("== Changelog entry length self-tests ==")
 
-    for case in CASES:
-        run_case(case.name, lambda bound_case=case: run_table_case(bound_case))
-    run_case("Fails_WhenUnreleasedIsMissing", case_fails_when_unreleased_is_missing)
-    run_case("Fails_WhenUnreleasedIsDuplicated", case_fails_when_unreleased_is_duplicated)
-    run_case("Fails_WhenTheChangelogIsMissing", case_fails_when_the_changelog_is_missing)
-    run_case("Passes_AgainstTheRepositoryItself", case_passes_against_the_repository_itself)
+    run_cases([
+        *[(case.name, lambda bound_case=case: run_table_case(bound_case)) for case in CASES],
+        ("Fails_WhenUnreleasedIsMissing", case_fails_when_unreleased_is_missing),
+        ("Fails_WhenUnreleasedIsDuplicated", case_fails_when_unreleased_is_duplicated),
+        ("Fails_WhenTheChangelogIsMissing", case_fails_when_the_changelog_is_missing),
+        ("Passes_AgainstTheRepositoryItself", case_passes_against_the_repository_itself),
+    ])
 
     failures = failure_count()
     if failures > 0:

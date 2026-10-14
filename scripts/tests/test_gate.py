@@ -26,7 +26,7 @@ from _test_helpers import (
     find_python,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     write_fixture_file,
 )
 
@@ -602,71 +602,28 @@ def main() -> int:
     # only need a working interpreter because --plan executes nothing.
     python = find_python()
 
-    run_case("Plan_PrintsTheFullLaneTable", lambda: case_plan_prints_the_full_lane_table(python))
-    run_case("Plan_CarriesCommandsAndDependencies", lambda: case_plan_carries_commands_and_dependencies(python))
-    run_case(
-        "Plan_MarksTheDriftCheckAsAnEmptyOutputCheck",
-        lambda: case_plan_marks_the_drift_check_as_an_empty_output_check(python),
-    )
-    run_case("Plan_ResolvesEveryProgram", lambda: case_plan_resolves_every_program(python))
-    run_case(
-        "Only_SelectsTheRequestedStepsWithDependencies",
-        lambda: case_only_selects_the_requested_steps_with_dependencies(python),
-    )
-    run_case("Only_FailsOnUnknownStepNames", lambda: case_only_fails_on_unknown_step_names(python))
-    run_case("Plan_ExcludesTheUnitySuites", lambda: case_plan_excludes_the_unity_suites(python))
-    run_case(
-        "LaunchFailure_SurfacesTheReasonInConsoleAndReport",
-        lambda: case_launch_failure_surfaces_the_reason_in_console_and_report(python),
-    )
-    run_case(
-        "ReportWriteFailure_IsVisibleWithoutCrashingTheGate",
-        lambda: case_report_write_failure_is_visible_without_crashing_the_gate(python),
-    )
-    run_case(
-        "LaneCrash_SurfacesTheReasonInConsoleAndReport",
-        lambda: case_lane_crash_surfaces_the_reason_in_console_and_report(python),
-    )
-    run_case(
-        "ScopedLaneTable_RewritesTheThreeLintSteps",
-        lambda: case_scoped_lane_table_rewrites_the_three_lint_steps(python),
-    )
-    run_case(
-        "ScopedLaneTable_DropsTheCSharpLaneWhenNoCSharpChanged",
-        lambda: case_scoped_lane_table_drops_the_csharp_lane_when_no_csharp_changed(python),
-    )
-    run_case(
-        "ScopedLaneTable_DropsTheUnaffectedStepsAndRemapsDependencies",
-        lambda: case_scoped_lane_table_drops_the_unaffected_steps_and_remaps_dependencies(python),
-    )
-    run_case(
-        "ScopedLaneTable_ScopesTheSuiteSelection",
-        lambda: case_scoped_lane_table_scopes_the_suite_selection(python),
-    )
-    run_case(
-        "ScopedLaneTable_KeepsWholeTreeWithoutABase",
-        lambda: case_scoped_lane_table_keeps_whole_tree_without_a_base(python),
-    )
-    run_case(
-        "PackagePathsChanged_MatchesOnlyThePayload",
-        lambda: case_package_paths_changed_matches_only_the_payload(python),
-    )
-    run_case(
-        "Execution_ScopesTheLintStepsToTheScannedDiff",
-        lambda: case_execution_scopes_the_lint_steps_to_the_scanned_diff(python),
-    )
-    run_case(
-        "Execution_SkipsTheLintStepsWhenNoCSharpChanged",
-        lambda: case_execution_skips_the_lint_steps_when_no_csharp_changed(python),
-    )
-    run_case(
-        "Execution_SkipsEveryUnaffectedStepWhenTheDiffCannotAffectThem",
-        lambda: case_execution_skips_every_unaffected_step_when_the_diff_cannot_affect_them(python),
-    )
-    run_case(
-        "Execution_ScopesTheSuiteToTheSelectedFiles",
-        lambda: case_execution_scopes_the_suite_to_the_selected_files(python),
-    )
+    run_cases([
+        ("Plan_PrintsTheFullLaneTable", lambda: case_plan_prints_the_full_lane_table(python)),
+        ("Plan_CarriesCommandsAndDependencies", lambda: case_plan_carries_commands_and_dependencies(python)),
+        ("Plan_MarksTheDriftCheckAsAnEmptyOutputCheck", lambda: case_plan_marks_the_drift_check_as_an_empty_output_check(python)),
+        ("Plan_ResolvesEveryProgram", lambda: case_plan_resolves_every_program(python)),
+        ("Only_SelectsTheRequestedStepsWithDependencies", lambda: case_only_selects_the_requested_steps_with_dependencies(python)),
+        ("Only_FailsOnUnknownStepNames", lambda: case_only_fails_on_unknown_step_names(python)),
+        ("Plan_ExcludesTheUnitySuites", lambda: case_plan_excludes_the_unity_suites(python)),
+        ("LaunchFailure_SurfacesTheReasonInConsoleAndReport", lambda: case_launch_failure_surfaces_the_reason_in_console_and_report(python)),
+        ("ReportWriteFailure_IsVisibleWithoutCrashingTheGate", lambda: case_report_write_failure_is_visible_without_crashing_the_gate(python)),
+        ("LaneCrash_SurfacesTheReasonInConsoleAndReport", lambda: case_lane_crash_surfaces_the_reason_in_console_and_report(python)),
+        ("ScopedLaneTable_RewritesTheThreeLintSteps", lambda: case_scoped_lane_table_rewrites_the_three_lint_steps(python)),
+        ("ScopedLaneTable_DropsTheCSharpLaneWhenNoCSharpChanged", lambda: case_scoped_lane_table_drops_the_csharp_lane_when_no_csharp_changed(python)),
+        ("ScopedLaneTable_DropsTheUnaffectedStepsAndRemapsDependencies", lambda: case_scoped_lane_table_drops_the_unaffected_steps_and_remaps_dependencies(python)),
+        ("ScopedLaneTable_ScopesTheSuiteSelection", lambda: case_scoped_lane_table_scopes_the_suite_selection(python)),
+        ("ScopedLaneTable_KeepsWholeTreeWithoutABase", lambda: case_scoped_lane_table_keeps_whole_tree_without_a_base(python)),
+        ("PackagePathsChanged_MatchesOnlyThePayload", lambda: case_package_paths_changed_matches_only_the_payload(python)),
+        ("Execution_ScopesTheLintStepsToTheScannedDiff", lambda: case_execution_scopes_the_lint_steps_to_the_scanned_diff(python)),
+        ("Execution_SkipsTheLintStepsWhenNoCSharpChanged", lambda: case_execution_skips_the_lint_steps_when_no_csharp_changed(python)),
+        ("Execution_SkipsEveryUnaffectedStepWhenTheDiffCannotAffectThem", lambda: case_execution_skips_every_unaffected_step_when_the_diff_cannot_affect_them(python)),
+        ("Execution_ScopesTheSuiteToTheSelectedFiles", lambda: case_execution_scopes_the_suite_to_the_selected_files(python)),
+    ])
 
     failures = failure_count()
     if failures > 0:

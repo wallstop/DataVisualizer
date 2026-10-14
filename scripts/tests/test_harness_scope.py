@@ -24,7 +24,7 @@ from _test_helpers import (
     find_python,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     write_fixture_file,
 )
 
@@ -462,57 +462,35 @@ def main() -> int:
     # nothing.
     python = find_python()
 
-    run_case("Skips_ADocsOnlyCommit", lambda: case_skips_a_docs_only_commit(python))
-    run_case("Skips_ACSharpOnlyCommit", lambda: case_skips_a_csharp_only_commit(python))
-    run_case("Runs_ForAScriptsCommit", lambda: case_runs_for_a_scripts_commit(python))
-    run_case("Runs_ForHarnessDirectoryCommits", lambda: case_runs_for_harness_directory_commits(python))
-    run_case("Runs_ForARootManifestCommit", lambda: case_runs_for_a_root_manifest_commit(python))
-    run_case("Runs_ForAnUntrackedSurfaceFile", lambda: case_runs_for_an_untracked_surface_file(python))
-    run_case("Runs_ForAWorkingTreeSurfaceEdit", lambda: case_runs_for_a_working_tree_surface_edit(python))
-    run_case("Runs_WhenTheBaseCannotBeResolved", lambda: case_runs_when_the_base_cannot_be_resolved(python))
-    run_case(
-        "SurfacePath_MatchesTheDeclaredSurfaceOnly",
-        lambda: case_surface_path_matches_the_declared_surface_only(python),
-    )
-    run_case("Selection_SelectsTheMappedSubjectTests", lambda: case_selection_selects_the_mapped_subject_tests(python))
-    run_case("Selection_UnionsSubjectsAcrossPaths", lambda: case_selection_unions_subjects_across_paths(python))
-    run_case(
-        "Selection_PrefersTheSpecificMcpSubjectOverTheCoarseTree",
-        lambda: case_selection_prefers_the_specific_mcp_subject_over_the_coarse_tree(python),
-    )
-    run_case("Selection_MapsATestFileToItself", lambda: case_selection_maps_a_test_file_to_itself(python))
-    run_case("Selection_MapsTheGateSurface", lambda: case_selection_maps_the_gate_surface(python))
-    run_case("Selection_MapsTheMigratedTrioSurface", lambda: case_selection_maps_the_migrated_trio_surface(python))
-    run_case(
-        "Selection_FallsBackToAllForSharedSuitePaths",
-        lambda: case_selection_falls_back_to_all_for_shared_suite_paths(python),
-    )
-    run_case(
-        "Selection_FallsBackToAllForUnmappedSubjects",
-        lambda: case_selection_falls_back_to_all_for_unmapped_subjects(python),
-    )
-    run_case("Selection_IgnoresPathsOutsideTheSurface", lambda: case_selection_ignores_paths_outside_the_surface(python))
-    run_case(
-        "Selection_FailsSafeWhenAMappedNameIsUnavailable",
-        lambda: case_selection_fails_safe_when_a_mapped_name_is_unavailable(python),
-    )
-    run_case("Selection_AcceptsTheAvailableNames", lambda: case_selection_accepts_the_available_names(python))
-    run_case(
-        "SelectionOutput_NamesTheSubjectForAMappedCommit",
-        lambda: case_selection_output_names_the_subject_for_a_mapped_commit(python),
-    )
-    run_case(
-        "SelectionOutput_FallsBackToAllForAnUnmappedCommit",
-        lambda: case_selection_output_falls_back_to_all_for_an_unmapped_commit(python),
-    )
-    run_case("CiVerdicts_SkipADocsOnlyCommit", lambda: case_ci_verdicts_skip_a_docs_only_commit(python))
-    run_case("CiVerdicts_SkipMarkdownForACSharpOnlyCommit", lambda: case_ci_verdicts_skip_markdown_for_a_csharp_only_commit(python))
-    run_case("CiVerdicts_RunForAScriptsCommit", lambda: case_ci_verdicts_run_for_a_scripts_commit(python))
-    run_case("CiVerdicts_FlagAWorkingTreeMarkdownEdit", lambda: case_ci_verdicts_flag_a_working_tree_markdown_edit(python))
-    run_case(
-        "CiVerdicts_FailSafeWhenTheBaseCannotBeResolved",
-        lambda: case_ci_verdicts_fail_safe_when_the_base_cannot_be_resolved(python),
-    )
+    run_cases([
+        ("Skips_ADocsOnlyCommit", lambda: case_skips_a_docs_only_commit(python)),
+        ("Skips_ACSharpOnlyCommit", lambda: case_skips_a_csharp_only_commit(python)),
+        ("Runs_ForAScriptsCommit", lambda: case_runs_for_a_scripts_commit(python)),
+        ("Runs_ForHarnessDirectoryCommits", lambda: case_runs_for_harness_directory_commits(python)),
+        ("Runs_ForARootManifestCommit", lambda: case_runs_for_a_root_manifest_commit(python)),
+        ("Runs_ForAnUntrackedSurfaceFile", lambda: case_runs_for_an_untracked_surface_file(python)),
+        ("Runs_ForAWorkingTreeSurfaceEdit", lambda: case_runs_for_a_working_tree_surface_edit(python)),
+        ("Runs_WhenTheBaseCannotBeResolved", lambda: case_runs_when_the_base_cannot_be_resolved(python)),
+        ("SurfacePath_MatchesTheDeclaredSurfaceOnly", lambda: case_surface_path_matches_the_declared_surface_only(python)),
+        ("Selection_SelectsTheMappedSubjectTests", lambda: case_selection_selects_the_mapped_subject_tests(python)),
+        ("Selection_UnionsSubjectsAcrossPaths", lambda: case_selection_unions_subjects_across_paths(python)),
+        ("Selection_PrefersTheSpecificMcpSubjectOverTheCoarseTree", lambda: case_selection_prefers_the_specific_mcp_subject_over_the_coarse_tree(python)),
+        ("Selection_MapsATestFileToItself", lambda: case_selection_maps_a_test_file_to_itself(python)),
+        ("Selection_MapsTheGateSurface", lambda: case_selection_maps_the_gate_surface(python)),
+        ("Selection_MapsTheMigratedTrioSurface", lambda: case_selection_maps_the_migrated_trio_surface(python)),
+        ("Selection_FallsBackToAllForSharedSuitePaths", lambda: case_selection_falls_back_to_all_for_shared_suite_paths(python)),
+        ("Selection_FallsBackToAllForUnmappedSubjects", lambda: case_selection_falls_back_to_all_for_unmapped_subjects(python)),
+        ("Selection_IgnoresPathsOutsideTheSurface", lambda: case_selection_ignores_paths_outside_the_surface(python)),
+        ("Selection_FailsSafeWhenAMappedNameIsUnavailable", lambda: case_selection_fails_safe_when_a_mapped_name_is_unavailable(python)),
+        ("Selection_AcceptsTheAvailableNames", lambda: case_selection_accepts_the_available_names(python)),
+        ("SelectionOutput_NamesTheSubjectForAMappedCommit", lambda: case_selection_output_names_the_subject_for_a_mapped_commit(python)),
+        ("SelectionOutput_FallsBackToAllForAnUnmappedCommit", lambda: case_selection_output_falls_back_to_all_for_an_unmapped_commit(python)),
+        ("CiVerdicts_SkipADocsOnlyCommit", lambda: case_ci_verdicts_skip_a_docs_only_commit(python)),
+        ("CiVerdicts_SkipMarkdownForACSharpOnlyCommit", lambda: case_ci_verdicts_skip_markdown_for_a_csharp_only_commit(python)),
+        ("CiVerdicts_RunForAScriptsCommit", lambda: case_ci_verdicts_run_for_a_scripts_commit(python)),
+        ("CiVerdicts_FlagAWorkingTreeMarkdownEdit", lambda: case_ci_verdicts_flag_a_working_tree_markdown_edit(python)),
+        ("CiVerdicts_FailSafeWhenTheBaseCannotBeResolved", lambda: case_ci_verdicts_fail_safe_when_the_base_cannot_be_resolved(python)),
+    ])
 
     failures = failure_count()
     if failures > 0:

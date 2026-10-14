@@ -24,7 +24,7 @@ from _test_helpers import (
     find_python,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     run_tool_output,
     write_fixture_file,
 )
@@ -40,24 +40,11 @@ def invoke_line_ending_lint(
     git_attributes: str,
     lint_arguments: Sequence[str] = (),
 ) -> Tuple[str, int]:
-    """Run the lint with both overrides set, then restore them."""
-    had_editor_config = "LINE_ENDINGS_EDITORCONFIG" in os.environ
-    previous_editor_config = os.environ.get("LINE_ENDINGS_EDITORCONFIG")
-    had_git_attributes = "LINE_ENDINGS_GITATTRIBUTES" in os.environ
-    previous_git_attributes = os.environ.get("LINE_ENDINGS_GITATTRIBUTES")
-    try:
-        os.environ["LINE_ENDINGS_EDITORCONFIG"] = editor_config
-        os.environ["LINE_ENDINGS_GITATTRIBUTES"] = git_attributes
-        return run_tool_output([find_python(), str(LINT_SCRIPT), *lint_arguments])
-    finally:
-        if had_editor_config:
-            os.environ["LINE_ENDINGS_EDITORCONFIG"] = previous_editor_config or ""
-        else:
-            os.environ.pop("LINE_ENDINGS_EDITORCONFIG", None)
-        if had_git_attributes:
-            os.environ["LINE_ENDINGS_GITATTRIBUTES"] = previous_git_attributes or ""
-        else:
-            os.environ.pop("LINE_ENDINGS_GITATTRIBUTES", None)
+    """Run the lint with private child-environment overrides."""
+    env = dict(os.environ)
+    env["LINE_ENDINGS_EDITORCONFIG"] = editor_config
+    env["LINE_ENDINGS_GITATTRIBUTES"] = git_attributes
+    return run_tool_output([find_python(), str(LINT_SCRIPT), *lint_arguments], env=env)
 
 
 def invoke_fixture_lint(root: Path, lint_arguments: Sequence[str] = ()) -> Tuple[str, int]:
@@ -379,10 +366,11 @@ def case_passes_against_the_repository_itself() -> None:
 def main() -> int:
     print("== Line-ending contract self-tests ==")
 
-    for case in CASES:
-        run_case(case.name, lambda bound_case=case: run_table_case(bound_case))
-    run_case("Fails_WhenAGitAttributesFileIsMissing", case_fails_when_a_git_attributes_file_is_missing)
-    run_case("Passes_AgainstTheRepositoryItself", case_passes_against_the_repository_itself)
+    run_cases([
+        *[(case.name, lambda bound_case=case: run_table_case(bound_case)) for case in CASES],
+        ("Fails_WhenAGitAttributesFileIsMissing", case_fails_when_a_git_attributes_file_is_missing),
+        ("Passes_AgainstTheRepositoryItself", case_passes_against_the_repository_itself),
+    ])
 
     failures = failure_count()
     if failures > 0:
