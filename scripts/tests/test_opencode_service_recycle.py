@@ -30,7 +30,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 sys.dont_write_bytecode = True
 
@@ -41,7 +41,7 @@ from _test_helpers import (
     find_python,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     run_tool_output,
     write_fixture_file,
 )
@@ -478,22 +478,27 @@ def main() -> int:
     # The recycle script is typed Python; any working interpreter drives it.
     python = find_python()
 
-    def fixture_case(name: str, body: Callable[[str], None]) -> None:
-        if posix:
-            run_case(name, lambda: body(python))
-        else:
-            print(f"  SKIP: {name}")
-
-    fixture_case("Recycles_ServiceWithStaleCredential", case_recycles_service_with_stale_credential)
-    fixture_case("Removes_StaleDiscoveryRecord", case_removes_stale_discovery_record)
-    fixture_case("Leaves_MatchingServiceAlone", case_leaves_matching_service_alone)
-    fixture_case("DryRun_ReportsWithoutKilling", case_dry_run_reports_without_killing)
-    run_case("MissingServiceRecord_IsANoOp", lambda: case_missing_service_record_is_a_no_op(python))
-    run_case("DeadPid_IsCleanedUp", lambda: case_dead_pid_is_cleaned_up(python))
-    fixture_case("NoEnvFile_IsANoOp", case_no_env_file_is_a_no_op)
-    fixture_case("QuotedAndCrlfEnvFile_IsParsedLikeTheLoader", case_quoted_and_crlf_env_file_is_parsed_like_the_loader)
-    fixture_case("InheritedEnv_IsNotMistakenForAFileValue", case_inherited_env_is_not_mistaken_for_a_file_value)
-    fixture_case("Never_PrintsCredentialValues", case_never_prints_credential_values)
+    cases: List[Tuple[str, Callable[[], None]]] = [
+        ("Recycles_ServiceWithStaleCredential", lambda: case_recycles_service_with_stale_credential(python)),
+        ("Removes_StaleDiscoveryRecord", lambda: case_removes_stale_discovery_record(python)),
+        ("Leaves_MatchingServiceAlone", lambda: case_leaves_matching_service_alone(python)),
+        ("DryRun_ReportsWithoutKilling", lambda: case_dry_run_reports_without_killing(python)),
+        ("MissingServiceRecord_IsANoOp", lambda: case_missing_service_record_is_a_no_op(python)),
+        ("DeadPid_IsCleanedUp", lambda: case_dead_pid_is_cleaned_up(python)),
+        ("NoEnvFile_IsANoOp", lambda: case_no_env_file_is_a_no_op(python)),
+        ("QuotedAndCrlfEnvFile_IsParsedLikeTheLoader", lambda: case_quoted_and_crlf_env_file_is_parsed_like_the_loader(python)),
+        ("InheritedEnv_IsNotMistakenForAFileValue", lambda: case_inherited_env_is_not_mistaken_for_a_file_value(python)),
+        ("Never_PrintsCredentialValues", lambda: case_never_prints_credential_values(python)),
+    ]
+    if posix:
+        run_cases(cases)
+    else:
+        # Preserve the original interleaved skip/pass order on non-POSIX hosts.
+        for name, body in cases:
+            if name in ("MissingServiceRecord_IsANoOp", "DeadPid_IsCleanedUp"):
+                run_cases([(name, body)])
+            else:
+                print(f"  SKIP: {name}")
 
     failures = failure_count()
     print(f"== opencode-service-recycle: {failures} failure(s) ==")
