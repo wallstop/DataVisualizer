@@ -82,7 +82,12 @@ class HostTests(unittest.TestCase):
         return (self.root / 'bridge.log').read_text(encoding='utf-8')
 
     def stop(self) -> None:
-        self.process.terminate()
+        if os.name == 'nt' and self.process.poll() is None:
+            # Windows terminate kills only the parent, leaving the CLI child
+            # holding the fixture directory and log open.
+            subprocess.run(['taskkill', '/PID', str(self.process.pid), '/T', '/F'], capture_output=True, check=True)
+        else:
+            self.process.terminate()
         try:
             self.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
