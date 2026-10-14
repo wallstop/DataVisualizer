@@ -40,6 +40,16 @@ UNITY_MCP_HTTP_PORT = os.environ.get("UNITY_MCP_HTTP_PORT") or "9020"
 
 SCRUBBED_KEYS = ("GITHUB_PERSONAL_ACCESS_TOKEN", "GITHUB_MCP_PAT", "GITHUB_TOKEN", "ZAI_API_KEY", "Z_AI_API_KEY")
 
+
+def bash_path(path: Path) -> str:
+    """Render a path bash accepts on every host.
+
+    Windows-created fixture paths reach Git Bash through MSYS, which reads
+    drive-letter paths with forward slashes; the forward form is used
+    everywhere (a no-op on POSIX).
+    """
+    return str(path).replace("\\", "/")
+
 LEGACY_OPENCODE_JSON = """{
   "$schema": "https://opencode.ai/config.json",
   "theme": "system",
@@ -86,7 +96,7 @@ class Sandbox:
             # names pointing inside the sandbox.
             env["USERPROFILE"] = str(self.home)
         completed = subprocess.run(
-            ["bash", str(SYNC), str(self.root)],
+            ["bash", bash_path(SYNC), bash_path(self.root)],
             cwd=str(self.root),
             env=env,
             capture_output=True,

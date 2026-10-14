@@ -34,6 +34,17 @@ TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
 LOADER = REPO_ROOT / ".devcontainer" / "env-local.sh"
 
+
+def bash_path(path: Path) -> str:
+    """Render a path bash accepts on every host.
+
+    Windows-created fixture paths reach Git Bash through MSYS, which reads
+    drive-letter paths with forward slashes; backslashes would need quoting
+    gymnastics inside the sourced loader, so the forward form is used
+    everywhere (a no-op on POSIX).
+    """
+    return str(path).replace("\\", "/")
+
 # Absolute so a case that overrides PATH cannot break the interpreter lookup,
 # mirroring the bash suite's BASH_BIN.
 BASE_PATH = os.environ.get("PATH", os.defpath)
@@ -59,7 +70,7 @@ def resolve(env_file: Path, variable: str, overrides: Optional[Dict[str, str]] =
         env.update(overrides)
     # ``printf %s "${!3}"`` prints the variable named by the third argument.
     script = '. "$1"; load_env_local "$2"; printf %s "${!3}"'
-    command = [bash, "-c", script, "_", str(LOADER), str(env_file), variable]
+    command = [bash, "-c", script, "_", bash_path(LOADER), bash_path(env_file), variable]
     completed = subprocess.run(
         command,
         env=env,
@@ -201,8 +212,8 @@ def case_repeated_load_is_idempotent() -> None:
                 "-c",
                 script,
                 "_",
-                str(LOADER),
-                str(fixture),
+                bash_path(LOADER),
+                bash_path(fixture),
                 "GITHUB_PERSONAL_ACCESS_TOKEN",
             ],
             env={
