@@ -109,6 +109,15 @@ class Sandbox:
         self.stdout = completed.stdout or ""
         self.stderr = completed.stderr or ""
 
+    def run_failure_context(self) -> str:
+        """Carry the subject's own output in failure messages.
+
+        The bash original tee'd sandbox output into files beside the case; a
+        failing sync with no captured output is undebuggable from CI, so every
+        assertion about a run can attach what the subject printed.
+        """
+        return f"(exit {self.last_exit}; stdout: {self.stdout!r}; stderr: {self.stderr!r})"
+
     def path(self, relative: str) -> Path:
         return self.root / relative
 
@@ -119,8 +128,8 @@ class Sandbox:
         remove_temp_root(self.root)
 
 
-def assert_eq(description: str, expected: Any, actual: Any) -> None:
-    assert_true(expected == actual, f"{description} (expected: [{expected}]; actual: [{actual}])")
+def assert_eq(description: str, expected: Any, actual: Any, suffix: str = "") -> None:
+    assert_true(expected == actual, f"{description} (expected: [{expected}]; actual: [{actual}]){suffix}")
 
 
 def assert_file_contains(sandbox: Sandbox, relative: str, needle: str, description: str) -> None:
@@ -155,7 +164,7 @@ def json_server_names(sandbox: Sandbox, relative: str, keys: List[str]) -> str:
 def case_sync_generates_all_frontends() -> None:
     sandbox = Sandbox()
     sandbox.run_sync()
-    assert_eq("sync exits zero", 0, sandbox.last_exit)
+    assert_eq("sync exits zero", 0, sandbox.last_exit, sandbox.run_failure_context())
     for relative in (".mcp.json", "opencode.json", ".vscode/mcp.json", ".nanocoder/mcp.json", ".cursor/mcp.json"):
         assert_true(sandbox.path(relative).is_file(), f"sync generated {relative}")
     assert_true(sandbox.path("codex-home/config.toml").is_file(), "sync generated codex config.toml")
@@ -188,7 +197,7 @@ def case_opencode_v2_shape_and_legacy_migration() -> None:
     sandbox = Sandbox()
     sandbox.path("opencode.json").write_text(LEGACY_OPENCODE_JSON, encoding="utf-8", newline="")
     sandbox.run_sync()
-    assert_eq("sync migrates legacy v1 opencode.json without error", 0, sandbox.last_exit)
+    assert_eq("sync migrates legacy v1 opencode.json without error", 0, sandbox.last_exit, sandbox.run_failure_context())
     document = sandbox.load_json("opencode.json")
     mcp = document["mcp"]
     assert_eq(
@@ -216,7 +225,7 @@ def case_opencode_v2_shape_and_legacy_migration() -> None:
     assert_eq("unrelated settings survive migration", "system", document["theme"])
     first_pass = sandbox.path("opencode.json").read_bytes()
     sandbox.run_sync()
-    assert_eq("re-sync exits zero", 0, sandbox.last_exit)
+    assert_eq("re-sync exits zero", 0, sandbox.last_exit, sandbox.run_failure_context())
     assert_eq("re-sync is idempotent", first_pass, sandbox.path("opencode.json").read_bytes())
     sandbox.destroy()
 
