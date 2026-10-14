@@ -58,8 +58,8 @@ launches. The gateway launchers are per-process opt-ins installed by `python3 .d
 - Z.ai overrides: `CODEX_ZAI_MODEL`, `CODEX_ZAI_REASONING_EFFORT` (`low|high|max`), `ZAI_API_TIMEOUT_MS`, `CLAUDE_ZAI_CONFIG_DIR`, `CLAUDE_ZAI_{SONNET,OPUS,HAIKU}_MODEL`.
 - OpenRouter overrides: `CODEX_OPENROUTER_MODEL`, `CODEX_OPENROUTER_REASONING_EFFORT` (`low|medium|high|xhigh|max`), `OPENROUTER_API_TIMEOUT_MS`, `CLAUDE_OPENROUTER_CONFIG_DIR`,
   `CLAUDE_OPENROUTER_{FABLE,SONNET,OPUS,HAIKU}_MODEL`, `CLAUDE_OPENROUTER_SUBAGENT_MODEL`, `CLAUDE_OPENROUTER_GATEWAY_DISCOVERY`.
-- Contract tests live in `scripts/tests/test_ai_backends.py` (stubs, no network) and `.devcontainer/tests/test-mcp-sync.sh` (syncs into a throwaway workspace; asserts fleet parity
-  across frontends and that no secrets land on disk). Both run via `scripts/tests/run_all.py` in CI.
+- Contract tests live in `scripts/tests/test_ai_backends.py` (stubs, no network) and `scripts/tests/test_mcp_sync.py` (syncs into a throwaway workspace; asserts fleet parity across
+  frontends and that no secrets land on disk). Both run via `scripts/tests/run_all.py` in CI.
 
 Inside the container Claude's experimental Linux subprocess scrubber is disabled by default (`AI_BACKENDS_CLAUDE_SUBPROCESS_ENV_SCRUB=0`; legacy `CLAUDE_ZAI_SUBPROCESS_ENV_SCRUB`
 stays honored): Docker's seccomp profile blocks bubblewrap's namespaces, and the outer devcontainer is already the isolation boundary. Outside a container the stronger scrubber is

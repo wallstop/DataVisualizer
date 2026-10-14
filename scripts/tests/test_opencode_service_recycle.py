@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """opencode-service-recycle contract tests (typed Python port of the bash contract suite, issue #171).
 
-Every case from ``.devcontainer/tests/test-opencode-service-recycle.sh`` is
+Every case from the retired bash contract suite is
 kept with the same assertions; the suite now drives the ported
 ``recycle_stale_opencode_service.py`` natively, and the bash original retired
 with the script it tested.
@@ -100,7 +100,7 @@ class _ServiceFixture:
     into the script's dead-pid path. Readiness is verified after each spawn,
     with one retry, and a fixture that still never becomes ready raises before
     the case acts, mirroring the stub-readiness pattern of
-    test-mcp-credentials.sh.
+    scripts/tests/test_mcp_credentials.py.
     """
 
     def __init__(self) -> None:
