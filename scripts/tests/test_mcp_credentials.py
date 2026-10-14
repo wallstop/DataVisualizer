@@ -30,11 +30,11 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 sys.dont_write_bytecode = True
 
-from _test_helpers import assert_true, failure_count, new_temp_root, remove_temp_root, run_case
+from _test_helpers import assert_true, new_temp_root, remove_temp_root, run_cases
 
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
@@ -85,7 +85,7 @@ class StubEndpoint:
                     self.end_headers()
                     self.wfile.write(b'{"error": "unauthorized"}')
 
-            def log_message(self, *args: object) -> None:
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - http.server's name
                 pass
 
         self._server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
@@ -454,9 +454,7 @@ def main() -> int:
     if shutil.which("node") is None:
         print("    SKIP: node not found on PATH; mcp-credentials contract tests drive node subjects.")
         return 0
-    for case in CASES:
-        run_case(case.__name__, case)
-    failures = failure_count()
+    failures = run_cases([(case.__name__, case) for case in CASES])
     print(f"== mcp-credentials: {failures} failure(s) ==")
     return 1 if failures else 0
 

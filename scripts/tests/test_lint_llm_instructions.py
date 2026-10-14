@@ -19,13 +19,12 @@ sys.dont_write_bytecode = True
 from _test_helpers import (
     assert_exit_code,
     assert_true,
-    failure_count,
     find_python,
     fixture_path,
     new_llm_fixture_root,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     write_fixture_file,
 )
 
@@ -278,32 +277,25 @@ def main() -> int:
     # interpreter because the fixtures never touch a toolchain.
     python = find_python()
 
-    run_case("Passes_When_FixtureIsValid", lambda: case_passes_when_fixture_is_valid(python))
-    run_case("Passes_With_OptionalFrontmatterKeys", lambda: case_passes_with_optional_frontmatter_keys(python))
-    run_case(
-        "Fails_When_PointerFileMissingDelegationLink",
-        lambda: case_fails_when_pointer_file_missing_delegation_link(python),
+    failures = run_cases(
+        (
+            ("Passes_When_FixtureIsValid", lambda: case_passes_when_fixture_is_valid(python)),
+            ("Passes_With_OptionalFrontmatterKeys", lambda: case_passes_with_optional_frontmatter_keys(python)),
+            ("Fails_When_PointerFileMissingDelegationLink", lambda: case_fails_when_pointer_file_missing_delegation_link(python)),
+            ("Fails_When_PointerFileMissing", lambda: case_fails_when_pointer_file_missing(python)),
+            ("Fails_When_SkillNameUppercase", lambda: case_fails_when_skill_name_uppercase(python)),
+            ("Fails_When_DescriptionOver1024Chars", lambda: case_fails_when_description_over_1024_chars(python)),
+            ("Fails_When_IndexDrift_And_FixRegenerates", lambda: case_fails_when_index_drift_and_fix_regenerates(python)),
+            ("Fails_When_ContextHasMultipleH1", lambda: case_fails_when_context_has_multiple_h1(python)),
+            (
+                "Fails_When_ContextVersionMismatchesPackage_And_FixSyncs",
+                lambda: case_fails_when_context_version_mismatches_package_and_fix_syncs(python),
+            ),
+            ("Fails_When_SkillDirectoryHasNoSkillMd", lambda: case_fails_when_skill_directory_has_no_skill_md(python)),
+            ("Fails_When_ContextMissingSkillsLink", lambda: case_fails_when_context_missing_skills_link(python)),
+            ("Fails_When_MissingContextFile", lambda: case_fails_when_missing_context_file(python)),
+        )
     )
-    run_case("Fails_When_PointerFileMissing", lambda: case_fails_when_pointer_file_missing(python))
-    run_case("Fails_When_SkillNameUppercase", lambda: case_fails_when_skill_name_uppercase(python))
-    run_case("Fails_When_DescriptionOver1024Chars", lambda: case_fails_when_description_over_1024_chars(python))
-    run_case(
-        "Fails_When_IndexDrift_And_FixRegenerates",
-        lambda: case_fails_when_index_drift_and_fix_regenerates(python),
-    )
-    run_case("Fails_When_ContextHasMultipleH1", lambda: case_fails_when_context_has_multiple_h1(python))
-    run_case(
-        "Fails_When_ContextVersionMismatchesPackage_And_FixSyncs",
-        lambda: case_fails_when_context_version_mismatches_package_and_fix_syncs(python),
-    )
-    run_case(
-        "Fails_When_SkillDirectoryHasNoSkillMd",
-        lambda: case_fails_when_skill_directory_has_no_skill_md(python),
-    )
-    run_case("Fails_When_ContextMissingSkillsLink", lambda: case_fails_when_context_missing_skills_link(python))
-    run_case("Fails_When_MissingContextFile", lambda: case_fails_when_missing_context_file(python))
-
-    failures = failure_count()
     print(f"== lint-llm-instructions: {failures} failure(s) ==")
     return 1 if failures > 0 else 0
 

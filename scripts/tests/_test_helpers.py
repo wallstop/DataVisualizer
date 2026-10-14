@@ -22,8 +22,9 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Sequence, Tuple
+from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 _failure_count_value = 0
 
@@ -98,23 +99,82 @@ def failure_count() -> int:
     return _failure_count_value
 
 
-def run_case(name: str, body: Callable[[], None]) -> bool:
-    """Run one test case, printing the shared PASS/FAIL line shapes.
+def _execute_case(name: str, body: Callable[[], None]) -> Optional[str]:
+    """Run one case body and return its failure message, or ``None`` when it passed.
 
-    Every exception becomes a recorded failure with its message; only an
-    escaping ``SystemExit`` (a body that exits the process) can bypass the
-    runner, matching the PowerShell original where ``exit`` leaves the
-    whole child.
+    Every exception becomes the returned message; only an escaping
+    ``SystemExit`` (a body that exits the process) can bypass the runner,
+    matching the PowerShell original where ``exit`` leaves the whole child.
     """
-    global _failure_count_value
     try:
         body()
     except Exception as error:  # the case runner must convert every failure into a record
+        return str(error)
+    return None
+
+
+def _report_case(name: str, error: Optional[str]) -> bool:
+    """Print one case's shared PASS/FAIL line and return whether it passed."""
+    if error is not None:
         print(f"  FAIL: {name} :: {error}")
-        _failure_count_value += 1
         return False
     print(f"  PASS: {name}")
     return True
+
+
+def run_case(name: str, body: Callable[[], None]) -> bool:
+    """Run one test case, printing the shared PASS/FAIL line shapes."""
+    global _failure_count_value
+    passed = _report_case(name, _execute_case(name, body))
+    if not passed:
+        _failure_count_value += 1
+    return passed
+
+
+def run_cases(cases: Sequence[Tuple[str, Callable[[], None]]]) -> int:
+    """Run independent cases concurrently, replaying the shared lines in order.
+
+    The suite's slowest files wait on child processes (tool invocations,
+    ``git``, ``tar``, ``npm``); running a file's cases on a bounded thread
+    pool overlaps those waits instead of serializing them. Every case body
+    must own its state: the converted files each build a private temp root
+    and spawn children with explicit arguments, never process-global state.
+
+    Output stays byte-comparable to a sequential run: cases execute
+    concurrently, but the PASS/FAIL lines print after every case settles,
+    in the submitted order, through the same shapes ``run_case`` prints —
+    including when a case's escaping ``SystemExit`` aborts the child, where
+    the cases that settled first still replay before the exception leaves
+    ``run_cases``. Accounting happens on the caller's thread after the pool
+    drains, so no worker ever touches the failure counter. Returns the
+    number of failed cases.
+    """
+    global _failure_count_value
+    if len(cases) > 1:
+        with ThreadPoolExecutor(max_workers=min(len(cases), os.cpu_count() or 1)) as pool:
+            futures = [pool.submit(_execute_case, name, body) for name, body in cases]
+            errors: List[Optional[str]] = []
+            try:
+                for future in futures:
+                    errors.append(future.result())
+            except BaseException:
+                # An escaping ``SystemExit`` (or ``KeyboardInterrupt``) must
+                # kill the child like the sequential runner: nothing catches
+                # it, and the accounting below never runs. Replaying the
+                # cases that already settled first keeps even this abort
+                # path's output byte-comparable to the sequential run.
+                for (name, _), error in zip(cases, errors):
+                    _report_case(name, error)
+                raise
+    else:
+        errors = [_execute_case(name, body) for name, body in cases]
+
+    failed = 0
+    for (name, _), error in zip(cases, errors):
+        if not _report_case(name, error):
+            failed += 1
+    _failure_count_value += failed
+    return failed
 
 
 def assert_true(condition: object, message: str) -> None:
