@@ -83,7 +83,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string SearchCachePopulatedFieldName = "_isSearchCachePopulated";
         private const string SearchResultsFieldName = "_currentSearchResultItems";
 
-        private static readonly int[] FixtureSizes = { 100, 1000 };
+        private static readonly int[] FixtureSizes = { 100, 1000, 10000 };
 
         private static readonly string[] FixtureTitles =
         {
