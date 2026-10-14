@@ -19,10 +19,11 @@ on:
 
 # Publication runs to completion instead of being cancelled by a later merge,
 # so a half-written deploy never replaces a good site. Pull-request builds get
-# their own group, so a merge never queues behind review feedback.
+# their own group and a superseded build is cancelled: nothing is deployed
+# from a pull request, so finishing a stale build only queues the fresh one.
 concurrency:
   group: docs-pages-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -37,6 +38,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # The strict build reads only the working tree: mkdocs has no
+          # git-history plugin and the build script never calls git.
+          fetch-depth: 1
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -51,6 +55,10 @@ jobs:
         run: python3 scripts/build_docs.py --installer pip
 
       - name: Upload the built site
+        # Only a main push can deploy, so a pull-request build would upload an
+        # artifact nothing ever consumes; the strict build above already proves
+        # the site compiles.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v5
         with:
           path: site
