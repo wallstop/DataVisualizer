@@ -79,6 +79,8 @@ class Sandbox:
         self.stderr = ""
 
     def run_sync(self) -> None:
+        bash = shutil.which("bash")
+        assert_true(bash is not None, "bash must be on PATH; the sync subject is a bash script")
         env = dict(os.environ)
         for key in SCRUBBED_KEYS:
             env.pop(key, None)
@@ -96,7 +98,10 @@ class Sandbox:
             # names pointing inside the sandbox.
             env["USERPROFILE"] = str(self.home)
         completed = subprocess.run(
-            ["bash", bash_path(SYNC), bash_path(self.root)],
+            # Resolve bash through PATH explicitly: on Windows a bare "bash"
+            # in CreateProcess's search order hits System32's WSL launcher
+            # before any PATH entry, and WSL without a distro fails the sync.
+            [bash, bash_path(SYNC), bash_path(self.root)],
             cwd=str(self.root),
             env=env,
             capture_output=True,
