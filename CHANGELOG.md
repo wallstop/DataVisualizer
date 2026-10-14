@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Large asset import bursts no longer freeze the editor: the window decides which imports matter from each asset's type instead of loading every imported asset (#226).
 - Window placement no longer overwrites your saved preferred window size with the size the operating system clamps the window to, so reopening keeps the size you chose (#39, #42).
 - Fix the docs copy to match the window: a processor without an `Accepts` list is never offered, pane widths always save in editor preferences, and persistence docs use the
   on-screen **Persist State in Settings Asset** label. The settings tooltip now names the correct save location. (#153, #149)
