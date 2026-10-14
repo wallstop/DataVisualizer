@@ -22,7 +22,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Tuple
 
 sys.dont_write_bytecode = True
 
@@ -305,14 +305,24 @@ def case_wrapper_forwards_workspace_flags_and_exit_status() -> None:
         )
         other = root / "other workspace"
         other.mkdir()
-        for arguments, working_directory, expected_workspace, flags in (
-            ([], other, root, []),
-            (["--check"], other, root, ["--check"]),
-            (["other workspace", "--check", "two words"], root, other, ["--check", "two words"]),
-            ([""], other, root, [""]),
-        ):
+        cases: List[Tuple[Path, List[str], Path, Path, List[str]]] = [
+            (wrapper, [], other, root, []),
+            (wrapper, ["--check"], other, root, ["--check"]),
+            (wrapper, ["other workspace", "--check", "two words"], root, other, ["--check", "two words"]),
+            (wrapper, [""], other, root, [""]),
+        ]
+        if os.name == "posix":
+            alias = root / "workspace alias"
+            alias.symlink_to(root, target_is_directory=True)
+            cases.extend([
+                (wrapper, [str(alias), "--check"], other, alias, ["--check"]),
+                (alias / ".llm" / "mcp" / SYNC.name, ["--check"], other, alias, ["--check"]),
+            ])
+        else:
+            print("    SKIP: workspace alias cases require a POSIX symlink fixture.")
+        for entry, arguments, working_directory, expected_workspace, flags in cases:
             completed = subprocess.run(
-                [sys.executable, str(wrapper), *arguments],
+                [sys.executable, str(entry), *arguments],
                 cwd=working_directory,
                 env={**os.environ, "DATAVIZ_MCP_WORKSPACE": "ignored inherited workspace"},
                 capture_output=True,
@@ -324,7 +334,7 @@ def case_wrapper_forwards_workspace_flags_and_exit_status() -> None:
             record = json.loads(completed.stdout)
             assert_eq("configurator flags", flags, record["args"])
             assert_eq("configurator cwd", expected_workspace.resolve(), Path(record["cwd"]).resolve())
-            assert_eq("workspace environment", expected_workspace.resolve(), Path(record["workspace"]).resolve())
+            assert_eq("workspace environment preserves logical path", os.path.abspath(expected_workspace), record["workspace"])
         failed = subprocess.run(
             [sys.executable, str(wrapper), str(root / "missing workspace")],
             capture_output=True,

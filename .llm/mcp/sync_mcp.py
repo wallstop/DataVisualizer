@@ -18,10 +18,12 @@ from typing import Sequence
 def main(arguments: Sequence[str]) -> int:
     """Run the adjacent Node configurator with the wrapper's workspace contract."""
     args = list(arguments)
-    script_dir = Path(__file__).resolve().parent
+    # Trust entries use the workspace spelling opened by the agent, so retain
+    # symlinks in both an explicit workspace and a script-relative default.
+    script_dir = Path(os.path.abspath(__file__)).parent
     workspace = script_dir.parent.parent
     if args and args[0] and not args[0].startswith("-"):
-        workspace = Path(args.pop(0)).resolve()
+        workspace = Path(os.path.abspath(args.pop(0)))
     node = shutil.which("node")
     if node is None:
         print("❌ node is required to sync MCP configuration.", file=sys.stderr)
