@@ -50,8 +50,8 @@ python3 .devcontainer/recycle_stale_opencode_service.py --dry-run   # report onl
 python3 .devcontainer/recycle_stale_opencode_service.py             # recycle
 ```
 
-Contract tests: `.devcontainer/tests/test-mcp-credentials.sh` (credential aliasing, divergence detection, repair), `.devcontainer/tests/test-env-local-precedence.sh` (loader
-precedence), and `scripts/tests/test_opencode_service_recycle.py` (service recycling).
+Contract tests: `scripts/tests/test_mcp_credentials.py` (credential aliasing, divergence detection, repair), `scripts/tests/test_env_local_precedence.py` (loader precedence), and
+`scripts/tests/test_opencode_service_recycle.py` (service recycling).
 
 ## One command to wire everything
 

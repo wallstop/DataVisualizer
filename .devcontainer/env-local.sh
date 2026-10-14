@@ -20,7 +20,7 @@
 # how a devcontainer picks up a repaired credential WITHOUT a rebuild: the
 # forwarded value lives in process.env for the container's whole lifetime, and
 # "non-empty always wins" otherwise pins it forever. See
-# .devcontainer/tests/test-env-local-precedence.sh for the contract.
+# scripts/tests/test_env_local_precedence.py for the contract.
 #
 # Usage: source this file, then: load_env_local [path-to-.env.local]
 load_env_local() {
