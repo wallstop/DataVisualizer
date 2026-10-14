@@ -32,7 +32,7 @@ def sync_mcp_configs(workspace: Path) -> None:
     """Re-derive the machine-local MCP configs when node is available."""
     if shutil.which("node") is None:
         return
-    run_child_strict(["bash", ".llm/mcp/sync-mcp.sh", str(workspace)], workspace)
+    run_child_strict([sys.executable, ".llm/mcp/sync_mcp.py", str(workspace)], workspace)
 
 
 def main(argv: Sequence[str]) -> int:

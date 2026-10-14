@@ -118,7 +118,7 @@ def refresh_npm_tools(workspace: Path) -> None:
 def configure_mcp(workspace: Path) -> None:
     """Regenerate the machine-local MCP configs when node is available."""
     if shutil.which("node") is not None:
-        code = run_child(["bash", ".llm/mcp/sync-mcp.sh", str(workspace)], workspace)
+        code = run_child([sys.executable, ".llm/mcp/sync_mcp.py", str(workspace)], workspace)
         if code != 0:
             print("⚠️  MCP configuration reported warnings; run 'npm run mcp:sync' to retry.")
         return

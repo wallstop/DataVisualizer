@@ -38,7 +38,7 @@ from _test_helpers import assert_true, new_temp_root, remove_temp_root, run_case
 
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
-SYNC = REPO_ROOT / ".llm" / "mcp" / "sync-mcp.sh"
+SYNC = REPO_ROOT / ".llm" / "mcp" / "sync_mcp.py"
 DOCTOR = REPO_ROOT / ".llm" / "mcp" / "mcp-doctor.mjs"
 CONFIGURE = REPO_ROOT / ".llm" / "mcp" / "configure.mjs"
 
