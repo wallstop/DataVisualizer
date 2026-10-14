@@ -23,11 +23,10 @@ sys.dont_write_bytecode = True
 from _test_helpers import (
     assert_exit_code,
     assert_true,
-    failure_count,
     find_python,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     run_tool_output,
     write_fixture_file,
 )
@@ -520,18 +519,20 @@ def main() -> int:
 
     python = find_python()
 
-    run_case("Validates_A_BuilderArchive_AgainstTheTrackedTree", lambda: case_validates_a_builder_archive(python))
-    run_case("Validates_A_HandBuiltStandardTar", lambda: case_validates_a_hand_built_standard_tar(python))
-    run_case("Fails_When_TheChecksumSidecarDisagrees", lambda: case_fails_when_the_checksum_sidecar_disagrees(python))
-    run_case("Fails_When_TheArchiveIsCorruptOrEmpty", lambda: case_fails_when_the_archive_is_corrupt_or_empty(python))
-    run_case("Fails_When_TheArchiveCarriesMalformedMembers", lambda: case_fails_when_the_archive_carries_malformed_members(python))
-    run_case("Fails_When_TheArchiveCarriesDuplicateMembers", lambda: case_fails_when_the_archive_carries_duplicate_members(python))
-    run_case("Fails_When_TheArchiveDisagreesWithTheRepository", lambda: case_fails_when_the_archive_disagrees_with_the_repository(python))
-    run_case("Fails_When_TheTreeDriftsAfterBuild", lambda: case_fails_when_the_tree_drifts_after_build(python))
-    run_case("Fails_When_TheRootIsNotARepository", lambda: case_fails_when_the_root_is_not_a_repository(python))
-    run_case("Rejects_InvalidArguments", lambda: case_rejects_invalid_arguments(python))
-
-    failures = failure_count()
+    failures = run_cases(
+        (
+            ("Validates_A_BuilderArchive_AgainstTheTrackedTree", lambda: case_validates_a_builder_archive(python)),
+            ("Validates_A_HandBuiltStandardTar", lambda: case_validates_a_hand_built_standard_tar(python)),
+            ("Fails_When_TheChecksumSidecarDisagrees", lambda: case_fails_when_the_checksum_sidecar_disagrees(python)),
+            ("Fails_When_TheArchiveIsCorruptOrEmpty", lambda: case_fails_when_the_archive_is_corrupt_or_empty(python)),
+            ("Fails_When_TheArchiveCarriesMalformedMembers", lambda: case_fails_when_the_archive_carries_malformed_members(python)),
+            ("Fails_When_TheArchiveCarriesDuplicateMembers", lambda: case_fails_when_the_archive_carries_duplicate_members(python)),
+            ("Fails_When_TheArchiveDisagreesWithTheRepository", lambda: case_fails_when_the_archive_disagrees_with_the_repository(python)),
+            ("Fails_When_TheTreeDriftsAfterBuild", lambda: case_fails_when_the_tree_drifts_after_build(python)),
+            ("Fails_When_TheRootIsNotARepository", lambda: case_fails_when_the_root_is_not_a_repository(python)),
+            ("Rejects_InvalidArguments", lambda: case_rejects_invalid_arguments(python)),
+        )
+    )
     print(f"== validate-unitypackage: {failures} failure(s) ==")
     return 1 if failures > 0 else 0
 

@@ -22,11 +22,10 @@ sys.dont_write_bytecode = True
 from _test_helpers import (
     assert_exit_code,
     assert_true,
-    failure_count,
     find_python,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     run_tool_output,
     write_fixture_file,
 )
@@ -287,19 +286,21 @@ def main() -> int:
 
     python = find_python()
 
-    run_case("Verifies_MatchingTag_AndReportsPublishOutputs", lambda: case_verifies_matching_tag_and_reports_publish_outputs(python))
-    run_case("Resolves_Next_DistTag_For_RestrictedPrereleases", lambda: case_resolves_next_dist_tag_for_restricted_prereleases(python))
-    run_case("Verifies_An_ExplicitPackageFile_WithoutPacking", lambda: case_verifies_an_explicit_package_file_without_packing(python))
-    run_case("Fails_When_TagDoesNotMatchPackageVersion", lambda: case_fails_when_tag_does_not_match_package_version(python))
-    run_case("Fails_When_TarballCarriesUnallowlistedFile", lambda: case_fails_when_tarball_carries_unallowlisted_file(python))
-    run_case("Fails_When_AllowlistedPayloadFileIsMissing", lambda: case_fails_when_allowlisted_payload_file_is_missing(python))
-    run_case("Fails_When_PackageVersionIsUnsupportedSemver", lambda: case_fails_when_package_version_is_unsupported_semver(python))
-    run_case("Fails_When_PackageJsonIsMissingOrIncomplete", lambda: case_fails_when_package_json_is_missing_or_incomplete(python))
-    run_case("Fails_When_PackageFileDoesNotExist", lambda: case_fails_when_package_file_does_not_exist(python))
-    run_case("Fails_When_RootIsNotARepository", lambda: case_fails_when_root_is_not_a_repository(python))
-    run_case("Rejects_InvalidArguments", lambda: case_rejects_invalid_arguments(python))
-
-    failures = failure_count()
+    failures = run_cases(
+        (
+            ("Verifies_MatchingTag_AndReportsPublishOutputs", lambda: case_verifies_matching_tag_and_reports_publish_outputs(python)),
+            ("Resolves_Next_DistTag_For_RestrictedPrereleases", lambda: case_resolves_next_dist_tag_for_restricted_prereleases(python)),
+            ("Verifies_An_ExplicitPackageFile_WithoutPacking", lambda: case_verifies_an_explicit_package_file_without_packing(python)),
+            ("Fails_When_TagDoesNotMatchPackageVersion", lambda: case_fails_when_tag_does_not_match_package_version(python)),
+            ("Fails_When_TarballCarriesUnallowlistedFile", lambda: case_fails_when_tarball_carries_unallowlisted_file(python)),
+            ("Fails_When_AllowlistedPayloadFileIsMissing", lambda: case_fails_when_allowlisted_payload_file_is_missing(python)),
+            ("Fails_When_PackageVersionIsUnsupportedSemver", lambda: case_fails_when_package_version_is_unsupported_semver(python)),
+            ("Fails_When_PackageJsonIsMissingOrIncomplete", lambda: case_fails_when_package_json_is_missing_or_incomplete(python)),
+            ("Fails_When_PackageFileDoesNotExist", lambda: case_fails_when_package_file_does_not_exist(python)),
+            ("Fails_When_RootIsNotARepository", lambda: case_fails_when_root_is_not_a_repository(python)),
+            ("Rejects_InvalidArguments", lambda: case_rejects_invalid_arguments(python)),
+        )
+    )
     print(f"== verify-release: {failures} failure(s) ==")
     return 1 if failures > 0 else 0
 

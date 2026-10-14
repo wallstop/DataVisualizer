@@ -20,11 +20,10 @@ sys.dont_write_bytecode = True
 from _test_helpers import (
     assert_exit_code,
     assert_true,
-    failure_count,
     find_python,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     run_tool_output,
     write_fixture_file,
 )
@@ -341,23 +340,25 @@ def main() -> int:
 
     python = find_python()
 
-    run_case("Creates_AnnotatedTag_AtHead_OnTheMergedReleaseCommit", lambda: case_creates_annotated_tag_at_head(python))
-    run_case("Tags_TheRequestedCommit_WhenCommitArgumentIsGiven", lambda: case_tags_the_requested_commit(python))
-    run_case("Supports_PrereleaseVersions", lambda: case_supports_prerelease_versions(python))
-    run_case("DryRun_Verifies_WithoutCreatingATag", lambda: case_dry_run_verifies_without_creating_a_tag(python))
-    run_case("Fails_When_BranchDoesNotMatchPackageVersion", lambda: case_fails_when_branch_does_not_match(python))
-    run_case("Fails_When_ChangelogSection_IsMissing", lambda: case_fails_when_changelog_section_is_missing(python))
-    run_case("Fails_When_ChangelogSection_IsDuplicated", lambda: case_fails_when_changelog_section_is_duplicated(python))
-    run_case("Fails_When_ChangelogSection_HasNoNotes", lambda: case_fails_when_changelog_section_has_no_notes(python))
-    run_case("Fails_When_TagAlreadyExists_AndNeverRetargets", lambda: case_fails_when_tag_already_exists(python))
-    run_case("Fails_When_WorkingTreeIsDirty", lambda: case_fails_when_working_tree_is_dirty(python))
-    run_case("Rejects_InvalidArguments", lambda: case_rejects_invalid_arguments(python))
-    run_case("Fails_When_PackageVersion_IsUnsupportedSemver", lambda: case_fails_when_package_version_is_unsupported_semver(python))
-    run_case("Fails_When_RequiredFiles_AreMissing", lambda: case_fails_when_required_files_are_missing(python))
-    run_case("Fails_When_RootIsNotARepository", lambda: case_fails_when_root_is_not_a_repository(python))
-    run_case("Fails_When_CommitArgument_DoesNotResolve", lambda: case_fails_when_commit_argument_does_not_resolve(python))
-
-    failures = failure_count()
+    failures = run_cases(
+        (
+            ("Creates_AnnotatedTag_AtHead_OnTheMergedReleaseCommit", lambda: case_creates_annotated_tag_at_head(python)),
+            ("Tags_TheRequestedCommit_WhenCommitArgumentIsGiven", lambda: case_tags_the_requested_commit(python)),
+            ("Supports_PrereleaseVersions", lambda: case_supports_prerelease_versions(python)),
+            ("DryRun_Verifies_WithoutCreatingATag", lambda: case_dry_run_verifies_without_creating_a_tag(python)),
+            ("Fails_When_BranchDoesNotMatchPackageVersion", lambda: case_fails_when_branch_does_not_match(python)),
+            ("Fails_When_ChangelogSection_IsMissing", lambda: case_fails_when_changelog_section_is_missing(python)),
+            ("Fails_When_ChangelogSection_IsDuplicated", lambda: case_fails_when_changelog_section_is_duplicated(python)),
+            ("Fails_When_ChangelogSection_HasNoNotes", lambda: case_fails_when_changelog_section_has_no_notes(python)),
+            ("Fails_When_TagAlreadyExists_AndNeverRetargets", lambda: case_fails_when_tag_already_exists(python)),
+            ("Fails_When_WorkingTreeIsDirty", lambda: case_fails_when_working_tree_is_dirty(python)),
+            ("Rejects_InvalidArguments", lambda: case_rejects_invalid_arguments(python)),
+            ("Fails_When_PackageVersion_IsUnsupportedSemver", lambda: case_fails_when_package_version_is_unsupported_semver(python)),
+            ("Fails_When_RequiredFiles_AreMissing", lambda: case_fails_when_required_files_are_missing(python)),
+            ("Fails_When_RootIsNotARepository", lambda: case_fails_when_root_is_not_a_repository(python)),
+            ("Fails_When_CommitArgument_DoesNotResolve", lambda: case_fails_when_commit_argument_does_not_resolve(python)),
+        )
+    )
     print(f"== tag-release: {failures} failure(s) ==")
     return 1 if failures > 0 else 0
 
