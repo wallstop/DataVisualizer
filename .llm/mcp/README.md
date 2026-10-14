@@ -84,11 +84,11 @@ first-run approval prompt. The isolated Claude state directories used by the `cl
 the same trust + approvals by `python3 .devcontainer/ai_backends.py install` (and on every launcher start), because Claude only reads that state from the config dir its
 `CLAUDE_CONFIG_DIR` points at.
 
-Windsurf and other host GUI clients are not writable from the container; run the official configurator on the host instead (see below).
+Unmanaged Windsurf and other host GUI clients are not writable from the container; run the official configurator on the host instead (see below).
 
-`fetch`/`git` are only registered when `uvx` is on PATH (baked into the devcontainer image). Cursor's project config only carries host-executable entries (it omits `zai-image`,
-whose script path is container-local). Merging preserves servers configured by other tools. The Z.ai credential is read from `ZAI_API_KEY` or `Z_AI_API_KEY`; `npm run mcp:sync`
-mirrors whichever exists into the other inside `.env.local`.
+`fetch`/`git` are only registered when `uvx` is on PATH (baked into the devcontainer image). Cursor's project config uses the same pinned Unity HTTP bridge and only carries
+host-executable stdio entries (it omits `zai-image`, whose script path is container-local). Merging preserves servers configured by other tools. The Z.ai credential is read from
+`ZAI_API_KEY` or `Z_AI_API_KEY`; `npm run mcp:sync` mirrors whichever exists into the other inside `.env.local`.
 
 ## Unity MCP server (official Unity CLI)
 
@@ -101,7 +101,7 @@ materials, animation, packages, tests, builds, plus an arbitrary C# `eval` tool)
 # 1. Install the pipeline package into the Unity project
 cd /path/to/UnityProject && unity pipeline install
 
-# 2. Point host-side GUI clients (Cursor, Windsurf, Claude Desktop, …) at it
+# 2. For unmanaged host GUI clients (Windsurf, Claude Desktop, …) only
 unity mcp configure <client>     # `unity mcp configure --list` for all
 ```
 
@@ -115,9 +115,15 @@ npm run unity:mcp:host   # host: spawns `unity mcp`, serves http://0.0.0.0:9020/
 ```
 
 Container agents connect to `http://host.docker.internal:9020/mcp` (written automatically by `npm run mcp:sync`). The bridge is transparent: JSON-RPC requests are forwarded to the
-CLI with per-request id remapping, notifications are passed through, and a crashed CLI is respawned lazily on the next request.
+CLI with per-request id remapping, client notifications are passed through, and a crashed CLI is respawned lazily on the next request. Startup also verifies a proxy-free local HTTP
+roundtrip against a unique bridge instance ID before updating client configs. `/healthz` includes `bridgePid` and `instanceId`; `pid` identifies the lazy Unity CLI child. A failed
+self-check exits with code 1. Port persistence uses asynchronous file I/O so it cannot block HTTP handling.
 
-Environment (prefer a gitignored `.env.local` at the workspace root):
+Environment (process variables override the gitignored workspace `.env.local`):
+
+Keep the bridge URL, port, and token in the workspace `.env.local` so host and container clients read the same settings. The legacy host file `~/.unity-mcp/.env.local` is only a
+fallback for CLI launch settings (`UNITY_CLI`, `UNITY_MCP_PROJECT`, `UNITY_PROJECT_PATH`, `UNITY_MCP_CLI_ARGS`); workspace values take precedence. Home-only transport settings are
+ignored because frontend sync cannot read a Windows host home from the container.
 
 | Variable               | Purpose                                                                                                                                                              |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -125,6 +131,7 @@ Environment (prefer a gitignored `.env.local` at the workspace root):
 | `UNITY_MCP_CLI_ARGS`   | Extra args appended after `mcp` (e.g. `--instance host:port`)                                                                                                        |
 | `UNITY_MCP_PROJECT`    | `--project-path` value; must be the project **root** (`UNITY_PROJECT_PATH` alias honored; non-root values self-heal to the enclosing project)                        |
 | `UNITY_MCP_HTTP_PORT`  | Bridge port (default 9020). When busy, the bridge binds the next free port, persists the choice here, and re-syncs client configs (`UNITY_MCP_AUTO_SYNC=0` disables) |
+| `UNITY_MCP_HTTP_URL`   | Endpoint override read from process env or `.env.local` by sync and both doctors                                                                                     |
 | `UNITY_MCP_TOKEN`      | Optional bearer token required by the bridge when set                                                                                                                |
 | `UNITY_MCP_TIMEOUT_MS` | Per-request timeout (default 180000)                                                                                                                                 |
 
@@ -160,3 +167,9 @@ Security: the bridge listens on all interfaces by default (Linux Docker cannot r
 
 The previous hand-rolled `UnityMcpBridge.cs` (10 tools) is deprecated. If it was installed into the Unity project, delete `<project>/Assets/Editor/UnityMcpBridge.cs` (and its
 `.meta`) — it is no longer installed or served by anything in this repo.
+
+### Diagnose connection failures
+
+Run `npm run mcp:sync`, restart the host bridge and agent sessions, then run `npm run unity:mcp:doctor` from the container. The doctor checks initialization, tool discovery, and
+the pinned editor. If `/healthz` times out, check the host URL and remove forwarded Unity bridge ports in VS Code's Ports view: reverse tunnels can intercept host traffic. Connect
+directly to the host bridge. Match health's `bridgePid` to the listener owner; health bypasses authentication and does not start Unity.

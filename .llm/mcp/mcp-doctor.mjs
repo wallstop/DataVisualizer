@@ -431,52 +431,50 @@ await spawnProbe("zai-image", "node", [".llm/mcp/zai-image-mcp.mjs"], {
 // ---------------------------------------------------------------------------
 console.log("--- Unity bridge ---");
 const port = Number(env("UNITY_MCP_HTTP_PORT")) || 9020;
-const bridgeBase = `http://host.docker.internal:${port}`;
+const bridgeUrl = (env("UNITY_MCP_HTTP_URL") || `http://host.docker.internal:${port}/mcp`).replace(/\/+$/, "");
+const bridgeBase = bridgeUrl.slice(0, bridgeUrl.lastIndexOf("/"));
 try {
     const res = await fetch(`${bridgeBase}/healthz`, {
         signal: AbortSignal.timeout(5000),
     });
-    const body = await res.json();
-    if (body.ok) {
-        ok(`unity bridge: ${bridgeBase}/healthz ok=true`);
-    } else {
-        // The CLI child is spawned lazily on the first request; drive one to
-        // prove the stack end-to-end instead of warning on the idle state.
-        const token = env("UNITY_MCP_TOKEN");
-        const mcpRes = await fetch(`${bridgeBase}/mcp`, {
-            method: "POST",
-            headers: {
-                "content-type": "application/json",
-                accept: "application/json, text/event-stream",
-                ...(token ? { authorization: `Bearer ${token}` } : {}),
+    await res.json();
+    if (!res.ok) throw new Error(`health HTTP ${res.status}`);
+    // Always drive initialize: a live CLI pid does not prove authentication
+    // or JSON-RPC works for this client.
+    const token = env("UNITY_MCP_TOKEN");
+    const mcpRes = await fetch(bridgeUrl, {
+        method: "POST",
+        headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: {
+                protocolVersion: "2025-03-26",
+                capabilities: {},
+                clientInfo: { name: "mcp-doctor", version: "0.1.0" },
             },
-            body: JSON.stringify({
-                jsonrpc: "2.0",
-                id: 1,
-                method: "initialize",
-                params: {
-                    protocolVersion: "2025-03-26",
-                    capabilities: {},
-                    clientInfo: { name: "mcp-doctor", version: "0.1.0" },
-                },
-            }),
-            signal: AbortSignal.timeout(30000),
-        });
-        const mcpBody = await mcpRes.json();
-        if (mcpBody?.result?.serverInfo) {
-            ok(
-                `unity bridge: ${bridgeBase}/mcp initialize OK ` +
-                    `serverInfo=${JSON.stringify(mcpBody.result.serverInfo)} (child was lazily idle)`,
-            );
-        } else {
-            fail(
-                `unity bridge responded but MCP initialize failed: ${JSON.stringify(mcpBody).slice(0, 200)}`,
-            );
-        }
+        }),
+        signal: AbortSignal.timeout(30000),
+    });
+    const mcpBody = await mcpRes.json();
+    if (mcpBody?.result?.serverInfo) {
+        ok(
+            `unity bridge: ${bridgeBase}/mcp initialize OK ` +
+                `serverInfo=${JSON.stringify(mcpBody.result.serverInfo)}`,
+        );
+    } else {
+        fail(
+            `unity bridge responded but MCP initialize failed: ${JSON.stringify(mcpBody).slice(0, 200)}`,
+        );
     }
-} catch {
+} catch (error) {
     fail(
-        `unity bridge not reachable on host.docker.internal:${port}. On the host run: ` +
+        `unity bridge failed at ${bridgeBase}: ${error.message}. On the host run: ` +
             "npm run unity:mcp:host (then unity:mcp:doctor for depth).",
     );
 }

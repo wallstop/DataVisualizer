@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import ntpath
 import os
 import subprocess
 import sys
@@ -30,11 +31,13 @@ def read_env_local(path: Path) -> Dict[str, str]:
     except (OSError, UnicodeError):
         return {}
     result: Dict[str, str] = {}
-    for raw in text.splitlines():
+    for raw in text.lstrip("\ufeff").splitlines():
         line = raw.strip()
         if not line or line.startswith('#') or '=' not in line:
             continue
         key, value = (part.strip() for part in line.split('=', 1))
+        if key.startswith('export '):
+            key = key[7:].strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
             value = value[1:-1]
         if key:
@@ -55,13 +58,16 @@ def enclosing_project(start: Path) -> Optional[Path]:
 
 
 def unity_command(arguments: List[str]) -> str:
-    return subprocess.check_output(['unity', *arguments], text=True, encoding='utf-8').strip()
+    local = {**read_env_local(Path.home() / '.unity-mcp' / '.env.local'), **read_env_local(REPO_ROOT / '.env.local')}
+    executable = os.environ.get('UNITY_CLI') or local.get('UNITY_CLI') or 'unity'
+    return subprocess.check_output([executable, *arguments], text=True, encoding='utf-8').strip()
 
 
 def request_json(url: str, headers: Dict[str, str], payload: Optional[JsonObject]) -> JsonObject:
     data = None if payload is None else json.dumps(payload).encode('utf-8')
     with urlopen(Request(url, data=data, headers=headers), timeout=30) as response:
-        return object_value(cast(Json, json.load(response)))
+        body = response.read()
+        return object_value(cast(Json, json.loads(body))) if body else {}
 
 
 class Doctor:
@@ -72,12 +78,17 @@ class Doctor:
     ) -> None:
         self.root = root
         self.environment = environment
-        self.local = {**read_env_local(root / '.env.local'), **read_env_local(home / '.unity-mcp' / '.env.local')}
+        host_local = read_env_local(home / '.unity-mcp' / '.env.local')
+        self.local = {key: value for key, value in host_local.items()
+                      if key in ('UNITY_CLI', 'UNITY_MCP_PROJECT', 'UNITY_PROJECT_PATH', 'UNITY_MCP_CLI_ARGS')}
+        self.local.update(read_env_local(root / '.env.local'))
         self.command = command
         self.request = request
         self.failures = 0
         self.warnings = 0
         self.project: Optional[Path] = None
+        container_flag = environment.get('DATAVIZ_IN_CONTAINER')
+        self.remote = container_flag == '1' if container_flag is not None else Path('/.dockerenv').exists() or Path('/run/.containerenv').exists()
 
     def fail(self, message: str) -> None:
         self.failures += 1
@@ -148,14 +159,17 @@ class Doctor:
 
     def check_bridge(self) -> None:
         port = self.environment.get('UNITY_MCP_HTTP_PORT') or self.local.get('UNITY_MCP_HTTP_PORT') or '9020'
-        base = f'http://127.0.0.1:{port}'
+        host = 'host.docker.internal' if self.remote else '127.0.0.1'
+        endpoint = (self.environment.get('UNITY_MCP_HTTP_URL') or self.local.get('UNITY_MCP_HTTP_URL') or f'http://{host}:{port}/mcp').rstrip('/')
+        base = endpoint.rsplit('/', 1)[0]
         try:
             health = self.request(base + '/healthz', {}, None)
             self.ok(f"Bridge healthz: ok={str(health.get('ok')).lower()} cli={json.dumps(health.get('cli'))}")
-        except (OSError, ValueError):
-            print(f'ℹ️  Bridge not reachable on {base} — start it on the host with: npm run unity:mcp:host')
+        except (OSError, ValueError) as error:
+            self.fail(f'Bridge HTTP health failed on {base}: {error}. Check the host /healthz URL, bridge port, and firewall; '
+                      'start it on the host with: npm run unity:mcp:host')
             return
-        headers = {'content-type': 'application/json'}
+        headers = {'content-type': 'application/json', 'accept': 'application/json, text/event-stream'}
         token = self.environment.get('UNITY_MCP_TOKEN') or self.local.get('UNITY_MCP_TOKEN') or ''
         if token:
             headers['authorization'] = f'Bearer {token}'
@@ -165,17 +179,25 @@ class Doctor:
                       'Restart the bridge with UNITY_MCP_PROJECT set.')
 
         def rpc(identifier: int, method: str, params: JsonObject) -> JsonObject:
-            return self.request(base + '/mcp', headers, {'jsonrpc': '2.0', 'id': identifier, 'method': method, 'params': params})
+            result = self.request(endpoint, headers, {'jsonrpc': '2.0', 'id': identifier, 'method': method, 'params': params})
+            if 'error' in result:
+                raise ValueError(json.dumps(result['error']))
+            if not isinstance(result.get('result'), dict):
+                raise ValueError(f'{method} returned no result object')
+            return result
 
         try:
             init = rpc(1, 'initialize', {'protocolVersion': '2025-03-26', 'capabilities': {},
                                        'clientInfo': {'name': 'unity-mcp-doctor', 'version': '0.1.0'}})
+            if not object_value(init.get('result')).get('serverInfo'):
+                raise ValueError('initialize returned no serverInfo')
             server = object_value(init.get('result')).get('serverInfo', init.get('error'))
             self.ok(f'MCP initialize: server={json.dumps(server)}')
         except (OSError, ValueError) as error:
             self.fail(f'MCP initialize failed: {error}')
             return
         try:
+            self.request(endpoint, headers, {'jsonrpc': '2.0', 'method': 'notifications/initialized'})
             tools = object_value(rpc(2, 'tools/list', {}).get('result')).get('tools')
             count = len(tools) if isinstance(tools, list) else 0
             if count == 0:
@@ -186,6 +208,8 @@ class Doctor:
             self.fail(f'tools/list failed: {error}')
         try:
             call = rpc(3, 'tools/call', {'name': 'editor_status', 'arguments': {}})
+            if object_value(call.get('result')).get('isError'):
+                raise ValueError('editor_status returned isError=true')
             content = object_value(call.get('result')).get('content')
             text = object_value(content[0]).get('text') if isinstance(content, list) and content else json.dumps(call.get('error'))
             text = text if isinstance(text, str) else json.dumps(text)
@@ -195,26 +219,36 @@ class Doctor:
                 status = {}
             driven = status.get('projectPath')
             if isinstance(driven, str) and driven:
-                actual = Path(driven).resolve()
-                if self.project and actual == self.project:
-                    self.ok(f'editor_status drives the pinned project: {actual}')
+                expected = (self.environment.get('UNITY_MCP_PROJECT') or self.environment.get('UNITY_PROJECT_PATH')
+                            or self.local.get('UNITY_MCP_PROJECT') or self.local.get('UNITY_PROJECT_PATH') or '') if self.remote else str(self.project or '')
+                # Windows host paths are opaque to Linux. Compare them with
+                # Windows rules instead of resolving C:\\... under /workspaces.
+                normalize: Callable[[str], str] = (lambda value: ntpath.normcase(ntpath.normpath(value))) if ntpath.splitdrive(driven)[0] else os.path.normpath
+                actual = normalize(driven)
+                if expected and actual == normalize(expected):
+                    self.ok(f'editor_status drives the pinned project: {driven}')
+                elif not expected and self.remote:
+                    self.ok(f'editor_status drives host project: {driven}')
                 else:
                     self.fail(f"WRONG EDITOR: the MCP server drives '{actual}' but the pinned project is "
-                              f"'{self.project or ''}'. Restart the bridge after fixing UNITY_MCP_PROJECT.")
+                              f"'{expected}'. Restart the bridge after fixing UNITY_MCP_PROJECT.")
             else:
-                self.warn('editor_status did not return a project (editor for the pinned project likely not running): '
+                self.fail('editor_status did not return a project (editor for the pinned project likely not running): '
                           + ' '.join(text[:200].split()))
         except (OSError, ValueError) as error:
-            self.warn(f'editor_status canary failed: {error}')
+            self.fail(f'editor_status canary failed: {error}')
 
     def run(self) -> int:
-        try:
-            self.ok(f"Unity CLI on PATH: {self.command(['--version'])}")
-        except (OSError, subprocess.SubprocessError):
-            self.fail('Unity CLI not runnable (`unity --version` failed). Install it or set UNITY_CLI; '
-                      'the bridge spawns `unity mcp`.')
-        self.check_project()
-        self.check_editor()
+        if self.remote:
+            print('ℹ️  Container client: Unity CLI and project paths belong to the host; checking through the bridge.')
+        else:
+            try:
+                self.ok(f"Unity CLI on PATH: {self.command(['--version'])}")
+            except (OSError, subprocess.SubprocessError):
+                self.fail('Unity CLI not runnable (`unity --version` failed). Install it or set UNITY_CLI; '
+                          'the bridge spawns `unity mcp`.')
+            self.check_project()
+            self.check_editor()
         self.check_bridge()
         return self.finish()
 

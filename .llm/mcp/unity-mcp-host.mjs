@@ -47,12 +47,12 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKSPACE_ROOT = path.resolve(SCRIPT_DIR, "..", "..");
-const REQUEST_TIMEOUT_MS = Number(process.env.UNITY_MCP_TIMEOUT_MS || 180000);
+const INSTANCE_ID = crypto.randomUUID();
 
 function readEnvLocal(filePath) {
     const vars = {};
@@ -62,12 +62,12 @@ function readEnvLocal(filePath) {
     } catch {
         return vars;
     }
-    for (const rawLine of text.split(/\r?\n/)) {
+    for (const rawLine of text.replace(/^\uFEFF/, "").split(/\r?\n/)) {
         const line = rawLine.trim();
         if (!line || line.startsWith("#")) continue;
         const eq = line.indexOf("=");
         if (eq <= 0) continue;
-        const key = line.slice(0, eq).trim();
+        const key = line.slice(0, eq).trim().replace(/^export\s+/, "");
         let value = line.slice(eq + 1).trim();
         if (
             (value.startsWith('"') && value.endsWith('"')) ||
@@ -80,10 +80,17 @@ function readEnvLocal(filePath) {
     return vars;
 }
 
+// Only host launch settings may fall back to the legacy home file. Shared
+// transport settings must match configure.mjs and the container workspace.
+const hostEnvLocal = readEnvLocal(path.join(os.homedir(), ".unity-mcp", ".env.local"));
 const envLocal = {
+    UNITY_CLI: hostEnvLocal.UNITY_CLI,
+    UNITY_MCP_PROJECT: hostEnvLocal.UNITY_MCP_PROJECT,
+    UNITY_PROJECT_PATH: hostEnvLocal.UNITY_PROJECT_PATH,
+    UNITY_MCP_CLI_ARGS: hostEnvLocal.UNITY_MCP_CLI_ARGS,
     ...readEnvLocal(path.join(WORKSPACE_ROOT, ".env.local")),
-    ...readEnvLocal(path.join(os.homedir(), ".unity-mcp", ".env.local")),
 };
+const REQUEST_TIMEOUT_MS = Number(process.env.UNITY_MCP_TIMEOUT_MS || envLocal.UNITY_MCP_TIMEOUT_MS || 180000);
 
 // Preferred HTTP port: process env wins, then .env.local, then the historical
 // default of 9020. When the preferred port is busy the bridge binds the next
@@ -108,7 +115,7 @@ function timingSafeEqual(a, b) {
 // CLI process management
 // ---------------------------------------------------------------------------
 
-const cliCommand = process.env.UNITY_CLI || "unity";
+const cliCommand = process.env.UNITY_CLI || envLocal.UNITY_CLI || "unity";
 const cliArgs = ["mcp"];
 
 function isUnityProjectRoot(dir) {
@@ -179,8 +186,9 @@ if (!projectPath) {
     }
 }
 if (projectPath) cliArgs.push("--project-path", projectPath);
-if (process.env.UNITY_MCP_CLI_ARGS) {
-    cliArgs.push(...process.env.UNITY_MCP_CLI_ARGS.split(" ").filter(Boolean));
+const extraCliArgs = process.env.UNITY_MCP_CLI_ARGS || envLocal.UNITY_MCP_CLI_ARGS;
+if (extraCliArgs) {
+    cliArgs.push(...extraCliArgs.split(" ").filter(Boolean));
 }
 
 let child = null;
@@ -212,9 +220,21 @@ function spawnChild() {
     }
     lastSpawnAt = Date.now();
     failPending("Unity CLI restarted; retry the request.");
-    child = spawn(cliCommand, cliArgs, {
+    stdoutBuffer = "";
+    const spawned = spawn(cliCommand, cliArgs, {
         stdio: ["pipe", "pipe", "pipe"],
         env: process.env,
+    });
+    child = spawned;
+    // A closed pipe must fail the current requests instead of crashing the
+    // HTTP bridge with an unhandled EPIPE. Old children cannot clear a newer
+    // child's state when their exit events arrive late.
+    spawned.stdin.on("error", (error) => {
+        if (child !== spawned) return;
+        child = null;
+        stdoutBuffer = "";
+        failPending(`Unity CLI input closed: ${error.message}; retry the request.`);
+        spawned.kill();
     });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -259,12 +279,15 @@ function spawnChild() {
         process.stderr.write(`[unity mcp] ${chunk}`);
     });
     child.on("exit", (code, signal) => {
+        if (child !== spawned) return;
         child = null;
+        stdoutBuffer = "";
         failPending(
             `Unity CLI exited (code=${code ?? "null"}${signal ? `, signal=${signal}` : ""}); retry the request.`,
         );
     });
     child.on("error", (error) => {
+        if (child !== spawned) return;
         process.stderr.write(`[unity-mcp] failed to spawn ${cliCommand}: ${error.message}\n`);
         const failedChild = child;
         child = null;
@@ -304,15 +327,14 @@ function forwardRequest(message) {
             pending.set(internalId, { resolve, timer, originalId: message.id });
             child.stdin.write(`${JSON.stringify({ ...message, id: internalId })}\n`);
         } catch (error) {
-            if (internalId) pending.delete(internalId);
+            if (internalId) {
+                const entry = pending.get(internalId);
+                if (entry) clearTimeout(entry.timer);
+                pending.delete(internalId);
+            }
             resolve(jsonRpcError(message.id, -32000, error?.message || String(error)));
         }
     });
-}
-
-function ensureChild() {
-    if (!child || !child.stdin.writable) spawnChild();
-    return child;
 }
 
 // ---------------------------------------------------------------------------
@@ -350,8 +372,13 @@ function startHttpServer(port, host, onListening) {
             response.writeHead(200, { "content-type": "application/json" });
             response.end(
                 JSON.stringify({
+                    bridge: "dataviz-unity-mcp",
+                    instanceId: INSTANCE_ID,
+                    bridgePid: process.pid,
                     ok: Boolean(child && child.exitCode === null),
                     cli: `${cliCommand} ${cliArgs.join(" ")}`.trim(),
+                    projectPath,
+                    authRequired: Boolean(token),
                     pid: child?.pid ?? null,
                 }),
             );
@@ -359,14 +386,6 @@ function startHttpServer(port, host, onListening) {
         }
         if (url.pathname !== "/mcp") {
             response.writeHead(404).end();
-            return;
-        }
-        if (request.method === "DELETE") {
-            response.writeHead(204).end();
-            return;
-        }
-        if (request.method !== "POST") {
-            response.writeHead(405, { allow: "POST, DELETE" }).end();
             return;
         }
         if (token) {
@@ -379,6 +398,14 @@ function startHttpServer(port, host, onListening) {
                 response.end(JSON.stringify({ error: "unauthorized" }));
                 return;
             }
+        }
+        if (request.method === "DELETE") {
+            response.writeHead(204).end();
+            return;
+        }
+        if (request.method !== "POST") {
+            response.writeHead(405, { allow: "POST, DELETE" }).end();
+            return;
         }
         const chunks = [];
         request.on("data", (chunk) => chunks.push(chunk));
@@ -393,18 +420,10 @@ function startHttpServer(port, host, onListening) {
                 );
                 return;
             }
-            try {
-                ensureChild();
-            } catch (error) {
-                response.writeHead(200, { "content-type": "application/json" });
-                response.end(JSON.stringify(jsonRpcError(null, -32000, error.message)));
-                return;
-            }
             handleRpcMessage(message)
                 .then((result) => {
                     if (result === null) {
-                        response.writeHead(202, { "content-type": "application/json" });
-                        response.end("{}");
+                        response.writeHead(202).end();
                         return;
                     }
                     response.writeHead(200, { "content-type": "application/json" });
@@ -424,7 +443,23 @@ function startHttpServer(port, host, onListening) {
         console.log(`[unity-mcp] HTTP MCP server listening on http://${displayedHost}:${port}/mcp`);
         console.log(`[unity-mcp] Health: http://${displayedHost}:${port}/healthz`);
         console.log(`[unity-mcp] Auth: ${token ? "bearer token required" : "OPEN (no UNITY_MCP_TOKEN configured)"}`);
-        if (onListening) onListening();
+        // A listen callback proves only that a socket was bound. Check the
+        // actual HTTP response and instance identity before publishing configs.
+        verifyLocalHttp(port, host)
+            .then(async () => {
+                console.log(`[unity-mcp] Local HTTP self-check passed (bridge PID ${process.pid}, instance ${INSTANCE_ID}).`);
+                if (onListening) await onListening();
+                console.log("[unity-mcp] Startup complete.");
+            })
+            .catch((error) => {
+                console.error(`[unity-mcp] Startup failed: ${error.message}`);
+                console.error("[unity-mcp] Check the port's owning process and VS Code Ports view for a reverse tunnel. Unity has not been verified.");
+                process.exitCode = 1;
+                failPending("Bridge startup failed.");
+                child?.kill();
+                server.closeAllConnections();
+                server.close();
+            });
     });
     const shutdown = () => {
         try {
@@ -443,13 +478,54 @@ function startHttpServer(port, host, onListening) {
 // Startup: idempotent start, dynamic port fallback, persistence, client sync
 // ---------------------------------------------------------------------------
 
-function isPortFree(port, host) {
+function verifyLocalHttp(port, host) {
+    const hostname = host === "0.0.0.0" ? "127.0.0.1" : host === "::" ? "::1" : host;
+    return new Promise((resolve, reject) => {
+        // Core http bypasses HTTP_PROXY, ALL_PROXY, and fetch dispatchers.
+        const request = http.get({
+            hostname, port, path: "/healthz", agent: false,
+            signal: AbortSignal.timeout(3000),
+        }, (response) => {
+            let body = "";
+            response.setEncoding("utf8");
+            response.on("error", reject);
+            response.on("data", (chunk) => { body += chunk; });
+            response.on("end", () => {
+                try {
+                    const health = JSON.parse(body);
+                    if (response.statusCode !== 200 || health.instanceId !== INSTANCE_ID) {
+                        throw new Error("the loopback endpoint did not answer as this bridge instance");
+                    }
+                    resolve();
+                } catch (error) {
+                    reject(new Error(`Local HTTP self-check failed on ${hostname}:${port}: ${error.message}`));
+                }
+            });
+        });
+        request.on("error", (error) => reject(new Error(
+            `Local HTTP self-check failed on ${hostname}:${port}: ${error.message}`,
+        )));
+    });
+}
+
+function canBindPort(port, host) {
     return new Promise((resolve) => {
         const probe = net.createServer();
         probe.once("error", () => resolve(false));
         probe.once("listening", () => probe.close(() => resolve(true)));
-        probe.listen(port, host);
+        probe.listen({ port, host, exclusive: true });
     });
+}
+
+// Windows can bind a wildcard socket beside a loopback-only listener. The
+// specific listener then receives loopback traffic instead of this bridge.
+// Match DxCommandTerminal's check: reserve both addresses before choosing a port.
+async function isPortFree(port, host) {
+    if (!(await canBindPort(port, host))) return false;
+    if (host === "0.0.0.0" || host === "::" || host === "localhost") {
+        return canBindPort(port, "127.0.0.1");
+    }
+    return true;
 }
 
 // Detect an already-running unity-mcp bridge (ours) so re-running the npm
@@ -461,7 +537,8 @@ async function probeExistingBridge(port) {
         });
         if (!response.ok) return false;
         const body = await response.json();
-        return typeof body?.cli === "string" && body.cli.startsWith("unity mcp");
+        return body?.bridge === "dataviz-unity-mcp" ||
+            (typeof body?.cli === "string" && /(?:^|[/\\])unity(?:\.exe)? mcp(?: |$)/.test(body.cli));
     } catch {
         return false;
     }
@@ -471,12 +548,12 @@ async function probeExistingBridge(port) {
 // and every generated frontend config follow it. Idempotent; a no-op when the
 // recorded value already matches or when the port is the 9020 default and no
 // override exists.
-function persistPort(port) {
+async function persistPort(port) {
     const envLocalPath = path.join(WORKSPACE_ROOT, ".env.local");
     const line = `UNITY_MCP_HTTP_PORT=${port}`;
     let content = "";
     try {
-        content = fs.readFileSync(envLocalPath, "utf8");
+        content = await fs.promises.readFile(envLocalPath, "utf8");
     } catch {
         content = "# Machine-local credentials (gitignored).\n";
     }
@@ -490,7 +567,7 @@ function persistPort(port) {
         content += `\n# Auto-persisted by unity-mcp-host.mjs (dynamic port) on ${new Date().toISOString()}\n${line}\n`;
     }
     try {
-        fs.writeFileSync(envLocalPath, content, "utf8");
+        await fs.promises.writeFile(envLocalPath, content, "utf8");
     } catch (error) {
         process.stderr.write(
             `[unity-mcp] Could not persist port to .env.local: ${error.message}\n`,
@@ -502,12 +579,19 @@ function persistPort(port) {
 
 // Re-run the universal configurator so every agentic frontend config picks up
 // the new unity bridge port. Cross-platform: runs configure.mjs directly.
-function syncClientConfigs() {
-    const result = spawnSync(process.execPath, [path.join(SCRIPT_DIR, "configure.mjs")], {
-        cwd: WORKSPACE_ROOT,
-        stdio: "inherit",
+function syncClientConfigs(port) {
+    // Configuration can stall on host filesystem or command discovery. Keep
+    // the HTTP event loop responsive while it runs, with a bounded lifetime.
+    return new Promise((resolve) => {
+        const sync = spawn(process.execPath, [path.join(SCRIPT_DIR, "configure.mjs")], {
+            cwd: WORKSPACE_ROOT,
+            stdio: "inherit",
+            env: { ...process.env, UNITY_MCP_HTTP_PORT: String(port) },
+            timeout: 30000,
+        });
+        sync.once("error", () => resolve(false));
+        sync.once("exit", (code) => resolve(code === 0));
     });
-    return !result.error && result.status === 0;
 }
 
 async function main() {
@@ -577,17 +661,17 @@ Environment:
         port = allocated;
     }
 
-    startHttpServer(port, host, () => {
-        if (!persistPort(port)) return;
+    startHttpServer(port, host, async () => {
+        if (!(await persistPort(port))) return;
         console.log(
             `[unity-mcp] Persisted UNITY_MCP_HTTP_PORT=${port} to .env.local so client configs follow.`,
         );
-        if (process.env.UNITY_MCP_AUTO_SYNC === "0") {
+        if ((process.env.UNITY_MCP_AUTO_SYNC || envLocal.UNITY_MCP_AUTO_SYNC) === "0") {
             console.log("[unity-mcp] AUTO_SYNC disabled; run `npm run mcp:sync` to update MCP clients.");
             return;
         }
         console.log("[unity-mcp] Syncing MCP client configs across agentic frontends…");
-        if (syncClientConfigs()) {
+        if (await syncClientConfigs(port)) {
             console.log("[unity-mcp] MCP client configs updated (unity URL follows the new port).");
         } else {
             console.log("[unity-mcp] ⚠️ Config sync failed; run `npm run mcp:sync` manually.");
