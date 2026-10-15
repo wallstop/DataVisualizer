@@ -158,3 +158,9 @@ jobs:
       - name: Run harness self-tests
         if: steps.check-scope.outputs.self-tests != 'skip'
         run: uv run scripts/tests/run_all.py --names "${{ steps.check-scope.outputs.selection }}"
+
+      # Temporary evidence collection for #249; remove before handoff.
+      - name: Compare full validation on the same runner
+        env:
+          COMPARISON_BASE: ${{ github.event.pull_request.base.sha }}
+        run: uv run scripts/benchmark_ci_comparison.py --base "${{ env.COMPARISON_BASE }}"
