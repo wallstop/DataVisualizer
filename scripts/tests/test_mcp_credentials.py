@@ -26,11 +26,13 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
 from pathlib import Path
 from typing import Dict, Optional
+from urllib.request import Request, urlopen
 
 sys.dont_write_bytecode = True
 
@@ -88,7 +90,9 @@ class StubEndpoint:
             def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - http.server's name
                 pass
 
-        self._server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        # Probe clients may open idle connections before sending requests.
+        # Give each connection a worker so it cannot block another probe.
+        self._server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.port = self._server.server_address[1]
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
@@ -428,6 +432,18 @@ def case_doctor_never_prints_secret_values() -> None:
     sandbox.destroy()
 
 
+def case_stub_handles_an_idle_connection_without_blocking_probes() -> None:
+    stub = StubEndpoint(LIVE)
+    idle = socket.create_connection(("127.0.0.1", stub.port), timeout=2)
+    try:
+        request = Request(stub.url, data=b"{}", headers={"Authorization": f"Bearer {LIVE}"})
+        with urlopen(request, timeout=2) as response:
+            assert_eq("an idle connection must not block another probe", "200", str(response.status))
+    finally:
+        idle.close()
+        stub.stop()
+
+
 CASES = (
     case_sync_reports_divergent_github_alias,
     case_sync_reports_divergent_zai_alias,
@@ -440,6 +456,7 @@ CASES = (
     case_repair_reconciles_divergent_github_pair,
     case_repair_refuses_when_neither_credential_authenticates,
     case_repair_respects_reverse_divergence,
+    case_stub_handles_an_idle_connection_without_blocking_probes,
     case_repair_leaves_matching_pair_untouched,
     case_repair_never_prints_secret_values,
     case_repair_preserves_bom_and_line_endings,

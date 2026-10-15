@@ -64,13 +64,16 @@ def resolve(env_file: Path, variable: str, overrides: Optional[Dict[str, str]] =
     leak into a fixture.
     """
     bash = shutil.which("bash")
-    assert_true(bash is not None, "bash must be on PATH; the loader subject is a bash script")
+    if bash is None:
+        raise RuntimeError("bash must be on PATH; the loader subject is a bash script")
     env: Dict[str, str] = {"PATH": BASE_PATH, "HOME": HOME}
     if overrides:
         env.update(overrides)
     # ``printf %s "${!3}"`` prints the variable named by the third argument.
-    script = '. "$1"; load_env_local "$2"; printf %s "${!3}"'
-    command = [bash, "-c", script, "_", bash_path(LOADER), bash_path(env_file), variable]
+    # MSYS Bash can prepend its runtime paths at process startup. Set the
+    # fixture PATH after startup so this tests the loader's precedence alone.
+    script = 'PATH="$4"; . "$1"; load_env_local "$2"; printf %s "${!3}"'
+    command = [bash, "-c", script, "_", bash_path(LOADER), bash_path(env_file), variable, env["PATH"]]
     completed = subprocess.run(
         command,
         env=env,
@@ -204,7 +207,8 @@ def case_repeated_load_is_idempotent() -> None:
             {"GITHUB_PERSONAL_ACCESS_TOKEN": "stale", "DATAVIZ_ENV_LOCAL_PRECEDENCE": "file"},
         )
         bash = shutil.which("bash")
-        assert_true(bash is not None, "bash must be on PATH; the loader subject is a bash script")
+        if bash is None:
+            raise RuntimeError("bash must be on PATH; the loader subject is a bash script")
         script = '. "$1"; load_env_local "$2"; load_env_local "$2"; printf %s "${!3}"'
         completed = subprocess.run(
             [
