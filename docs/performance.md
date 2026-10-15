@@ -1,64 +1,74 @@
 # Measured performance
 
-This page reports what the editor window actually costs on a recorded host, produced by a reproducible measurement driver instead of impressions. The numbers below are the first
-published baseline: one host, one session, with every limitation stated. The measurement harness (roadmap area T01) keeps extending the scenario set, and this page grows with it.
+This page reports a complete 100-, 1,000-, and 10,000-asset run on one recorded host. It gives measured window, search, and selection costs, with the fixture-creation cost and
+other limitations stated separately. These samples do not establish a performance guarantee.
 
 ## How the numbers are produced
 
-The driver lives at `Tests/Editor/PerfBaseline.cs`. It stages deterministic `PlayModeDataObject` fixture datasets, then measures inside the editor with monotonic `Stopwatch`
-timers, so no tool transport ever pollutes a sample. The current driver runs 100, 1,000, and 10,000 assets; this published baseline contains only the 100- and 1,000-asset results:
+The driver lives at `Tests/Editor/PerfBaseline.cs`. It stages deterministic `PlayModeDataObject` fixture datasets and measures with monotonic `Stopwatch` timers inside the editor.
+Transport latency is not added to each duration.
 
 - **Fixture import** is the wall time of the single `AssetDatabase.Refresh` after fixture creation. The timer excludes the preceding `AssetDatabase.CreateAsset` loop, so this
   number does not measure the total cost of creating or importing the dataset.
-- **Window open to index ready** runs from `CreateGUI` until the production search cache reports populated — the same flag the window's asynchronous batch loader flips for a user.
-  _Cold_ is the first open after staging; _warm_ numbers come from repeated open-close cycles of the same already-imported dataset, after two discarded warm-ups.
-- **Search first results** types a query into the production search field and measures until the results list carries a row, including any deferral the search performs. The results
-  list displays at most 25 rows, so match counts saturate at the cap.
+- **Window open to index ready** runs from `CreateGUI` until the production search cache reports populated. _Cold_ means the first open after staging in an already-running editor;
+  it does not mean a fresh editor or an empty filesystem cache. _Warm_ numbers come from repeated open-close cycles of the same dataset, after two discarded warm-ups.
+- **Search first results** changes the query in the production search field and waits for a result row, including any search deferral. The visible list is capped at 25 rows, so
+  match counts saturate at that cap.
 - **Selection** measures the production `SelectObject` call for a mid-list fixture asset.
 
-The run writes one JSON report (schema 1) recording the environment block, every raw sample, and the repetition counts, so two runs compare without reinterpreting prose. A
-25-minute watchdog fails the run closed, removing its fixtures and windows on every exit path.
+The run writes a schema-1 JSON report with the environment, raw samples, and repetition counts. A 45-minute watchdog is checked on editor ticks and fails the run closed. It cannot
+interrupt synchronous fixture staging; teardown runs when control returns to the driver and removes its fixtures and windows.
 
 ## Recorded environment
 
-| Property                                            | Value                                                |
-| --------------------------------------------------- | ---------------------------------------------------- |
-| Unity                                               | 6000.5.2f1 (Windows Editor)                          |
-| OS                                                  | Windows 11 (10.0.26200)                              |
-| CPU                                                 | Snapdragon X Elite X1E80100, 12 cores                |
-| Memory                                              | ~65 GB                                               |
-| GPU                                                 | Qualcomm Adreno X1-85                                |
-| Display                                             | one, 96 DPI, editor pixels-per-point 1.0, dark theme |
-| Pre-existing ScriptableObject assets in the project | 214                                                  |
+The run started at 22:43:42 UTC and generated its report at 23:24:07 UTC on 2026-10-14. The measured Unity source matches
+[main at ec085b1](https://github.com/wallstop/DataVisualizer/commit/ec085b1596775eac6be5071b23f5da9870097973), including the type-only asset relevance change from
+[#228](https://github.com/wallstop/DataVisualizer/pull/228). [Download the unchanged raw report](performance-baseline-2026-10-14.json).
+
+| Property                                     | Value                                                |
+| -------------------------------------------- | ---------------------------------------------------- |
+| Unity / package                              | 6000.5.2f1 (Windows Editor) / 0.1.0                  |
+| OS                                           | Windows 11 (10.0.26200)                              |
+| CPU                                          | Snapdragon X Elite X1E80100, 12 cores                |
+| Memory                                       | 65,011 MB                                            |
+| GPU                                          | Qualcomm Adreno X1-85                                |
+| Display                                      | one, 96 DPI, editor pixels-per-point 1.0, dark theme |
+| ScriptableObject assets outside the fixtures | 214, verified after cleanup                          |
+
+The raw report's `preExistingScriptableObjectAssets` field says 10,214 because it was captured before teardown and includes the final 10,000 fixtures. The raw file is preserved as
+emitted; this field defect is tracked in [#243](https://github.com/wallstop/DataVisualizer/issues/243).
 
 ## Results
 
-Every row is milliseconds; warm and sampled scenarios report min / median / max over five samples.
+Every value is milliseconds, rounded to one decimal place. Warm, search, and selection rows show min / median / max over five samples; cold and refresh rows are single samples.
 
-| Scenario                               | 100 assets            | 1,000 assets             |
-| -------------------------------------- | --------------------- | ------------------------ |
-| Fixture import (single sample)         | 40.3                  | 40.7                     |
-| Window open to index ready, cold       | 2478.3                | 2050.1                   |
-| Window open to index ready, warm       | 483.1 / 511.8 / 581.8 | 1043.7 / 1251.5 / 1715.8 |
-| Search first results (13 / 25 matches) | 54.6 / 58.3 / 235.1   | 79.4 / 92.0 / 107.0      |
-| Selection                              | 32.4 / 33.1 / 45.2    | 20.3 / 23.0 / 25.2       |
+| Scenario                                    | 100 assets            | 1,000 assets             | 10,000 assets            |
+| ------------------------------------------- | --------------------- | ------------------------ | ------------------------ |
+| Fixture import (single sample)              | 31.7                  | 4971.2                   | 561.2                    |
+| Window open to index ready, cold            | 1984.6                | 2220.4                   | 6951.4                   |
+| Window open to index ready, warm            | 548.0 / 580.0 / 720.9 | 1197.6 / 1390.7 / 2418.8 | 6883.2 / 7771.4 / 8578.4 |
+| Search first results (13 / 25 / 25 matches) | 60.6 / 71.3 / 320.2   | 139.7 / 192.2 / 650.9    | 336.7 / 368.2 / 611.6    |
+| Selection                                   | 38.1 / 41.1 / 66.5    | 35.2 / 39.5 / 44.3       | 18.1 / 20.7 / 25.1       |
 
 Reading the numbers:
 
-- The **cold** open includes one-time session costs (type catalog construction, first asset resolution), so it is not the number a daily user sees after the first open; the warm
-  median is the steady-state open cost. The cold single samples also vary with session history, which is why they are recorded as single samples and not medians.
-- **Search first results** has medians below 100 ms at both sizes, including any search deferral. The maxima exceed 100 ms (235.1 ms at 100 assets and 107.0 ms at 1,000), so these
-  five-sample runs do not establish a worst-case or p95 guarantee. The visible result cap limits row building to 25 results.
-- The **warm** open grows roughly with dataset size at this scale, and the async batch loader keeps the window responsive while it fills; see
-  [The object list fills in gradually](troubleshooting.md#the-object-list-fills-in-gradually) for what that looks like in practice.
+- Warm open medians rise from 580 ms to 1,391 ms to 7,771 ms. At 10,000 assets, the first open takes 6,951 ms and the warm maximum reaches 8,578 ms. The object list fills gradually
+  while the index loads; see [The object list fills in gradually](troubleshooting.md#the-object-list-fills-in-gradually).
+- Search first-results medians are 71 ms, 192 ms, and 368 ms. The 1,000- and 10,000-asset medians exceed 100 ms, and every size has a maximum above 100 ms. Five samples do not
+  establish a p95 or worst-case guarantee.
+- Selection medians are 41 ms, 39 ms, and 21 ms. Search displays 13 rows at 100 assets and the capped 25 rows at both larger sizes; these timings do not measure rendering every
+  match.
+- The final 10,000-asset refresh takes 561 ms, but the complete run takes about 40 minutes. Main-thread status requests were unavailable for roughly 36 minutes between the
+  1,000-asset warm phase and the 10,000-asset warm phase. The driver does not time fixture creation separately, so this report cannot identify that interval's exact cause or
+  establish fast end-to-end creation/import.
+
+The [earlier 100-/1,000-asset baseline](https://github.com/wallstop/DataVisualizer/blob/51b37b8/docs/performance.md) remains in repository history. These are separate sessions, not
+a controlled before/after comparison. In particular, the 561 ms final refresh does not prove that the import-stall acceptance criterion in
+[#226](https://github.com/wallstop/DataVisualizer/issues/226) is satisfied.
 
 ## Current gaps
 
-Recorded explicitly rather than smoothed over:
-
-- A 10,000-asset result is not yet published. An earlier attempt exposed synchronous per-asset loads in the asset postprocessor
-  ([#226](https://github.com/wallstop/DataVisualizer/issues/226)). The type-only relevance fix has merged in [#228](https://github.com/wallstop/DataVisualizer/pull/228), but a
-  post-fix 10,000-asset run and the Unity test suites still need a host editor session. The table above is the earlier baseline; it does not demonstrate the fix's performance.
+- Total fixture creation/import time and a controlled 10,000-asset import-burst measurement remain unmeasured. The final refresh alone excludes preceding work.
 - Play Mode entry overhead and compile timings are separate roadmap areas (T03, T08) and are not measured here yet.
 - Cold scenarios are single samples; the full acceptance wants 30+ repetitions per warm scenario and cross-host spread (T01, T12).
 

@@ -1,0 +1,14 @@
+{
+  "schema": "1",
+  "generatedAtUtc": "2026-10-14T23:24:07.5889237Z",
+  "environment": {"unityVersion": "6000.5.2f1", "platform": "WindowsEditor", "operatingSystem": "Windows 11  (10.0.26200)", "processorType": "Snapdragon(R) X Elite - X1E80100 - Qualcomm(R) Oryon(TM) CPU", "processorCount": 12, "systemMemoryMegabytes": 65011, "graphicsDevice": "Qualcomm(R) Adreno(TM) X1-85 GPU", "dpi": 96, "editorPixelsPerPoint": 1, "darkTheme": true, "displayCount": 1, "packageVersion": "0.1.0", "preExistingScriptableObjectAssets": 10214},
+  "repetitions": {"cold": 1, "warmWarmups": 2, "warmSamples": 5, "searchSamples": 5, "selectionSamples": 5},
+  "gaps": ["Play-entry and compile timings are not yet measured", "cold is a single sample per size", "cross-host spread is not yet collected"],
+  "scenarios": [
+    {"name": "fixture-import", "unit": "ms", "sizes": [{"size": 100, "samples": [31.736], "median": 31.736, "min": 31.736, "max": 31.736}, {"size": 1000, "samples": [4971.23], "median": 4971.23, "min": 4971.23, "max": 4971.23}, {"size": 10000, "samples": [561.237], "median": 561.237, "min": 561.237, "max": 561.237}]},
+    {"name": "window-open-to-index-ready", "unit": "ms", "sizes": [{"size": 100, "samples": [1984.646], "median": 1984.646, "min": 1984.646, "max": 1984.646}, {"size": 1000, "samples": [2220.398], "median": 2220.398, "min": 2220.398, "max": 2220.398}, {"size": 10000, "samples": [6951.372], "median": 6951.372, "min": 6951.372, "max": 6951.372}]},
+    {"name": "window-open-to-index-ready-warm", "unit": "ms", "sizes": [{"size": 100, "samples": [554.63, 579.977, 720.886, 547.953, 590.961], "median": 579.977, "min": 547.953, "max": 720.886}, {"size": 1000, "samples": [2418.796, 1390.709, 1526.809, 1345.783, 1197.618], "median": 1390.709, "min": 1197.618, "max": 2418.796}, {"size": 10000, "samples": [8578.364, 6883.166, 7250.129, 7771.447, 8184.176], "median": 7771.447, "min": 6883.166, "max": 8578.364}]},
+    {"name": "search-first-results", "unit": "ms", "sizes": [{"size": 100, "samples": [320.178, 71.304, 60.607, 73.55, 64.676], "median": 71.304, "min": 60.607, "max": 320.178, "matchCounts": [13, 13, 13, 13, 13]}, {"size": 1000, "samples": [193.198, 650.875, 139.737, 192.243, 152.446], "median": 192.243, "min": 139.737, "max": 650.875, "matchCounts": [25, 25, 25, 25, 25]}, {"size": 10000, "samples": [352.521, 570.796, 368.173, 611.641, 336.661], "median": 368.173, "min": 336.661, "max": 611.641, "matchCounts": [25, 25, 25, 25, 25]}]},
+    {"name": "selection", "unit": "ms", "sizes": [{"size": 100, "samples": [43.713, 39.59, 41.082, 66.492, 38.142], "median": 41.082, "min": 38.142, "max": 66.492}, {"size": 1000, "samples": [44.32, 41.98, 39.481, 37.11, 35.163], "median": 39.481, "min": 35.163, "max": 44.32}, {"size": 10000, "samples": [18.082, 25.053, 23.88, 20.685, 19.518], "median": 20.685, "min": 18.082, "max": 25.053}]}
+  ]
+}
