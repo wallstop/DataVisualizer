@@ -2,8 +2,9 @@
 """Runs the harness self-test suite, optionally narrowed by surface (issue #171).
 
 Every ``test_*.py`` file next to this script runs in a child interpreter
-with its output captured and replayed in name order. At most four files
-run at once, bounding the nested Node/Bash/Python subprocess load. The suite is typed
+with its output captured and replayed in name order. The bridge fixture
+runs alone before the remaining files run concurrently, protecting its
+cold Node startup from the suite's nested subprocess load. The suite is typed
 Python after the issue #171 migration, so the selection runs on any
 interpreter, including hosts that never had PowerShell.
 
@@ -85,12 +86,18 @@ def run_tests(selected: Sequence[str], python_executable: str) -> int:
         output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
         return name, completed.returncode, output
 
-    # Each file can spawn its own subprocesses. Bound file concurrency so
-    # cold Node/Bash startups are not starved on the Windows CI runner.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(_collect, name, run_one, results, lock) for name in selected]
-        for future in futures:
-            future.result()
+    # This fixture starts a real HTTP bridge with a readiness deadline.
+    # Isolate its cold startup instead of serializing unrelated test files.
+    bridge = "test_unity_mcp_host.py"
+    for name in selected:
+        if name == bridge:
+            _collect(name, run_one, results, lock)
+    remaining = [name for name in selected if name != bridge]
+    if remaining:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(remaining)) as executor:
+            futures = [executor.submit(_collect, name, run_one, results, lock) for name in remaining]
+            for future in futures:
+                future.result()
 
     # Completeness belt: a selected file without a recorded result cannot
     # count as passed. The worker conversion below should make this

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from unittest.mock import Mock, patch
 
 sys.dont_write_bytecode = True
 REPO = Path(__file__).resolve().parents[2]
@@ -85,7 +86,12 @@ class HostTests(unittest.TestCase):
         if os.name == 'nt' and self.process.poll() is None:
             # Windows terminate kills only the parent, leaving the CLI child
             # holding the fixture directory and log open.
-            subprocess.run(['taskkill', '/PID', str(self.process.pid), '/T', '/F'], capture_output=True, check=True)
+            command = ['taskkill', '/PID', str(self.process.pid), '/T', '/F']
+            result = subprocess.run(command, capture_output=True, check=False)
+            # The process can exit between poll and taskkill, or taskkill
+            # can kill the parent after one child has already exited.
+            if result.returncode != 0 and self.process.poll() is None:
+                self.fail(f"taskkill failed for bridge PID {self.process.pid}: {result.stdout!r} {result.stderr!r}")
         else:
             self.process.terminate()
         try:
@@ -217,6 +223,28 @@ class HostTests(unittest.TestCase):
         self.assertLess(time.monotonic() - start, 1)
         self.assertEqual(port_file.read_text(encoding='utf-8'), str(self.port))
         time.sleep(1.8)
+
+
+class CleanupTests(unittest.TestCase):
+    def test_taskkill_failure_requires_a_live_process(self) -> None:
+        for exit_code in (0, None):
+            with self.subTest(exit_code=exit_code):
+                host = HostTests('test_repeated_start_recognizes_absolute_cli_path')
+                process = Mock(pid=123)
+                process.poll.side_effect = [None, exit_code]
+                result = subprocess.CompletedProcess(['taskkill'], 255, stdout=b'parent exited', stderr=b'child exited')
+                def kill(command: list[str], *, capture_output: bool, check: bool) -> subprocess.CompletedProcess[bytes]:
+                    if check:
+                        raise subprocess.CalledProcessError(255, command, stderr=result.stderr)
+                    return result
+                with patch.object(host, 'process', process, create=True), patch('os.name', 'nt'), patch('subprocess.run', side_effect=kill):
+                    if exit_code is None:
+                        with self.assertRaisesRegex(AssertionError, 'child exited'):
+                            host.stop()
+                        process.wait.assert_not_called()
+                    else:
+                        host.stop()
+                        process.wait.assert_called_once_with(timeout=5)
 
 
 if __name__ == '__main__':
