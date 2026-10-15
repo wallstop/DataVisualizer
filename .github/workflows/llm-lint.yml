@@ -81,7 +81,7 @@ jobs:
   lint:
     name: Lint .llm harness (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -158,10 +158,3 @@ jobs:
       - name: Run harness self-tests
         if: steps.check-scope.outputs.self-tests != 'skip'
         run: uv run scripts/tests/run_all.py --names "${{ steps.check-scope.outputs.selection }}"
-
-      # Temporary evidence collection for #249; remove before handoff.
-      - name: Compare full validation on the same runner
-        if: github.event_name == 'pull_request' && steps.check-scope.outputs.self-tests != 'skip'
-        env:
-          COMPARISON_BASE: ${{ github.event.pull_request.base.sha }}
-        run: uv run scripts/benchmark_ci_comparison.py --base "${{ env.COMPARISON_BASE }}"
