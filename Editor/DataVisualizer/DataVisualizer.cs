@@ -30,6 +30,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
     public sealed class DataVisualizer : EditorWindow
     {
+        private const string WindowIconGuid = "c1138ae8224b4c65958ad1e30815ff51";
         private const string PackageId = "com.wallstop-studios.data-visualizer";
         private const string PrefsPrefix = "WallstopStudios.Editor.DataVisualizer.";
 
@@ -442,8 +443,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         [MenuItem("Tools/Wallstop Studios/DxVisualizer")]
         public static void ShowWindow()
         {
-            DataVisualizer window = GetWindow<DataVisualizer>("DxVisualizer");
-            window.titleContent = new GUIContent("DxVisualizer");
+            DataVisualizer window = GetWindow<DataVisualizer>();
 
             bool initialSizeApplied = EditorPrefs.GetBool(PrefsInitialSizeAppliedKey, false);
             if (!MonitorUtility.ShouldApplyInitialPlacement(initialSizeApplied, window.docked))
@@ -1527,6 +1527,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void OnEnable()
         {
+            titleContent = new GUIContent(EditorGUIUtility.TrTextContentWithIcon("DxVisualizer", AssetDatabase.GUIDToAssetPath(WindowIconGuid)));
             _hasObservedInitialWindowGeometry = false;
             _packagePlacementPending = false;
             _windowSettleDeadline = EditorApplication.timeSinceStartup + WindowGeometrySettleSeconds;
