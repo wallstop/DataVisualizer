@@ -184,7 +184,7 @@ class ExportTests(unittest.TestCase):
                     return original_stat(path)
 
                 output = io.StringIO()
-                with patch.object(exporter, "encode_verified", side_effect=self.encoded), patch.object(exporter.os, "replace", side_effect=replace), patch.object(Path, "stat", new=inspect), contextlib.redirect_stdout(output):
+                with patch.object(exporter, "encode_verified", side_effect=self.encoded), patch.object(exporter.os, "replace", side_effect=replace), patch.object(Path, "stat", new=inspect), patch.object(Path, "lstat", new=inspect), contextlib.redirect_stdout(output):
                     self.assertEqual(exporter.main(["--source-dir", directory]), 1)
                 recovery = list(root.glob(".docs-webp-*"))
                 self.assertEqual(len(recovery), 1)

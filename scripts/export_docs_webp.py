@@ -21,6 +21,7 @@ import os
 import shutil
 import stat
 import struct
+import sys
 import tempfile
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, cast
@@ -116,11 +117,18 @@ def _remove_readonly(remove: Callable[[str], None], path: str, _error: object) -
     remove(path)
 
 
+def _remove_staging(path: Path) -> None:
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=_remove_readonly)
+    else:
+        shutil.rmtree(path, onerror=_remove_readonly)
+
+
 def _publish_batch(pending: Sequence[Tuple[Path, bytes]], output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     with ExitStack() as cleanup:
         staging = Path(tempfile.mkdtemp(prefix=".docs-webp-", dir=output_dir))
-        cleanup.callback(shutil.rmtree, staging, onerror=_remove_readonly)
+        cleanup.callback(_remove_staging, staging)
         prepared = staging / "prepared"
         previous = staging / "previous"
         prepared.mkdir()
