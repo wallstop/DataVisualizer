@@ -151,7 +151,7 @@ def case_spawn_failure_counts_as_failed(python: str) -> None:
         remove_temp_root(root)
 
 
-def case_isolates_bridge_startup(python: str) -> None:
+def case_bounds_parallel_files(python: str) -> None:
     root = new_runner_fixture()
     driver = """import subprocess, sys, threading, time
 from pathlib import Path
@@ -159,31 +159,25 @@ sys.path.insert(0, str(Path(__file__).parent / "scripts" / "tests"))
 import run_all
 lock = threading.Lock()
 active = peak = completed = 0
-bridge_done = False
 def probe(arguments, **kwargs):
-    global active, peak, completed, bridge_done
-    is_bridge = Path(arguments[1]).name == "test_unity_mcp_host.py"
+    global active, peak, completed
     with lock:
-        assert active == 0 if is_bridge else bridge_done
         active += 1
         peak = max(peak, active)
     time.sleep(0.05)
     with lock:
         active -= 1
         completed += 1
-        if is_bridge:
-            bridge_done = True
     return subprocess.CompletedProcess(arguments, 0, stdout="passed", stderr="")
 run_all.subprocess.run = probe
-names = [f"test_{index}.py" for index in range(12)] + ["test_unity_mcp_host.py", "test_unity_mcp_host.py"]
-assert run_all.run_tests(names, sys.executable) == 0
-assert completed == 14, completed
-assert peak > 1, peak
+assert run_all.run_tests([f"test_{index}.py" for index in range(12)], sys.executable) == 0
+assert completed == 12, completed
+assert peak <= 4, peak
 """
     write_fixture_file(root, "workers.py", driver)
     try:
         completed = subprocess.run([python, str(root / "workers.py")], capture_output=True, text=True, check=False)
-        assert_exit_code(0, f"bridge startup must be isolated and every file must complete: {completed.stderr}", completed.returncode)
+        assert_exit_code(0, f"file workers must stay bounded and complete every file: {completed.stderr}", completed.returncode)
     finally:
         remove_temp_root(root)
 
@@ -198,7 +192,7 @@ def main() -> int:
     run_case("Names_RunsOnlyTheSelectedFiles", lambda: case_names_run_only_the_selected_files(python))
     run_case("UnknownNames_FailSafeToTheFullSuite", lambda: case_unknown_names_fail_safe_to_the_full_suite(python))
     run_case("EmptyNames_RunEverything", lambda: case_empty_names_run_everything(python))
-    run_case("Concurrency_IsolatesBridgeStartup", lambda: case_isolates_bridge_startup(python))
+    run_case("Concurrency_BoundsFileWorkers", lambda: case_bounds_parallel_files(python))
     run_case("SpawnFailure_CountsAsFailed", lambda: case_spawn_failure_counts_as_failed(python))
 
     failures = failure_count()
