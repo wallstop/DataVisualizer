@@ -91,11 +91,11 @@ class CiLadderTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / '.github/workflows/llm-lint.yml').read_text(encoding='utf-8')
         block = workflow.split('- name: Run the repository lints', 1)[1].split('- name:', 1)[0]
-        self.assertIn("uv run scripts/run_ci_lints.py", block)
+        self.assertIn('uv run --no-project --python ">=3.9" scripts/run_ci_lints.py', block)
         self.assertNotIn('scripts/lint_', block)
         self.assertIn('uses: astral-sh/setup-uv@', workflow)
-        self.assertIn('uv run scripts/should_run_self_tests.py --github-actions', workflow)
-        self.assertIn('uv run scripts/tests/run_all.py --names', workflow)
+        self.assertIn('uv run --no-project --python ">=3.9" scripts/should_run_self_tests.py --github-actions', workflow)
+        self.assertIn('uv run --no-project --python ">=3.9" scripts/tests/run_all.py --names', workflow)
         self.assertNotIn('shell: bash', workflow)
         self.assertEqual(workflow.count('      - "pyproject.toml"'), 2)
 
