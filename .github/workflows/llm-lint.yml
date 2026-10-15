@@ -21,6 +21,8 @@ on:
       - ".prettierrc.json"
       - ".prettierignore"
       - ".csharpierrc"
+      - "pyproject.toml"
+      - "uv.lock"
       - "**/*.md"
       - ".devcontainer/**"
       - ".mcp.json"
@@ -50,6 +52,8 @@ on:
       - ".prettierrc.json"
       - ".prettierignore"
       - ".csharpierrc"
+      - "pyproject.toml"
+      - "uv.lock"
       - "**/*.md"
       - ".devcontainer/**"
       - ".mcp.json"
@@ -89,47 +93,18 @@ jobs:
           # itself, so a full history clone only spends runner time.
           fetch-depth: 1
 
-      # One step resolves the interpreter and classifies the change for the
-      # two expensible phases: which self-tests to run, and whether the npm
-      # install and the Prettier check can be affected at all. Both verdicts
-      # fail safe: an unresolvable base runs everything it guarded.
-      #
-      # Resolution validates that the interpreter actually executes: the
-      # Windows python3 App-Execution-Alias stub exists on PATH but is not a
-      # working interpreter, and silently falling back to a garbage verdict
-      # would turn every Windows run into the full suite. The two concerns
-      # share one step because every GitHub step pays runner shell and
-      # action overhead on both operating systems, and the scope step is the
-      # first consumer of the interpreter it resolves.
-      - name: Resolve the interpreter and the check scope
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.10"
+          enable-cache: false
+
+      # Typed Python owns shallow-base fetching and fail-safe scope outputs.
+      - name: Resolve the check scope
         id: check-scope
-        shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          set -euo pipefail
-          PYTHON=""
-          for candidate in python3 python; do
-            if command -v "${candidate}" >/dev/null 2>&1 && "${candidate}" -c "" 2>/dev/null; then
-              PYTHON="${candidate}"
-              break
-            fi
-          done
-          if [ -z "${PYTHON}" ]; then
-            echo "::error::no working Python 3 interpreter found"
-            exit 1
-          fi
-          echo "PYTHON=${PYTHON}" >> "${GITHUB_ENV}"
-          if [ -n "${BASE_SHA:-}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ] && ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
-            git fetch --depth=1 origin "${BASE_SHA}" || true
-          fi
-          # The verdict script is stdlib-only typed Python (issue #171). One
-          # call prints all three fail-safe key=value verdicts; Prettier reads
-          # the checked Markdown files, its config/ignore, and its pinned
-          # version, so a diff that touches none of them cannot change that
-          # verdict and the npm steps are skipped. An unresolvable base runs
-          # everything it guards.
-          "${PYTHON}" scripts/should_run_self_tests.py --base-sha "${BASE_SHA:-}" --ci-verdicts >> "${GITHUB_OUTPUT}"
+        run: uv run scripts/should_run_self_tests.py --github-actions
 
       # The lint job only installs prettier. Caching the installed tree lets a
       # package.json hit skip the install entirely — the extraction, not the
@@ -169,8 +144,7 @@ jobs:
       # One Python process runs the same ordered lints and index drift check.
       # Each script keeps its CLI arguments, diagnostics and first-failure exit.
       - name: Run the repository lints
-        shell: bash
-        run: '"${PYTHON}" scripts/run_ci_lints.py'
+        run: uv run scripts/run_ci_lints.py
 
       # The self-tests only verify the harness surface (scripts, .llm, CI and
       # devcontainer wiring, package manifests). Skip them when that surface is
@@ -179,11 +153,4 @@ jobs:
       # to 'all', which runs the full suite.
       - name: Run harness self-tests
         if: steps.check-scope.outputs.self-tests != 'skip'
-        shell: bash
-        run: |
-          selection="${{ steps.check-scope.outputs.selection }}"
-          if [ "${selection}" = "all" ] || [ -z "${selection}" ]; then
-            "${PYTHON}" scripts/tests/run_all.py
-          else
-            "${PYTHON}" scripts/tests/run_all.py --names "${selection}"
-          fi
+        run: uv run scripts/tests/run_all.py --names "${{ steps.check-scope.outputs.selection }}"

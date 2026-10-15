@@ -28,6 +28,10 @@ the llm-lint scope step consumes in one invocation:
 Ported from ``scripts/should-run-self-tests.ps1`` (issue #171); the verdict
 semantics are identical, only the interpreter changed.
 
+With ``--github-actions`` it reads ``BASE_SHA``, fetches a missing shallow
+base, and appends UTF-8 verdicts to ``GITHUB_OUTPUT``. Failed base resolution
+still runs every guarded check; missing/unwritable output files fail the step.
+
 Launch with ``uv run scripts/should_run_self_tests.py``; any Python 3.9+
 interpreter works.
 """
@@ -35,6 +39,10 @@ interpreter works.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -103,7 +111,13 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="print all three key=value CI verdicts (self-tests, selection, markdown) in one invocation",
     )
+    parser.add_argument(
+        "--github-actions", action="store_true",
+        help="fetch BASE_SHA if missing and append CI verdicts to GITHUB_OUTPUT",
+    )
     options = parser.parse_args(argv)
+    if options.github_actions and (options.ci_verdicts or options.selection or options.base_sha):
+        parser.error("--github-actions reads BASE_SHA and implies --ci-verdicts; pass no other output/base options")
     if options.ci_verdicts and options.selection:
         parser.error("--selection is implied by --ci-verdicts; pass only --ci-verdicts")
     return options
@@ -131,9 +145,44 @@ def print_ci_verdicts(repo_root: Path, base_sha: Optional[str]) -> None:
     print("markdown=run" if markdown_paths_changed(paths) else "markdown=skip")
 
 
+def github_actions_verdicts(repo_root: Path) -> int:
+    """Replace workflow shell logic while preserving fail-safe shallow comparisons."""
+    output = os.environ.get("GITHUB_OUTPUT", "")
+    if not output:
+        print("GITHUB_OUTPUT is required for --github-actions", file=sys.stderr)
+        return 2
+
+    requested = os.environ.get("BASE_SHA", "").strip()
+    base_sha = resolve_base_sha(repo_root, requested)
+    if base_sha is None and requested != _NULL_SHA and re.fullmatch(r"[0-9a-fA-F]{40}", requested):
+        try:
+            # Failed fetches must select the full suite, never skip checks.
+            subprocess.run(
+                ["git", "-C", str(repo_root), "fetch", "--depth=1", "origin", requested],
+                stdout=sys.stderr, stderr=sys.stderr, check=False, timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            print(f"[check-scope] base fetch unavailable: {error}", file=sys.stderr)
+        base_sha = resolve_base_sha(repo_root, requested)
+
+    verdicts = io.StringIO()
+    with contextlib.redirect_stdout(verdicts):
+        print_ci_verdicts(repo_root, base_sha)
+    try:
+        with Path(output).open("a", encoding="utf-8", newline="\n") as stream:
+            stream.write(verdicts.getvalue())
+    except OSError as error:
+        print(f"[check-scope] cannot write GitHub outputs: {error}", file=sys.stderr)
+        return 1
+    print(verdicts.getvalue(), end="")
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     options = parse_arguments(argv)
     repo_root = options.repo_root.resolve()
+    if options.github_actions:
+        return github_actions_verdicts(repo_root)
     base_sha = resolve_base_sha(repo_root, options.base_sha)
 
     if options.ci_verdicts:

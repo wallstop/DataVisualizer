@@ -98,16 +98,17 @@ def case_unknown_names_fail_safe_to_the_full_suite(python: str) -> None:
 def case_empty_names_run_everything(python: str) -> None:
     root = new_runner_fixture()
     try:
-        output, exit_code = invoke_runner(root, python, [])
-        assert_exit_code(1, "the full suite must run without a selection, so the failing stub fails", exit_code)
-        assert_true("surface selection" not in output, "an empty selection must not report a narrowed run")
-        assert_true("1 of 2 test file(s) failed" in output, f"both stub files must run, got: {output}")
+        for names in ([], ["all"]):
+            output, exit_code = invoke_runner(root, python, names)
+            assert_exit_code(1, "the full selection must run the failing stub", exit_code)
+            assert_true("1 of 2 test file(s) failed" in output, f"both stub files must run, got: {output}")
+            assert_true("surface selection" not in output, "a full selection must not report a narrowed run")
+            assert_true("unknown test file" not in output, "all is an explicit full-suite sentinel")
     finally:
         remove_temp_root(root)
 
 
-# A worker that cannot start a child must record a failure, not vanish: the
-# pwsh runner failed closed on a spawn error and the port must too.
+# A worker that cannot start a child must record a failure, not vanish.
 def case_spawn_failure_counts_as_failed(python: str) -> None:
     root = new_runner_fixture()
     driver = "\n".join(

@@ -10,6 +10,7 @@ mapped subject names now point at the ported ``test_*.py`` files.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -454,6 +455,55 @@ def case_ci_verdicts_fail_safe_when_the_base_cannot_be_resolved(python: str) -> 
         remove_temp_root(repo)
 
 
+def case_github_actions_outputs(python: str, scenario: str) -> None:
+    repo = new_scope_repo()
+    try:
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        scope_commit(repo, {"Editor/New.cs": "// changed\n"})
+        checkout = repo / "checkout"
+        completed = subprocess.run(
+            ["git", "clone", "--quiet", "--depth=1", repo.as_uri(), str(checkout)],
+            capture_output=True, text=True, check=False,
+        )
+        assert_exit_code(0, f"clone failed: {completed.stderr}", completed.returncode)
+        if scenario == "available":
+            _git_output(checkout, ["fetch", "--quiet", "--depth=1", "origin", base])
+        elif scenario == "failed-fetch":
+            _git_output(checkout, ["remote", "set-url", "origin", str(repo / "missing-origin")])
+        elif scenario == "null-base":
+            base = "0" * 40
+        output = repo / "step outputs.txt"
+        output.write_text("existing=preserved\n", encoding="utf-8")
+        environment = dict(os.environ, BASE_SHA=base, GITHUB_OUTPUT=str(output))
+        completed = subprocess.run(
+            [python, str(WRAPPER_PATH), "--repo-root", str(checkout), "--github-actions"],
+            env=environment, capture_output=True, text=True, encoding="utf-8", check=False,
+        )
+        assert_exit_code(0, f"GitHub scope failed: {completed.stderr}", completed.returncode)
+        verdicts = parse_ci_verdicts(completed.stdout)
+        expected = "run" if scenario in ("failed-fetch", "null-base") else "skip"
+        assert_true(verdicts["markdown"] == expected, f"{scenario} must preserve the Markdown verdict")
+        assert_true(verdicts["self-tests"] == expected, f"{scenario} must preserve the suite verdict")
+        assert_true(verdicts["selection"] == "all", "C#-only and fail-safe comparisons retain the full selection sentinel")
+        assert_true(output.read_bytes() == ("existing=preserved\n" + completed.stdout).encode("utf-8"), "outputs must append UTF-8 without a BOM or CRLF")
+    finally:
+        remove_temp_root(repo)
+
+
+def case_github_actions_rejects_unavailable_output(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        for destination, code in (("", 2), (str(repo), 1)):
+            environment = dict(os.environ, BASE_SHA="", GITHUB_OUTPUT=destination)
+            completed = subprocess.run(
+                [python, str(WRAPPER_PATH), "--repo-root", str(repo), "--github-actions"],
+                env=environment, capture_output=True, text=True, check=False,
+            )
+            assert_exit_code(code, "an unavailable output destination must fail CI", completed.returncode)
+    finally:
+        remove_temp_root(repo)
+
+
 def main() -> int:
     print("== Harness scope self-tests ==")
 
@@ -485,6 +535,11 @@ def main() -> int:
         ("Selection_AcceptsTheAvailableNames", lambda: case_selection_accepts_the_available_names(python)),
         ("SelectionOutput_NamesTheSubjectForAMappedCommit", lambda: case_selection_output_names_the_subject_for_a_mapped_commit(python)),
         ("SelectionOutput_FallsBackToAllForAnUnmappedCommit", lambda: case_selection_output_falls_back_to_all_for_an_unmapped_commit(python)),
+        ("GitHubActions_ExistingBase", lambda: case_github_actions_outputs(python, "available")),
+        ("GitHubActions_FetchShallowBase", lambda: case_github_actions_outputs(python, "shallow")),
+        ("GitHubActions_FailedFetchRunsEverything", lambda: case_github_actions_outputs(python, "failed-fetch")),
+        ("GitHubActions_NullBaseRunsEverything", lambda: case_github_actions_outputs(python, "null-base")),
+        ("GitHubActions_UnavailableOutputFails", lambda: case_github_actions_rejects_unavailable_output(python)),
         ("CiVerdicts_SkipADocsOnlyCommit", lambda: case_ci_verdicts_skip_a_docs_only_commit(python)),
         ("CiVerdicts_SkipMarkdownForACSharpOnlyCommit", lambda: case_ci_verdicts_skip_markdown_for_a_csharp_only_commit(python)),
         ("CiVerdicts_RunForAScriptsCommit", lambda: case_ci_verdicts_run_for_a_scripts_commit(python)),

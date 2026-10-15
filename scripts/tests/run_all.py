@@ -50,7 +50,7 @@ def discover_test_files() -> List[str]:
 def resolve_selection(names_csv: str, available: Sequence[str]) -> Tuple[List[str], bool]:
     """Resolve ``--names`` to selected files, failing safe to the full suite."""
     requested = [name.strip() for name in names_csv.split(",") if name.strip()]
-    if not requested:
+    if not requested or requested == ["all"]:
         return list(available), False
     unknown = [name for name in requested if name not in available]
     if unknown:
@@ -146,7 +146,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "--names",
         default="",
-        help="comma-separated test file names; empty runs everything",
+        help="comma-separated test file names; empty or all runs everything",
     )
     options = parser.parse_args(argv)
 
