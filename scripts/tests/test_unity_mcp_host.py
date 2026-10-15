@@ -74,7 +74,11 @@ fs.writeFileSync = (path, data, ...options) => {
             ready = root / 'writer-ready'
             while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.01)
-            self.assertTrue(ready.exists(), 'The writer must reach the paused empty-file state.')
+            if not ready.exists():
+                exit_code = process.poll()
+                process.kill()
+                _, errors = process.communicate(timeout=5)
+                self.fail(f'Writer did not reach the paused empty-file state; exit={exit_code}: {errors!r}')
             port_file = root / 'sync-port'
             self.assertFalse(port_file.exists(), 'Readers must not see an incomplete selected port.')
             _, errors = process.communicate(input=b'continue', timeout=5)
