@@ -22,7 +22,7 @@ def checked(arguments: list[str], root: Path) -> subprocess.CompletedProcess[str
 
 @contextlib.contextmanager
 def baseline_tree(root: Path, revision: str) -> Generator[Path, None, None]:
-    with tempfile.TemporaryDirectory(prefix="dv-ci-compare-") as directory:
+    with tempfile.TemporaryDirectory(prefix="dv-ci-compare-", dir=root.parent) as directory:
         target = Path(directory) / "baseline"
         checked(["git", "worktree", "add", "--detach", str(target), revision], root)
         try:
@@ -54,6 +54,9 @@ def main() -> int:
     parser.add_argument("--base", required=True)
     options = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
+    probe = subprocess.run(["git", "rev-parse", "--verify", f"{options.base}^{{commit}}"], cwd=root, capture_output=True, text=True, check=False)
+    if probe.returncode != 0:
+        checked(["git", "fetch", "--no-tags", "--depth=1", "origin", options.base], root)
     base = checked(["git", "rev-parse", options.base], root).stdout.strip()
     head = checked(["git", "rev-parse", "HEAD"], root).stdout.strip()
     rows: list[dict[str, object]] = []
@@ -68,7 +71,7 @@ def main() -> int:
     for label in ("baseline", "candidate"):
         values = [float(str(row["seconds"])) for row in rows if row["label"] == label]
         totals[label] = statistics.median(values)
-    report = {"base": base, "head": head, "python": sys.version, "platform": platform.platform(), "cpu_count": os.cpu_count(), "samples": rows, "median_seconds": totals}
+    report = {"base": base, "head": head, "python": sys.version, "platform": platform.platform(), "cpu_count": os.cpu_count(), "roots": {"baseline": str(before), "candidate": str(root)}, "samples": rows, "median_seconds": totals}
     print("CI_COMPARISON_REPORT " + json.dumps(report), flush=True)
     return 0
 

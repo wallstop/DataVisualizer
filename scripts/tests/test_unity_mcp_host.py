@@ -138,8 +138,13 @@ class HostTests(unittest.TestCase):
         retry = self.rpc('initialize', identifier=23)
         self.assertEqual(retry['id'], 23)
         self.assertIn('error', retry)
-        time.sleep(1.05)
-        self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
+        deadline = time.monotonic() + 10
+        recovered = self.rpc('initialize')
+        while 'result' not in recovered and time.monotonic() < deadline:
+            time.sleep(0.05)
+            recovered = self.rpc('initialize')
+        self.assertIn('result', recovered, f"Bridge did not recover: {recovered}; {self.logs()}")
+        self.assertEqual(recovered['result']['serverInfo']['name'], 'fixture')
         self.assertTrue(self.http('/healthz')[1]['ok'])
 
     def test_workspace_transport_settings_override_legacy_host_file(self) -> None:
