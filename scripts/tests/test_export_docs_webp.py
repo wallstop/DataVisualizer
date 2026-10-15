@@ -156,7 +156,7 @@ class ExportTests(unittest.TestCase):
                     self.assertEqual(list(root.glob(".docs-webp-*")), [])
 
     def test_failed_rollback_reports_and_retains_recovery_files(self) -> None:
-        for failure in ("replacement", "metadata"):
+        for failure in ("replacement", "metadata", "interruption", "interruption-after"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 self.make_sources(root)
@@ -174,8 +174,13 @@ class ExportTests(unittest.TestCase):
                     if target == publication_target:
                         publication_failed = True
                         raise PermissionError("publication blocked")
-                    if failure == "replacement" and source.parent.name == "previous" and target == restore_target:
-                        raise PermissionError("restoration blocked")
+                    if source.parent.name == "previous" and target == restore_target:
+                        if failure == "replacement":
+                            raise PermissionError("restoration blocked")
+                        if failure.startswith("interruption"):
+                            if failure == "interruption-after":
+                                original_replace(source, target)
+                            raise KeyboardInterrupt("restoration interrupted")
                     original_replace(source, target)
 
                 def inspect(path: Path, **_kwargs: object) -> os.stat_result:
@@ -185,14 +190,22 @@ class ExportTests(unittest.TestCase):
 
                 output = io.StringIO()
                 with patch.object(exporter, "encode_verified", side_effect=self.encoded), patch.object(exporter.os, "replace", side_effect=replace), patch.object(Path, "stat", new=inspect), patch.object(Path, "lstat", new=inspect), contextlib.redirect_stdout(output):
-                    self.assertEqual(exporter.main(["--source-dir", directory]), 1)
+                    try:
+                        result = exporter.main(["--source-dir", directory])
+                    except KeyboardInterrupt:
+                        result = 130
                 recovery = list(root.glob(".docs-webp-*"))
                 self.assertEqual(len(recovery), 1)
-                self.assertEqual((recovery[0] / "previous" / restore_target.name).read_bytes(), old_layout)
+                self.assertEqual(result, 1)
+                preserved = restore_target if failure == "interruption-after" else recovery[0] / "previous" / restore_target.name
+                self.assertEqual(preserved.read_bytes(), old_layout)
+                self.assertTrue(list((recovery[0] / "previous").glob("*.webp")))
                 diagnostic = output.getvalue()
                 self.assertIn("publication blocked", diagnostic)
-                self.assertIn("metadata blocked" if failure == "metadata" else "restoration blocked", diagnostic)
-                self.assertIn(str(restore_target), diagnostic)
+                expected_error = {"replacement": "restoration blocked", "metadata": "metadata blocked", "interruption": "KeyboardInterrupt"}
+                self.assertIn("KeyboardInterrupt" if failure.startswith("interruption") else expected_error[failure], diagnostic)
+                if not failure.startswith("interruption"):
+                    self.assertIn(str(restore_target), diagnostic)
                 self.assertIn(f"recovery files preserved at {recovery[0]}", diagnostic)
 
     def test_non_file_output_is_rejected_before_publication(self) -> None:

@@ -96,8 +96,8 @@ pixelsPerPoint 1. Review fresh captures before updating dimensions; pass `--mani
 
 The exporter rejects missing or unexpected shots, wrong dimensions, uniform blank captures, and duplicate encoded images before writing. It checks that every decoded WebP pixel
 matches its PNG and that every copy is smaller. It stages the complete changed set before replacing outputs and keeps unchanged files intact. If publication fails, it restores
-previous files and removes new outputs. If a filesystem error also blocks restoration, the error names the retained `.docs-webp-*` recovery directory and affected files; restore
-the listed backups from its `previous/` folder and remove listed new outputs before retrying. Keep the reviewed PNGs in `docs/images/` as capture sources. Run
+previous files and removes new outputs. If restoration cannot finish, the error names the retained `.docs-webp-*` recovery directory and affected files; restore the listed backups
+from its `previous/` folder and remove listed new outputs before retrying. Keep the reviewed PNGs in `docs/images/` as capture sources. Run
 `uv run scripts/export_docs_webp.py --check` to verify the committed copies. Pillow is pinned by the export script and installed only for that local command; the site build uses
 the committed images.
 

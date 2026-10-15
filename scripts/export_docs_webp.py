@@ -128,7 +128,13 @@ def _publish_batch(pending: Sequence[Tuple[Path, bytes]], output_dir: Path) -> N
     output_dir.mkdir(parents=True, exist_ok=True)
     with ExitStack() as cleanup:
         staging = Path(tempfile.mkdtemp(prefix=".docs-webp-", dir=output_dir))
-        cleanup.callback(_remove_staging, staging)
+        cleanup_safe = True
+
+        def remove_staging_if_safe() -> None:
+            if cleanup_safe:
+                _remove_staging(staging)
+
+        cleanup.callback(remove_staging_if_safe)
         prepared = staging / "prepared"
         previous = staging / "previous"
         prepared.mkdir()
@@ -140,31 +146,38 @@ def _publish_batch(pending: Sequence[Tuple[Path, bytes]], output_dir: Path) -> N
             (prepared / target.name).write_bytes(encoded)
             if original is not None:
                 shutil.copy2(target, previous / target.name)
+        # Retain backups before the first published mutation. Cleanup becomes
+        # safe again only after a complete publication or restoration.
+        cleanup_safe = False
         try:
             for target, _ in pending:
                 os.replace(prepared / target.name, target)
         except BaseException as error:
             failures: List[str] = []
-            for target, _ in reversed(pending):
-                # A successful replace consumes its staged file. Use that
-                # filesystem state so interruption cannot miss an undo entry.
-                try:
-                    if _stat_or_none(prepared / target.name) is not None:
-                        continue
-                    backup = previous / target.name
-                    if _stat_or_none(backup) is not None:
-                        os.replace(backup, target)
-                    else:
-                        target.unlink(missing_ok=True)
-                except OSError as restore_error:
-                    failures.append(f"{target}: {restore_error}")
+            try:
+                for target, _ in reversed(pending):
+                    # A successful replace consumes its staged file. Use that
+                    # filesystem state so interruption cannot miss an undo entry.
+                    try:
+                        if _stat_or_none(prepared / target.name) is not None:
+                            continue
+                        backup = previous / target.name
+                        if _stat_or_none(backup) is not None:
+                            os.replace(backup, target)
+                        else:
+                            target.unlink(missing_ok=True)
+                    except OSError as restore_error:
+                        failures.append(f"{target}: {restore_error}")
+            except BaseException as restore_error:
+                failures.append(f"Rollback interrupted ({type(restore_error).__name__}: {restore_error})")
             if failures:
-                cleanup.pop_all()
                 raise OSError(
                     f"Publication failed ({error}); rollback incomplete: {'; '.join(failures)}; "
                     f"recovery files preserved at {staging}"
                 ) from error
+            cleanup_safe = True
             raise
+        cleanup_safe = True
 
 
 def export(source_dir: Path, output_dir: Path, check: bool, manifest: Path = DEFAULT_MANIFEST) -> int:
