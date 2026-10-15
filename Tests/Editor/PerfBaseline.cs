@@ -227,6 +227,67 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return cycle == 0 ? title : $"{title} {cycle:D6}";
         }
 
+        internal static string BuildEnvironmentJson()
+        {
+            return new StringBuilder(1024)
+                .Append("{\"unityVersion\": \"")
+                .Append(JsonEscape(Application.unityVersion))
+                .Append("\"")
+                .Append(", \"platform\": \"")
+                .Append(JsonEscape(Application.platform.ToString()))
+                .Append("\"")
+                .Append(", \"operatingSystem\": \"")
+                .Append(JsonEscape(SystemInfo.operatingSystem))
+                .Append("\"")
+                .Append(", \"processorType\": \"")
+                .Append(JsonEscape(SystemInfo.processorType))
+                .Append("\"")
+                .Append(", \"processorCount\": ")
+                .Append(SystemInfo.processorCount)
+                .Append(", \"systemMemoryMegabytes\": ")
+                .Append(SystemInfo.systemMemorySize)
+                .Append(", \"graphicsDevice\": \"")
+                .Append(JsonEscape(SystemInfo.graphicsDeviceName))
+                .Append("\"")
+                .Append(", \"dpi\": ")
+                .Append(Screen.dpi.ToString("0.#", CultureInfo.InvariantCulture))
+                .Append(", \"editorPixelsPerPoint\": ")
+                .Append(EditorGUIUtility.pixelsPerPoint.ToString("0.###", CultureInfo.InvariantCulture))
+                .Append(", \"darkTheme\": ")
+                .Append(EditorGUIUtility.isProSkin ? "true" : "false")
+                .Append(", \"displayCount\": ")
+                .Append(Display.displays != null ? Display.displays.Length : 0)
+                .Append(", \"packageVersion\": \"")
+                .Append(JsonEscape(ReadPackageVersion()))
+                .Append("\"")
+                .Append(", \"preExistingScriptableObjectAssets\": ")
+                .Append(CountScriptableObjectAssets())
+                .Append("}")
+                .ToString();
+        }
+
+        internal static int CountScriptableObjectAssets()
+        {
+            try
+            {
+                int count = 0;
+                foreach (string guid in AssetDatabase.FindAssets("t:ScriptableObject"))
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    if (!path.StartsWith(FixtureFolder + "/", StringComparison.Ordinal))
+                    {
+                        count++;
+                    }
+                }
+
+                return count;
+            }
+            catch (Exception)
+            {
+                return -1;
+            }
+        }
+
         private static void Tick()
         {
             RunState state = _active;
@@ -742,45 +803,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return json.ToString();
         }
 
-        private static string BuildEnvironmentJson()
-        {
-            return new StringBuilder(1024)
-                .Append("{\"unityVersion\": \"")
-                .Append(JsonEscape(Application.unityVersion))
-                .Append("\"")
-                .Append(", \"platform\": \"")
-                .Append(JsonEscape(Application.platform.ToString()))
-                .Append("\"")
-                .Append(", \"operatingSystem\": \"")
-                .Append(JsonEscape(SystemInfo.operatingSystem))
-                .Append("\"")
-                .Append(", \"processorType\": \"")
-                .Append(JsonEscape(SystemInfo.processorType))
-                .Append("\"")
-                .Append(", \"processorCount\": ")
-                .Append(SystemInfo.processorCount)
-                .Append(", \"systemMemoryMegabytes\": ")
-                .Append(SystemInfo.systemMemorySize)
-                .Append(", \"graphicsDevice\": \"")
-                .Append(JsonEscape(SystemInfo.graphicsDeviceName))
-                .Append("\"")
-                .Append(", \"dpi\": ")
-                .Append(Screen.dpi.ToString("0.#", CultureInfo.InvariantCulture))
-                .Append(", \"editorPixelsPerPoint\": ")
-                .Append(EditorGUIUtility.pixelsPerPoint.ToString("0.###", CultureInfo.InvariantCulture))
-                .Append(", \"darkTheme\": ")
-                .Append(EditorGUIUtility.isProSkin ? "true" : "false")
-                .Append(", \"displayCount\": ")
-                .Append(Display.displays != null ? Display.displays.Length : 0)
-                .Append(", \"packageVersion\": \"")
-                .Append(JsonEscape(ReadPackageVersion()))
-                .Append("\"")
-                .Append(", \"preExistingScriptableObjectAssets\": ")
-                .Append(CountScriptableObjectAssets())
-                .Append("}")
-                .ToString();
-        }
-
         private static string ReadPackageVersion()
         {
             const string marker = "\"version\":";
@@ -800,18 +822,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             catch (Exception)
             {
                 return "unknown";
-            }
-        }
-
-        private static int CountScriptableObjectAssets()
-        {
-            try
-            {
-                return AssetDatabase.FindAssets("t:ScriptableObject").Length;
-            }
-            catch (Exception)
-            {
-                return -1;
             }
         }
 

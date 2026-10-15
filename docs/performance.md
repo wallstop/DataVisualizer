@@ -36,7 +36,7 @@ The run started at 22:43:42 UTC and generated its report at 23:24:07 UTC on 2026
 | ScriptableObject assets outside the fixtures | 214, verified after cleanup                          |
 
 The raw report's `preExistingScriptableObjectAssets` field says 10,214 because it was captured before teardown and includes the final 10,000 fixtures. The raw file is preserved as
-emitted; this field defect is tracked in [#243](https://github.com/wallstop/DataVisualizer/issues/243).
+emitted. New reports exclude the benchmark fixture folder from this count; see [#243](https://github.com/wallstop/DataVisualizer/issues/243).
 
 ## Results
 
