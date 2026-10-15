@@ -473,7 +473,8 @@ def case_github_actions_outputs(python: str, scenario: str) -> None:
         elif scenario == "null-base":
             base = "0" * 40
         output = repo / "step outputs.txt"
-        output.write_text("existing=preserved\n", encoding="utf-8")
+        previous = b"existing=preserved\r\n"
+        output.write_bytes(previous)
         environment = dict(os.environ, BASE_SHA=base, GITHUB_OUTPUT=str(output))
         completed = subprocess.run(
             [python, str(WRAPPER_PATH), "--repo-root", str(checkout), "--github-actions"],
@@ -485,7 +486,7 @@ def case_github_actions_outputs(python: str, scenario: str) -> None:
         assert_true(verdicts["markdown"] == expected, f"{scenario} must preserve the Markdown verdict")
         assert_true(verdicts["self-tests"] == expected, f"{scenario} must preserve the suite verdict")
         assert_true(verdicts["selection"] == "all", "C#-only and fail-safe comparisons retain the full selection sentinel")
-        assert_true(output.read_bytes() == ("existing=preserved\n" + completed.stdout).encode("utf-8"), "outputs must append UTF-8 without a BOM or CRLF")
+        assert_true(output.read_bytes() == previous + completed.stdout.encode("utf-8"), "outputs must preserve existing bytes and append UTF-8 without a BOM or CRLF")
     finally:
         remove_temp_root(repo)
 
