@@ -112,6 +112,14 @@ mention a reviewer in a comment, call a reviewer-request API, or otherwise trigg
 review. Monitor and address reviews that arrive through the repository's existing
 configuration or that another participant submits independently.
 
+## Close the planning record
+
+Before handoff, apply [Planning and session records](../../context.md#planning-and-session-records):
+move completed work and validation evidence to the session record, remove completed
+plan entries, and leave `No task selected.` when the task ends. Keep only unresolved
+future actions and links in `PLAN.md`; check its size and preserve each remaining
+action in its owning issue or roadmap. Do not paste this checklist into the plan.
+
 ## Related Skills
 
 - [manage-skills](./manage-skills/SKILL.md) - how to keep the harness itself valid

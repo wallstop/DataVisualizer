@@ -145,6 +145,20 @@ lands there as annotated, stdlib-first Python; `uvx pyright` validates types loc
   `.llm/code-samples/` or `.llm/references/`.
 - After editing any skill: regenerate the index, then run `npm run lint:llm`.
 
+### Planning and session records
+
+- `PLAN.md` holds one current task and a short rule for selecting future work from live GitHub state. Aim for 40 lines and 400 words or fewer; the existing 150-line lint cap is a
+  safety ceiling, not a target. Long table cells and paragraphs do not make a plan lean.
+- When asked to select work, inspect current default-branch CI and open GitHub issues, including recent comments, dependencies, and linked PRs. Follow `GOAL.md` for priority and
+  scope; use the roadmap only when no actionable issue remains. Do not maintain a fixed issue list in the plan. Specific issue details belong only in the selected current task.
+- For the current task, state the outcome, acceptance criteria, scope, and necessary validation. At handoff, replace it with `No task selected.`; do not append a completion
+  narrative or retain the last PR's status.
+- Move completed work, measurements, validation evidence, and repository-state snapshots to `progress/session-NNN-brief-description.md`. Put durable constraints here or in
+  `.llm/references/`, reusable procedures in `.llm/skills/`, and detailed future scope in [the roadmap](./references/roadmap.md). Link to the owning source instead of copying it.
+- Before each handoff, remove completed entries and duplicate context, check that every unresolved action still has a destination, and recheck plan size. Verify issue status before
+  selecting work; do not keep a historical issue-state ledger or a second roadmap table in the plan.
+- `PLAN.md`, `GOAL.md`, and `progress/` are ignored local working documents. Do not force-add them. Keep these maintenance rules in tracked agent guidance.
+
 ### Validation Ladder (Run After Each Change)
 
 Per-iteration speed: run `npm run check:fast` first (formats and lints only the files changed since the comparison base, and runs only the surface-selected harness self-tests: each
