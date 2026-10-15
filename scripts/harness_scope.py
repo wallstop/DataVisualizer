@@ -34,6 +34,7 @@ SURFACE_PREFIXES: Tuple[str, ...] = (
     ".github/",
     ".devcontainer/",
     ".config/",
+    "docs/images/data-visualizer-",
 )
 
 SURFACE_FILES: Tuple[str, ...] = (
@@ -42,6 +43,7 @@ SURFACE_FILES: Tuple[str, ...] = (
     "opencode.json",
     "pyproject.toml",
     "uv.lock",
+    "docs/images/capture-manifest.json",
     ".pre-commit-config.yaml",
     ".mcp.json",
     ".env.local.example",
@@ -54,6 +56,7 @@ SURFACE_FILES: Tuple[str, ...] = (
 # (issue #171); the migration's last .ps1 test file ported with the
 # host-analyzer installer tranche.
 SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
+    "docs/images/capture-manifest.json": ("test_export_docs_webp.py",),
     "scripts/build_docs.py": ("test_build_docs.py",),
     # Unity metadata cannot affect unrelated Python subjects. Keep this
     # companion on the same docs contract; unknown metadata stays fail-safe.
@@ -156,6 +159,7 @@ SUBJECT_PREFIXES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
         ),
     ),
     (".llm/", ("test_lint_llm_instructions.py", "test_file_lengths.py", "test_generate_skills_index.py")),
+    ("docs/images/data-visualizer-", ("test_export_docs_webp.py",)),
     (".github/", ("test_release_workflows.py", "test_release_secrets.py")),
 )
 

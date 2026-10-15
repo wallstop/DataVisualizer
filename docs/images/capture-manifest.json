@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "description": "Reviewed Windows Unity 6000.5 captures at pixelsPerPoint 1. Review dimension changes before updating this inventory.",
+  "captures": {
+    "layout": [
+      1180,
+      780
+    ],
+    "instance-actions": [
+      604,
+      749
+    ],
+    "create": [
+      917,
+      146
+    ],
+    "import": [
+      271,
+      462
+    ],
+    "search": [
+      1141,
+      262
+    ],
+    "settings": [
+      332,
+      177
+    ]
+  }
+}
