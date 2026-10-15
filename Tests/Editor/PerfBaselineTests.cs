@@ -3,11 +3,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System;
     using System.Collections.Generic;
     using NUnit.Framework;
+    using UnityEditor;
     using UnityEngine;
+    using PlayModeDataObject = WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject;
 
     /*
-        Pure-part coverage for the performance-baseline driver (T01 slice, #114): the
-        output-directory resolution contract, median statistics, and JSON escaping.
+        Coverage for the performance-baseline driver (T01 slice, #114): the
+        output-directory resolution contract, median statistics, JSON escaping,
+        and background asset accounting with a small temporary dataset.
         The staged-dataset measurements themselves run on a Unity host through the
         driver entry point and land in the JSON report; spinning a full fixture
         dataset inside an EditMode test would measure the host instead of the
@@ -87,6 +90,56 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldCarryTheSchemaVersionContract()
         {
             Assert.AreEqual("1", PerfBaseline.SchemaVersion);
+        }
+
+        [Test]
+        public void ShouldExcludeOnlyBenchmarkFixturesFromReportedBackgroundCount()
+        {
+            const string fixtureRoot = "Assets/PerfBaselineFixtures";
+            string suffix = Guid.NewGuid().ToString("N");
+            string sibling = fixtureRoot + "_" + suffix;
+            string nested = fixtureRoot + "/" + suffix;
+            using TestCleanupScope cleanup = new();
+            if (!AssetDatabase.IsValidFolder(fixtureRoot))
+            {
+                cleanup.Defer(() => AssetDatabase.DeleteAsset(fixtureRoot));
+                AssetDatabase.CreateFolder("Assets", "PerfBaselineFixtures");
+            }
+
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(sibling));
+            AssetDatabase.CreateFolder("Assets", "PerfBaselineFixtures_" + suffix);
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(nested));
+            AssetDatabase.CreateFolder(fixtureRoot, suffix);
+
+            int before = PerfBaseline.CountScriptableObjectAssets();
+            Assert.That(before, Is.GreaterThanOrEqualTo(0));
+            PlayModeDataObject background = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() =>
+            {
+                if (background != null && !AssetDatabase.Contains(background))
+                {
+                    UnityEngine.Object.DestroyImmediate(background);
+                }
+            });
+            AssetDatabase.CreateAsset(background, sibling + "/Background.asset");
+            int expected = before + 1;
+            Assert.AreEqual(expected, PerfBaseline.CountScriptableObjectAssets(), "A similarly named sibling belongs to the background workload.");
+
+            for (int index = 0; index < 3; index++)
+            {
+                PlayModeDataObject fixture = ScriptableObject.CreateInstance<PlayModeDataObject>();
+                cleanup.Defer(() =>
+                {
+                    if (fixture != null && !AssetDatabase.Contains(fixture))
+                    {
+                        UnityEngine.Object.DestroyImmediate(fixture);
+                    }
+                });
+                AssetDatabase.CreateAsset(fixture, nested + $"/Fixture{index}.asset");
+            }
+
+            Assert.AreEqual(expected, PerfBaseline.CountScriptableObjectAssets(), "Nested benchmark fixtures must not inflate the background workload.");
+            StringAssert.Contains($"\"preExistingScriptableObjectAssets\": {expected}}}", PerfBaseline.BuildEnvironmentJson());
         }
     }
 }
