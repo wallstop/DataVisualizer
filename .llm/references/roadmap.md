@@ -1,6 +1,6 @@
 # Modernization Roadmap: Areas T01-T12
 
-Detail behind the roadmap table in `PLAN.md`. Areas are priorities and outcome definitions, not a queue: select one bounded slice per run (`GOAL.md`). Mark an item delivered only
+Detailed future scope linked from `PLAN.md`. Areas are priorities and outcome definitions, not a queue: select one bounded slice per run (`GOAL.md`). Mark an item delivered only
 when the work is on the default branch; keep PR and issue references as the evidence.
 
 Status legend: `done` (all known scope on main), `partial`, `open` (no known scope delivered). Re-verify against GitHub issues before selecting work; issues override this file when
@@ -145,7 +145,8 @@ Delivered: MkDocs Material foundation with strict build and Pages publishing wor
 
 - [x] README hero imagery from the capture pipeline (#140, #143); README stays concise and links into the site.
 - [x] Troubleshooting page (incomplete indexing, stale metadata, missing scripts, small windows, capture limits, host/container paths) (#145).
-- [ ] Measured performance section once T01 produces numbers; captures embedded with captions and alt text, validated against the manifest.
+- [x] Measured performance section with the complete 100/1,000/10,000 baseline (docs/performance.md and its raw report; #244). Background-count correction remains #243.
+- [ ] Complete captures embedded with captions and alt text, validated against the manifest.
 - [x] Odin behavior documented separately from the default inspector contract (docs/extending.md, #134).
 
 Done when: the published site is accurate with working examples and complete screenshots; unavailable publication access is reported explicitly.
