@@ -103,22 +103,12 @@ Label editing is package-driven asset editing, so it is refused during the Play 
 
 ### Refresh the published search image
 
-After reviewing a regenerated `docs/images/data-visualizer-search.png`, refresh its WebP companion from the repository root. This verifies every decoded pixel before writing:
+After reviewing regenerated captures, use the shared six-shot exporter from the repository root:
 
 ```bash
-uv run --with Pillow==12.3.0 python - <<'PY'
-from io import BytesIO
-from pathlib import Path
-from PIL import Image
-source = Path("docs/images/data-visualizer-search.png")
-with Image.open(source) as image:
-    pixels = image.convert("RGBA")
-    encoded = BytesIO()
-    pixels.save(encoded, format="WEBP", lossless=True, exact=True, quality=100, method=6)
-    with Image.open(BytesIO(encoded.getvalue())) as decoded:
-        assert decoded.size == pixels.size
-        assert decoded.convert("RGBA").tobytes() == pixels.tobytes()
-    assert len(encoded.getvalue()) < source.stat().st_size
-    source.with_suffix(".webp").write_bytes(encoded.getvalue())
-PY
+uv run scripts/export_docs_webp.py
+uv run scripts/export_docs_webp.py --check
 ```
+
+Search is a required shot in the [capture inventory](images/capture-manifest.json). The exporter checks its dimensions, distinct image content, and decoded pixel equality with the
+PNG alongside the other five shots. See [capture regeneration](troubleshooting.md#recreating-the-documentation-images) for the complete workflow.
