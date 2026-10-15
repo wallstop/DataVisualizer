@@ -2,7 +2,8 @@
 """Runs the harness self-test suite, optionally narrowed by surface (issue #171).
 
 Every ``test_*.py`` file next to this script runs in a child interpreter
-with its output captured and replayed in name order. The suite is typed
+with its output captured and replayed in name order. At most four files
+run at once, bounding the nested Node/Bash/Python subprocess load. The suite is typed
 Python after the issue #171 migration, so the selection runs on any
 interpreter, including hosts that never had PowerShell.
 
@@ -29,6 +30,7 @@ scripts/tests/run_all.py``); any Python 3.9+ interpreter works.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import subprocess
 import sys
 import threading
@@ -82,11 +84,12 @@ def run_tests(selected: Sequence[str], python_executable: str) -> int:
         output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
         return name, completed.returncode, output
 
-    threads = [threading.Thread(target=_collect, args=(name, run_one, results, lock)) for name in selected]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    # Each file can spawn its own subprocesses. Bound file concurrency so
+    # cold Node/Bash startups are not starved on the Windows CI runner.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(_collect, name, run_one, results, lock) for name in selected]
+        for future in futures:
+            future.result()
 
     # Completeness belt: a selected file without a recorded result cannot
     # count as passed. The worker conversion below should make this
