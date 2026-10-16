@@ -141,9 +141,15 @@ jobs:
         if: steps.check-scope.outputs.markdown != 'skip' && steps.toolchain-cache.outputs.cache-hit != 'true'
         run: npm install --no-audit --no-fund
 
+      # Pull requests check only the changed Markdown (already resolved with
+      # .prettierignore semantics), so the step does not re-scan every
+      # tracked file; push events keep the full sweep, so everything merged
+      # to main was checked in full. Fail-safe and config changes report
+      # "all", which keeps the sweep. The list stays one comma-joined token
+      # so neither default runner shell has to split it.
       - name: Check Markdown formatting
         if: steps.check-scope.outputs.markdown != 'skip'
-        run: npm run format:md:check
+        run: uv run scripts/markdown_check.py ${{ github.event_name == 'push' && 'all' || steps.check-scope.outputs.markdown-files }}
 
       # One Python process runs the same ordered lints and index drift check.
       # Each script keeps its CLI arguments, diagnostics and first-failure exit.

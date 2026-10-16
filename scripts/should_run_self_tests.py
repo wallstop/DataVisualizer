@@ -24,6 +24,13 @@ the llm-lint scope step consumes in one invocation:
   working-tree Markdown edit also selects it; CI's fresh checkout is
   clean at HEAD, where the behavior matches the committed-only diff CI
   used to inline.
+- ``markdown-files=all|csv|`` — what the Markdown step checks when
+  ``markdown=run``: ``all`` keeps the full ``**/*.md`` sweep (formatter
+  config or manifest changed, or any fail-safe direction), otherwise the
+  comma-joined changed ``.md`` paths outside ``.prettierignore``, and an
+  empty value means the step is skipped anyway. The workflow checks the
+  explicit paths on pull requests and keeps the full sweep on push
+  events, so every merged commit was checked in full.
 
 Ported from ``scripts/should-run-self-tests.ps1`` (issue #171); the verdict
 semantics are identical, only the interpreter changed.
@@ -58,6 +65,7 @@ from harness_scope import (
     available_test_files,
     committed_changed_files,
     is_surface_path,
+    markdown_check_files,
     markdown_paths_changed,
     self_test_selection,
     working_tree_changed_files,
@@ -136,13 +144,16 @@ def print_ci_verdicts(repo_root: Path, base_sha: Optional[str]) -> None:
         print("self-tests=run")
         print("selection=all")
         print("markdown=run")
+        print("markdown-files=all")
         return
 
     paths = changed_paths(repo_root, base_sha)
     selection = self_test_selection(paths, available_test_files())
     print("self-tests=run" if any(is_surface_path(path) for path in paths) else "self-tests=skip")
     print("selection=all" if selection.all else "selection=" + ",".join(selection.names))
-    print("markdown=run" if markdown_paths_changed(paths) else "markdown=skip")
+    markdown_files = markdown_check_files(paths, repo_root)
+    print("markdown=run" if markdown_paths_changed(paths, repo_root) else "markdown=skip")
+    print("markdown-files=" + markdown_files)
 
 
 def github_actions_verdicts(repo_root: Path) -> int:
