@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
 import json
 import os
 import shutil
@@ -14,11 +15,93 @@ import time
 import unittest
 from pathlib import Path
 from typing import Any, Dict, Optional
+from unittest import mock
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 sys.dont_write_bytecode = True
 REPO = Path(__file__).resolve().parents[2]
+
+
+def cleanup_fixture_directory(directory: tempfile.TemporaryDirectory[str]) -> None:
+    # A terminating Windows CLI child can retain its current-directory handle briefly.
+    deadline = time.monotonic() + 2.0
+    while True:
+        try:
+            directory.cleanup()
+            return
+        except PermissionError as error:
+            if getattr(error, 'winerror', None) != 32 or deadline <= time.monotonic():
+                raise
+            time.sleep(0.01)
+
+
+class FixtureDirectoryCleanupTests(unittest.TestCase):
+    def test_cleanup_retries_only_temporary_sharing_violations(self) -> None:
+        for winerror in (None, 5, 32):
+            with self.subTest(winerror=winerror):
+                error = PermissionError('fixture lock')
+                if winerror is not None:
+                    setattr(error, 'winerror', winerror)
+                directory = tempfile.TemporaryDirectory()
+                with directory, mock.patch.object(directory, 'cleanup', side_effect=[error, None]) as remove, mock.patch('time.sleep') as sleep:
+                    if winerror == 32:
+                        cleanup_fixture_directory(directory)
+                        self.assertEqual(remove.call_count, 2)
+                        sleep.assert_called_once_with(0.01)
+                    else:
+                        with self.assertRaises(PermissionError) as raised:
+                            cleanup_fixture_directory(directory)
+                        self.assertIs(raised.exception, error)
+                        remove.assert_called_once_with()
+                        sleep.assert_not_called()
+
+    def test_cleanup_preserves_a_sharing_violation_at_the_deadline(self) -> None:
+        for clock, attempts in (([0.0, 2.0], 1), ([0.0, 0.0, 2.0], 2)):
+            with self.subTest(attempts=attempts):
+                error = PermissionError('persistent fixture lock')
+                setattr(error, 'winerror', 32)
+                directory = tempfile.TemporaryDirectory()
+                with directory, mock.patch.object(directory, 'cleanup', side_effect=error) as remove:
+                    with mock.patch('time.monotonic', side_effect=clock), mock.patch('time.sleep') as sleep:
+                        with self.assertRaises(PermissionError) as raised:
+                            cleanup_fixture_directory(directory)
+                        self.assertIs(raised.exception, error)
+                        self.assertEqual(remove.call_count, attempts)
+                        self.assertEqual(sleep.call_count, attempts - 1)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows locks process current directories')
+    def test_cleanup_waits_for_a_real_process_directory_lock(self) -> None:
+        with contextlib.ExitStack() as cleanup:
+            directory = tempfile.TemporaryDirectory(prefix='fixture-cwd-lock-')
+            cleanup.callback(directory.cleanup)
+            root = Path(directory.name)
+            holder = cleanup.enter_context(subprocess.Popen(
+                [sys.executable, '-c', "from pathlib import Path; import sys; Path('holder-ready').touch(); sys.stdin.buffer.read(1)"],
+                cwd=root, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            ))
+            cleanup.callback(holder.kill)
+            deadline = time.monotonic() + 5
+            while not (root / 'holder-ready').exists() and holder.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue((root / 'holder-ready').exists(), 'The subprocess must hold the fixture directory.')
+            remove = directory.cleanup
+            observed_errors: list[int] = []
+
+            def release_after_locked_cleanup() -> None:
+                try:
+                    remove()
+                except PermissionError as error:
+                    observed_errors.append(getattr(error, 'winerror', 0))
+                    _, errors = holder.communicate(input=b'release', timeout=5)
+                    self.assertEqual(holder.returncode, 0, errors.decode('utf-8', errors='replace'))
+                    raise
+
+            with mock.patch.object(directory, 'cleanup', side_effect=release_after_locked_cleanup):
+                cleanup_fixture_directory(directory)
+            self.assertEqual(observed_errors, [32])
+            self.assertFalse(root.exists())
+
 FAKE_CLI = r"""
 const readline = require('node:readline');
 readline.createInterface({ input: process.stdin }).on('line', line => {
@@ -40,7 +123,7 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
 class HostTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix='unity-mcp-host-')
-        self.addCleanup(self.temp.cleanup)
+        self.addCleanup(cleanup_fixture_directory, self.temp)
         self.root = Path(self.temp.name)
         script_dir = self.root / '.llm' / 'mcp'
         script_dir.mkdir(parents=True)
