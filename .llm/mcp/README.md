@@ -148,8 +148,8 @@ Security: the bridge listens on all interfaces by default (Linux Docker cannot r
 - **`npm run mcp:sync` on the host.** It runs `configure.mjs` directly (pure node, cross-platform); container hooks use the typed Python wrapper `sync_mcp.py`
   (`uv run .llm/mcp/sync_mcp.py [workspace_dir] [flags...]`). `hasCommand` uses `where` on Windows so `uvx`-gated servers register on the host too.
 - **Shared configs are environment-agnostic.** Sync produces identical files from the host and the container (verified by hash): the unity bridge URL always uses
-  `host.docker.internal` (resolves on the host under Docker Desktop too), and zai-image uses PATH-resolved `node` with a workspace-relative script. Never reintroduce `127.0.0.1` or
-  absolute binaries into shared entries — they silently break the other environment.
+  `host.docker.internal` (resolves on the host under Docker Desktop too), and zai-image uses the PATH-resolved `uv` runner with a workspace-relative script. Never reintroduce
+  `127.0.0.1` or absolute binaries into shared entries — they silently break the other environment.
 - **MCP auth fails in the container after editing `.env.local`.** `{env:VAR}` references expand at AGENT STARTUP: restart the agent from a fresh shell (interactive shells source
   `.env.local` via the bashrc loader, which now runs with `DATAVIZ_ENV_LOCAL_PRECEDENCE=file` so a rotated credential wins over a stale value already exported into the session — no
   container rebuild needed). VS Code is special: its extension host inherits the server's frozen environment, and `remoteEnv` forwards (`${localEnv:VAR}`) are empty unless the host
