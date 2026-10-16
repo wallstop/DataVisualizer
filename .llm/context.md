@@ -84,7 +84,8 @@ lands there as annotated, stdlib-first Python; `uvx pyright` validates types loc
     unordered collections, and `RemoveAll` is for predicate-based bulk removal.
 16. Use read-only collection interfaces for consumers. Mutation helpers that resize a collection should accept the concrete supported mutable type when a broader interface permits
     invalid inputs or adds measured dispatch cost; specialize only for collection shapes used by production callers.
-17. Unity generates `.meta` files for every non-dot path; commit them alongside new files. Dot-folders (`.llm`, `.github`) never get `.meta` files.
+17. Unity generates `.meta` files for every non-dot path; commit them alongside new files (new folders carry folder metas too). Dot-folders (`.llm`, `.github`) never get `.meta`
+    files. `scripts/lint_meta_companions.py` enforces the companions.
 18. Keep tests, docs imagery, and agent/dev files out of the npm tarball: `package.json` `files` whitelists only `Editor`, `Runtime`, and their `.meta` companions (docs imagery
     ships via GitHub, not npm). Static analyzer binaries, Unity metadata/labels, notices, and `-analyzer` response-file arguments must not exist in this package repository; install
     development-only analyzers in the host Unity project instead. Install or verify the pinned analyzer sets with

@@ -37,6 +37,8 @@ suites stay outside it.
 2. If any `.llm/**` file changed: `npm run lint:llm` (regenerates nothing; use
    `npm run lint:llm:fix` to auto-fix index drift and version sync, then review the
    diff and re-stage).
+2b. Added any file or folder outside dot folders: commit its Unity `.meta`
+   companion (folder metas too); `npm run lint:meta-companions` fails otherwise.
 3. `python scripts/tests/run_all.py` when `scripts/**` changed.
 4. `npm pack` when `package.json`, `files`, or shipped assets changed; confirm the
    tarball contains only `Editor`, `Runtime`, and package metadata payloads. Docs
