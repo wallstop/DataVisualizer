@@ -172,7 +172,7 @@ def probe(arguments, **kwargs):
 run_all.subprocess.run = probe
 assert run_all.run_tests([f"test_{index}.py" for index in range(12)], sys.executable) == 0
 assert completed == 12, completed
-assert peak <= 4, peak
+assert peak <= run_all.max_file_workers(), peak
 """
     write_fixture_file(root, "workers.py", driver)
     try:
