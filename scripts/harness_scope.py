@@ -220,8 +220,9 @@ def markdown_check_files(paths: Sequence[str], repo_root: Path = REPO_ROOT) -> s
     package manifest changed, or when the ignore list cannot be read, so
     the formatter never narrows on doubt. Otherwise it is the sorted,
     comma-joined changed ``.md`` paths that Prettier's own glob would check,
-    meaning paths under the ignore list's directory prefixes are excluded.
-    The empty string means the change cannot affect checked Markdown.
+    meaning paths that still exist on disk and sit outside the ignore
+    list's directory prefixes. The empty string means the change cannot
+    affect checked Markdown.
 
     CI's llm-lint workflow checks these explicit paths on pull requests so
     the step does not re-scan every tracked file; push events keep the full
@@ -234,6 +235,13 @@ def markdown_check_files(paths: Sequence[str], repo_root: Path = REPO_ROOT) -> s
             return _MARKDOWN_CHECK_ALL
         if normalized.endswith(".md"):
             files.append(normalized)
+    if not files:
+        return _MARKDOWN_UNCHANGED
+    # Deletions and rename old-sides appear in a git diff but not on disk,
+    # and Prettier exits 2 on a path that matches no file, so only paths
+    # that still exist may reach the formatter. When nothing remains, the
+    # change cannot affect checked Markdown.
+    files = [path for path in files if (repo_root / path).is_file()]
     if not files:
         return _MARKDOWN_UNCHANGED
     prefixes = _prettierignore_prefixes(repo_root)

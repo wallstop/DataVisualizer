@@ -434,6 +434,39 @@ def case_ci_verdicts_run_for_a_scripts_commit(python: str) -> None:
         remove_temp_root(repo)
 
 
+def case_ci_verdicts_skip_a_markdown_deletion(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        scope_commit(repo, {"README.md": "# Title\n"})
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        (repo / "README.md").unlink()
+        _git_output(repo, ["add", "-A"])
+        _git_output(repo, ["commit", "-q", "-m", "delete"])
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
+        assert_true(verdicts["markdown"] == "skip", "a deletion-only commit leaves no Markdown to check")
+        assert_true(verdicts["markdown-files"] == "", "a deleted path must not reach the formatter")
+    finally:
+        remove_temp_root(repo)
+
+
+def case_ci_verdicts_keep_only_the_rename_destination(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        scope_commit(repo, {"README.md": "# Title\n"})
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        (repo / "README.md").rename(repo / "GUIDE.md")
+        _git_output(repo, ["add", "-A"])
+        _git_output(repo, ["commit", "-q", "-m", "rename"])
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
+        assert_true(verdicts["markdown"] == "run", "a rename still leaves Markdown to check")
+        assert_true(
+            verdicts["markdown-files"] == "GUIDE.md",
+            "a rename must check only the destination that exists, got: " + verdicts["markdown-files"],
+        )
+    finally:
+        remove_temp_root(repo)
+
+
 def case_ci_verdicts_check_all_when_the_formatter_config_changes(python: str) -> None:
     repo = new_scope_repo()
     try:
@@ -580,6 +613,8 @@ def main() -> int:
         ("CiVerdicts_SkipMarkdownForACSharpOnlyCommit", lambda: case_ci_verdicts_skip_markdown_for_a_csharp_only_commit(python)),
         ("CiVerdicts_CheckAllWhenTheFormatterConfigChanges", lambda: case_ci_verdicts_check_all_when_the_formatter_config_changes(python)),
         ("CiVerdicts_SkipIgnoredMarkdownTrees", lambda: case_ci_verdicts_skip_ignored_markdown_trees(python)),
+        ("CiVerdicts_SkipAMarkdownDeletion", lambda: case_ci_verdicts_skip_a_markdown_deletion(python)),
+        ("CiVerdicts_KeepOnlyTheRenameDestination", lambda: case_ci_verdicts_keep_only_the_rename_destination(python)),
         ("CiVerdicts_RunForAScriptsCommit", lambda: case_ci_verdicts_run_for_a_scripts_commit(python)),
         ("CiVerdicts_FlagAWorkingTreeMarkdownEdit", lambda: case_ci_verdicts_flag_a_working_tree_markdown_edit(python)),
         ("CiVerdicts_FailSafeWhenTheBaseCannotBeResolved", lambda: case_ci_verdicts_fail_safe_when_the_base_cannot_be_resolved(python)),
