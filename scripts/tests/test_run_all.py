@@ -182,8 +182,6 @@ assert peak <= 4, peak
         remove_temp_root(root)
 
 
-
-
 def case_overlaps_files_after_bridge_startup(python: str) -> None:
     root = new_runner_fixture()
     driver = """import contextlib, io, subprocess, sys, threading
@@ -191,6 +189,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "scripts" / "tests"))
 import run_all
 mode = sys.argv[1]
+run_all.sys.platform = mode if mode in ("win32", "darwin") else "linux"
+bypass = mode in ("win32", "darwin")
 startup_file = "test_unity_mcp_host.py"
 archive_file = "test_validate_unitypackage.py"
 announced = threading.Event()
@@ -242,8 +242,11 @@ class Bridge:
         return 0 if mode.startswith("ready") or mode == "skipped-startup" else 9
 def probe(arguments, **kwargs):
     name = Path(arguments[1]).name
-    assert name != startup_file, "Bridge startup must be captured."
-    assert announced.is_set() if mode.startswith("ready") else finished.is_set()
+    if bypass:
+        assert "env" not in kwargs, "Other platforms must retain normal capture."
+    else:
+        assert name != startup_file, "Bridge startup must be captured."
+        assert announced.is_set() if mode.startswith("ready") else finished.is_set()
     other_started.set()
     with lock:
         completed.append(name)
@@ -256,22 +259,22 @@ if mode == "ready-repeated":
 output = io.StringIO()
 with contextlib.redirect_stdout(output):
     result = run_all.run_tests(selected, sys.executable)
-assert result == (0 if mode.startswith("ready") or mode == "skipped-startup" else 1), (result, output.getvalue())
+assert result == (0 if bypass or mode.startswith("ready") or mode == "skipped-startup" else 1), (result, output.getvalue())
 assert sorted(completed) == sorted(selected), completed
 remaining = list(selected)
 remaining.remove(startup_file)
 remaining.sort(key=lambda name: name != archive_file)
-assert submitted == [startup_file, *remaining], submitted
+assert submitted == (selected if bypass else [startup_file, *remaining]), submitted
 rendered = output.getvalue()
 if mode == "spawn-failure":
     assert "bridge launch failed" in rendered, rendered
-else:
+elif not bypass:
     assert "ordinary startup output" in rendered and "ordinary final output" in rendered
 assert all(marker not in rendered for marker in markers), rendered
 """
     write_fixture_file(root, "startup.py", driver)
     try:
-        for mode in ("ready", "failed-before-ready", "spawn-failure", "skipped-startup", "ready-repeated"):
+        for mode in ("ready", "failed-before-ready", "spawn-failure", "skipped-startup", "ready-repeated", "win32", "darwin"):
             result = subprocess.run([python, str(root / "startup.py"), mode], capture_output=True, text=True, check=False, timeout=30)
             assert_exit_code(0, f"{mode} must preserve startup, overlap and failure contracts: {result.stdout} {result.stderr}", result.returncode)
     finally:

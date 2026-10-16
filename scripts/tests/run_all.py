@@ -75,10 +75,11 @@ def run_tests(selected: Sequence[str], python_executable: str) -> int:
     lock = threading.Lock()
     startup_ready = threading.Event()
     startup_file = "test_unity_mcp_host.py"
+    coordinate_startup = sys.platform.startswith("linux") and startup_file in selected
     startup_marker = f"[run-all-ready:{os.getpid()}:{time.perf_counter_ns()}]"
 
     def run_one(name: str) -> Tuple[str, Optional[int], str]:
-        if name == startup_file:
+        if coordinate_startup and name == startup_file:
             try:
                 environment = dict(os.environ, DATAVIZ_HARNESS_STARTUP_MARKER=startup_marker)
                 with subprocess.Popen(
@@ -109,13 +110,14 @@ def run_tests(selected: Sequence[str], python_executable: str) -> int:
         output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
         return name, completed.returncode, output
 
-    # Give the bridge a quiet startup, then overlap its I/O and long archive checks.
+    # Linux measurements favor quiet bridge startup followed by overlapping I/O.
+    # Other platforms retain their existing launch path and input ordering.
     queued = list(selected)
     # Each file can spawn its own subprocesses. Bound file concurrency so
     # cold Node/Bash startups are not starved on the Windows CI runner.
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures: List[concurrent.futures.Future[None]] = []
-        if startup_file in queued:
+        if coordinate_startup:
             queued.remove(startup_file)
             futures.append(executor.submit(_collect, startup_file, run_one, results, lock))
             startup_ready.wait()
