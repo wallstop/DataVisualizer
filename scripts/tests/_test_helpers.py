@@ -146,6 +146,12 @@ def run_cases(cases: Sequence[Tuple[str, Callable[[], None]]], max_workers: Opti
     default stays the machine's CPU count, which is what the existing
     concurrent files already use.
 
+    Case bodies must not print: a body-printed line would land in worker
+    completion order instead of the submitted order the sequential runner
+    produced. Decide platform or capability skips in the caller's main before
+    the pool and print the SKIP lines there, as the ai-backends and
+    opencode-service-recycle mains do.
+
     Output stays byte-comparable to a sequential run: cases execute
     concurrently, but the PASS/FAIL lines print after every case settles,
     in the submitted order, through the same shapes ``run_case`` prints —
