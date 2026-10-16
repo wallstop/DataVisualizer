@@ -34,6 +34,7 @@ import concurrent.futures
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
 
@@ -129,6 +130,7 @@ def _collect(
     results: List[Tuple[str, Optional[int], str]],
     lock: threading.Lock,
 ) -> None:
+    started = time.perf_counter()
     try:
         result: Tuple[str, Optional[int], str] = run_one(name)
     except Exception as error:
@@ -137,6 +139,9 @@ def _collect(
         # let the suite report success. ``None`` counts as failed because
         # it is not the exit code of a test that ran.
         result = (name, None, f"[run-all] ERROR: could not run {name}: {error!r}")
+    elapsed = time.perf_counter() - started
+    result_name, exit_code, output = result
+    result = (result_name, exit_code, f"{output}\n[run-all] {name}: {elapsed:.3f}s")
     with lock:
         results.append(result)
 
