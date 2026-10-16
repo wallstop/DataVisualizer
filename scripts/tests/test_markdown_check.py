@@ -4,13 +4,15 @@
 The Markdown check script must keep its contract: ``all`` (or nothing)
 fails safe to the full sweep, the comma-joined token selects exactly the
 named paths, and a missing npm launcher fails closed. The command-building
-cases run in-process; the two end-to-end cases drive real Prettier through
-the local npm install, so a formatting regression cannot hide behind a
-rewritten command.
+cases run in-process; the integration cases drive real Prettier and skip
+with a notice where no local npm install provides it (CI skips the npm
+steps when Markdown is untouched).
 """
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -22,7 +24,15 @@ from _test_helpers import assert_exit_code, new_temp_root, remove_temp_root
 
 TESTS_DIR = Path(__file__).resolve().parent
 SCRIPT_PATH = TESTS_DIR.parent / "markdown_check.py"
+REPO_ROOT = TESTS_DIR.parent.parent
 FULL_SWEEP = ["npm", "run", "format:md:check"]
+
+
+def prettier_available() -> bool:
+    """Return whether the local npm install provides Prettier."""
+    if shutil.which("npx") is None:
+        return False
+    return any((REPO_ROOT / "node_modules" / ".bin").glob("prettier*"))
 
 
 sys.path.insert(0, str(SCRIPT_PATH.parent))
@@ -51,12 +61,26 @@ class MarkdownCheckScopeTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             invoke(["README.md", "docs/guide.md"])
 
-    def test_a_missing_launcher_fails_closed(self) -> None:
-        from markdown_check import resolve_executable
+    def test_an_empty_path_list_fails_safe_to_the_full_sweep(self) -> None:
+        self.assertEqual(invoke([",,"]), FULL_SWEEP)
 
-        self.assertIsNone(resolve_executable("definitely-not-an-npm-launcher"))
+    def test_a_missing_launcher_fails_closed(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH), "README.md"],
+            env={**os.environ, "PATH": ""},
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 2, "a missing launcher must fail closed with exit two")
+        self.assertIn("is not on PATH", completed.stderr)
 
     def test_a_formatted_file_passes_through_real_prettier(self) -> None:
+        if not prettier_available():
+            print("    SKIP: prettier is required to drive the check.")
+            return
         repo = new_temp_root(prefix="markdown-check-")
         try:
             target = repo / "formatted.md"
@@ -70,6 +94,9 @@ class MarkdownCheckScopeTests(unittest.TestCase):
             remove_temp_root(repo)
 
     def test_an_unformatted_file_fails_through_real_prettier(self) -> None:
+        if not prettier_available():
+            print("    SKIP: prettier is required to drive the check.")
+            return
         repo = new_temp_root(prefix="markdown-check-")
         try:
             target = repo / "unformatted.md"
