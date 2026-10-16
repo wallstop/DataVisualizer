@@ -364,13 +364,33 @@ function handleRpcMessage(message) {
     return forwardRequest(message);
 }
 
+function sendEarlyResponse(request, response, status, headers = {}, body = "") {
+    // Send the complete reply now, but let the client finish its request before
+    // ending the response. Closing over an unread body can reset Windows clients.
+    if (status !== 204) {
+        response.setHeader("content-length", Buffer.byteLength(body));
+    }
+    response.writeHead(status, headers);
+    response.flushHeaders();
+    if (body) response.write(body);
+    if (request.readableEnded) {
+        response.end();
+        return;
+    }
+    request.once("end", () => response.end());
+    request.resume();
+}
+
 function startHttpServer(port, host, onListening) {
     const token = resolveToken();
     const server = http.createServer((request, response) => {
         const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
         if (url.pathname === "/healthz") {
-            response.writeHead(200, { "content-type": "application/json" });
-            response.end(
+            sendEarlyResponse(
+                request,
+                response,
+                200,
+                { "content-type": "application/json" },
                 JSON.stringify({
                     bridge: "dataviz-unity-mcp",
                     instanceId: INSTANCE_ID,
@@ -385,7 +405,7 @@ function startHttpServer(port, host, onListening) {
             return;
         }
         if (url.pathname !== "/mcp") {
-            response.writeHead(404).end();
+            sendEarlyResponse(request, response, 404);
             return;
         }
         if (token) {
@@ -394,17 +414,16 @@ function startHttpServer(port, host, onListening) {
                 ? authorization.slice(7)
                 : "";
             if (!provided || !timingSafeEqual(provided, token)) {
-                response.writeHead(401, { "content-type": "application/json" });
-                response.end(JSON.stringify({ error: "unauthorized" }));
+                sendEarlyResponse(request, response, 401, { "content-type": "application/json" }, JSON.stringify({ error: "unauthorized" }));
                 return;
             }
         }
         if (request.method === "DELETE") {
-            response.writeHead(204).end();
+            sendEarlyResponse(request, response, 204);
             return;
         }
         if (request.method !== "POST") {
-            response.writeHead(405, { allow: "POST, DELETE" }).end();
+            sendEarlyResponse(request, response, 405, { allow: "POST, DELETE" });
             return;
         }
         const chunks = [];
