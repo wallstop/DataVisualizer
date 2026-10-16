@@ -235,22 +235,29 @@ class HostTests(unittest.TestCase):
         return (self.root / 'bridge.log').read_text(encoding='utf-8')
 
     def stop(self) -> None:
+        taskkill_failure: Optional[str] = None
         if os.name == 'nt' and self.process.poll() is None:
             # Windows terminate kills only the parent, leaving the CLI child
             # holding the fixture directory and log open.
             command = ['taskkill', '/PID', str(self.process.pid), '/T', '/F']
             result = subprocess.run(command, capture_output=True, check=False)
-            # The process can exit between poll and taskkill, or taskkill
-            # can kill the parent after one child has already exited.
-            if result.returncode != 0 and self.process.poll() is None:
-                self.fail(f"taskkill failed for bridge PID {self.process.pid}: {result.stdout!r} {result.stderr!r}")
+            # A partial taskkill failure can precede the parent's observed exit.
+            if result.returncode != 0:
+                taskkill_failure = f"taskkill failed for bridge PID {self.process.pid}: {result.stdout!r} {result.stderr!r}"
         else:
             self.process.terminate()
         try:
             self.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            self.process.kill()
-            self.process.wait(timeout=5)
+            try:
+                self.process.kill()
+                self.process.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired) as cleanup_error:
+                if taskkill_failure is not None:
+                    self.fail(f"{taskkill_failure}; forced cleanup failed: {cleanup_error}")
+                raise
+            if taskkill_failure is not None:
+                self.fail(taskkill_failure)
 
     def http(self, route: str, payload: Optional[Dict[str, Any]] = None, token: str = 'fixture-secret', method: Optional[str] = None) -> tuple[int, Any]:
         headers = {'content-type': 'application/json', 'authorization': f'Bearer {token}'}
@@ -384,24 +391,58 @@ class HostTests(unittest.TestCase):
 
 class CleanupTests(unittest.TestCase):
     def test_taskkill_failure_requires_a_live_process(self) -> None:
-        for exit_code in (0, None):
-            with self.subTest(exit_code=exit_code):
+        for state in ('already-exited', 'exits-while-waiting', 'remains-live'):
+            with self.subTest(state=state):
                 host = HostTests('test_repeated_start_recognizes_absolute_cli_path')
                 process = Mock(pid=123)
-                process.poll.side_effect = [None, exit_code]
-                result = subprocess.CompletedProcess(['taskkill'], 255, stdout=b'parent exited', stderr=b'child exited')
+                process.poll.side_effect = [None, 0 if state == 'already-exited' else None]
+                process.wait.return_value = 0
+                if state == 'remains-live':
+                    process.wait.side_effect = [subprocess.TimeoutExpired('bridge', 5), 0]
+                result = subprocess.CompletedProcess(['taskkill'], 255, stdout=b'parent terminated', stderr=b'child exited')
                 def kill(command: list[str], *, capture_output: bool, check: bool) -> subprocess.CompletedProcess[bytes]:
                     if check:
                         raise subprocess.CalledProcessError(255, command, stderr=result.stderr)
                     return result
                 with patch.object(host, 'process', process, create=True), patch('os.name', 'nt'), patch('subprocess.run', side_effect=kill):
-                    if exit_code is None:
-                        with self.assertRaisesRegex(AssertionError, 'child exited'):
+                    if state == 'remains-live':
+                        with self.assertRaisesRegex(AssertionError, 'parent terminated.*child exited'):
                             host.stop()
-                        process.wait.assert_not_called()
+                        self.assertEqual(process.wait.call_count, 2)
+                        process.kill.assert_called_once_with()
                     else:
                         host.stop()
                         process.wait.assert_called_once_with(timeout=5)
+                        process.kill.assert_not_called()
+
+    def test_taskkill_failure_keeps_forced_cleanup_errors(self) -> None:
+        for failure in ('kill', 'wait'):
+            with self.subTest(failure=failure):
+                host = HostTests('test_repeated_start_recognizes_absolute_cli_path')
+                process = Mock(pid=123)
+                process.poll.return_value = None
+                process.wait.side_effect = [subprocess.TimeoutExpired('bridge', 5), subprocess.TimeoutExpired('forced cleanup', 5)]
+                if failure == 'kill':
+                    process.kill.side_effect = OSError('cleanup denied')
+                result = subprocess.CompletedProcess(['taskkill'], 255, stdout=b'parent termination', stderr=b'child termination')
+                with patch.object(host, 'process', process, create=True), patch('os.name', 'nt'), patch('subprocess.run', return_value=result):
+                    with self.assertRaisesRegex(AssertionError, 'parent termination.*child termination.*forced cleanup failed') as raised:
+                        host.stop()
+                    expected = 'cleanup denied' if failure == 'kill' else 'forced cleanup'
+                    self.assertIn(expected, str(raised.exception))
+                    process.kill.assert_called_once_with()
+                    self.assertEqual(process.wait.call_count, 1 if failure == 'kill' else 2)
+
+    def test_successful_taskkill_retains_forced_cleanup(self) -> None:
+        host = HostTests('test_repeated_start_recognizes_absolute_cli_path')
+        process = Mock(pid=123)
+        process.poll.return_value = None
+        process.wait.side_effect = [subprocess.TimeoutExpired('bridge', 5), 0]
+        result = subprocess.CompletedProcess(['taskkill'], 0, stdout=b'terminated', stderr=b'')
+        with patch.object(host, 'process', process, create=True), patch('os.name', 'nt'), patch('subprocess.run', return_value=result):
+            host.stop()
+        process.kill.assert_called_once_with()
+        self.assertEqual(process.wait.call_args_list, [mock.call(timeout=5), mock.call(timeout=5)])
 
 
 if __name__ == '__main__':
