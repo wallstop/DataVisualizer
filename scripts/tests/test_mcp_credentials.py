@@ -97,8 +97,7 @@ class StubEndpoint:
         # Give each connection a worker so it cannot block another probe.
         self._server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.port = self._server.server_address[1]
-        # shutdown waits for this polling loop; keep fixture teardown responsive.
-        self._thread = threading.Thread(target=self._server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
 
     @property

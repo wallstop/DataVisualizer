@@ -85,10 +85,12 @@ def run_tests(selected: Sequence[str], python_executable: str) -> int:
         output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
         return name, completed.returncode, output
 
+    # Start the long bridge suite early so its I/O waits overlap other files.
+    scheduled = sorted(selected, key=lambda name: name != "test_unity_mcp_host.py")
     # Each file can spawn its own subprocesses. Bound file concurrency so
     # cold Node/Bash startups are not starved on the Windows CI runner.
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(_collect, name, run_one, results, lock) for name in selected]
+        futures = [executor.submit(_collect, name, run_one, results, lock) for name in scheduled]
         for future in futures:
             future.result()
 

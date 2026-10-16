@@ -182,6 +182,41 @@ assert peak <= 4, peak
         remove_temp_root(root)
 
 
+
+def case_overlaps_bridge_suite_with_the_other_files(python: str) -> None:
+    root = new_runner_fixture()
+    driver = """import subprocess, sys, threading
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent / "scripts" / "tests"))
+import run_all
+bridge_started = threading.Event()
+other_started = threading.Event()
+completed = []
+lock = threading.Lock()
+def probe(arguments, **kwargs):
+    name = Path(arguments[1]).name
+    if name == "test_unity_mcp_host.py":
+        bridge_started.set()
+        assert other_started.wait(5), "The bridge must overlap another file."
+    else:
+        assert bridge_started.wait(5), "The bridge must start before short files occupy every worker."
+        other_started.set()
+    with lock:
+        completed.append(name)
+    return subprocess.CompletedProcess(arguments, 0, stdout="passed", stderr="")
+run_all.subprocess.run = probe
+selected = [f"test_{index}.py" for index in range(6)] + ["test_unity_mcp_host.py"]
+assert run_all.run_tests(selected, sys.executable) == 0
+assert sorted(completed) == sorted(selected), completed
+"""
+    write_fixture_file(root, "overlap.py", driver)
+    try:
+        result = subprocess.run([python, str(root / "overlap.py")], capture_output=True, text=True, check=False, timeout=30)
+        assert_exit_code(0, f"the bridge suite must overlap short files without dropping work: {result.stdout} {result.stderr}", result.returncode)
+    finally:
+        remove_temp_root(root)
+
+
 def main() -> int:
     print("== run-all self-tests ==")
 
@@ -193,6 +228,7 @@ def main() -> int:
     run_case("UnknownNames_FailSafeToTheFullSuite", lambda: case_unknown_names_fail_safe_to_the_full_suite(python))
     run_case("EmptyNames_RunEverything", lambda: case_empty_names_run_everything(python))
     run_case("Concurrency_BoundsFileWorkers", lambda: case_bounds_parallel_files(python))
+    run_case("Concurrency_OverlapsBridgeSuite", lambda: case_overlaps_bridge_suite_with_the_other_files(python))
     run_case("SpawnFailure_CountsAsFailed", lambda: case_spawn_failure_counts_as_failed(python))
 
     failures = failure_count()
