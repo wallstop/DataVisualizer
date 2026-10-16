@@ -157,4 +157,8 @@ jobs:
       # to 'all', which runs the full suite.
       - name: Run harness self-tests
         if: steps.check-scope.outputs.self-tests != 'skip'
+        env:
+          TMPDIR: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: uv run scripts/tests/run_all.py --names "${{ steps.check-scope.outputs.selection }}"
