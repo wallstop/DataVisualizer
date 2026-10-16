@@ -76,13 +76,25 @@ def is_meta_relevant(path: str) -> bool:
 
 
 def _git_check_ignored(repo_root: Path, paths: Sequence[str]) -> List[str]:
-    """Return the subset of paths git ignores (never present on a fresh checkout)."""
+    """Return the subset of paths git ignores.
+
+    Each path is asked twice, bare and with a trailing slash: directory-only
+    rules (``Cache/``) match only the slash form, and a scanned asset is
+    often absent from disk (a fresh checkout), where git cannot infer
+    directory-ness from the filesystem. Verified forms: bare-vs-``Cache/``
+    does not match, ``Cache/``-vs-``Cache/`` matches even when absent.
+    """
     if not paths:
         return []
+    variants: List[str] = []
+    for path in paths:
+        variants.append(path)
+        if not path.endswith("/"):
+            variants.append(path + "/")
     try:
         completed = subprocess.run(
             ["git", "-C", str(repo_root), "check-ignore", "--stdin", "-z"],
-            input=("\0".join(paths) + "\0").encode("utf-8"),
+            input=("\0".join(variants) + "\0").encode("utf-8"),
             capture_output=True,
             check=False,
         )
@@ -90,7 +102,8 @@ def _git_check_ignored(repo_root: Path, paths: Sequence[str]) -> List[str]:
         return []
     if completed.returncode not in (0, 1):
         return []
-    return [entry.decode("utf-8", errors="replace") for entry in completed.stdout.split(b"\0") if entry]
+    reported = [entry.decode("utf-8", errors="replace") for entry in completed.stdout.split(b"\0") if entry]
+    return sorted({entry.rstrip("/") for entry in reported})
 
 
 def missing_companions(paths: Sequence[str], repo_root: Path) -> List[str]:

@@ -206,15 +206,19 @@ def case_folder_companion_for_ignored_only_folder_is_tolerated() -> None:
     sandbox = LintSandbox()
     try:
         seed_baseline(sandbox)
-        # A committed folder meta whose folder holds only ignored content is
-        # the tracked __pycache__ shape: the folder exists on disk, so the
-        # companion is not an orphan.
+        # The fresh-checkout shape: the folder exists nowhere on disk (its
+        # only content is ignored), and the .gitignore rule is the
+        # directory-only `Cache/` spelling. The exemption must ask the
+        # trailing-slash form too: a bare query does not match a
+        # directory-only rule when the directory is absent, and the
+        # tolerated folder meta would be misread as an orphan.
         sandbox.write(".gitignore", "Cache/\n")
         sandbox.write("Scripts/Cache.meta", "guid: f\n")
         sandbox.commit_all()
-        sandbox.write("Scripts/Cache/blob.bin", "bytes\n")
+        assert_true(not (sandbox.root / "Scripts" / "Cache").exists(), "the fixture must keep the folder absent")
         sandbox.run()
-        assert_exit_code(0, "a folder meta over ignored-only content is tolerated", sandbox.last_exit)
+        assert_exit_code(0, "a folder meta over an absent ignored directory is tolerated", sandbox.last_exit)
+        assert_true("Scripts/Cache.meta" not in sandbox.output, "the tolerated meta must not be reported")
     finally:
         sandbox.destroy()
 
