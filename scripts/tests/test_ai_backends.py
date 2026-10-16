@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Sequence
 
 sys.dont_write_bytecode = True
 
-from _test_helpers import assert_exit_code, assert_true, failure_count, new_temp_root, remove_temp_root, run_case
+from _test_helpers import assert_exit_code, assert_true, new_temp_root, remove_temp_root, run_cases
 
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
@@ -281,14 +281,7 @@ def assert_file_contains(path: Path, description: str, needle: str) -> None:
     assert_true(needle in content, f"{description} (missing [{needle}] in {path})")
 
 
-def skip(name: str) -> None:
-    print(f"    SKIP: {name}")
-
-
 def case_claude_zai_uses_env_local_file_key() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("ZAI_API_KEY=zk-file-key\n")
     sandbox.link_launchers()
@@ -310,9 +303,6 @@ def case_claude_zai_uses_env_local_file_key() -> None:
 
 
 def case_claude_zai_env_var_wins_over_file() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("ZAI_API_KEY=zk-file-key\n")
     sandbox.link_launchers()
@@ -322,9 +312,6 @@ def case_claude_zai_env_var_wins_over_file() -> None:
 
 
 def case_claude_zai_accepts_variant_file_key() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("Z_AI_API_KEY=zk-variant-key\n")
     sandbox.link_launchers()
@@ -343,9 +330,6 @@ def case_claude_zai_missing_key_fails() -> None:
 
 
 def case_claude_zai_sandbox_settings_flag() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     # The container sandbox override must reach claude via --settings; a bare
     # positional is parsed as the session PROMPT (it literally became the first
     # user message of every claude-zai session).
@@ -363,9 +347,6 @@ def case_claude_zai_sandbox_settings_flag() -> None:
 
 
 def case_claude_openrouter_uses_env_local_file_key() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("OPENROUTER_API_KEY=sk-or-file-key\n")
     sandbox.link_launchers()
@@ -400,9 +381,6 @@ def case_claude_openrouter_uses_env_local_file_key() -> None:
 
 
 def case_claude_openrouter_accepts_variant_file_key() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("OPEN_ROUTER_API_KEY=sk-or-variant-key\n")
     sandbox.link_launchers()
@@ -414,9 +392,6 @@ def case_claude_openrouter_accepts_variant_file_key() -> None:
 
 
 def case_claude_openrouter_env_var_wins_over_file() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("OPENROUTER_API_KEY=sk-or-file-key\n")
     sandbox.link_launchers()
@@ -428,9 +403,6 @@ def case_claude_openrouter_env_var_wins_over_file() -> None:
 
 
 def case_claude_openrouter_model_overrides() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("OPENROUTER_API_KEY=sk-or-file-key\n")
     sandbox.link_launchers()
@@ -459,9 +431,6 @@ def case_claude_openrouter_missing_key_fails() -> None:
 
 
 def case_codex_openrouter_launch() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("OPENROUTER_API_KEY=sk-or-file-key\n")
     sandbox.link_launchers()
@@ -487,12 +456,9 @@ def case_codex_openrouter_reasoning_effort_validation() -> None:
     sandbox.write_env_file("OPENROUTER_API_KEY=sk-or-file-key\n")
     sandbox.run("codex-openrouter", ["--version"], extra_env={"CODEX_OPENROUTER_REASONING_EFFORT": "bogus"})
     assert_exit_code(1, "invalid reasoning effort rejected", sandbox.last_exit)
-    if os.name == "posix":
-        sandbox.link_launchers()
-        sandbox.run("codex-openrouter", ["--version"], extra_env={"CODEX_OPENROUTER_REASONING_EFFORT": "xhigh"})
-        assert_dump_line(sandbox, "valid reasoning effort forwarded", 'arg: model_reasoning_effort="xhigh"')
-    else:
-        skip("valid-effort exec check requires a POSIX host")
+    sandbox.link_launchers()
+    sandbox.run("codex-openrouter", ["--version"], extra_env={"CODEX_OPENROUTER_REASONING_EFFORT": "xhigh"})
+    assert_dump_line(sandbox, "valid reasoning effort forwarded", 'arg: model_reasoning_effort="xhigh"')
     sandbox.destroy()
 
 
@@ -505,9 +471,6 @@ def case_codex_openrouter_missing_key_fails() -> None:
 
 
 def case_codex_zai_regression() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("ZAI_API_KEY=zk-file-key\n")
     sandbox.link_launchers()
@@ -525,9 +488,6 @@ def case_codex_zai_regression() -> None:
 
 
 def case_env_file_does_not_clobber_existing_env() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("PATH=/evil\nZAI_API_KEY=zk-file-key\n")
     sandbox.link_launchers()
@@ -538,9 +498,6 @@ def case_env_file_does_not_clobber_existing_env() -> None:
 
 
 def case_env_file_with_bom_and_crlf_is_parsed() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     # Windows-edited .env.local files commonly carry a UTF-8 BOM and CRLF
     # endings; bash `source` chokes on the BOM, so the loader must not.
     sandbox = Sandbox()
@@ -558,9 +515,6 @@ def case_env_file_with_bom_and_crlf_is_parsed() -> None:
 
 
 def case_env_file_precedence_inversion_for_managed_credentials() -> None:
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     # DATAVIZ_ENV_LOCAL_PRECEDENCE=file lets a rotated managed credential in
     # .env.local win over a stale exported copy; unmanaged keys keep
     # "non-empty preexisting wins".
@@ -581,13 +535,8 @@ def case_env_file_precedence_inversion_for_managed_credentials() -> None:
 def case_config_dir_root_owned_is_self_healed_with_sudo() -> None:
     # Root-owned config dirs (Docker named volumes initialized before the image
     # pre-created the mount target) must be repaired in place when passwordless
-    # sudo is available, not left failing. Needs sudo to stage the state.
-    if os.name != "posix":
-        skip("sudo repair case requires a POSIX host")
-        return
-    if os.getuid() == 0 or subprocess.run(["sudo", "-n", "true"], capture_output=True, check=False).returncode != 0:
-        skip("sudo unavailable or running as root")
-        return
+    # sudo is available, not left failing. Needs sudo to stage the state; main
+    # decides the sudo gate so the skip prints before the pool starts.
     sandbox = Sandbox()
     sandbox.write_env_file("OPENROUTER_API_KEY=sk-or-file-key\n")
     sandbox.link_launchers()
@@ -610,9 +559,6 @@ def case_config_dir_failure_is_actionable() -> None:
     # still fail fast with the chown remediation. A read-only parent forces
     # mkdir and chmod to fail deterministically; the real passwordless sudo
     # chown of a nonexistent path fails on its own.
-    if os.name != "posix":
-        skip("config-dir failure case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("OPENROUTER_API_KEY=sk-or-file-key\n")
     sandbox.link_launchers()
@@ -633,9 +579,6 @@ def case_config_dir_failure_is_actionable() -> None:
 
 
 def case_install_creates_all_launchers() -> None:
-    if os.name != "posix":
-        skip("symlink creation case requires a POSIX host")
-        return
     sandbox = Sandbox()
     install_bin = sandbox.root / "install-bin"
     install_bin.mkdir()
@@ -670,9 +613,6 @@ def case_install_seeds_isolated_claude_approvals() -> None:
     # Isolated Claude config dirs (claude-zai / claude-openrouter) read MCP
     # approvals and folder trust from their own .claude.json. `install` must
     # seed them, or every project MCP server shows "Pending approval" there.
-    if os.name != "posix":
-        skip("symlink creation case requires a POSIX host")
-        return
     sandbox = Sandbox()
     install_bin = sandbox.root / "install-bin"
     install_bin.mkdir()
@@ -698,9 +638,6 @@ def case_broken_state_writer_keeps_optional_claude_approvals_best_effort() -> No
     # launcher. Claude approval seeding is optional: a failing writer must not
     # stop the launch. The copied launcher pair points its workspace at the
     # sandbox, where backend_state.py is deliberately broken.
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("ZAI_API_KEY=z-fixture-key\nOPENROUTER_API_KEY=or-fixture-key\n")
     sandbox.mcp_config.write_bytes('{"mcpServers":{"unity":{}}}\n'.encode("utf-8"))
@@ -736,9 +673,6 @@ def case_config_dir_failure_aborts_despite_best_effort_approvals() -> None:
     # the sandbox, where the state writer is broken AND the config parent is
     # read-only, so the writer failure (swallowed) and the config failure
     # (fatal) are both live in one case.
-    if os.name != "posix":
-        skip("exec-path case requires a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("ZAI_API_KEY=z-fixture-key\n")
     sandbox.mcp_config.write_bytes('{"mcpServers":{"unity":{}}}\n'.encode("utf-8"))
@@ -782,9 +716,6 @@ def case_state_writer_falls_back_when_early_candidates_cannot_execute() -> None:
     # broken python3 must not break the launcher when a working interpreter
     # exists later in the chain, and the launcher's own interpreter is the
     # final fallback.
-    if os.name != "posix":
-        skip("interpreter fixture symlinks require a POSIX host")
-        return
     sandbox = Sandbox()
     sandbox.write_env_file("ZAI_API_KEY=z-fixture-key\n")
     binary = sandbox.root / "interp"
@@ -859,13 +790,65 @@ CASES = (
 )
 
 
+# Platform gates decided by main, not by the case bodies: bodies run on the
+# worker pool, where a printed SKIP line would land in completion order
+# instead of the submitted order the sequential runner produced. Messages are
+# the originals so the replayed output stays byte-comparable to it.
+POSIX_ONLY_CASES: Dict[str, str] = {
+    "case_claude_zai_uses_env_local_file_key": "exec-path case requires a POSIX host",
+    "case_claude_zai_env_var_wins_over_file": "exec-path case requires a POSIX host",
+    "case_claude_zai_accepts_variant_file_key": "exec-path case requires a POSIX host",
+    "case_claude_zai_sandbox_settings_flag": "exec-path case requires a POSIX host",
+    "case_claude_openrouter_uses_env_local_file_key": "exec-path case requires a POSIX host",
+    "case_claude_openrouter_accepts_variant_file_key": "exec-path case requires a POSIX host",
+    "case_claude_openrouter_env_var_wins_over_file": "exec-path case requires a POSIX host",
+    "case_claude_openrouter_model_overrides": "exec-path case requires a POSIX host",
+    "case_codex_openrouter_launch": "exec-path case requires a POSIX host",
+    "case_codex_openrouter_reasoning_effort_validation": "valid-effort exec check requires a POSIX host",
+    "case_codex_zai_regression": "exec-path case requires a POSIX host",
+    "case_env_file_does_not_clobber_existing_env": "exec-path case requires a POSIX host",
+    "case_env_file_with_bom_and_crlf_is_parsed": "exec-path case requires a POSIX host",
+    "case_env_file_precedence_inversion_for_managed_credentials": "exec-path case requires a POSIX host",
+    "case_config_dir_root_owned_is_self_healed_with_sudo": "sudo repair case requires a POSIX host",
+    "case_config_dir_failure_is_actionable": "config-dir failure case requires a POSIX host",
+    "case_install_creates_all_launchers": "symlink creation case requires a POSIX host",
+    "case_install_seeds_isolated_claude_approvals": "symlink creation case requires a POSIX host",
+    "case_broken_state_writer_keeps_optional_claude_approvals_best_effort": "exec-path case requires a POSIX host",
+    "case_state_writer_falls_back_when_early_candidates_cannot_execute": "interpreter fixture symlinks require a POSIX host",
+    "case_config_dir_failure_aborts_despite_best_effort_approvals": "exec-path case requires a POSIX host",
+}
+
+# The sudo repair case also needs a non-root user with passwordless sudo;
+# main probes that once so the decision cannot race with the pool.
+SUDO_REPAIR_CASE = "case_config_dir_root_owned_is_self_healed_with_sudo"
+
+
 def main() -> int:
     assert_true(LAUNCHER.is_file(), f"launcher not found at {LAUNCHER}")
     assert_true(STATE_WRITER.is_file(), f"state writer not found at {STATE_WRITER}")
     print("== ai-backends launcher contract tests ==")
-    for case in CASES:
-        run_case(case.__name__, case)
-    failures = failure_count()
+
+    posix = os.name == "posix"
+    sudo_ready = (
+        posix
+        and os.getuid() != 0
+        and subprocess.run(["sudo", "-n", "true"], capture_output=True, check=False).returncode == 0
+    )
+    # Every case owns its Sandbox temp root and spawns children with an
+    # explicit environment, so the cases overlap their waits on a bounded
+    # pool; four workers match the suite runner's file-level cap.
+    if posix:
+        selected = [case for case in CASES if sudo_ready or case.__name__ != SUDO_REPAIR_CASE]
+        failures = run_cases([(case.__name__, case) for case in selected], max_workers=4)
+    else:
+        # Preserve the original interleaved skip/pass order on non-POSIX hosts.
+        failures = 0
+        for case in CASES:
+            reason = POSIX_ONLY_CASES.get(case.__name__)
+            if reason is not None:
+                print(f"    SKIP: {reason}")
+                continue
+            failures += run_cases([(case.__name__, case)], max_workers=1)
     print(f"== ai-backends: {failures} failure(s) ==")
     return 1 if failures else 0
 

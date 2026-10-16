@@ -24,11 +24,10 @@ sys.dont_write_bytecode = True
 from _test_helpers import (
     assert_exit_code,
     assert_true,
-    failure_count,
     find_python,
     new_temp_root,
     remove_temp_root,
-    run_case,
+    run_cases,
     run_tool_output,
     write_fixture_file,
 )
@@ -439,29 +438,38 @@ def main() -> int:
 
     python = find_python()
 
-    run_case("Installs_Verifies_AndRepeatsIdempotently", lambda: case_installs_verifies_and_repeats_idempotently(python))
-    run_case("FailsVerification_WhenAnalyzerPayloadChanges", lambda: case_fails_verification_when_analyzer_payload_changes(python))
-    run_case(
-        "FailsVerification_WhenAnalyzerMetadataChanges",
-        lambda: case_fails_verification_when_analyzer_metadata_changes(python),
+    # Each case owns its TestContext fixture tree, so the installer
+    # invocations overlap their waits on a bounded pool; four workers match
+    # the suite runner's file-level cap.
+    failures = run_cases(
+        (
+            ("Installs_Verifies_AndRepeatsIdempotently", lambda: case_installs_verifies_and_repeats_idempotently(python)),
+            (
+                "FailsVerification_WhenAnalyzerPayloadChanges",
+                lambda: case_fails_verification_when_analyzer_payload_changes(python),
+            ),
+            (
+                "FailsVerification_WhenAnalyzerMetadataChanges",
+                lambda: case_fails_verification_when_analyzer_metadata_changes(python),
+            ),
+            ("Fails_WhenHostProjectIsInvalid", lambda: case_fails_when_host_project_is_invalid(python)),
+            (
+                "Fails_WhenDestinationIsInsidePackageRepository",
+                lambda: case_fails_when_destination_is_inside_package_repository(python),
+            ),
+            ("Fails_WhenNuGetPackageHashChanges", lambda: case_fails_when_nuget_package_hash_changes(python)),
+            (
+                "SonarAnalyzer_Installs_Verifies_AndRepeatsIdempotently",
+                lambda: case_sonar_analyzer_installs_verifies_and_repeats_idempotently(python),
+            ),
+            (
+                "SonarAnalyzer_FailsVerification_WhenAnalyzerPayloadChanges",
+                lambda: case_sonar_analyzer_fails_verification_when_analyzer_payload_changes(python),
+            ),
+            ("All_AnalyzerSet_Verifies_BothInstalledSets", lambda: case_all_analyzer_set_verifies_both_installed_sets(python)),
+        ),
+        max_workers=4,
     )
-    run_case("Fails_WhenHostProjectIsInvalid", lambda: case_fails_when_host_project_is_invalid(python))
-    run_case(
-        "Fails_WhenDestinationIsInsidePackageRepository",
-        lambda: case_fails_when_destination_is_inside_package_repository(python),
-    )
-    run_case("Fails_WhenNuGetPackageHashChanges", lambda: case_fails_when_nuget_package_hash_changes(python))
-    run_case(
-        "SonarAnalyzer_Installs_Verifies_AndRepeatsIdempotently",
-        lambda: case_sonar_analyzer_installs_verifies_and_repeats_idempotently(python),
-    )
-    run_case(
-        "SonarAnalyzer_FailsVerification_WhenAnalyzerPayloadChanges",
-        lambda: case_sonar_analyzer_fails_verification_when_analyzer_payload_changes(python),
-    )
-    run_case("All_AnalyzerSet_Verifies_BothInstalledSets", lambda: case_all_analyzer_set_verifies_both_installed_sets(python))
-
-    failures = failure_count()
     print(f"== host analyzer installer: {failures} failure(s) ==")
     return 1 if failures > 0 else 0
 

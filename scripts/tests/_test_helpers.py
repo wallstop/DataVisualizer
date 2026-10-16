@@ -131,7 +131,7 @@ def run_case(name: str, body: Callable[[], None]) -> bool:
     return passed
 
 
-def run_cases(cases: Sequence[Tuple[str, Callable[[], None]]]) -> int:
+def run_cases(cases: Sequence[Tuple[str, Callable[[], None]]], max_workers: Optional[int] = None) -> int:
     """Run independent cases concurrently, replaying the shared lines in order.
 
     The suite's slowest files wait on child processes (tool invocations,
@@ -139,6 +139,18 @@ def run_cases(cases: Sequence[Tuple[str, Callable[[], None]]]) -> int:
     pool overlaps those waits instead of serializing them. Every case body
     must own its state: the converted files each build a private temp root
     and spawn children with explicit arguments, never process-global state.
+
+    ``max_workers`` caps the pool for files whose cases each spawn several
+    children, so a converted file cannot multiply the suite runner's own
+    file-level worker cap into a process storm on a small CI runner. The
+    default stays the machine's CPU count, which is what the existing
+    concurrent files already use.
+
+    Case bodies must not print: a body-printed line would land in worker
+    completion order instead of the submitted order the sequential runner
+    produced. Decide platform or capability skips in the caller's main before
+    the pool and print the SKIP lines there, as the ai-backends and
+    opencode-service-recycle mains do.
 
     Output stays byte-comparable to a sequential run: cases execute
     concurrently, but the PASS/FAIL lines print after every case settles,
@@ -150,8 +162,14 @@ def run_cases(cases: Sequence[Tuple[str, Callable[[], None]]]) -> int:
     number of failed cases.
     """
     global _failure_count_value
+    if max_workers is None:
+        worker_limit = os.cpu_count() or 1
+    elif max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
+    else:
+        worker_limit = max_workers
     if len(cases) > 1:
-        with ThreadPoolExecutor(max_workers=min(len(cases), os.cpu_count() or 1)) as pool:
+        with ThreadPoolExecutor(max_workers=min(len(cases), worker_limit)) as pool:
             futures = [pool.submit(_execute_case, name, body) for name, body in cases]
             errors: List[Optional[str]] = []
             try:
