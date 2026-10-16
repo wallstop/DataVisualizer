@@ -283,6 +283,9 @@ class HostTests(unittest.TestCase):
                 self.http('/mcp', {}, token='wrong', method=method)
             self.assertEqual(raised.exception.code, 401)
         self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
+        startup_marker = os.environ.get('DATAVIZ_HARNESS_STARTUP_MARKER')
+        if startup_marker:
+            print('\n' + startup_marker, flush=True)
         self.assertEqual(self.http('/mcp', {'jsonrpc': '2.0', 'method': 'notifications/initialized'}), (202, None))
         methods = ['first', 'second', 'third']
         with concurrent.futures.ThreadPoolExecutor() as executor:
