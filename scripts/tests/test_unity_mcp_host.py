@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
 import json
 import os
 import shutil
@@ -35,6 +36,55 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
     setTimeout(() => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\n'), 5);
 });
 """
+
+CONFIG_SYNC_FIXTURE = """
+import fs from 'node:fs';
+fs.writeFileSync('sync-port.pending', process.env.UNITY_MCP_HTTP_PORT);
+fs.renameSync('sync-port.pending', 'sync-port');
+setTimeout(() => process.exit(0), 1800);
+"""
+
+
+@unittest.skipUnless(shutil.which('node'), 'node is required')
+class ConfigSyncPublicationTests(unittest.TestCase):
+    def test_port_is_published_only_after_the_write_completes(self) -> None:
+        with contextlib.ExitStack() as cleanup:
+            directory = cleanup.enter_context(tempfile.TemporaryDirectory(prefix='config-sync-publication-'))
+            root = Path(directory)
+            preload = root / 'pause-write.mjs'
+            preload.write_text("""
+import fs from 'node:fs';
+const write = fs.writeFileSync;
+fs.writeFileSync = (path, data, ...options) => {
+    write(path, '');
+    write('writer-ready', '');
+    fs.readSync(0, Buffer.alloc(1), 0, 1, null);
+    return write(path, data, ...options);
+};
+""", encoding='utf-8')
+            fixture = root / 'configure.mjs'
+            # Publication is synchronous; this test does not need the bridge's background delay.
+            fixture.write_text(CONFIG_SYNC_FIXTURE + '\nprocess.exit(0);', encoding='utf-8')
+            env = dict(os.environ, UNITY_MCP_HTTP_PORT='53386')
+            process = cleanup.enter_context(subprocess.Popen(
+                [str(shutil.which('node')), '--import', preload.as_uri(), str(fixture)],
+                cwd=root, env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            ))
+            cleanup.callback(process.kill)
+            deadline = time.monotonic() + 5
+            ready = root / 'writer-ready'
+            while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.01)
+            if not ready.exists():
+                exit_code = process.poll()
+                process.kill()
+                _, errors = process.communicate(timeout=5)
+                self.fail(f'Writer did not reach the paused empty-file state; exit={exit_code}: {errors!r}')
+            port_file = root / 'sync-port'
+            self.assertFalse(port_file.exists(), 'Readers must not see an incomplete selected port.')
+            _, errors = process.communicate(input=b'continue', timeout=5)
+            self.assertEqual(process.returncode, 0, errors.decode('utf-8', errors='replace'))
+            self.assertEqual(port_file.read_text(encoding='utf-8'), '53386')
 
 
 @unittest.skipUnless(shutil.which('node'), 'node is required')
@@ -213,7 +263,7 @@ class HostTests(unittest.TestCase):
     def test_slow_config_sync_keeps_http_responsive_and_uses_selected_port(self) -> None:
         self.stop()
         configure = self.script.parent / 'configure.mjs'
-        configure.write_text("import fs from 'node:fs'; fs.writeFileSync('sync-port', process.env.UNITY_MCP_HTTP_PORT); setTimeout(() => process.exit(0), 1800);", encoding='utf-8')
+        configure.write_text(CONFIG_SYNC_FIXTURE, encoding='utf-8')
         self.env['UNITY_MCP_AUTO_SYNC'] = '1'
         self.env['UNITY_MCP_HTTP_PORT'] = '9020'
         self.env_file.write_text(self.env_file.read_text(encoding='utf-8').replace(f'UNITY_MCP_HTTP_PORT={self.port}', 'UNITY_MCP_HTTP_PORT=9020'), encoding='utf-8')
