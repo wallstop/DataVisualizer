@@ -1516,7 +1516,7 @@ def main(argv: List[str]) -> int:
                 result = analyze_file(text, prohibit_linq)
                 guard += 1
             if text != original:
-                file.write_text(text, encoding="utf-8", newline="")
+                file.write_bytes(text.encode("utf-8"))
                 fixed_files += 1
                 fixed_sites += before - len(result.violations)
 

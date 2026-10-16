@@ -296,7 +296,7 @@ def main() -> int:
         if fix:
             fixed = fix_file(text, masked_lines)
             if fixed is not None:
-                file.full_path.write_text(fixed, encoding="utf-8", newline="")
+                file.full_path.write_bytes(fixed.encode("utf-8"))
                 fixes.append(str(file.display))
                 continue
             violations.append(f"{file.display}:{misplaced[0] + 1} (manual barrier; fix declined)")

@@ -135,7 +135,7 @@ def main() -> None:
     if options.output is not None:
         output_path = Path(options.output) if Path(options.output).is_absolute() else root / options.output
         output_path = output_path.resolve()
-        output_path.write_text(notes, encoding="utf-8", newline="")
+        output_path.write_bytes(notes.encode("utf-8"))
         print(f"notes: {options.output}")
     else:
         sys.stdout.write(notes)

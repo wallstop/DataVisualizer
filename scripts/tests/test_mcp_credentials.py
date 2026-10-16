@@ -126,7 +126,7 @@ class Sandbox:
         self.stdout = ""
 
     def write_env_file(self, content: str) -> None:
-        self.env_file.write_text(content, encoding="utf-8", newline="")
+        self.env_file.write_bytes(content.encode("utf-8"))
 
     def read_env_file(self) -> str:
         # newline="" keeps the bytes verbatim: the BOM and line-ending cases
