@@ -276,6 +276,11 @@ def _run_tool_call(message: Any, params: Dict[str, Any], in_flight: List[int]) -
 
 def serve() -> int:
     """Serve MCP requests on stdin until EOF, then drain in-flight responses."""
+    # The node server pinned UTF-8 on both streams; without this, a Windows
+    # host decodes stdin with the locale codec and corrupts non-ASCII prompts.
+    # Responses are JSON with ensure_ascii, so stdout is ASCII-safe regardless.
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     in_flight = [0]
     for raw_line in sys.stdin:
         line = raw_line.strip()
