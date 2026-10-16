@@ -1,0 +1,31 @@
+fileFormatVersion: 2
+guid: c1138ae8224b4c65958ad1e30815ff51
+TextureImporter:
+  externalObjects: {}
+  serializedVersion: 12
+  mipmaps:
+    enableMipMap: 0
+    sRGBTexture: 1
+  isReadable: 0
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  alphaIsTransparency: 1
+  textureType: 2
+  textureShape: 1
+  maxTextureSize: 32
+  platformSettings:
+  - serializedVersion: 3
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 32
+    textureFormat: -1
+    textureCompression: 0
+    overridden: 0
+  userData:
+  assetBundleName:
+  assetBundleVariant:

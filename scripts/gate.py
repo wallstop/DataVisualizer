@@ -64,21 +64,10 @@ PLAN_SCHEMA_VERSION = 1
 FAILURE_OUTPUT_LINES = 60
 
 
-def _python_launcher() -> Tuple[str, ...]:
-    """Prefix that runs the harness's own Python scripts on this machine.
-
-    ``uv run`` is the documented path because it provisions the project
-    environment on machines that have uv; anywhere uv is absent (CI runners
-    without it, minimal containers) the gate degrades to the interpreter
-    running this script, so the plan always describes commands that can
-    actually execute on the host that built it.
-    """
-    if shutil.which("uv") is not None:
-        return ("uv", "run")
-    return (sys.executable,)
-
-
-_PYTHON_LAUNCHER: Tuple[str, ...] = _python_launcher()
+# The outer uv entry point has already selected the interpreter. These
+# child checks use only the standard library, so reuse it instead of
+# spawning uv and resolving/syncing the same environment for every step.
+_PYTHON_LAUNCHER: Tuple[str, ...] = (sys.executable,)
 
 
 @dataclass(frozen=True)
