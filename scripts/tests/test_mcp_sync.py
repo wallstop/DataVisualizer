@@ -130,11 +130,14 @@ def assert_file_contains(sandbox: Sandbox, relative: str, needle: str, descripti
 
 
 def expected_fleet() -> str:
-    # The managed fleet; fetch/git only register when uvx exists (mirrors the
-    # configurator), so the expected set is derived from the same condition.
+    # The managed fleet; fetch/git only register when uvx exists and
+    # zai-image only registers when uv exists (mirrors the configurator), so
+    # the expected set is derived from the same conditions.
     fleet = ["context7", "fetch", "git", "github", "unity", "zai-image", "zai-vision", "zai-web-search"]
     if shutil.which("uvx") is None:
         fleet = [name for name in fleet if name not in ("fetch", "git")]
+    if shutil.which("uv") is None:
+        fleet = [name for name in fleet if name != "zai-image"]
     return " ".join(fleet)
 
 

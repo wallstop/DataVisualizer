@@ -95,6 +95,23 @@ function hasCommand(command) {
     }
 }
 
+function resolveCommand(command) {
+    // The absolute twin of hasCommand: same PATH + PATHEXT rules, falling
+    // back to the bare name when the lookup fails.
+    try {
+        if (process.platform === "win32") {
+            const output = execFileSync("where", [command], { encoding: "utf8" });
+            const first = String(output)
+                .split(/\r?\n/)
+                .find((line) => line.trim());
+            return first ? first.trim() : command;
+        }
+        return execFileSync("/bin/bash", ["-c", `command -v ${command}`], { encoding: "utf8" }).trim() || command;
+    } catch {
+        return command;
+    }
+}
+
 function ensureUnityMcpToken() {
     // Authentication is a host choice. Sync must not introduce a token after
     // the bridge has already started without one, or require an absent env
@@ -167,9 +184,11 @@ function ensureGithubPatAlias() {
 // Managed server catalog
 // ---------------------------------------------------------------------------
 
-const ZAI_IMAGE_SCRIPT = path.join(WORKSPACE_ROOT, ".llm", "mcp", "zai-image-mcp.mjs");
+const ZAI_IMAGE_SCRIPT = path.join(WORKSPACE_ROOT, ".llm", "mcp", "zai_image_mcp.py");
 const NODE_BIN = process.execPath;
 const HAS_UVX = hasCommand("uvx");
+const HAS_UV = hasCommand("uv");
+const UV_BIN = HAS_UV ? resolveCommand("uv") : "uv";
 // Container agents reach the host HTTP bridge via host.docker.internal; when
 // the configurator runs on the host itself, the bridge is plain loopback. The
 // port is configurable (UNITY_MCP_HTTP_PORT, process env or .env.local) and is
@@ -435,41 +454,44 @@ function buildCatalog() {
             headers: { Authorization: "Bearer ${env:ZAI_API_KEY}" },
         },
     });
-    // zai-image runs from the shared workspace: PATH-resolved `node` plus a
-    // workspace-relative script path keep the entry valid on the host AND in
-    // containers (frontends spawn MCP servers with cwd = workspace/project
-    // root). Codex keeps the absolute form — its config is HOME-separated per
-    // environment, so there is no sharing to break.
-    servers.set("zai-image", {
-        summary: "Z.ai image generation (glm-image) wrapped as local MCP",
-        claude: {
-            type: "stdio",
-            command: "node",
-            args: [".llm/mcp/zai-image-mcp.mjs"],
-            env: { ZAI_API_KEY: "${ZAI_API_KEY:-}" },
-        },
-        codex: {
-            command: NODE_BIN,
-            args: [ZAI_IMAGE_SCRIPT],
-            env_vars: ["ZAI_API_KEY"],
-        },
-        opencode: {
-            type: "local",
-            command: ["node", ".llm/mcp/zai-image-mcp.mjs"],
-            enabled: true,
-            timeout: 300000,
-            environment: { ZAI_API_KEY: "{env:ZAI_API_KEY}" },
-        },
-        nanocoder: {
-            transport: "stdio",
-            command: "node",
-            args: [".llm/mcp/zai-image-mcp.mjs"],
-            env: { ZAI_API_KEY: "${ZAI_API_KEY:-}" },
-        },
-        vscode: {
-            command: vscodeEnvWrapper("exec node .llm/mcp/zai-image-mcp.mjs"),
-        },
-    });
+    // zai-image runs from the shared workspace as typed stdlib Python: the
+    // PATH-resolved `uv` runner plus a workspace-relative script path keep
+    // the entry valid on the host AND in containers (frontends spawn MCP
+    // servers with cwd = workspace/project root). Codex keeps the absolute
+    // form — its config is HOME-separated per environment, so there is no
+    // sharing to break.
+    if (HAS_UV) {
+        servers.set("zai-image", {
+            summary: "Z.ai image generation (glm-image) wrapped as local MCP",
+            claude: {
+                type: "stdio",
+                command: "uv",
+                args: ["run", "--no-project", ".llm/mcp/zai_image_mcp.py"],
+                env: { ZAI_API_KEY: "${ZAI_API_KEY:-}" },
+            },
+            codex: {
+                command: UV_BIN,
+                args: ["run", "--no-project", ZAI_IMAGE_SCRIPT],
+                env_vars: ["ZAI_API_KEY"],
+            },
+            opencode: {
+                type: "local",
+                command: ["uv", "run", "--no-project", ".llm/mcp/zai_image_mcp.py"],
+                enabled: true,
+                timeout: 300000,
+                environment: { ZAI_API_KEY: "{env:ZAI_API_KEY}" },
+            },
+            nanocoder: {
+                transport: "stdio",
+                command: "uv",
+                args: ["run", "--no-project", ".llm/mcp/zai_image_mcp.py"],
+                env: { ZAI_API_KEY: "${ZAI_API_KEY:-}" },
+            },
+            vscode: {
+                command: vscodeEnvWrapper("exec uv run --no-project .llm/mcp/zai_image_mcp.py"),
+            },
+        });
+    }
     return servers;
 }
 
@@ -915,6 +937,9 @@ function main() {
     console.log(`  Servers: ${[...catalog.keys()].join(", ")}`);
     if (!HAS_UVX) {
         console.log("  (fetch/git skipped: uvx not found on PATH)");
+    }
+    if (!HAS_UV) {
+        console.log("  (zai-image skipped: uv not found on PATH)");
     }
     console.log(
         `  UNITY_MCP_TOKEN: ${unityToken ? "configured" : "OPEN (no token)"}`,

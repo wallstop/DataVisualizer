@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Callable, Dict, List, Mapping, Optional, Protocol, Union, cast
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 Json = Union[None, bool, int, float, str, List['Json'], Dict[str, 'Json']]
@@ -65,9 +66,17 @@ def unity_command(arguments: List[str]) -> str:
 
 def request_json(url: str, headers: Dict[str, str], payload: Optional[JsonObject]) -> JsonObject:
     data = None if payload is None else json.dumps(payload).encode('utf-8')
-    with urlopen(Request(url, data=data, headers=headers), timeout=30) as response:
-        body = response.read()
-        return object_value(cast(Json, json.loads(body))) if body else {}
+    try:
+        with urlopen(Request(url, data=data, headers=headers), timeout=30) as response:
+            body = response.read()
+            return object_value(cast(Json, json.loads(body))) if body else {}
+    except HTTPError as error:
+        # urllib raises before the error body is read, so the exception text
+        # alone carries only the status. The bridge's error JSON names the
+        # reason (token mismatch, bad project pin), which is the diagnostic
+        # this doctor exists to surface.
+        detail = error.read().decode('utf-8', errors='replace').strip()
+        raise ValueError(f'HTTP {error.code} from {url}: {detail[:300]}') from error
 
 
 class Doctor:

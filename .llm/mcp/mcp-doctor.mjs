@@ -11,7 +11,7 @@
 //      entries are therefore generated as env-sourcing wrappers.
 //   3. Shared machine-local configs must be environment-agnostic:
 //      unity bridge URL uses host.docker.internal (reachable from host AND
-//      container) and zai-image uses PATH-resolved `node` with a
+//      container) and zai-image uses PATH-resolved `uv` with a
 //      workspace-relative script path.
 //
 // Exit 0 = healthy, 1 = action required. Never prints secret values.
@@ -422,7 +422,7 @@ if (zaiToken) {
         Z_AI_MODE: env("Z_AI_MODE") || "ZAI",
     });
 }
-await spawnProbe("zai-image", "node", [".llm/mcp/zai-image-mcp.mjs"], {
+await spawnProbe("zai-image", "uv", ["run", "--no-project", ".llm/mcp/zai_image_mcp.py"], {
     ZAI_API_KEY: zaiToken,
 });
 

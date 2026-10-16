@@ -10,9 +10,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from email.message import Message
 from pathlib import Path
 from unittest.mock import patch
 from typing import Dict, List, Optional
+from urllib.error import HTTPError
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -145,6 +147,17 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(request.get_method(), 'POST')
             self.assertEqual(opener.call_args.kwargs['timeout'], 30)
             self.assertEqual(result, {'result': {'tools': []}})
+
+    def test_http_transport_reports_error_status_and_body(self) -> None:
+        # urllib raises HTTPError before the body is read; the doctor must
+        # surface the bridge's error JSON, not just "HTTP Error 401".
+        error = HTTPError('http://127.0.0.1:9020/healthz', 401, 'Unauthorized', Message(), io.BytesIO(b'{"error":"token mismatch"}'))
+        with patch('unity_mcp_doctor.urlopen', side_effect=error):
+            with self.assertRaises(ValueError) as raised:
+                request_json('http://127.0.0.1:9020/healthz', {}, None)
+        message = str(raised.exception)
+        self.assertIn('HTTP 401', message)
+        self.assertIn('token mismatch', message)
 
     def test_environment_parser_preserves_literal_values(self) -> None:
         path = self.root / '.env.local'

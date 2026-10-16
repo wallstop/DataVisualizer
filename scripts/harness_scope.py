@@ -70,12 +70,30 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
         "test_mcp_credentials.py",
         "test_mcp_sync.py",
     ),
+    # The zai-image server contract suite joins the coarse mcp suites the
+    # subtree prefix already selects.
+    ".llm/mcp/zai_image_mcp.py": (
+        "test_zai_image_mcp.py",
+        "test_mcp_credentials.py",
+        "test_mcp_sync.py",
+    ),
     # Retired doctor path: kept so a deletion still selects the suite that
     # pinned it, instead of failing safe to the full suite.
     ".llm/mcp/unity-mcp-doctor.mjs": ("test_unity_mcp_doctor.py",),
+    # Retired node zai-image server (issue #171 port): a deletion keeps the
+    # ported contract suite selected instead of failing safe to everything.
+    ".llm/mcp/zai-image-mcp.mjs": (
+        "test_zai_image_mcp.py",
+        "test_mcp_credentials.py",
+        "test_mcp_sync.py",
+    ),
     "scripts/run_ci_lints.py": ("test_run_ci_lints.py",),
     "scripts/run_ci_lints.py.meta": ("test_run_ci_lints.py",),
     "scripts/tests/test_run_ci_lints.py.meta": ("test_run_ci_lints.py",),
+    "scripts/lint_meta_companions.py": ("test_meta_companions.py",),
+    "scripts/lint_meta_companions.py.meta": ("test_meta_companions.py",),
+    "scripts/tests/test_meta_companions.py.meta": ("test_meta_companions.py",),
+    "scripts/tests/test_zai_image_mcp.py.meta": ("test_zai_image_mcp.py",),
     "scripts/export_docs_gif.py": ("test_export_docs_gif.py",),
     "scripts/export_docs_gif.py.meta": ("test_export_docs_gif.py",),
     "scripts/tests/test_export_docs_gif.py.meta": ("test_export_docs_gif.py",),

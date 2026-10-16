@@ -53,6 +53,7 @@
     "lint:csharp-usings:fix": "uv run scripts/lint_csharp_usings.py --fix",
     "lint:release-secrets": "uv run scripts/lint_release_secrets.py",
     "lint:line-endings": "uv run scripts/lint_line_endings.py",
+    "lint:meta-companions": "uv run scripts/lint_meta_companions.py",
     "lint:changelog-length": "uv run scripts/lint_changelog_length.py",
     "lint:llm:full": "uv run scripts/generate_skills_index.py && uv run scripts/lint_llm_instructions.py --verbose-output && uv run scripts/lint_file_lengths.py --verbose-output && uv run scripts/lint_csharp_member_order.py --verbose && uv run scripts/lint_release_secrets.py --verbose && uv run scripts/lint_line_endings.py --verbose && uv run scripts/lint_changelog_length.py --verbose && uv run scripts/tests/run_all.py",
     "mcp:sync": "node .llm/mcp/configure.mjs",

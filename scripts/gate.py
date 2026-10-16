@@ -177,6 +177,11 @@ LANES: Tuple[Tuple[str, Tuple[Step, ...]], ...] = (
                 (*_PYTHON_LAUNCHER, "scripts/lint_line_endings.py"),
                 ("harness.skills-index",),
             ),
+            Step(
+                "harness.meta-companions",
+                "Meta companion lint",
+                (*_PYTHON_LAUNCHER, "scripts/lint_meta_companions.py"),
+            ),
         ),
     ),
     (
