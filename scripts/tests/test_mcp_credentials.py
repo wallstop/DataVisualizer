@@ -22,6 +22,7 @@ Cases skip when node is unavailable, like the bash-required cases above.
 from __future__ import annotations
 
 import http.server
+import io
 import json
 import os
 import re
@@ -32,6 +33,7 @@ import sys
 import threading
 from pathlib import Path
 from typing import Dict, Optional
+from unittest import mock
 from urllib.request import Request, urlopen
 
 sys.dont_write_bytecode = True
@@ -74,6 +76,7 @@ class StubEndpoint:
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self) -> None:  # noqa: N802 - http.server's name
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
                 auth = self.headers.get("Authorization") or ""
                 if auth == f"Bearer {accepted}":
                     body = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"serverInfo": {"name": "stub"}}})
@@ -100,6 +103,9 @@ class StubEndpoint:
     @property
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}/mcp/"
+
+    def handle_connection(self, connection: object) -> None:
+        self._server.RequestHandlerClass(connection, ("127.0.0.1", 0), self._server)
 
     def stop(self) -> None:
         self._server.shutdown()
@@ -436,6 +442,27 @@ def case_stub_handles_an_idle_connection_without_blocking_probes() -> None:
     stub = StubEndpoint(LIVE)
     idle = socket.create_connection(("127.0.0.1", stub.port), timeout=2)
     try:
+        for token, status in ((LIVE, 200), (STALE, 401)):
+            request_bytes = (
+                f"POST /mcp/ HTTP/1.0\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\nContent-Length: 2\r\n\r\n{{}}"
+            ).encode("ascii")
+            incoming = io.BytesIO(request_bytes)
+            connection = mock.Mock(spec=socket.socket)
+            connection.makefile.return_value = incoming
+            response_chunks: list[bytes] = []
+
+            def capture_response(data: bytes) -> None:
+                assert_true(
+                    incoming.tell() == len(request_bytes),
+                    "the stub must consume the complete request body before writing a response",
+                )
+                response_chunks.append(data)
+
+            connection.sendall.side_effect = capture_response
+            stub.handle_connection(connection)
+            response_bytes = b"".join(response_chunks)
+            assert_true(response_bytes.startswith(f"HTTP/1.0 {status} ".encode("ascii")), f"the stub must retain HTTP {status}")
+
         request = Request(stub.url, data=b"{}", headers={"Authorization": f"Bearer {LIVE}"})
         with urlopen(request, timeout=2) as response:
             assert_eq("an idle connection must not block another probe", "200", str(response.status))
