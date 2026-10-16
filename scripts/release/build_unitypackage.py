@@ -284,7 +284,7 @@ def main() -> None:
     output_directory.mkdir(parents=True, exist_ok=True)
     archive_path.write_bytes(gzip_buffer)
     sha256 = hashlib.sha256(gzip_buffer).hexdigest()
-    Path(f"{archive_path}.sha256").write_text(f"{sha256}  {archive_name}\n", encoding="utf-8", newline="")
+    Path(f"{archive_path}.sha256").write_bytes(f"{sha256}  {archive_name}\n".encode("utf-8"))
 
     print(f"package_file: {archive_name}")
     print(f"sha256: {sha256}")
