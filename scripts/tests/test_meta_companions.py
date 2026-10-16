@@ -175,19 +175,69 @@ def case_pycache_and_meta_files_are_exempt() -> None:
         seed_baseline(sandbox)
         sandbox.write("Scripts/__pycache__/keep.pyc", "bytes\n")
         sandbox.write("Scripts/__pycache__/keep.pyc.meta", "guid: c\n")
-        sandbox.write("Scripts/Loose.meta", "guid: d\n")
+        # .meta files never need companions of their own, but an unpaired one
+        # is an orphan the lint must still flag; pair this one with its asset.
+        sandbox.write("Scripts/Loose.cs")
+        sandbox.write("Scripts/Loose.cs.meta", "guid: d\n")
         sandbox.commit_all()
         sandbox.run()
-        assert_exit_code(0, "__pycache__ content and .meta files are exempt", sandbox.last_exit)
+        assert_exit_code(0, "__pycache__ content and paired .meta files are exempt", sandbox.last_exit)
+    finally:
+        sandbox.destroy()
+
+
+def case_orphan_companion_fails() -> None:
+    sandbox = LintSandbox()
+    try:
+        seed_baseline(sandbox)
+        # An orphan companion: committed with no asset beside it. Unity
+        # treats the asset as missing and deletes or regenerates the meta.
+        sandbox.write("Scripts/Orphan.cs.meta", "guid: e\n")
+        sandbox.commit_all()
+        sandbox.run()
+        assert_true(sandbox.last_exit == 1, "an orphan companion must fail")
+        assert_contains("the failure names the orphan", "Scripts/Orphan.cs.meta", sandbox.output)
+        assert_contains("the failure names the orphan class", "orphan", sandbox.output)
+    finally:
+        sandbox.destroy()
+
+
+def case_folder_companion_for_ignored_only_folder_is_tolerated() -> None:
+    sandbox = LintSandbox()
+    try:
+        seed_baseline(sandbox)
+        # A committed folder meta whose folder holds only ignored content is
+        # the tracked __pycache__ shape: the folder exists on disk, so the
+        # companion is not an orphan.
+        sandbox.write(".gitignore", "Cache/\n")
+        sandbox.write("Scripts/Cache.meta", "guid: f\n")
+        sandbox.commit_all()
+        sandbox.write("Scripts/Cache/blob.bin", "bytes\n")
+        sandbox.run()
+        assert_exit_code(0, "a folder meta over ignored-only content is tolerated", sandbox.last_exit)
     finally:
         sandbox.destroy()
 
 
 def case_missing_companions_reports_sorted_unique_paths() -> None:
-    missing = missing_companions(["B/A.cs", "B.meta", "A/A.cs", "A/A.cs.meta", "A.meta", "A.cs", "A.cs.meta"])
-    assert_true(missing == ["B/A.cs"], f"only B/A.cs lacks a companion, got: {missing}")
-    missing = missing_companions(["X/Y/Z.cs"])
-    assert_true(missing == ["X", "X/Y", "X/Y/Z.cs"], f"every ancestor companion is reported, got: {missing}")
+    root = new_temp_root(prefix="meta-companion-pure-")
+    try:
+        # The A and B folder metas are only tolerated when their folders
+        # exist (the __pycache__ shape); create them so the case isolates
+        # the one genuinely missing companion.
+        (root / "A").mkdir()
+        (root / "B").mkdir()
+        missing = missing_companions(["B/A.cs", "B.meta", "A/A.cs", "A/A.cs.meta", "A.meta", "A.cs", "A.cs.meta"], root)
+        assert_true(missing == ["B/A.cs"], f"only B/A.cs lacks a companion, got: {missing}")
+        missing = missing_companions(["X/Y/Z.cs"], root)
+        assert_true(missing == ["X", "X/Y", "X/Y/Z.cs"], f"every ancestor companion is reported, got: {missing}")
+        missing = missing_companions(["Gone.cs.meta", "Present.cs"], root)
+        assert_true(
+            missing == ["Gone.cs.meta", "Present.cs"],
+            f"an orphan meta and a missing companion are both reported, got: {missing}",
+        )
+    finally:
+        remove_temp_root(root)
 
 
 CASES = (
@@ -198,6 +248,8 @@ CASES = (
     case_ignored_file_is_exempt,
     case_new_folder_without_folder_companion_fails,
     case_pycache_and_meta_files_are_exempt,
+    case_orphan_companion_fails,
+    case_folder_companion_for_ignored_only_folder_is_tolerated,
     case_missing_companions_reports_sorted_unique_paths,
 )
 
