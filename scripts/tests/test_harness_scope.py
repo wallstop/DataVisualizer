@@ -255,6 +255,7 @@ def case_selection_selects_the_mapped_subject_tests(python: str) -> None:
         ("scripts/fast_check.py", "test_fast_check.py"),
         ("scripts/build_docs.py", "test_build_docs.py"),
         ("scripts/tests/test_build_docs.py.meta", "test_build_docs.py"),
+        ("scripts/markdown_check.py", "test_markdown_check.py"),
     ):
         probe = invoke_scope_probe(python, subject)
         assert_true(not probe["selection"]["all"], "a mapped subject must not select the full suite")
@@ -394,13 +395,13 @@ def parse_ci_verdicts(output: str) -> Dict[str, str]:
     """Parse the --ci-verdicts key=value lines into a mapping."""
     lines = [line for line in output.splitlines() if line.strip()]
     assert_true(
-        len(lines) == 3,
-        f"the ci-verdicts mode must print three key=value lines, got: {output}",
+        len(lines) == 4,
+        f"the ci-verdicts mode must print four key=value lines, got: {output}",
     )
     pairs = dict(line.split("=", 1) for line in lines)
     assert_true(
-        sorted(pairs) == ["markdown", "selection", "self-tests"],
-        f"the ci-verdicts keys must be self-tests, selection, and markdown, got: {output}",
+        sorted(pairs) == ["markdown", "markdown-files", "selection", "self-tests"],
+        f"the ci-verdicts keys must be self-tests, selection, markdown, and markdown-files, got: {output}",
     )
     return pairs
 
@@ -416,6 +417,7 @@ def case_ci_verdicts_skip_a_docs_only_commit(python: str) -> None:
         assert_true(verdicts["self-tests"] == "skip", "a docs-only commit must skip the suite")
         assert_true(verdicts["selection"] == "all", "a docs-only commit must fail safe to the full selection")
         assert_true(verdicts["markdown"] == "run", "a README change must select the Prettier check")
+        assert_true(verdicts["markdown-files"] == "README.md", "a README change must name only that file")
     finally:
         remove_temp_root(repo)
 
@@ -428,6 +430,7 @@ def case_ci_verdicts_skip_markdown_for_a_csharp_only_commit(python: str) -> None
         verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
         assert_true(verdicts["self-tests"] == "skip", "a C#-only commit must skip the suite")
         assert_true(verdicts["markdown"] == "skip", "a C#-only commit must skip the npm and Prettier steps")
+        assert_true(verdicts["markdown-files"] == "", "a C#-only commit must name no Markdown file")
     finally:
         remove_temp_root(repo)
 
@@ -444,6 +447,67 @@ def case_ci_verdicts_run_for_a_scripts_commit(python: str) -> None:
             f"the scripts commit must select its subject test, got: {verdicts['selection']}",
         )
         assert_true(verdicts["markdown"] == "skip", "a scripts commit must skip the npm and Prettier steps")
+        assert_true(verdicts["markdown-files"] == "", "a scripts commit must name no Markdown file")
+    finally:
+        remove_temp_root(repo)
+
+
+def case_ci_verdicts_skip_a_markdown_deletion(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        scope_commit(repo, {"README.md": "# Title\n"})
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        (repo / "README.md").unlink()
+        _git_output(repo, ["add", "-A"])
+        _git_output(repo, ["commit", "-q", "-m", "delete"])
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
+        assert_true(verdicts["markdown"] == "skip", "a deletion-only commit leaves no Markdown to check")
+        assert_true(verdicts["markdown-files"] == "", "a deleted path must not reach the formatter")
+    finally:
+        remove_temp_root(repo)
+
+
+def case_ci_verdicts_keep_only_the_rename_destination(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        scope_commit(repo, {"README.md": "# Title\n"})
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        (repo / "README.md").rename(repo / "GUIDE.md")
+        _git_output(repo, ["add", "-A"])
+        _git_output(repo, ["commit", "-q", "-m", "rename"])
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
+        assert_true(verdicts["markdown"] == "run", "a rename still leaves Markdown to check")
+        assert_true(
+            verdicts["markdown-files"] == "GUIDE.md",
+            "a rename must check only the destination that exists, got: " + verdicts["markdown-files"],
+        )
+    finally:
+        remove_temp_root(repo)
+
+
+def case_ci_verdicts_check_all_when_the_formatter_config_changes(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        scope_commit(repo, {".prettierrc.json": "{}\n"})
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
+        assert_true(verdicts["markdown"] == "run", "a formatter config change must select the Prettier check")
+        assert_true(verdicts["markdown-files"] == "all", "a formatter config change must keep the full sweep")
+    finally:
+        remove_temp_root(repo)
+
+
+def case_ci_verdicts_skip_ignored_markdown_trees(python: str) -> None:
+    repo = new_scope_repo()
+    try:
+        # The ignore list itself must predate the change: editing it is a
+        # formatter-config change that keeps the full sweep.
+        scope_commit(repo, {".prettierignore": "# generated\n.llm/skills/\n"})
+        base = _git_output(repo, ["rev-parse", "HEAD"])
+        scope_commit(repo, {".llm/skills/example/SKILL.md": "changed\n"})
+        verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
+        assert_true(verdicts["markdown"] == "skip", "an ignored-tree edit must skip the npm and Prettier steps")
+        assert_true(verdicts["markdown-files"] == "", "an ignored-tree edit must name no Markdown file")
     finally:
         remove_temp_root(repo)
 
@@ -458,6 +522,7 @@ def case_ci_verdicts_flag_a_working_tree_markdown_edit(python: str) -> None:
         verdicts = parse_ci_verdicts(invoke_should_run(repo, python, base, ci_verdicts=True))
         assert_true(verdicts["self-tests"] == "skip", "a README edit must still skip the suite")
         assert_true(verdicts["markdown"] == "run", "a working-tree README edit must select the Prettier check")
+        assert_true(verdicts["markdown-files"] == "README.md", "a working-tree edit must name only that file")
     finally:
         remove_temp_root(repo)
 
@@ -469,6 +534,7 @@ def case_ci_verdicts_fail_safe_when_the_base_cannot_be_resolved(python: str) -> 
         assert_true(verdicts["self-tests"] == "run", "an unusable base must run the suite")
         assert_true(verdicts["selection"] == "all", "an unusable base must select the full suite")
         assert_true(verdicts["markdown"] == "run", "an unusable base must run the Prettier check")
+        assert_true(verdicts["markdown-files"] == "all", "an unusable base must keep the full sweep")
     finally:
         remove_temp_root(repo)
 
@@ -502,6 +568,8 @@ def case_github_actions_outputs(python: str, scenario: str) -> None:
         verdicts = parse_ci_verdicts(completed.stdout)
         expected = "run" if scenario in ("failed-fetch", "null-base") else "skip"
         assert_true(verdicts["markdown"] == expected, f"{scenario} must preserve the Markdown verdict")
+        expected_files = "all" if scenario in ("failed-fetch", "null-base") else ""
+        assert_true(verdicts["markdown-files"] == expected_files, f"{scenario} must preserve the Markdown file scope")
         assert_true(verdicts["self-tests"] == expected, f"{scenario} must preserve the suite verdict")
         assert_true(verdicts["selection"] == "all", "C#-only and fail-safe comparisons retain the full selection sentinel")
         assert_true(output.read_bytes() == previous + completed.stdout.encode("utf-8"), "outputs must preserve existing bytes and append UTF-8 without a BOM or CRLF")
@@ -563,6 +631,10 @@ def main() -> int:
         ("GitHubActions_UnavailableOutputFails", lambda: case_github_actions_rejects_unavailable_output(python)),
         ("CiVerdicts_SkipADocsOnlyCommit", lambda: case_ci_verdicts_skip_a_docs_only_commit(python)),
         ("CiVerdicts_SkipMarkdownForACSharpOnlyCommit", lambda: case_ci_verdicts_skip_markdown_for_a_csharp_only_commit(python)),
+        ("CiVerdicts_CheckAllWhenTheFormatterConfigChanges", lambda: case_ci_verdicts_check_all_when_the_formatter_config_changes(python)),
+        ("CiVerdicts_SkipIgnoredMarkdownTrees", lambda: case_ci_verdicts_skip_ignored_markdown_trees(python)),
+        ("CiVerdicts_SkipAMarkdownDeletion", lambda: case_ci_verdicts_skip_a_markdown_deletion(python)),
+        ("CiVerdicts_KeepOnlyTheRenameDestination", lambda: case_ci_verdicts_keep_only_the_rename_destination(python)),
         ("CiVerdicts_RunForAScriptsCommit", lambda: case_ci_verdicts_run_for_a_scripts_commit(python)),
         ("CiVerdicts_FlagAWorkingTreeMarkdownEdit", lambda: case_ci_verdicts_flag_a_working_tree_markdown_edit(python)),
         ("CiVerdicts_FailSafeWhenTheBaseCannotBeResolved", lambda: case_ci_verdicts_fail_safe_when_the_base_cannot_be_resolved(python)),

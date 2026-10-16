@@ -79,6 +79,9 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/export_docs_gif.py": ("test_export_docs_gif.py",),
     "scripts/export_docs_gif.py.meta": ("test_export_docs_gif.py",),
     "scripts/tests/test_export_docs_gif.py.meta": ("test_export_docs_gif.py",),
+    "scripts/markdown_check.py": ("test_markdown_check.py",),
+    "scripts/markdown_check.py.meta": ("test_markdown_check.py",),
+    "scripts/tests/test_markdown_check.py.meta": ("test_markdown_check.py",),
     "scripts/fast_check.py": ("test_fast_check.py",),
     "scripts/gate.py": ("test_gate.py",),
     "pyproject.toml": ("test_gate.py",),
@@ -203,7 +206,7 @@ def normalize_relative_path(path: str) -> str:
     return normalized.lstrip("/")
 
 
-def markdown_paths_changed(paths: Sequence[str]) -> bool:
+def markdown_paths_changed(paths: Sequence[str], repo_root: Path = REPO_ROOT) -> bool:
     """Return whether any changed path can affect the checked Markdown formatting.
 
     Any changed ``.md`` file counts, plus the Prettier configuration, ignore
@@ -212,11 +215,82 @@ def markdown_paths_changed(paths: Sequence[str]) -> bool:
     change that cannot affect the checked Markdown skips the formatter in
     both places with identical semantics.
     """
+    return markdown_check_files(paths, repo_root) != _MARKDOWN_UNCHANGED
+
+
+_MARKDOWN_UNCHANGED = ""
+_MARKDOWN_CHECK_ALL = "all"
+
+
+def markdown_check_files(paths: Sequence[str], repo_root: Path = REPO_ROOT) -> str:
+    """Return the Markdown check scope for changed paths.
+
+    The result is ``all`` when the Prettier configuration, ignore list, or
+    package manifest changed, or when the ignore list cannot be read, so
+    the formatter never narrows on doubt. Otherwise it is the sorted,
+    comma-joined changed ``.md`` paths that Prettier's own glob would check,
+    meaning paths that still exist on disk and sit outside the ignore
+    list's directory prefixes. The empty string means the change cannot
+    affect checked Markdown.
+
+    CI's llm-lint workflow checks these explicit paths on pull requests so
+    the step does not re-scan every tracked file; push events keep the full
+    ``**/*.md`` sweep.
+    """
+    files: List[str] = []
     for path in paths:
         normalized = normalize_relative_path(path)
-        if normalized.endswith(".md") or normalized in (".prettierrc.json", ".prettierignore", "package.json"):
-            return True
-    return False
+        if normalized in _MARKDOWN_CONFIG_FILES:
+            return _MARKDOWN_CHECK_ALL
+        if normalized.endswith(".md"):
+            files.append(normalized)
+    if not files:
+        return _MARKDOWN_UNCHANGED
+    # Deletions and rename old-sides appear in a git diff but not on disk,
+    # and Prettier exits 2 on a path that matches no file, so only paths
+    # that still exist may reach the formatter. When nothing remains, the
+    # change cannot affect checked Markdown.
+    files = [path for path in files if (repo_root / path).is_file()]
+    if not files:
+        return _MARKDOWN_UNCHANGED
+    prefixes = _prettierignore_prefixes(repo_root)
+    if prefixes is None:
+        return _MARKDOWN_CHECK_ALL
+    files = [path for path in files if not any(path.startswith(prefix) for prefix in prefixes)]
+    if not files:
+        return _MARKDOWN_UNCHANGED
+    return ",".join(sorted(set(files)))
+
+
+_MARKDOWN_CONFIG_FILES = (".prettierrc.json", ".prettierignore", "package.json")
+
+
+def _prettierignore_prefixes(repo_root: Path) -> Optional[Tuple[str, ...]]:
+    """Return the normalized directory prefixes ``.prettierignore`` excludes.
+
+    Every current pattern is a root-relative directory prefix ending in a
+    slash. A missing file yields no exclusions; a pattern the simple prefix
+    grammar cannot represent yields ``None``, which the caller must treat as
+    "check everything" - the same fail-safe direction as every other verdict
+    here.
+    """
+    ignore_path = repo_root / ".prettierignore"
+    try:
+        lines = ignore_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ()
+    prefixes: List[str] = []
+    for line in lines:
+        pattern = line.strip()
+        if not pattern or pattern.startswith("#"):
+            continue
+        if not pattern.endswith("/"):
+            # An unsupported glob shape must not silently narrow the check.
+            return None
+        prefix = normalize_relative_path(pattern.rstrip("/"))
+        if prefix:
+            prefixes.append(prefix + "/")
+    return tuple(prefixes)
 
 
 def is_surface_path(path: str) -> bool:
