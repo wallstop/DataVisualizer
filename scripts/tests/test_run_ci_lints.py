@@ -4,10 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import os
-import shlex
-import shutil
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -95,37 +91,13 @@ class CiLadderTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / '.github/workflows/llm-lint.yml').read_text(encoding='utf-8')
         block = workflow.split('- name: Run the repository lints', 1)[1].split('- name:', 1)[0]
-        project = (root / 'pyproject.toml').read_text(encoding='utf-8')
-        requirement = next(line.partition('=')[2].strip() for line in project.splitlines() if line.startswith('requires-python = '))
-        launcher = f'uv run --no-project --no-managed-python --python {requirement}'
-        self.assertIn(f"{launcher} scripts/run_ci_lints.py", block)
+        self.assertIn("uv run scripts/run_ci_lints.py", block)
         self.assertNotIn('scripts/lint_', block)
         self.assertIn('uses: astral-sh/setup-uv@', workflow)
-        self.assertIn(f'{launcher} scripts/should_run_self_tests.py --github-actions', workflow)
-        self.assertIn(f'{launcher} scripts/tests/run_all.py --names', workflow)
+        self.assertIn('uv run scripts/should_run_self_tests.py --github-actions', workflow)
+        self.assertIn('uv run scripts/tests/run_all.py --names', workflow)
         self.assertNotIn('shell: bash', workflow)
         self.assertEqual(workflow.count('      - "pyproject.toml"'), 2)
-
-
-    @unittest.skipUnless(shutil.which('uv'), 'uv is required for the CI launch regression')
-    def test_ci_launcher_ignores_project_resolution_and_creates_no_venv(self) -> None:
-        workflow = (Path(__file__).resolve().parents[2] / '.github/workflows/llm-lint.yml').read_text(encoding='utf-8')
-        launch = next(line.strip().removeprefix('run: ') for line in workflow.splitlines() if 'run:' in line and 'scripts/run_ci_lints.py' in line)
-        arguments = shlex.split(launch)[:-1]
-        arguments[0] = str(shutil.which('uv'))
-        environment = dict(os.environ, UV_PYTHON_DOWNLOADS='never')
-        environment.pop('VIRTUAL_ENV', None)
-        if sys.prefix != sys.base_prefix:
-            active_bin = os.path.normcase(str(Path(sys.executable).parent))
-            environment['PATH'] = os.pathsep.join(entry for entry in environment['PATH'].split(os.pathsep) if os.path.normcase(entry) != active_bin)
-        (self.root / 'pyproject.toml').write_text('[project]\nname="must-not-resolve"\nversion="1.0"\nrequires-python=">=99"\ndependencies=["must-not-install"]\n', encoding='utf-8')
-        probe = self.root / 'probe.py'
-        probe.write_text('import sys\nassert sys.version_info >= (3, 9)\nassert sys.prefix == sys.base_prefix\nprint("system Python")\n', encoding='utf-8')
-        completed = subprocess.run([*arguments, str(probe)], cwd=self.root, env=environment, capture_output=True, text=True, check=False, timeout=30)
-        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
-        self.assertEqual(completed.stdout.strip(), 'system Python')
-        self.assertFalse((self.root / '.venv').exists())
-        self.assertFalse((self.root / 'uv.lock').exists())
 
 
 if __name__ == '__main__':

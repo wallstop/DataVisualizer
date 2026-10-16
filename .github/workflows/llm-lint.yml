@@ -103,14 +103,12 @@ jobs:
           version: "0.12.10"
           enable-cache: false
 
-      # These stdlib-only steps use a supported system Python through uv.
-      # Avoid project venv creation and Windows venv redirector startup.
       # Typed Python owns shallow-base fetching and fail-safe scope outputs.
       - name: Resolve the check scope
         id: check-scope
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: uv run --no-project --no-managed-python --python ">=3.9" scripts/should_run_self_tests.py --github-actions
+        run: uv run scripts/should_run_self_tests.py --github-actions
 
       # The lint job only installs prettier. Caching the installed tree lets a
       # package.json hit skip the install entirely — the extraction, not the
@@ -150,7 +148,7 @@ jobs:
       # One Python process runs the same ordered lints and index drift check.
       # Each script keeps its CLI arguments, diagnostics and first-failure exit.
       - name: Run the repository lints
-        run: uv run --no-project --no-managed-python --python ">=3.9" scripts/run_ci_lints.py
+        run: uv run scripts/run_ci_lints.py
 
       # The self-tests only verify the harness surface (scripts, .llm, CI and
       # devcontainer wiring, package manifests). Skip them when that surface is
@@ -159,4 +157,4 @@ jobs:
       # to 'all', which runs the full suite.
       - name: Run harness self-tests
         if: steps.check-scope.outputs.self-tests != 'skip'
-        run: uv run --no-project --no-managed-python --python ">=3.9" scripts/tests/run_all.py --names "${{ steps.check-scope.outputs.selection }}"
+        run: uv run scripts/tests/run_all.py --names "${{ steps.check-scope.outputs.selection }}"
