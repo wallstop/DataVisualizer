@@ -185,7 +185,7 @@ def case_opencode_v2_shape_and_legacy_migration() -> None:
     # catalog/execution), strip legacy V1 flat entries on re-sync, and
     # preserve unrelated user settings and a valid V2 mcp.timeout block.
     sandbox = Sandbox()
-    sandbox.path("opencode.json").write_text(LEGACY_OPENCODE_JSON, encoding="utf-8", newline="")
+    sandbox.path("opencode.json").write_bytes(LEGACY_OPENCODE_JSON.encode("utf-8"))
     sandbox.run_sync()
     assert_eq("sync migrates legacy v1 opencode.json without error", 0, sandbox.last_exit, sandbox.run_failure_context())
     document = sandbox.load_json("opencode.json")
