@@ -85,8 +85,8 @@ def run_tests(selected: Sequence[str], python_executable: str) -> int:
         output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
         return name, completed.returncode, output
 
-    # Overlap long archive validation with other files; retain their relative order.
-    scheduled = sorted(selected, key=lambda name: name != "test_validate_unitypackage.py")
+    # Overlap long Windows archive validation; retain other file/platform ordering.
+    scheduled = sorted(selected, key=lambda name: name != "test_validate_unitypackage.py") if sys.platform == "win32" else selected
     # Each file can spawn its own subprocesses. Bound file concurrency so
     # cold Node/Bash startups are not starved on the Windows CI runner.
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:

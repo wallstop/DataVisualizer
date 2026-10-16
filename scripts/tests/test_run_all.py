@@ -183,12 +183,14 @@ assert peak <= 4, peak
 
 
 
-def case_overlaps_archive_validation_with_the_other_files(python: str) -> None:
+def case_keeps_platform_order_and_overlaps_windows_archives(python: str) -> None:
     root = new_runner_fixture()
     driver = """import subprocess, sys, threading
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "scripts" / "tests"))
 import run_all
+platform = sys.argv[1]
+run_all.sys.platform = platform
 long_started = {"test_validate_unitypackage.py": threading.Event()}
 submitted = []
 original_submit = run_all.concurrent.futures.ThreadPoolExecutor.submit
@@ -201,12 +203,13 @@ completed = []
 lock = threading.Lock()
 def probe(arguments, **kwargs):
     name = Path(arguments[1]).name
-    if name in long_started:
-        long_started[name].set()
-        assert other_started.wait(5), "Long suites must overlap another file."
-    else:
-        assert all(event.wait(5) for event in long_started.values()), "Long suites must start before short files occupy every worker."
-        other_started.set()
+    if platform == "win32":
+        if name in long_started:
+            long_started[name].set()
+            assert other_started.wait(5), "Archive validation must overlap another file."
+        else:
+            assert all(event.wait(5) for event in long_started.values()), "Archive validation must start before short files occupy every worker."
+            other_started.set()
     with lock:
         completed.append(name)
     return subprocess.CompletedProcess(arguments, 0, stdout="passed", stderr="")
@@ -214,12 +217,14 @@ run_all.subprocess.run = probe
 selected = [f"test_{index}.py" for index in range(6)] + ["test_unity_mcp_host.py", "test_validate_unitypackage.py"]
 assert run_all.run_tests(selected, sys.executable) == 0
 assert sorted(completed) == sorted(selected), completed
-assert submitted == [selected[-1], *selected[:-1]], submitted
+expected = [selected[-1], *selected[:-1]] if platform == "win32" else selected
+assert submitted == expected, submitted
 """
     write_fixture_file(root, "overlap.py", driver)
     try:
-        result = subprocess.run([python, str(root / "overlap.py")], capture_output=True, text=True, check=False, timeout=30)
-        assert_exit_code(0, f"archive validation must overlap other files without reordering them: {result.stdout} {result.stderr}", result.returncode)
+        for platform in ("linux", "darwin", "win32"):
+            result = subprocess.run([python, str(root / "overlap.py"), platform], capture_output=True, text=True, check=False, timeout=30)
+            assert_exit_code(0, f"{platform} must retain its scheduling contract: {result.stdout} {result.stderr}", result.returncode)
     finally:
         remove_temp_root(root)
 
@@ -235,7 +240,7 @@ def main() -> int:
     run_case("UnknownNames_FailSafeToTheFullSuite", lambda: case_unknown_names_fail_safe_to_the_full_suite(python))
     run_case("EmptyNames_RunEverything", lambda: case_empty_names_run_everything(python))
     run_case("Concurrency_BoundsFileWorkers", lambda: case_bounds_parallel_files(python))
-    run_case("Concurrency_OverlapsArchiveValidation", lambda: case_overlaps_archive_validation_with_the_other_files(python))
+    run_case("Concurrency_KeepsPlatformOrder", lambda: case_keeps_platform_order_and_overlaps_windows_archives(python))
     run_case("SpawnFailure_CountsAsFailed", lambda: case_spawn_failure_counts_as_failed(python))
 
     failures = failure_count()
