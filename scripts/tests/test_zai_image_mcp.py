@@ -205,6 +205,16 @@ def _error_code(response: Dict[str, Any]) -> Optional[int]:
     return code
 
 
+def _saved_path(text: str, description: str) -> Path:
+    """Extract the 'Saved: <path>' marker and verify the file exists on disk."""
+    assert_true("Saved: " in text, description)
+    saved = text.split("Saved: ", 1)[1]
+    assert_true(bool(saved), "the saved path is not empty")
+    path = Path(saved)
+    assert_true(path.is_file(), f"the saved path points at a written file ({saved})")
+    return path
+
+
 def case_initialize_echoes_supported_version() -> None:
     sandbox = Sandbox()
     try:
@@ -265,9 +275,8 @@ def case_generate_saves_png_from_b64_payload() -> None:
         is_error, text = _response_payload(first)
         assert_true(not is_error, "a successful generation is not an error")
         assert_contains("the text names the prompt", 'Generated image for: "Hello World!"', text)
-        saved_marker = text.split("Saved: ", 1)[1] if "Saved: " in text else ""
-        assert_true(saved_marker and Path(saved_marker).is_file(), "the saved path points at a written file")
-        assert_true(Path(saved_marker).read_bytes() == PNG_BYTES, "the saved file carries the decoded PNG bytes")
+        saved_marker = _saved_path(text, "the response names the saved path")
+        assert_true(saved_marker.read_bytes() == PNG_BYTES, "the saved file carries the decoded PNG bytes")
         content = require_list(require_dict(first.get("result"), "tools/call carries a result object").get("content"), "tools/call carries content parts")
         image_part = require_dict(content[1], "the inline image part follows the text part")
         assert_true(image_part.get("mimeType") == "image/png", "the inline part is a PNG")
@@ -301,7 +310,8 @@ def case_generate_downloads_url_payload() -> None:
             base64.b64decode(require_text(image_part.get("data"), "the inline part carries base64 data")) == PNG_BYTES,
             "the inline part carries the bytes downloaded from the url",
         )
-        assert_true("Saved: /" in text, "the generated image was also saved")
+        saved_marker = _saved_path(text, "the generated image was also saved")
+        assert_true(saved_marker.read_bytes() == PNG_BYTES, "the downloaded image file carries the PNG bytes")
     finally:
         stub.stop()
         sandbox.destroy()

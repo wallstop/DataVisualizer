@@ -138,7 +138,12 @@ def save_image(base64_data: str, prompt: str) -> str:
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).isoformat().replace(":", "-").replace(".", "-")
     file_path = IMAGES_DIR / (stamp + "-" + slugify(prompt) + ".png")
-    target = os.open(str(file_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if hasattr(os, "O_BINARY"):
+        # Windows os.open defaults to text mode, which would translate the
+        # PNG's 0x0A bytes; the low-level fd must be explicitly binary there.
+        flags |= os.O_BINARY
+    target = os.open(str(file_path), flags, 0o600)
     try:
         os.write(target, blob)
     finally:
