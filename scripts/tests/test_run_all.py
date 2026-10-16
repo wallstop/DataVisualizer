@@ -183,48 +183,97 @@ assert peak <= 4, peak
 
 
 
-def case_keeps_platform_order_and_overlaps_windows_archives(python: str) -> None:
+
+def case_overlaps_files_after_bridge_startup(python: str) -> None:
     root = new_runner_fixture()
-    driver = """import subprocess, sys, threading
+    driver = """import contextlib, io, subprocess, sys, threading
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "scripts" / "tests"))
 import run_all
-platform = sys.argv[1]
-run_all.sys.platform = platform
-long_started = {"test_validate_unitypackage.py": threading.Event()}
+mode = sys.argv[1]
+startup_file = "test_unity_mcp_host.py"
+archive_file = "test_validate_unitypackage.py"
+announced = threading.Event()
+finished = threading.Event()
+other_started = threading.Event()
+lock = threading.Lock()
+completed = []
 submitted = []
+markers = []
+instances = 0
 original_submit = run_all.concurrent.futures.ThreadPoolExecutor.submit
 def submit(pool, function, name, *args):
     submitted.append(name)
     return original_submit(pool, function, name, *args)
 run_all.concurrent.futures.ThreadPoolExecutor.submit = submit
-other_started = threading.Event()
-completed = []
-lock = threading.Lock()
+class Bridge:
+    def __init__(self, arguments, **kwargs):
+        global instances
+        assert Path(arguments[1]).name == startup_file
+        with lock:
+            instances += 1
+            first = instances == 1
+        if first:
+            assert not other_started.is_set(), "Other files must wait for startup."
+        marker = kwargs["env"]["DATAVIZ_HARNESS_STARTUP_MARKER"]
+        markers.append(marker)
+        if mode == "spawn-failure":
+            with lock:
+                completed.append(startup_file)
+            finished.set()
+            raise OSError("bridge launch failed")
+        self.stdout = self.lines(marker)
+    def lines(self, marker):
+        yield "ordinary startup output\\n"
+        if mode.startswith("ready"):
+            announced.set()
+            yield marker + "\\n"
+        yield "ordinary final output\\n"
+    def __enter__(self):
+        return self
+    def __exit__(self, *arguments):
+        return None
+    def wait(self):
+        if mode.startswith("ready"):
+            assert other_started.wait(5), "Ready bridge must overlap another file."
+        with lock:
+            completed.append(startup_file)
+        finished.set()
+        return 0 if mode.startswith("ready") or mode == "skipped-startup" else 9
 def probe(arguments, **kwargs):
     name = Path(arguments[1]).name
-    if platform == "win32":
-        if name in long_started:
-            long_started[name].set()
-            assert other_started.wait(5), "Archive validation must overlap another file."
-        else:
-            assert all(event.wait(5) for event in long_started.values()), "Archive validation must start before short files occupy every worker."
-            other_started.set()
+    assert name != startup_file, "Bridge startup must be captured."
+    assert announced.is_set() if mode.startswith("ready") else finished.is_set()
+    other_started.set()
     with lock:
         completed.append(name)
     return subprocess.CompletedProcess(arguments, 0, stdout="passed", stderr="")
+run_all.subprocess.Popen = Bridge
 run_all.subprocess.run = probe
-selected = [f"test_{index}.py" for index in range(6)] + ["test_unity_mcp_host.py", "test_validate_unitypackage.py"]
-assert run_all.run_tests(selected, sys.executable) == 0
+selected = [f"test_{index}.py" for index in range(6)] + [startup_file, archive_file]
+if mode == "ready-repeated":
+    selected.append(startup_file)
+output = io.StringIO()
+with contextlib.redirect_stdout(output):
+    result = run_all.run_tests(selected, sys.executable)
+assert result == (0 if mode.startswith("ready") or mode == "skipped-startup" else 1), (result, output.getvalue())
 assert sorted(completed) == sorted(selected), completed
-expected = [selected[-1], *selected[:-1]] if platform == "win32" else selected
-assert submitted == expected, submitted
+remaining = list(selected)
+remaining.remove(startup_file)
+remaining.sort(key=lambda name: name != archive_file)
+assert submitted == [startup_file, *remaining], submitted
+rendered = output.getvalue()
+if mode == "spawn-failure":
+    assert "bridge launch failed" in rendered, rendered
+else:
+    assert "ordinary startup output" in rendered and "ordinary final output" in rendered
+assert all(marker not in rendered for marker in markers), rendered
 """
-    write_fixture_file(root, "overlap.py", driver)
+    write_fixture_file(root, "startup.py", driver)
     try:
-        for platform in ("linux", "darwin", "win32"):
-            result = subprocess.run([python, str(root / "overlap.py"), platform], capture_output=True, text=True, check=False, timeout=30)
-            assert_exit_code(0, f"{platform} must retain its scheduling contract: {result.stdout} {result.stderr}", result.returncode)
+        for mode in ("ready", "failed-before-ready", "spawn-failure", "skipped-startup", "ready-repeated"):
+            result = subprocess.run([python, str(root / "startup.py"), mode], capture_output=True, text=True, check=False, timeout=30)
+            assert_exit_code(0, f"{mode} must preserve startup, overlap and failure contracts: {result.stdout} {result.stderr}", result.returncode)
     finally:
         remove_temp_root(root)
 
@@ -240,7 +289,7 @@ def main() -> int:
     run_case("UnknownNames_FailSafeToTheFullSuite", lambda: case_unknown_names_fail_safe_to_the_full_suite(python))
     run_case("EmptyNames_RunEverything", lambda: case_empty_names_run_everything(python))
     run_case("Concurrency_BoundsFileWorkers", lambda: case_bounds_parallel_files(python))
-    run_case("Concurrency_KeepsPlatformOrder", lambda: case_keeps_platform_order_and_overlaps_windows_archives(python))
+    run_case("Concurrency_CoordinatesStartup", lambda: case_overlaps_files_after_bridge_startup(python))
     run_case("SpawnFailure_CountsAsFailed", lambda: case_spawn_failure_counts_as_failed(python))
 
     failures = failure_count()
