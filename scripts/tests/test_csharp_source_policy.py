@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Sequence, Tuple
+from typing import Dict, Optional, Sequence, Tuple
 
 sys.dont_write_bytecode = True
 
@@ -90,7 +90,7 @@ MEMBER_ORDER_FIXTURE = """namespace Demo
 
 def invoke_composite(root: Path, arguments: Sequence[str] = ()) -> Tuple[str, int]:
     """Run the composite with every lint root pointed at the fixture root."""
-    previous: dict = {}
+    previous: Dict[str, Optional[str]] = {}
     for env_var in ROOT_ENV_VARS:
         previous[env_var] = os.environ.get(env_var)
         os.environ[env_var] = str(root)
