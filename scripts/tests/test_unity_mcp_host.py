@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import contextlib
+import http.client
 import json
 import os
 import shutil
@@ -214,6 +215,27 @@ class HostTests(unittest.TestCase):
         self.env_file.write_text(f'\ufeffexport UNITY_CLI="{shutil.which("node")}"\nUNITY_MCP_PROJECT="{self.project}"\nUNITY_MCP_TOKEN=fixture-secret\nUNITY_MCP_TIMEOUT_MS=1500\n', encoding='utf-8')
         self.log = (self.root / 'bridge.log').open('w+', encoding='utf-8')
         self.addCleanup(self.log.close)
+        self.node_options: list[str] = []
+        if self._testMethodName == 'test_auth_notifications_and_parallel_request_ids':
+            observer = self.root / 'observe-response-end.mjs'
+            observer.write_text("""
+import http from 'node:http';
+const createServer = http.createServer;
+http.createServer = (handler) => createServer((request, response) => {
+    const end = response.end.bind(response);
+    response.end = (...args) => {
+        if (request.headers['x-dataviz-drain-probe']) {
+            console.log('[drain-probe]' + JSON.stringify({
+                probe: request.headers['x-dataviz-drain-probe'],
+                drained: request.readableEnded,
+            }));
+        }
+        return end(...args);
+    };
+    handler(request, response);
+});
+""", encoding='utf-8')
+            self.node_options = ['--import', observer.as_uri()]
         self.launch()
         self.addCleanup(self.stop)
 
@@ -228,7 +250,7 @@ class HostTests(unittest.TestCase):
             time.sleep(0.02)
 
     def command(self) -> list[str]:
-        return [str(shutil.which('node')), str(self.script), '--host', '127.0.0.1', '--port', str(self.port)]
+        return [str(shutil.which('node')), *self.node_options, str(self.script), '--host', '127.0.0.1', '--port', str(self.port)]
 
     def logs(self) -> str:
         self.log.flush()
@@ -279,9 +301,12 @@ class HostTests(unittest.TestCase):
         self.assertTrue(health['authRequired'])
         self.assertFalse(health['ok'])
         for method in ['POST', 'DELETE']:
-            with self.assertRaises(HTTPError) as raised:
-                self.http('/mcp', {}, token='wrong', method=method)
-            self.assertEqual(raised.exception.code, 401)
+            with self.subTest(method=method):
+                with self.assertRaises(HTTPError) as raised:
+                    self.http('/mcp', {}, token='wrong', method=method)
+                with raised.exception as response:
+                    self.assertEqual(response.code, 401)
+                    self.assertEqual(json.loads(response.read()), {'error': 'unauthorized'})
         self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
         startup_marker = os.environ.get('DATAVIZ_HARNESS_STARTUP_MARKER')
         if startup_marker:
@@ -292,6 +317,50 @@ class HostTests(unittest.TestCase):
             results = list(executor.map(self.rpc, methods))
         self.assertEqual([result['id'] for result in results], [7, 7, 7])
         self.assertEqual([result['result']['method'] for result in results], methods)
+
+        # Send the body only after reading the full early response, without a sleep.
+        cases = [
+            ('POST', '/mcp', 'wrong', 401),
+            ('DELETE', '/mcp', 'wrong', 401),
+            ('POST', '/missing', 'fixture-secret', 404),
+            ('DELETE', '/mcp', 'fixture-secret', 204),
+            ('PUT', '/mcp', 'fixture-secret', 405),
+            ('POST', '/healthz', 'fixture-secret', 200),
+        ]
+        for method, route, token, status in cases:
+            probe = f'{method}:{route}:{status}'
+            with self.subTest(probe=probe):
+                with socket.create_connection(('127.0.0.1', self.port), timeout=5) as client:
+                    headers = (f'{method} {route} HTTP/1.1\r\nHost: 127.0.0.1\r\n'
+                               f'Authorization: Bearer {token}\r\nX-Dataviz-Drain-Probe: {probe}\r\n'
+                               'Content-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n')
+                    client.sendall(headers.encode('ascii'))
+                    with http.client.HTTPResponse(client) as response:
+                        response.begin()
+                        self.assertEqual(response.status, status)
+                        body = response.read()
+                        if status == 401:
+                            self.assertEqual(json.loads(body), {'error': 'unauthorized'})
+                        elif status == 200:
+                            self.assertEqual(json.loads(body)['bridge'], 'dataviz-unity-mcp')
+                        else:
+                            self.assertEqual(body, b'')
+                        if status == 405:
+                            self.assertEqual(response.getheader('Allow'), 'POST, DELETE')
+                    client.sendall(b'{}')
+                    self.assertEqual(client.recv(1), b'', 'Close only after consuming the complete request.')
+                observations = [json.loads(line.split('[drain-probe]', 1)[1])
+                                for line in self.logs().splitlines() if '[drain-probe]' in line]
+                self.assertIn({'probe': probe, 'drained': True}, observations)
+
+        # An abandoning client must leave the bridge responsive, without a retry.
+        with socket.create_connection(('127.0.0.1', self.port), timeout=5) as client:
+            client.sendall(b'POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer wrong\r\nContent-Length: 2\r\n\r\n')
+            with http.client.HTTPResponse(client) as response:
+                response.begin()
+                self.assertEqual(response.status, 401)
+                self.assertEqual(json.loads(response.read()), {'error': 'unauthorized'})
+        self.assertEqual(self.http('/healthz')[0], 200)
 
     def test_cli_crash_does_not_poison_restarted_stdout(self) -> None:
         self.rpc('initialize')
