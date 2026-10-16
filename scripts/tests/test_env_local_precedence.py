@@ -88,7 +88,7 @@ def resolve(env_file: Path, variable: str, overrides: Optional[Dict[str, str]] =
 
 def case_fills_empty_preexisting_variable() -> None:
     fixture = new_temp_root(prefix="env-local-test-") / "fixture.env"
-    fixture.write_text("TEST_TOKEN=from-file\n", encoding="utf-8", newline="")
+    fixture.write_bytes("TEST_TOKEN=from-file\n".encode("utf-8"))
     try:
         assert_eq(
             "an empty preexisting variable is filled from the file",
@@ -101,7 +101,7 @@ def case_fills_empty_preexisting_variable() -> None:
 
 def case_nonempty_preexisting_variable_wins_by_default() -> None:
     fixture = new_temp_root(prefix="env-local-test-") / "fixture.env"
-    fixture.write_text("TEST_TOKEN=from-file\n", encoding="utf-8", newline="")
+    fixture.write_bytes("TEST_TOKEN=from-file\n".encode("utf-8"))
     try:
         assert_eq(
             "a non-empty preexisting variable wins by default",
@@ -116,7 +116,7 @@ def case_path_is_never_overridden_under_file_precedence() -> None:
     # The inverted mode must stay scoped to MCP credentials. Overriding PATH
     # would break every agent CLI in the session.
     fixture = new_temp_root(prefix="env-local-test-") / "fixture.env"
-    fixture.write_text("PATH=/evil/path\n", encoding="utf-8", newline="")
+    fixture.write_bytes("PATH=/evil/path\n".encode("utf-8"))
     try:
         assert_eq(
             "PATH is never overridden even when precedence=file",
@@ -129,7 +129,7 @@ def case_path_is_never_overridden_under_file_precedence() -> None:
 
 def case_github_pat_overridden_under_file_precedence() -> None:
     fixture = new_temp_root(prefix="env-local-test-") / "fixture.env"
-    fixture.write_text("GITHUB_PERSONAL_ACCESS_TOKEN=repaired-in-file\n", encoding="utf-8", newline="")
+    fixture.write_bytes("GITHUB_PERSONAL_ACCESS_TOKEN=repaired-in-file\n".encode("utf-8"))
     try:
         assert_eq(
             "GITHUB_PERSONAL_ACCESS_TOKEN takes the file value under precedence=file",
@@ -146,7 +146,7 @@ def case_github_pat_overridden_under_file_precedence() -> None:
 
 def case_github_mcp_pat_overridden_under_file_precedence() -> None:
     fixture = new_temp_root(prefix="env-local-test-") / "fixture.env"
-    fixture.write_text("GITHUB_MCP_PAT=repaired-in-file\n", encoding="utf-8", newline="")
+    fixture.write_bytes("GITHUB_MCP_PAT=repaired-in-file\n".encode("utf-8"))
     try:
         assert_eq(
             "GITHUB_MCP_PAT takes the file value under precedence=file",
@@ -163,7 +163,7 @@ def case_github_mcp_pat_overridden_under_file_precedence() -> None:
 
 def case_zai_key_overridden_under_file_precedence() -> None:
     fixture = new_temp_root(prefix="env-local-test-") / "fixture.env"
-    fixture.write_text("ZAI_API_KEY=repaired-in-file\n", encoding="utf-8", newline="")
+    fixture.write_bytes("ZAI_API_KEY=repaired-in-file\n".encode("utf-8"))
     try:
         assert_eq(
             "ZAI_API_KEY takes the file value under precedence=file",
@@ -182,7 +182,7 @@ def case_unmanaged_variable_not_overridden_under_file_precedence() -> None:
     # Scope guard: precedence=file must not turn the loader into a general
     # "the file wins" mode for arbitrary variables.
     fixture = new_temp_root(prefix="env-local-test-") / "fixture.env"
-    fixture.write_text("SOME_OTHER_SETTING=from-file\n", encoding="utf-8", newline="")
+    fixture.write_bytes("SOME_OTHER_SETTING=from-file\n".encode("utf-8"))
     try:
         assert_eq(
             "an unmanaged variable keeps the preexisting value under precedence=file",
@@ -199,7 +199,7 @@ def case_unmanaged_variable_not_overridden_under_file_precedence() -> None:
 
 def case_repeated_load_is_idempotent() -> None:
     fixture = new_temp_root(prefix="env-local-test-") / "fixture.env"
-    fixture.write_text("GITHUB_PERSONAL_ACCESS_TOKEN=value-in-file\n", encoding="utf-8", newline="")
+    fixture.write_bytes("GITHUB_PERSONAL_ACCESS_TOKEN=value-in-file\n".encode("utf-8"))
     try:
         once = resolve(
             fixture,
