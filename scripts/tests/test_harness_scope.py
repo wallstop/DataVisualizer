@@ -282,6 +282,24 @@ def case_selection_prefers_the_specific_mcp_subject_over_the_coarse_tree(python:
     )
 
 
+def case_selection_maps_the_live_doctor_path_to_its_contract(python: str) -> None:
+    probe = invoke_scope_probe(python, ".llm/mcp/mcp-doctor.mjs")
+    assert_true(not probe["selection"]["all"], "the live doctor path must not select the full suite")
+    assert_true(
+        ",".join(probe["selection"]["names"]) == "test_mcp_credentials.py,test_mcp_sync.py,test_unity_mcp_doctor.py",
+        f"the live doctor path must select the doctor suite alongside the mcp suites, got: {','.join(probe['selection']['names'])}",
+    )
+
+
+def case_selection_maps_the_retired_doctor_path_for_deletions(python: str) -> None:
+    probe = invoke_scope_probe(python, ".llm/mcp/unity-mcp-doctor.mjs")
+    assert_true(not probe["selection"]["all"], "the retired doctor path must not select the full suite")
+    assert_true(
+        ",".join(probe["selection"]["names"]) == "test_unity_mcp_doctor.py",
+        f"the retired doctor path must keep its deletion selection, got: {','.join(probe['selection']['names'])}",
+    )
+
+
 def case_selection_maps_a_test_file_to_itself(python: str) -> None:
     probe = invoke_scope_probe(python, "scripts/tests/test_harness_scope.py")
     assert_true(not probe["selection"]["all"], "a test file edit must not select the full suite")
@@ -526,6 +544,8 @@ def main() -> int:
         ("Selection_SelectsTheMappedSubjectTests", lambda: case_selection_selects_the_mapped_subject_tests(python)),
         ("Selection_UnionsSubjectsAcrossPaths", lambda: case_selection_unions_subjects_across_paths(python)),
         ("Selection_PrefersTheSpecificMcpSubjectOverTheCoarseTree", lambda: case_selection_prefers_the_specific_mcp_subject_over_the_coarse_tree(python)),
+        ("Selection_MapsTheLiveDoctorPathToItsContract", lambda: case_selection_maps_the_live_doctor_path_to_its_contract(python)),
+        ("Selection_MapsTheRetiredDoctorPathForDeletions", lambda: case_selection_maps_the_retired_doctor_path_for_deletions(python)),
         ("Selection_MapsATestFileToItself", lambda: case_selection_maps_a_test_file_to_itself(python)),
         ("Selection_MapsTheGateSurface", lambda: case_selection_maps_the_gate_surface(python)),
         ("Selection_MapsTheMigratedTrioSurface", lambda: case_selection_maps_the_migrated_trio_surface(python)),
