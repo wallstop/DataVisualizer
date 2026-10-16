@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
 import json
 import os
 import shutil
@@ -14,11 +15,115 @@ import time
 import unittest
 from pathlib import Path
 from typing import Any, Dict, Optional
+from unittest import mock
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from unittest.mock import Mock, patch
 
 sys.dont_write_bytecode = True
 REPO = Path(__file__).resolve().parents[2]
+
+
+def cleanup_fixture_directory(path: Path) -> None:
+    # A terminating Windows CLI child can retain its current-directory handle briefly.
+    deadline = time.monotonic() + 2.0
+    while True:
+        try:
+            shutil.rmtree(path)
+            return
+        except PermissionError as error:
+            if getattr(error, 'winerror', None) != 32 or deadline <= time.monotonic():
+                raise
+            time.sleep(0.01)
+
+
+class FixtureDirectoryCleanupTests(unittest.TestCase):
+    def test_cleanup_retries_only_temporary_sharing_violations(self) -> None:
+        for winerror in (None, 5, 32):
+            with self.subTest(winerror=winerror):
+                error = PermissionError('fixture lock')
+                if winerror is not None:
+                    setattr(error, 'winerror', winerror)
+                directory = tempfile.TemporaryDirectory()
+                with directory, mock.patch('shutil.rmtree', side_effect=[error, None]) as remove, mock.patch('time.sleep') as sleep:
+                    if winerror == 32:
+                        cleanup_fixture_directory(Path(directory.name))
+                        self.assertEqual(remove.call_count, 2)
+                        sleep.assert_called_once_with(0.01)
+                    else:
+                        with self.assertRaises(PermissionError) as raised:
+                            cleanup_fixture_directory(Path(directory.name))
+                        self.assertIs(raised.exception, error)
+                        remove.assert_called_once_with(Path(directory.name))
+                        sleep.assert_not_called()
+
+    def test_cleanup_preserves_a_sharing_violation_at_the_deadline(self) -> None:
+        for clock, attempts in (([0.0, 2.0], 1), ([0.0, 0.0, 2.0], 2)):
+            with self.subTest(attempts=attempts):
+                error = PermissionError('persistent fixture lock')
+                setattr(error, 'winerror', 32)
+                directory = tempfile.TemporaryDirectory()
+                with directory, mock.patch('shutil.rmtree', side_effect=error) as remove:
+                    with mock.patch('time.monotonic', side_effect=clock), mock.patch('time.sleep') as sleep:
+                        with self.assertRaises(PermissionError) as raised:
+                            cleanup_fixture_directory(Path(directory.name))
+                        self.assertIs(raised.exception, error)
+                        self.assertEqual(remove.call_count, attempts)
+                        self.assertEqual(sleep.call_count, attempts - 1)
+
+    def test_cleanup_removes_the_directory_after_a_transient_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'fixture.txt').write_text('owned fixture', encoding='utf-8')
+            remove = shutil.rmtree
+            error = PermissionError('transient lock')
+            setattr(error, 'winerror', 32)
+            attempts = 0
+
+            def locked_once(path: Path) -> None:
+                nonlocal attempts
+                attempts += 1
+                if attempts == 1:
+                    raise error
+                remove(path)
+
+            with mock.patch('shutil.rmtree', side_effect=locked_once):
+                cleanup_fixture_directory(root)
+            self.assertEqual(attempts, 2)
+            self.assertFalse(root.exists(), 'A successful retry must actually remove the fixture.')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows locks process current directories')
+    def test_cleanup_waits_for_a_real_process_directory_lock(self) -> None:
+        with contextlib.ExitStack() as cleanup:
+            directory = tempfile.TemporaryDirectory(prefix='fixture-cwd-lock-')
+            cleanup.callback(directory.cleanup)
+            root = Path(directory.name)
+            holder = cleanup.enter_context(subprocess.Popen(
+                [sys.executable, '-c', "from pathlib import Path; import sys; Path('holder-ready').touch(); sys.stdin.buffer.read(1)"],
+                cwd=root, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            ))
+            cleanup.callback(holder.kill)
+            deadline = time.monotonic() + 5
+            while not (root / 'holder-ready').exists() and holder.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue((root / 'holder-ready').exists(), 'The subprocess must hold the fixture directory.')
+            remove = shutil.rmtree
+            observed_errors: list[int] = []
+
+            def release_after_locked_cleanup(path: Path) -> None:
+                try:
+                    remove(path)
+                except PermissionError as error:
+                    observed_errors.append(getattr(error, 'winerror', 0))
+                    _, errors = holder.communicate(input=b'release', timeout=5)
+                    self.assertEqual(holder.returncode, 0, errors.decode('utf-8', errors='replace'))
+                    raise
+
+            with mock.patch('shutil.rmtree', side_effect=release_after_locked_cleanup):
+                cleanup_fixture_directory(Path(directory.name))
+            self.assertEqual(observed_errors, [32])
+            self.assertFalse(root.exists())
+
 FAKE_CLI = r"""
 const readline = require('node:readline');
 readline.createInterface({ input: process.stdin }).on('line', line => {
@@ -35,13 +140,61 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
 });
 """
 
+CONFIG_SYNC_FIXTURE = """
+import fs from 'node:fs';
+fs.writeFileSync('sync-port.pending', process.env.UNITY_MCP_HTTP_PORT);
+fs.renameSync('sync-port.pending', 'sync-port');
+setTimeout(() => process.exit(0), 1800);
+"""
+
+
+@unittest.skipUnless(shutil.which('node'), 'node is required')
+class ConfigSyncPublicationTests(unittest.TestCase):
+    def test_port_is_published_only_after_the_write_completes(self) -> None:
+        with contextlib.ExitStack() as cleanup:
+            directory = cleanup.enter_context(tempfile.TemporaryDirectory(prefix='config-sync-publication-'))
+            root = Path(directory)
+            preload = root / 'pause-write.mjs'
+            preload.write_text("""
+import fs from 'node:fs';
+const write = fs.writeFileSync;
+fs.writeFileSync = (path, data, ...options) => {
+    write(path, '');
+    write('writer-ready', '');
+    fs.readSync(0, Buffer.alloc(1), 0, 1, null);
+    return write(path, data, ...options);
+};
+""", encoding='utf-8')
+            fixture = root / 'configure.mjs'
+            # Publication is synchronous; this test does not need the bridge's background delay.
+            fixture.write_text(CONFIG_SYNC_FIXTURE + '\nprocess.exit(0);', encoding='utf-8')
+            env = dict(os.environ, UNITY_MCP_HTTP_PORT='53386')
+            process = cleanup.enter_context(subprocess.Popen(
+                [str(shutil.which('node')), '--import', preload.as_uri(), str(fixture)],
+                cwd=root, env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            ))
+            cleanup.callback(process.kill)
+            deadline = time.monotonic() + 5
+            ready = root / 'writer-ready'
+            while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.01)
+            if not ready.exists():
+                exit_code = process.poll()
+                process.kill()
+                _, errors = process.communicate(timeout=5)
+                self.fail(f'Writer did not reach the paused empty-file state; exit={exit_code}: {errors!r}')
+            port_file = root / 'sync-port'
+            self.assertFalse(port_file.exists(), 'Readers must not see an incomplete selected port.')
+            _, errors = process.communicate(input=b'continue', timeout=5)
+            self.assertEqual(process.returncode, 0, errors.decode('utf-8', errors='replace'))
+            self.assertEqual(port_file.read_text(encoding='utf-8'), '53386')
+
 
 @unittest.skipUnless(shutil.which('node'), 'node is required')
 class HostTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(prefix='unity-mcp-host-')
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(tempfile.mkdtemp(prefix='unity-mcp-host-'))
+        self.addCleanup(cleanup_fixture_directory, self.root)
         script_dir = self.root / '.llm' / 'mcp'
         script_dir.mkdir(parents=True)
         self.script = script_dir / 'unity-mcp-host.mjs'
@@ -85,7 +238,12 @@ class HostTests(unittest.TestCase):
         if os.name == 'nt' and self.process.poll() is None:
             # Windows terminate kills only the parent, leaving the CLI child
             # holding the fixture directory and log open.
-            subprocess.run(['taskkill', '/PID', str(self.process.pid), '/T', '/F'], capture_output=True, check=True)
+            command = ['taskkill', '/PID', str(self.process.pid), '/T', '/F']
+            result = subprocess.run(command, capture_output=True, check=False)
+            # The process can exit between poll and taskkill, or taskkill
+            # can kill the parent after one child has already exited.
+            if result.returncode != 0 and self.process.poll() is None:
+                self.fail(f"taskkill failed for bridge PID {self.process.pid}: {result.stdout!r} {result.stderr!r}")
         else:
             self.process.terminate()
         try:
@@ -132,8 +290,13 @@ class HostTests(unittest.TestCase):
         retry = self.rpc('initialize', identifier=23)
         self.assertEqual(retry['id'], 23)
         self.assertIn('error', retry)
-        time.sleep(1.05)
-        self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
+        deadline = time.monotonic() + 10
+        recovered = self.rpc('initialize')
+        while 'result' not in recovered and time.monotonic() < deadline:
+            time.sleep(0.05)
+            recovered = self.rpc('initialize')
+        self.assertIn('result', recovered, f"Bridge did not recover: {recovered}; {self.logs()}")
+        self.assertEqual(recovered['result']['serverInfo']['name'], 'fixture')
         self.assertTrue(self.http('/healthz')[1]['ok'])
 
     def test_workspace_transport_settings_override_legacy_host_file(self) -> None:
@@ -202,7 +365,7 @@ class HostTests(unittest.TestCase):
     def test_slow_config_sync_keeps_http_responsive_and_uses_selected_port(self) -> None:
         self.stop()
         configure = self.script.parent / 'configure.mjs'
-        configure.write_text("import fs from 'node:fs'; fs.writeFileSync('sync-port', process.env.UNITY_MCP_HTTP_PORT); setTimeout(() => process.exit(0), 1800);", encoding='utf-8')
+        configure.write_text(CONFIG_SYNC_FIXTURE, encoding='utf-8')
         self.env['UNITY_MCP_AUTO_SYNC'] = '1'
         self.env['UNITY_MCP_HTTP_PORT'] = '9020'
         self.env_file.write_text(self.env_file.read_text(encoding='utf-8').replace(f'UNITY_MCP_HTTP_PORT={self.port}', 'UNITY_MCP_HTTP_PORT=9020'), encoding='utf-8')
@@ -217,6 +380,28 @@ class HostTests(unittest.TestCase):
         self.assertLess(time.monotonic() - start, 1)
         self.assertEqual(port_file.read_text(encoding='utf-8'), str(self.port))
         time.sleep(1.8)
+
+
+class CleanupTests(unittest.TestCase):
+    def test_taskkill_failure_requires_a_live_process(self) -> None:
+        for exit_code in (0, None):
+            with self.subTest(exit_code=exit_code):
+                host = HostTests('test_repeated_start_recognizes_absolute_cli_path')
+                process = Mock(pid=123)
+                process.poll.side_effect = [None, exit_code]
+                result = subprocess.CompletedProcess(['taskkill'], 255, stdout=b'parent exited', stderr=b'child exited')
+                def kill(command: list[str], *, capture_output: bool, check: bool) -> subprocess.CompletedProcess[bytes]:
+                    if check:
+                        raise subprocess.CalledProcessError(255, command, stderr=result.stderr)
+                    return result
+                with patch.object(host, 'process', process, create=True), patch('os.name', 'nt'), patch('subprocess.run', side_effect=kill):
+                    if exit_code is None:
+                        with self.assertRaisesRegex(AssertionError, 'child exited'):
+                            host.stop()
+                        process.wait.assert_not_called()
+                    else:
+                        host.stop()
+                        process.wait.assert_called_once_with(timeout=5)
 
 
 if __name__ == '__main__':

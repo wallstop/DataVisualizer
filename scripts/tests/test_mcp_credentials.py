@@ -274,7 +274,7 @@ def case_repair_respects_reverse_divergence() -> None:
     finally:
         stub.stop()
     assert_eq(
-        "repair copies the canonical value over a stale GITHUB_MCP_PAT",
+        f"repair copies the canonical value over a stale GITHUB_MCP_PAT; doctor output:\n{sandbox.stdout}",
         LIVE,
         read_canonical_value(sandbox, "GITHUB_MCP_PAT"),
     )

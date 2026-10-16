@@ -90,6 +90,11 @@ def case_plan_carries_commands_and_dependencies(python: str) -> None:
             assert_true(len(step["args"]) >= 1, f"step {step['name']} must carry a command")
             assert_true(step["title"], f"step {step['name']} must carry a title")
             steps[step["name"]] = step
+            if any(argument.endswith(".py") for argument in step["args"]):
+                assert_true(
+                    step["args"][0] == python,
+                    f"{step['name']} must reuse the active interpreter without provisioning another environment: {step['args']}",
+                )
     assert_true(
         ",".join(steps["csharp.member-order"]["after"]) == "csharp.format",
         "the member-order lint must run after the CSharpier format",
