@@ -13,14 +13,18 @@ before publication; unchanged output bytes keep their timestamps.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import hashlib
 import io
 import json
 import os
+import shutil
+import stat
 import struct
+import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple, cast
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 REQUIRED_SHOTS: Tuple[str, ...] = ("layout", "instance-actions", "create", "import", "search", "settings")
 DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "docs" / "images"
@@ -101,6 +105,81 @@ def validate_inventory(source_dir: Path, manifest: Path = DEFAULT_MANIFEST) -> L
     return sources
 
 
+def _stat_or_none(path: Path) -> Optional[os.stat_result]:
+    try:
+        return path.lstat()
+    except FileNotFoundError:
+        return None
+
+
+def _remove_readonly(remove: Callable[[str], None], path: str, _error: object) -> None:
+    os.chmod(path, stat.S_IWRITE)
+    remove(path)
+
+
+def _remove_staging(path: Path) -> None:
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=_remove_readonly)
+    else:
+        shutil.rmtree(path, onerror=_remove_readonly)
+
+
+def _publish_batch(pending: Sequence[Tuple[Path, bytes]], output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with ExitStack() as cleanup:
+        staging = Path(tempfile.mkdtemp(prefix=".docs-webp-", dir=output_dir))
+        cleanup_safe = True
+
+        def remove_staging_if_safe() -> None:
+            if cleanup_safe:
+                _remove_staging(staging)
+
+        cleanup.callback(remove_staging_if_safe)
+        prepared = staging / "prepared"
+        previous = staging / "previous"
+        prepared.mkdir()
+        previous.mkdir()
+        for target, encoded in pending:
+            original = _stat_or_none(target)
+            if original is not None and not stat.S_ISREG(original.st_mode):
+                raise ValueError(f"Output must be a regular file: {target}")
+            (prepared / target.name).write_bytes(encoded)
+            if original is not None:
+                shutil.copy2(target, previous / target.name)
+        # Retain backups before the first published mutation. Cleanup becomes
+        # safe again only after a complete publication or restoration.
+        cleanup_safe = False
+        try:
+            for target, _ in pending:
+                os.replace(prepared / target.name, target)
+        except BaseException as error:
+            failures: List[str] = []
+            try:
+                for target, _ in reversed(pending):
+                    # A successful replace consumes its staged file. Use that
+                    # filesystem state so interruption cannot miss an undo entry.
+                    try:
+                        if _stat_or_none(prepared / target.name) is not None:
+                            continue
+                        backup = previous / target.name
+                        if _stat_or_none(backup) is not None:
+                            os.replace(backup, target)
+                        else:
+                            target.unlink(missing_ok=True)
+                    except OSError as restore_error:
+                        failures.append(f"{target}: {restore_error}")
+            except BaseException as restore_error:
+                failures.append(f"Rollback interrupted ({type(restore_error).__name__}: {restore_error})")
+            if failures:
+                raise OSError(
+                    f"Publication failed ({error}); rollback incomplete: {'; '.join(failures)}; "
+                    f"recovery files preserved at {staging}"
+                ) from error
+            cleanup_safe = True
+            raise
+        cleanup_safe = True
+
+
 def export(source_dir: Path, output_dir: Path, check: bool, manifest: Path = DEFAULT_MANIFEST) -> int:
     sources = validate_inventory(source_dir, manifest)
     seen: Dict[bytes, str] = {}
@@ -122,14 +201,7 @@ def export(source_dir: Path, output_dir: Path, check: bool, manifest: Path = DEF
     if check and pending:
         raise ValueError("WebP copies are missing or stale: " + ", ".join(target.name for target, _ in pending))
     if pending:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        # Dot-prefixed staging is invisible to Unity. Replace each complete
-        # file atomically; the scope removes all temporary files on failure.
-        with tempfile.TemporaryDirectory(prefix=".docs-webp-", dir=output_dir) as staging:
-            for target, encoded in pending:
-                temporary = Path(staging) / target.name
-                temporary.write_bytes(encoded)
-                os.replace(temporary, target)
+        _publish_batch(pending, output_dir)
     print(f"[webp] OK: {len(sources)} captures; {total_source} -> {total_webp} bytes; {len(pending)} updated")
     return len(pending)
 
