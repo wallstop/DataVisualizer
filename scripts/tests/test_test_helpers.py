@@ -6,6 +6,7 @@ import contextlib
 import io
 import sys
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -80,6 +81,37 @@ class RunCasesTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 3)
         self.assertEqual(helper.failure_count(), before)
         self.assertEqual(captured.getvalue().splitlines(), ["  PASS: Settles_First"])
+
+    def test_worker_bound_limits_case_concurrency(self) -> None:
+        active = 0
+        peak = 0
+        lock = threading.Lock()
+
+        def bounded() -> None:
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            time.sleep(0.02)
+            with lock:
+                active -= 1
+
+        captured = io.StringIO()
+        with contextlib.redirect_stdout(captured):
+            failed = helper.run_cases(
+                tuple((f"Bounded_Case_{index}", bounded) for index in range(6)),
+                max_workers=1,
+            )
+        self.assertEqual(failed, 0)
+        self.assertEqual(peak, 1)
+        self.assertEqual(
+            captured.getvalue().splitlines(),
+            [f"  PASS: Bounded_Case_{index}" for index in range(6)],
+        )
+
+    def test_worker_bound_rejects_non_positive_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "max_workers must be at least 1"):
+            helper.run_cases((("Never_Runs", lambda: None),), max_workers=0)
 
 
 if __name__ == "__main__":

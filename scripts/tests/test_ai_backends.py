@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Sequence
 
 sys.dont_write_bytecode = True
 
-from _test_helpers import assert_exit_code, assert_true, failure_count, new_temp_root, remove_temp_root, run_case
+from _test_helpers import assert_exit_code, assert_true, new_temp_root, remove_temp_root, run_cases
 
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
@@ -863,9 +863,13 @@ def main() -> int:
     assert_true(LAUNCHER.is_file(), f"launcher not found at {LAUNCHER}")
     assert_true(STATE_WRITER.is_file(), f"state writer not found at {STATE_WRITER}")
     print("== ai-backends launcher contract tests ==")
-    for case in CASES:
-        run_case(case.__name__, case)
-    failures = failure_count()
+    # Every case owns its Sandbox temp root and spawns children with an
+    # explicit environment, so the cases overlap their waits on a bounded
+    # pool; four workers match the suite runner's file-level cap.
+    failures = run_cases(
+        [(case.__name__, case) for case in CASES],
+        max_workers=4,
+    )
     print(f"== ai-backends: {failures} failure(s) ==")
     return 1 if failures else 0
 
