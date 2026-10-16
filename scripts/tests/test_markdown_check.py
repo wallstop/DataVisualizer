@@ -84,7 +84,10 @@ class MarkdownCheckScopeTests(unittest.TestCase):
         repo = new_temp_root(prefix="markdown-check-")
         try:
             target = repo / "formatted.md"
-            target.write_text("# Title\n\nA short paragraph.\n", encoding="utf-8")
+            # Bytes, not text mode: Windows text-mode writes translate \n to
+            # \r\n, and prettier's default end-of-line is lf, so the fixture
+            # would fail its own formatting check only on Windows.
+            target.write_bytes(b"# Title\n\nA short paragraph.\n")
             completed = subprocess.run(
                 [sys.executable, str(SCRIPT_PATH), str(target)],
                 capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
@@ -100,7 +103,10 @@ class MarkdownCheckScopeTests(unittest.TestCase):
         repo = new_temp_root(prefix="markdown-check-")
         try:
             target = repo / "unformatted.md"
-            target.write_text("# Title\nText without a blank separator.\n", encoding="utf-8")
+            # Byte-explicit for the same Windows reason as the formatted case:
+            # the failure must come from the missing blank line, not from
+            # platform newline translation.
+            target.write_bytes(b"# Title\nText without a blank separator.\n")
             completed = subprocess.run(
                 [sys.executable, str(SCRIPT_PATH), str(target)],
                 capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
