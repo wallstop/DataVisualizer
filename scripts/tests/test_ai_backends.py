@@ -120,10 +120,10 @@ class Sandbox:
         """
         if os.name == "nt":
             stub = self.bin / f"{name}.bat"
-            stub.write_text("@echo off\r\nexit 0\r\n", encoding="utf-8", newline="")
+            stub.write_bytes("@echo off\r\nexit 0\r\n".encode("utf-8"))
             return
         stub = self.bin / name
-        stub.write_text(STUB_SCRIPT, encoding="utf-8", newline="")
+        stub.write_bytes(STUB_SCRIPT.encode("utf-8"))
         stub.chmod(0o755)
 
     def link_launchers(self) -> None:
@@ -140,14 +140,14 @@ class Sandbox:
         """
         devcontainer = self.root / ".devcontainer"
         target = devcontainer / "ai_backends.py"
-        target.write_text(LAUNCHER.read_text(encoding="utf-8"), encoding="utf-8", newline="")
+        target.write_bytes(LAUNCHER.read_text(encoding="utf-8").encode("utf-8"))
         target.chmod(0o755)
         if broken_state_writer:
             writer = devcontainer / "backend_state.py"
-            writer.write_text("import sys\nsys.exit(1)\n", encoding="utf-8", newline="")
+            writer.write_bytes("import sys\nsys.exit(1)\n".encode("utf-8"))
 
     def write_env_file(self, content: str) -> None:
-        self.env_file.write_text(content, encoding="utf-8", newline="")
+        self.env_file.write_bytes(content.encode("utf-8"))
 
     def run(
         self,
@@ -226,8 +226,8 @@ class Sandbox:
             check=False,
         )
         self.last_exit = completed.returncode
-        self.stdout.write_text(completed.stdout or "", encoding="utf-8", newline="")
-        self.stderr.write_text(completed.stderr or "", encoding="utf-8", newline="")
+        self.stdout.write_bytes((completed.stdout or "").encode("utf-8"))
+        self.stderr.write_bytes((completed.stderr or "").encode("utf-8"))
 
     @staticmethod
     def _read(path: Path) -> str:
@@ -655,7 +655,7 @@ def case_install_refuses_to_replace_non_symlink_launcher() -> None:
     sandbox = Sandbox()
     install_bin = sandbox.root / "install-bin"
     install_bin.mkdir()
-    (install_bin / "codex-zai").write_text("# a regular file must never be replaced\n", encoding="utf-8", newline="")
+    (install_bin / "codex-zai").write_bytes("# a regular file must never be replaced\n".encode("utf-8"))
     sandbox.run(
         "install",
         extra_env={"AI_BACKENDS_BIN_DIR": str(install_bin)},
@@ -676,7 +676,7 @@ def case_install_seeds_isolated_claude_approvals() -> None:
     sandbox = Sandbox()
     install_bin = sandbox.root / "install-bin"
     install_bin.mkdir()
-    sandbox.mcp_config.write_text('{"mcpServers":{"unity":{}}}\n', encoding="utf-8", newline="")
+    sandbox.mcp_config.write_bytes('{"mcpServers":{"unity":{}}}\n'.encode("utf-8"))
     sandbox.run(
         "install",
         extra_env={
@@ -703,7 +703,7 @@ def case_broken_state_writer_keeps_optional_claude_approvals_best_effort() -> No
         return
     sandbox = Sandbox()
     sandbox.write_env_file("ZAI_API_KEY=z-fixture-key\nOPENROUTER_API_KEY=or-fixture-key\n")
-    sandbox.mcp_config.write_text('{"mcpServers":{"unity":{}}}\n', encoding="utf-8", newline="")
+    sandbox.mcp_config.write_bytes('{"mcpServers":{"unity":{}}}\n'.encode("utf-8"))
     sandbox.copy_launcher_pair(broken_state_writer=True)
     copied_launcher = sandbox.root / ".devcontainer" / "ai_backends.py"
 
@@ -741,7 +741,7 @@ def case_config_dir_failure_aborts_despite_best_effort_approvals() -> None:
         return
     sandbox = Sandbox()
     sandbox.write_env_file("ZAI_API_KEY=z-fixture-key\n")
-    sandbox.mcp_config.write_text('{"mcpServers":{"unity":{}}}\n', encoding="utf-8", newline="")
+    sandbox.mcp_config.write_bytes('{"mcpServers":{"unity":{}}}\n'.encode("utf-8"))
     sandbox.copy_launcher_pair(broken_state_writer=True)
     copied_launcher = sandbox.root / ".devcontainer" / "ai_backends.py"
     read_only_parent = sandbox.home / "locked"
@@ -790,7 +790,7 @@ def case_state_writer_falls_back_when_early_candidates_cannot_execute() -> None:
     binary = sandbox.root / "interp"
     binary.mkdir()
     broken = binary / "python3"
-    broken.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8", newline="")
+    broken.write_bytes("#!/bin/sh\nexit 1\n".encode("utf-8"))
     broken.chmod(0o755)
     (binary / "python").symlink_to(sys.executable)
 
@@ -814,7 +814,7 @@ def case_state_writer_falls_back_when_early_candidates_cannot_execute() -> None:
     broken_only.mkdir()
     for name in ("python3", "python"):
         candidate = broken_only / name
-        candidate.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8", newline="")
+        candidate.write_bytes("#!/bin/sh\nexit 1\n".encode("utf-8"))
         candidate.chmod(0o755)
     sandbox.run(
         "install",

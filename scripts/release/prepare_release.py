@@ -282,9 +282,9 @@ def main() -> None:
         print(f"dry-run: would bump {current_version} -> {target_version}")
         print(f"dry-run: would update {', '.join(changed_files)}")
     else:
-        files.package_path.write_text(updated_package_json, encoding="utf-8", newline="")
-        files.context_path.write_text(updated_context, encoding="utf-8", newline="")
-        files.changelog_path.write_text(updated_changelog, encoding="utf-8", newline="")
+        files.package_path.write_bytes(updated_package_json.encode("utf-8"))
+        files.context_path.write_bytes(updated_context.encode("utf-8"))
+        files.changelog_path.write_bytes(updated_changelog.encode("utf-8"))
         print(f"Bumped {current_version} -> {target_version}.")
         print(f"Updated {', '.join(changed_files)}.")
     print(f"previous-version: {current_version}")

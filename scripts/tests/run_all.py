@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import os
 import subprocess
 import sys
 import threading
@@ -72,8 +73,32 @@ def run_tests(selected: Sequence[str], python_executable: str) -> int:
     """
     results: List[Tuple[str, Optional[int], str]] = []
     lock = threading.Lock()
+    startup_ready = threading.Event()
+    startup_file = "test_unity_mcp_host.py"
+    coordinate_startup = sys.platform.startswith("linux") and startup_file in selected
+    startup_marker = f"[run-all-ready:{os.getpid()}:{time.perf_counter_ns()}]"
 
     def run_one(name: str) -> Tuple[str, Optional[int], str]:
+        if coordinate_startup and name == startup_file:
+            try:
+                environment = dict(os.environ, DATAVIZ_HARNESS_STARTUP_MARKER=startup_marker)
+                with subprocess.Popen(
+                    [python_executable, str(TESTS_DIR / name)],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace", env=environment,
+                ) as child:
+                    if child.stdout is None:
+                        raise RuntimeError("Bridge startup output is unavailable.")
+                    lines: List[str] = []
+                    for line in child.stdout:
+                        if line.rstrip("\r\n") == startup_marker:
+                            startup_ready.set()
+                        else:
+                            lines.append(line)
+                    return name, child.wait(), "".join(lines).rstrip()
+            finally:
+                # A failed or skipped startup must still release the other files.
+                startup_ready.set()
         completed = subprocess.run(
             [python_executable, str(TESTS_DIR / name)],
             capture_output=True,
@@ -85,10 +110,19 @@ def run_tests(selected: Sequence[str], python_executable: str) -> int:
         output = ((completed.stdout or "") + (completed.stderr or "")).rstrip()
         return name, completed.returncode, output
 
+    # Linux measurements favor quiet bridge startup followed by overlapping I/O.
+    # Other platforms retain their existing launch path and input ordering.
+    queued = list(selected)
     # Each file can spawn its own subprocesses. Bound file concurrency so
     # cold Node/Bash startups are not starved on the Windows CI runner.
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(_collect, name, run_one, results, lock) for name in selected]
+        futures: List[concurrent.futures.Future[None]] = []
+        if coordinate_startup:
+            queued.remove(startup_file)
+            futures.append(executor.submit(_collect, startup_file, run_one, results, lock))
+            startup_ready.wait()
+            queued.sort(key=lambda name: name != "test_validate_unitypackage.py")
+        futures.extend(executor.submit(_collect, name, run_one, results, lock) for name in queued)
         for future in futures:
             future.result()
 
