@@ -29,6 +29,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -101,13 +102,23 @@ def _http_post_json(url: str, api_key: str, body: Dict[str, Any]) -> str:
         data=json.dumps(body).encode("utf-8"),
         headers={"content-type": "application/json", "authorization": "Bearer " + api_key},
     )
-    with urlopen(request) as response:
-        return response.read().decode("utf-8")
+    try:
+        with urlopen(request) as response:
+            return response.read().decode("utf-8")
+    except HTTPError as error:
+        # urllib raises before the error body is read, but the node server
+        # reported the API's status and payload verbatim; auth, quota, and
+        # content-policy rejections are only diagnosable from that body.
+        payload = error.read().decode("utf-8", errors="replace")
+        raise ValueError("Z.ai image API " + str(error.code) + ": " + payload[:500]) from error
 
 
 def _http_get_bytes(url: str) -> Tuple[bytes, str]:
-    with urlopen(url) as response:
-        return response.read(), (response.headers.get("content-type") or "image/png")
+    try:
+        with urlopen(url) as response:
+            return response.read(), (response.headers.get("content-type") or "image/png")
+    except HTTPError as error:
+        raise ValueError("Failed to download generated image: " + str(error.code)) from error
 
 
 def generate_image(prompt: str, size: Optional[str], model: Optional[str]) -> Dict[str, str]:

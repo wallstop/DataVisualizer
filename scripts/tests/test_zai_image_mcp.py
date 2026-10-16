@@ -76,8 +76,10 @@ class ImageStub:
 
     ``payload_mode`` selects the response shape the API may produce:
     ``b64`` returns {"data": [{"b64_json": ...}]}, ``url`` returns
-    {"data": [{"url": ...}]} pointing at this same stub's GET handler, and
-    ``empty`` returns an empty data list to drive the failure verdicts.
+    {"data": [{"url": ...}]} pointing at this same stub's GET handler,
+    ``empty`` returns an empty data list to drive the failure verdicts, and
+    ``status`` answers 401 with a JSON error body to pin the HTTP-error
+    reporting contract.
     """
 
     def __init__(self, payload_mode: str) -> None:
@@ -87,6 +89,13 @@ class ImageStub:
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self) -> None:  # noqa: N802 - http.server's name
                 self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                if stub.payload_mode == "status":
+                    body = json.dumps({"error": {"code": "1302", "message": "insufficient balance"}}).encode("utf-8")
+                    self.send_response(401)
+                    self.send_header("content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 item: Optional[Dict[str, Any]] = None
                 if stub.payload_mode == "b64":
                     item = {"b64_json": PNG_B64}
@@ -333,6 +342,24 @@ def case_api_failure_reports_is_error() -> None:
         sandbox.destroy()
 
 
+def case_api_http_error_reports_status_and_body() -> None:
+    stub = ImageStub("status")
+    sandbox = Sandbox()
+    try:
+        sandbox.spawn(
+            [_request(1, "tools/call", {"name": "zai_generate_image", "arguments": {"prompt": "rejected"}})],
+            extra_env={"ZAI_IMAGE_ENDPOINT": stub.endpoint},
+        )
+        is_error, text = _response_payload(sandbox.responses[0])
+        assert_true(is_error, "an API HTTP error surfaces as an error result")
+        assert_contains("the error carries the API status", "Z.ai image API 401", text)
+        assert_contains("the error carries the API payload", "insufficient balance", text)
+        assert_true(STUB_KEY not in text, "the error never echoes the credential value")
+    finally:
+        stub.stop()
+        sandbox.destroy()
+
+
 def case_missing_key_reports_is_error() -> None:
     stub = ImageStub("b64")
     sandbox = Sandbox()
@@ -396,6 +423,7 @@ CASES = (
     case_generate_saves_png_from_b64_payload,
     case_generate_downloads_url_payload,
     case_api_failure_reports_is_error,
+    case_api_http_error_reports_status_and_body,
     case_missing_key_reports_is_error,
     case_empty_prompt_reports_is_error,
     case_parse_error_and_unknown_method,
