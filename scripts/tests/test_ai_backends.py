@@ -456,6 +456,15 @@ def case_codex_openrouter_reasoning_effort_validation() -> None:
     sandbox.write_env_file("OPENROUTER_API_KEY=sk-or-file-key\n")
     sandbox.run("codex-openrouter", ["--version"], extra_env={"CODEX_OPENROUTER_REASONING_EFFORT": "bogus"})
     assert_exit_code(1, "invalid reasoning effort rejected", sandbox.last_exit)
+    sandbox.destroy()
+
+
+def case_codex_openrouter_valid_effort_exec_forwards_profile() -> None:
+    # Forwarding the profile's reasoning effort ends in the production execvp
+    # of the stubbed CLI, so this half of the old combined case stays
+    # POSIX-only while the rejection case above runs on every host.
+    sandbox = Sandbox()
+    sandbox.write_env_file("OPENROUTER_API_KEY=sk-or-file-key\n")
     sandbox.link_launchers()
     sandbox.run("codex-openrouter", ["--version"], extra_env={"CODEX_OPENROUTER_REASONING_EFFORT": "xhigh"})
     assert_dump_line(sandbox, "valid reasoning effort forwarded", 'arg: model_reasoning_effort="xhigh"')
@@ -773,6 +782,7 @@ CASES = (
     case_claude_openrouter_missing_key_fails,
     case_codex_openrouter_launch,
     case_codex_openrouter_reasoning_effort_validation,
+    case_codex_openrouter_valid_effort_exec_forwards_profile,
     case_codex_openrouter_missing_key_fails,
     case_codex_zai_regression,
     case_env_file_does_not_clobber_existing_env,
@@ -804,7 +814,7 @@ POSIX_ONLY_CASES: Dict[str, str] = {
     "case_claude_openrouter_env_var_wins_over_file": "exec-path case requires a POSIX host",
     "case_claude_openrouter_model_overrides": "exec-path case requires a POSIX host",
     "case_codex_openrouter_launch": "exec-path case requires a POSIX host",
-    "case_codex_openrouter_reasoning_effort_validation": "valid-effort exec check requires a POSIX host",
+    "case_codex_openrouter_valid_effort_exec_forwards_profile": "valid-effort exec check requires a POSIX host",
     "case_codex_zai_regression": "exec-path case requires a POSIX host",
     "case_env_file_does_not_clobber_existing_env": "exec-path case requires a POSIX host",
     "case_env_file_with_bom_and_crlf_is_parsed": "exec-path case requires a POSIX host",
@@ -838,6 +848,11 @@ def main() -> int:
     # explicit environment, so the cases overlap their waits on a bounded
     # pool; four workers match the suite runner's file-level cap.
     if posix:
+        # A POSIX host without passwordless sudo (or running as root) cannot
+        # stage the sudo repair state; say so instead of silently dropping
+        # the case from the pool.
+        if not sudo_ready:
+            print("    SKIP: sudo unavailable or running as root")
         selected = [case for case in CASES if sudo_ready or case.__name__ != SUDO_REPAIR_CASE]
         failures = run_cases([(case.__name__, case) for case in selected], max_workers=4)
     else:
