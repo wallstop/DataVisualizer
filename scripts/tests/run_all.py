@@ -2,8 +2,10 @@
 """Runs the harness self-test suite, optionally narrowed by surface (issue #171).
 
 Every ``test_*.py`` file next to this script runs in a child interpreter
-with its output captured and replayed in name order. At most four files
-run at once, bounding the nested Node/Bash/Python subprocess load. The suite is typed
+with its output captured and replayed in name order. At most
+``max_file_workers()`` files run at once - four on small CI runners, up to
+eight on larger hosts - bounding the nested Node/Bash/Python subprocess
+load. The suite is typed
 Python after the issue #171 migration, so the selection runs on any
 interpreter, including hosts that never had PowerShell.
 
@@ -40,6 +42,19 @@ from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
 
 TESTS_DIR = Path(__file__).resolve().parent
+
+
+def max_file_workers() -> int:
+    """Return the file-worker bound for this host.
+
+    Each file spawns its own nested Node/Bash/Python children, so the floor
+    of four keeps small CI runners free of nested-startup starvation and
+    leaves runner scheduling unchanged. Larger hosts may overlap more of the
+    cold per-interpreter I/O that dominates a full-suite run, up to a cap of
+    eight so nested children always keep headroom (measured on a 12-core
+    host: warm full-suite wall 34.5s at four workers, 16.6-21.6s at eight).
+    """
+    return max(4, min(os.cpu_count() or 4, 8))
 
 
 def discover_test_files() -> List[str]:
@@ -114,8 +129,9 @@ def run_tests(selected: Sequence[str], python_executable: str) -> int:
     # Other platforms retain their existing launch path and input ordering.
     queued = list(selected)
     # Each file can spawn its own subprocesses. Bound file concurrency so
-    # cold Node/Bash startups are not starved on the Windows CI runner.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    # cold Node/Bash startups are not starved on the Windows CI runner;
+    # ``max_file_workers`` keeps the runner-sized floor at four.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_file_workers()) as executor:
         futures: List[concurrent.futures.Future[None]] = []
         if coordinate_startup:
             queued.remove(startup_file)
