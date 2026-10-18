@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
 """mcp-sync contract tests (typed Python port of ``test-mcp-sync.sh``, issue #171).
 
-Every case from the bash original is kept with the same assertions.
-The Python sync entry drives the unchanged Node configurator
-(``sync_mcp.py`` driving ``configure.mjs``), so each case still syncs into
-a throwaway workspace with throwaway HOME and CODEX_HOME, and asserts
-that every supported agent frontend receives the same server fleet with
-placeholder-only credentials (no secrets on disk). The bash suite's ``jq``
-probes become stdlib ``json`` reads, which also removes the jq dependency
-the old suite silently required.
-
-Integration cases require node; the wrapper itself requires only Python.
+The Python sync entry drives the typed configurator in throwaway workspaces.
+Each case verifies frontend formats, placeholder-only credentials, and failures.
+The legacy Node entry remains covered separately by its fallback contracts.
 """
 
 from __future__ import annotations
@@ -330,9 +323,11 @@ def case_wrapper_forwards_workspace_flags_and_exit_status() -> None:
         script_dir.mkdir(parents=True)
         wrapper = script_dir / SYNC.name
         shutil.copyfile(SYNC, wrapper)
-        (script_dir / "configure.mjs").write_text(
-            "console.log(JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),"
-            "workspace:process.env.DATAVIZ_MCP_WORKSPACE}));process.exit(7);\n",
+        subject = root / "scripts" / "mcp_configure.py"
+        subject.parent.mkdir()
+        subject.write_text(
+            "import json, os, sys\nprint(json.dumps(dict(args=sys.argv[1:], cwd=os.getcwd(), "
+            "workspace=os.environ['DATAVIZ_MCP_WORKSPACE'])))\nsys.exit(7)\n",
             encoding="utf-8",
         )
         other = root / "other workspace"
@@ -381,17 +376,16 @@ def case_wrapper_forwards_workspace_flags_and_exit_status() -> None:
         remove_temp_root(root)
 
 
-def case_wrapper_fails_without_node() -> None:
-    completed = subprocess.run(
-        [sys.executable, str(SYNC), "--check"],
-        env={**os.environ, "PATH": ""},
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
-    assert_eq("missing node exits one", 1, completed.returncode)
-    assert_true("node is required to sync MCP configuration." in completed.stderr, completed.stderr)
+def case_wrapper_succeeds_without_node() -> None:
+    sandbox = Sandbox()
+    try:
+        with patch.dict(os.environ, {'PATH': ''}):
+            sandbox.run_sync('--check')
+        assert_eq("Python sync succeeds without Node", 0, sandbox.last_exit, sandbox.run_failure_context())
+        assert_true("Servers: unity, github, context7, zai-vision, zai-web-search" in sandbox.stdout, sandbox.stdout)
+        assert_true(not sandbox.path('.mcp.json').exists(), 'A direct Python dry run must not write configuration.')
+    finally:
+        sandbox.destroy()
 
 
 def case_codex_persistence_uses_python_when_uv_is_absent() -> None:
@@ -402,7 +396,6 @@ def case_codex_persistence_uses_python_when_uv_is_absent() -> None:
     try:
         binary = sandbox.path('bin')
         binary.mkdir()
-        (binary / 'node').symlink_to(shutil.which('node') or 'node')
         (binary / 'python').symlink_to(sys.executable)
         with patch.dict(os.environ, {'PATH': str(binary)}):
             sandbox.run_sync()
@@ -467,11 +460,7 @@ def case_successful_and_unchanged_syncs_exit_zero() -> None:
 def main() -> int:
     assert_true(SYNC.is_file(), f"sync script not found at {SYNC}")
     print("== mcp-sync contract tests ==")
-    run_case("case_wrapper_fails_without_node", case_wrapper_fails_without_node)
-    missing = shutil.which("node") is None
-    if missing:
-        print("    SKIP: node is required to drive the configurator.")
-        return 1 if failure_count() else 0
+    run_case("case_wrapper_succeeds_without_node", case_wrapper_succeeds_without_node)
     run_case('case_unity_auth_and_url_are_consistent', case_unity_auth_and_url_are_consistent)
     run_case("case_wrapper_forwards_workspace_flags_and_exit_status", case_wrapper_forwards_workspace_flags_and_exit_status)
     run_case('case_codex_persistence_uses_python_when_uv_is_absent', case_codex_persistence_uses_python_when_uv_is_absent)

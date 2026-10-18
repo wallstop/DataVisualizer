@@ -15,7 +15,7 @@ checked *presence*.
 
 Everything runs in a throwaway workspace with throwaway HOME and synthetic
 placeholder credentials. No real secret is read, written, or printed.
-Configurator cases skip when Node is unavailable; doctor cases use Python.
+Configurator and doctor cases run through Python.
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ import io
 import json
 import os
 import re
-import shutil
 import socket
 import subprocess
 import sys
@@ -43,7 +42,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
 SYNC = REPO_ROOT / ".llm" / "mcp" / "sync_mcp.py"
 DOCTOR = REPO_ROOT / "scripts" / "mcp_doctor.py"
-CONFIGURE = REPO_ROOT / ".llm" / "mcp" / "configure.mjs"
+CONFIGURE = REPO_ROOT / "scripts" / "mcp_configure.py"
 
 # Synthetic, obviously-fake placeholders. These are NOT credentials.
 STALE = "ghp_0000000000000000000000000000000000"
@@ -495,7 +494,7 @@ def main() -> int:
     assert_true(SYNC.is_file(), f"sync script not found at {SYNC}")
     assert_true(DOCTOR.is_file(), f"doctor not found at {DOCTOR}")
     print("== mcp-credentials contract tests ==")
-    cases = CASES if shutil.which("node") else tuple(case for case in CASES if not case.__name__.startswith("case_sync_"))
+    cases = CASES
     failures = run_cases([(case.__name__, case) for case in cases])
     print(f"== mcp-credentials: {failures} failure(s) ==")
     return 1 if failures else 0
