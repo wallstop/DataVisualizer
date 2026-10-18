@@ -17,7 +17,7 @@ Documentation: <https://ambiguous-interactive.github.io/DxVisualizer/>
 
 _Captured from the live window by the docs capture pipeline._
 
-DxVisualizer was called Data Visualizer until 0.2.0. Namespaces, the package name, saved state, and theme tokens are unchanged; see
+DxVisualizer was called Data Visualizer before 0.1.1. Namespaces, the package name, saved state, and theme tokens are unchanged; see
 [Migrating from Data Visualizer](https://ambiguous-interactive.github.io/DxVisualizer/migration/).
 
 ## Install
