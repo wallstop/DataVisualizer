@@ -434,7 +434,9 @@ def case_sync_reports_blocked_writes_and_continues_other_frontends() -> None:
             sandbox.path(relative).mkdir(parents=True)
             before = sorted(path.relative_to(sandbox.root).as_posix() for path in sandbox.root.rglob('*'))
             sandbox.run_sync('--check')
-            assert_eq(f'dry run for {relative} exits zero', 0, sandbox.last_exit, sandbox.run_failure_context())
+            # JSON planning reads existing state and must report unreadable inputs.
+            expected_check_exit = 0 if relative == 'codex-home/config.toml' else 1
+            assert_eq(f'dry run for {relative} reports input readability', expected_check_exit, sandbox.last_exit, sandbox.run_failure_context())
             after = sorted(path.relative_to(sandbox.root).as_posix() for path in sandbox.root.rglob('*'))
             assert_true(before == after, f'dry run for {relative} must not create outputs')
             sandbox.run_sync()

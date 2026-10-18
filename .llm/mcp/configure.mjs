@@ -524,28 +524,31 @@ function writeAtomic(filePath, contents, mode = 0o600) {
     }
 }
 
-function readJson(filePath) {
-    try {
-        return JSON.parse(fs.readFileSync(filePath, "utf8"));
-    } catch {
-        return null;
+function writeJsonConfigs(managed) {
+    let launcher = HAS_UV ? [UV_BIN, "run", "--no-project"] : null;
+    if (!launcher) {
+        for (const command of ["python3", "python"]) {
+            try {
+                const probe = execFileSync(command, ["-c", "import sys; assert sys.version_info >= (3, 9); print('mcp-json-python')"], {
+                    encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+                });
+                if (probe.trim() === "mcp-json-python") {
+                    launcher = [command];
+                    break;
+                }
+            } catch {
+                // Try the next interpreter before any configuration writes.
+            }
+        }
     }
-}
-
-function writeMergedJsonMap(filePath, rootKey, managedEntries, mode = 0o600) {
-    const existing = readJson(filePath) || {};
-    const bucket = { ...(existing[rootKey] || {}) };
-    for (const [name, entry] of Object.entries(managedEntries)) {
-        bucket[name] = entry;
-    }
-    const next = { ...existing, [rootKey]: bucket };
-    const before = JSON.stringify(existing[rootKey] || {}, null, 2);
-    const after = JSON.stringify(bucket, null, 2);
-    const changed = before !== after;
-    if (changed && !CHECK_ONLY) {
-        writeAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`, mode);
-    }
-    return changed;
+    if (!launcher) throw new Error("Python 3.9+ or uv is required for MCP JSON configuration.");
+    const [command, ...prefix] = launcher;
+    const script = path.resolve(SCRIPT_DIR, "..", "..", "scripts", "mcp_json_config.py");
+    const args = [...prefix, script, "--workspace", WORKSPACE_ROOT,
+        "--home", process.env.HOME || os.homedir(),
+        "--nano-home", process.env.NANOCODER_CONFIG_DIR || path.join(os.homedir(), ".config", "nanocoder")];
+    if (CHECK_ONLY) args.push("--check");
+    return JSON.parse(execFileSync(command, args, { input: JSON.stringify(managed), encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }));
 }
 
 // Codex persistence is typed Python; keep the Node server catalog until its port.
@@ -580,104 +583,6 @@ function codexConfig(operation, entries = {}) {
     }));
 }
 
-function writeClaudeSettings() {
-    const filePath = path.join(WORKSPACE_ROOT, ".claude", "settings.local.json");
-    const existing = readJson(filePath) || {};
-    const desired = { ...existing, enableAllProjectMcpServers: true };
-    const changed = JSON.stringify(existing) !== JSON.stringify(desired);
-    if (changed && !CHECK_ONLY) {
-        writeAtomic(filePath, `${JSON.stringify(desired, null, 2)}\n`, 0o600);
-    }
-    return changed;
-}
-
-// Project-scope .mcp.json servers stay "Pending approval" until the folder is
-// trusted and the servers are approved. Record the same machine-local state
-// (~/.claude.json projects entry) that the interactive dialogs write.
-function writeClaudeApprovals(managedNames) {
-    const homeDirectory = process.env.HOME || os.homedir();
-    const filePath = path.join(homeDirectory, ".claude.json");
-    let existing = {};
-    try {
-        existing = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    } catch {
-        existing = {};
-    }
-    const projects = { ...(existing.projects || {}) };
-    const projectKey = WORKSPACE_ROOT;
-    const entry = { ...(projects[projectKey] || {}) };
-    const enabled = [...new Set([...(entry.enabledMcpjsonServers || []), ...managedNames])].sort();
-    const desired = { ...entry, hasTrustDialogAccepted: true, enabledMcpjsonServers: enabled };
-    const changed =
-        JSON.stringify(projects[projectKey] || {}) !== JSON.stringify(desired);
-    if (changed && !CHECK_ONLY) {
-        projects[projectKey] = desired;
-        writeAtomic(filePath, `${JSON.stringify({ ...existing, projects }, null, 2)}\n`, 0o600);
-    }
-    return changed;
-}
-
-// Nanocoder gates startup behind a per-directory trust dialog, which blocks
-// non-interactive runs. Seed the same `trustedDirectories` entry its own trust
-// dialog writes (user-level nanocoder-preferences.json, honoring
-// NANOCODER_CONFIG_DIR), mirroring the Claude approval seeding above.
-function writeNanocoderPreferences() {
-    const configDir = process.env.NANOCODER_CONFIG_DIR
-        || path.join(os.homedir(), ".config", "nanocoder");
-    const filePath = path.join(configDir, "nanocoder-preferences.json");
-    const existing = readJson(filePath) || {};
-    const trusted = [...new Set([...(existing.trustedDirectories || []), WORKSPACE_ROOT])].sort();
-    const desired = { ...existing, trustedDirectories: trusted };
-    const changed = JSON.stringify(existing) !== JSON.stringify(desired);
-    if (changed && !CHECK_ONLY) {
-        writeAtomic(filePath, `${JSON.stringify(desired, null, 2)}\n`, 0o600);
-    }
-    return changed;
-}
-
-// Nanocoder's provider wizard writes agents.config.json; without a provider
-// the CLI only offers the setup wizard and cannot run. Register the same
-// custom providers the devcontainer's zai/openrouter launchers target, keyed
-// by env-var reference (nanocoder's substituteEnvVars supports
-// ${VAR:-default}; no secrets land on disk). User-added providers are kept.
-function writeNanocoderProviders() {
-    const filePath = path.join(WORKSPACE_ROOT, "agents.config.json");
-    const existing = readJson(filePath) || {};
-    const managedProviders = [
-        {
-            // Z.ai's OpenAI-compatible chat endpoint (/api/paas/v4), not
-            // /api/v1 — that one only serves the Responses API, which
-            // nanocoder's OpenAI SDK cannot speak (403 model_access_denied).
-            name: "zai",
-            baseUrl: "https://api.z.ai/api/paas/v4",
-            apiKey: "${ZAI_API_KEY}",
-            models: ["glm-5.3", "glm-5.3-flash"],
-            timeout: 300000,
-        },
-        {
-            name: "openrouter",
-            baseUrl: "https://openrouter.ai/api/v1",
-            apiKey: "${OPENROUTER_API_KEY}",
-            // Plain slug: nanocoder rejects the codex-style "~" alias prefix.
-            models: ["openai/gpt-5-mini"],
-            timeout: 300000,
-        },
-    ];
-    const userProviders = (existing.nanocoder?.providers || []).filter(
-        (provider) => !managedProviders.some((managed) => managed.name === provider.name),
-    );
-    const nanocoder = {
-        ...(existing.nanocoder || {}),
-        providers: [...managedProviders, ...userProviders],
-    };
-    const next = { ...existing, nanocoder };
-    const changed = JSON.stringify(existing) !== JSON.stringify(next);
-    if (changed && !CHECK_ONLY) {
-        writeAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`, 0o600);
-    }
-    return changed;
-}
-
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -708,22 +613,32 @@ function main() {
         if (definition.cursor) managedCursor[name] = definition.cursor;
     }
 
+    let jsonOutcomes;
+    let jsonFailure;
+    const writeJson = (frontend) => {
+        if (jsonFailure) throw jsonFailure;
+        if (!jsonOutcomes) {
+            try {
+                jsonOutcomes = writeJsonConfigs({
+                    claude: managedClaude, opencode: managedOpencode, nanocoder: managedNanocoder,
+                    vscode: managedVscode, cursor: managedCursor,
+                });
+            } catch (error) {
+                jsonFailure = error;
+                throw error;
+            }
+        }
+        const outcome = jsonOutcomes[frontend];
+        if (outcome.error) throw new Error(outcome.error);
+        return outcome.changed;
+    };
+
     const results = [];
     let codexWorkspaceOutcome = { changed: false, note: "" };
     const plan = [
         {
             label: "Claude Code (.mcp.json + project approval)",
-            write: () => {
-                const changed =
-                    writeMergedJsonMap(
-                        path.join(WORKSPACE_ROOT, ".mcp.json"),
-                        "mcpServers",
-                        managedClaude,
-                    ) |
-                    writeClaudeSettings() |
-                    writeClaudeApprovals(Object.keys(managedClaude));
-                return Boolean(changed);
-            },
+            write: () => writeJson("claude"),
         },
         {
             label: `Codex (${process.env.CODEX_HOME || "~/.codex"}/config.toml managed block)`,
@@ -745,59 +660,15 @@ function main() {
         },
         {
             label: "OpenCode (opencode.json mcp.servers block)",
-            write: () => {
-                const filePath = path.join(WORKSPACE_ROOT, "opencode.json");
-                const existing = readJson(filePath) || {};
-                const mcp = { ...(existing.mcp || {}) };
-                // Convert legacy V1 flat server entries (names directly under
-                // `mcp`) into the V2 shape instead of dropping them, so
-                // user-added servers survive the migration and a V2 reader
-                // never sees a mixed V1/V2 map.
-                const converted = {};
-                for (const key of Object.keys(mcp)) {
-                    if (key !== "servers" && key !== "timeout") {
-                        if (mcp[key] && typeof mcp[key] === "object") {
-                            converted[key] = opencodeServerV2(mcp[key]);
-                            delete mcp[key];
-                        }
-                    }
-                }
-                // Merge like the other frontends: user-added servers (V2
-                // shaped, or converted from V1) are preserved; managed
-                // entries win.
-                mcp.servers = {
-                    ...converted,
-                    ...(existing.mcp?.servers || {}),
-                    ...managedOpencode,
-                };
-                const next = { ...existing, mcp };
-                const changed =
-                    JSON.stringify(existing.mcp || {}) !== JSON.stringify(mcp);
-                if (changed && !CHECK_ONLY) {
-                    writeAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`);
-                }
-                return changed;
-            },
+            write: () => writeJson("opencode"),
         },
         {
             label: "Nanocoder (.nanocoder/mcp.json + trust seed + providers)",
-            write: () =>
-                Boolean(
-                    writeMergedJsonMap(
-                        path.join(WORKSPACE_ROOT, ".nanocoder", "mcp.json"),
-                        "mcpServers",
-                        managedNanocoder,
-                    ) | writeNanocoderPreferences() | writeNanocoderProviders(),
-                ),
+            write: () => writeJson("nanocoder"),
         },
         {
             label: "VS Code (.vscode/mcp.json)",
-            write: () =>
-                writeMergedJsonMap(
-                    path.join(WORKSPACE_ROOT, ".vscode", "mcp.json"),
-                    "servers",
-                    managedVscode,
-                ),
+            write: () => writeJson("vscode"),
         },
         {
             // Project scope: Cursor on the host reads this shared file. It
@@ -805,13 +676,7 @@ function main() {
             // host-visible binaries (`unity`, npx, uvx) — container-absolute
             // paths (zai-image) are intentionally omitted here.
             label: "Cursor (.cursor/mcp.json, project scope)",
-            write: () =>
-                writeMergedJsonMap(
-                    path.join(WORKSPACE_ROOT, ".cursor", "mcp.json"),
-                    "mcpServers",
-                    managedCursor,
-                    0o644,
-                ),
+            write: () => writeJson("cursor"),
         },
     ];
 

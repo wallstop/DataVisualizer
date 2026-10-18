@@ -69,10 +69,13 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     # The live doctor path selects the doctor contract suite alongside the
     # coarse mcp contract suites the subtree prefix already selects (#269).
     "scripts/mcp_doctor.py": ("test_unity_mcp_doctor.py", "test_mcp_credentials.py", "test_mcp_sync.py"),
-    ".llm/mcp/configure.mjs": ("test_mcp_codex_config.py", "test_mcp_credentials.py", "test_mcp_sync.py"),
+    ".llm/mcp/configure.mjs": ("test_mcp_codex_config.py", "test_mcp_credentials.py", "test_mcp_sync.py", "test_mcp_json_config.py"),
     "scripts/mcp_codex_config.py": ("test_mcp_codex_config.py", "test_mcp_credentials.py", "test_mcp_sync.py"),
     "scripts/mcp_codex_config.py.meta": ("test_mcp_codex_config.py",),
     "scripts/tests/test_mcp_codex_config.py.meta": ("test_mcp_codex_config.py",),
+    "scripts/mcp_json_config.py": ("test_mcp_json_config.py", "test_mcp_credentials.py", "test_mcp_sync.py"),
+    "scripts/mcp_json_config.py.meta": ("test_mcp_json_config.py",),
+    "scripts/tests/test_mcp_json_config.py.meta": ("test_mcp_json_config.py",),
     ".llm/mcp/mcp-doctor.mjs": (
         "test_unity_mcp_doctor.py",
         "test_mcp_credentials.py",
@@ -174,7 +177,7 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     ".devcontainer/env_local.py": ("test_ai_backends.py", "test_env_local_precedence.py", "test_devcontainer_lifecycle.py", "test_opencode_service_recycle.py"),
     ".devcontainer/ai_backends.py": ("test_ai_backends.py", "test_env_local_precedence.py"),
     ".devcontainer/env-local.sh": ("test_ai_backends.py", "test_env_local_precedence.py"),
-    ".devcontainer/backend_state.py": ("test_backend_state.py", "test_ai_backends.py", "test_env_local_precedence.py", "test_mcp_codex_config.py"),
+    ".devcontainer/backend_state.py": ("test_backend_state.py", "test_ai_backends.py", "test_env_local_precedence.py", "test_mcp_codex_config.py", "test_mcp_json_config.py", "test_mcp_credentials.py", "test_mcp_sync.py"),
     "scripts/tests/test_backend_state.py.meta": ("test_backend_state.py",),
     ".devcontainer/recycle_stale_opencode_service.py": ("test_opencode_service_recycle.py",),
     # The lifecycle entry points' contract suite (issue #171 port).

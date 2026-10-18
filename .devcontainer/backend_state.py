@@ -99,10 +99,15 @@ filters = { OPENROUTER_API_KEY = "exclude", OPEN_ROUTER_API_KEY = "exclude" }
 
 def write_private(path: Path, content: str) -> bool:
     """Replace a complete private file atomically; unchanged bytes retain mtime."""
+    return write_atomic(path, content, 0o600)
+
+
+def write_atomic(path: Path, content: str, mode: int = 0o600) -> bool:
+    """Publish a complete file with explicit permissions and unchanged-byte detection."""
     encoded = content.encode("utf-8")
     try:
         if not path.is_symlink() and path.is_file() and path.read_bytes() == encoded:
-            path.chmod(0o600)
+            path.chmod(mode)
             return False
     except OSError:
         # Profiles are reproducible: an unreadable root-owned file can still
@@ -110,9 +115,9 @@ def write_private(path: Path, content: str) -> bool:
         pass
     with tempfile.TemporaryDirectory(prefix=".backend-state-", dir=path.parent) as staging:
         temporary = Path(staging) / path.name
-        temporary.touch(mode=0o600)
+        temporary.touch(mode=mode)
         temporary.write_bytes(encoded)
-        temporary.chmod(0o600)
+        temporary.chmod(mode)
         os.replace(temporary, path)
     return True
 

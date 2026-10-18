@@ -144,6 +144,7 @@ class Sandbox:
                 "DATAVIZ_IN_CONTAINER": "1",
                 "CODEX_HOME": str(self.codex_home),
                 "HOME": str(self.home),
+                "NANOCODER_CONFIG_DIR": str(self.home / '.config' / 'nanocoder'),
                 "UNITY_MCP_HTTP_PORT": os.environ.get("UNITY_MCP_HTTP_PORT") or "9020",
                 "DATAVIZ_MCP_STUB_SKIP_PROBES": "1",
             }
