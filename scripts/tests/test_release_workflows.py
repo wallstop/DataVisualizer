@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import uuid
@@ -97,8 +96,8 @@ def case_uses_one_release_workflow() -> None:
 
 def case_validates_all_artifacts_before_npm_publication() -> None:
     assert_true("repository_identity.py" in prep, "Provenance mismatch must fail before the release branch push.")
-    assert_true(prep.find("repository_identity.py") < prep.find("git push origin"), "Check identity before remote writes.")
-    assert_true('INPUT_TAG:-v$(node' in publish, "Blank recovery tags must use the current package version.")
+    assert_true(prep.find("repository_identity.py") < prep.find("workflow.py commit-push"), "Check identity before remote writes.")
+    assert_true('workflow.py resolve' in publish, "Blank recovery tags must use the current package version.")
     assert_true("github.workflow_sha" in publish and "release-tools/repository_identity.py" in publish, "Recovery must use current tooling on immutable old tags.")
     publication = publish.find("- name: Publish to npm with trusted publishing")
     for step in ("Build the release .unitypackage", "Validate the release .unitypackage", "Prepare release notes and the npm tarball checksum"):
@@ -117,11 +116,11 @@ def case_rehearses_without_publishing() -> None:
 def case_validates_prepared_tree_even_during_dry_run() -> None:
     assert_true(re.search(r"args\+=\(--dry-run\)", prep, re.IGNORECASE) is None, "Runner must validate the bumped tree in a rehearsal.")
     assert_true(
-        "extract_release_notes.py" in prep and "validate_unitypackage.py" in prep,
+        "workflow.py validate-tree" in prep,
         "Preparation must validate the future release notes and Unity archive.",
     )
     assert_true("later release-automation slices" not in prep, "Release PR must describe the implemented chain.")
-    assert_true("--body-file" in prep, "Release PR body must use a file.")
+    assert_true("workflow.py open-pr" in prep, "Release PR body must use a file.")
 
 
 def case_prepares_tags_and_builds_a_complete_release(python: str) -> None:
@@ -145,7 +144,9 @@ def case_prepares_tags_and_builds_a_complete_release(python: str) -> None:
         git_spawn(root, "add", "-A")
         exit_code = git_spawn(root, "commit", "--quiet", "-m", "Initial fixture")
         assert_exit_code(0, "fixture commit", exit_code)
-        exit_code = python_spawn(python, RELEASE_SCRIPTS / "prepare_release.py", "--root", str(root), "--bump", "patch")
+        outputs = root / "workflow-outputs"
+        environment = {**os.environ, "BUMP": "patch", "EXPLICIT_VERSION": "", "GITHUB_OUTPUT": str(outputs)}
+        exit_code = subprocess.run([python, str(RELEASE_SCRIPTS / "workflow.py"), "prepare"], cwd=root, env=environment, check=False).returncode
         assert_exit_code(0, "prepare candidate", exit_code)
         git_spawn(root, "add", "-A")
         exit_code = git_spawn(root, "commit", "--quiet", "-m", "Prepare release")
@@ -154,7 +155,10 @@ def case_prepares_tags_and_builds_a_complete_release(python: str) -> None:
         assert_exit_code(0, "create annotated release tag", exit_code)
         kind, _ = git_capture(root, "cat-file", "-t", "refs/tags/v1.2.4")
         assert_true(kind == "tag", "Release tag must be annotated.")
-        exit_code = python_spawn(python, RELEASE_SCRIPTS / "verify_release.py", "--root", str(root), "--tag", "v1.2.4")
+        environment["TAG"] = "v1.2.4"
+        exit_code = subprocess.run([python, str(RELEASE_SCRIPTS / "workflow.py"), "verify"], cwd=root, env=environment, check=False).returncode
+        values = dict(line.split("=", 1) for line in outputs.read_text().splitlines())
+        assert_true(values["version"] == "1.2.4" and values["npm_tag"] == "latest", "Driver must publish validated helper outputs.")
         assert_exit_code(0, "pack and validate npm payload", exit_code)
         dist = root / "dist"
         exit_code = python_spawn(python, RELEASE_SCRIPTS / "build_unitypackage.py", "--root", str(root), "--output", str(dist))
@@ -179,14 +183,6 @@ def case_prepares_tags_and_builds_a_complete_release(python: str) -> None:
 
 
 def case_resolves_publish_and_automatic_merge_sources() -> None:
-    bash = shutil.which("bash")
-    if bash is None:
-        print("  SKIP: release source shell probe requires bash; Linux CI runs it.")
-        return
-    marker = publish.index("      - name: Resolve the release source")
-    start = publish.index("        run: |\n", marker) + len("        run: |\n")
-    end = publish.index("\n      - name:", start)
-    script = "\n".join(line[10:] for line in publish[start:end].splitlines())
     root = new_temp_root(prefix="release-source-")
     try:
         version = json.loads((REPO_ROOT / "package.json").read_text())["version"]
@@ -195,17 +191,18 @@ def case_resolves_publish_and_automatic_merge_sources() -> None:
             ("workflow_dispatch", "v0.1.0", "", "v0.1.0", "refs/tags/v0.1.0"),
             ("workflow_dispatch", "", "validated-merge", "v0.1.2", "validated-merge"),
             ("push", "", "", "v0.1.0", "refs/tags/v0.1.0"),
+            ("pull_request", "", "", "v0.1.2", "merged-pr"),
         ]:
             output = root / "outputs"
             output.write_text("")
             env = {**os.environ, "EVENT": event, "INPUT_TAG": input_tag, "PREPARED_SHA": prepared_sha,
-                   "PREPARED_BRANCH": "release/v0.1.2", "HEAD_REF": "", "MERGE_SHA": "",
+                   "PREPARED_BRANCH": "release/v0.1.2", "HEAD_REF": "release/v0.1.2", "MERGE_SHA": "merged-pr",
                    "REF": "refs/tags/v0.1.0" if event == "push" else "refs/heads/main", "GITHUB_OUTPUT": str(output)}
-            result = subprocess.run([bash, "-c", script], cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False)
+            result = subprocess.run([sys.executable, str(RELEASE_SCRIPTS / "workflow.py"), "resolve"], cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False)
             assert_exit_code(0, f"resolve {event} {input_tag or 'current version'}", result.returncode)
             values = dict(line.split("=", 1) for line in output.read_text().splitlines())
             assert_true(values["tag"] == expected_tag and values["checkout_ref"] == expected_ref, "Resolve the exact tag or validated merge.")
-            assert_true(values["create_tag"] == ("true" if prepared_sha else "false"), "Only prepared merges create tags.")
+            assert_true(values["create_tag"] == ("true" if prepared_sha or event == "pull_request" else "false"), "Only prepared merges create tags.")
     finally:
         remove_temp_root(root)
 
