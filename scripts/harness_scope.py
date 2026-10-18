@@ -68,6 +68,11 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     "scripts/tests/test_unity_mcp_settings.py.meta": ("test_unity_mcp_settings.py",),
     # The live doctor path selects the doctor contract suite alongside the
     # coarse mcp contract suites the subtree prefix already selects (#269).
+    "scripts/mcp_configure.py": ("test_mcp_aliases.py", "test_mcp_catalog.py", "test_mcp_codex_config.py", "test_mcp_credentials.py", "test_mcp_json_config.py", "test_mcp_sync.py"),
+    "scripts/mcp_configure.py.meta": ("test_mcp_aliases.py", "test_mcp_catalog.py", "test_mcp_codex_config.py", "test_mcp_credentials.py", "test_mcp_json_config.py", "test_mcp_sync.py"),
+    "scripts/unity_mcp_host.py": ("test_unity_mcp_host.py", "test_unity_mcp_host_python.py", "test_unity_mcp_settings.py"),
+    "scripts/unity_mcp_host.py.meta": ("test_unity_mcp_host.py", "test_unity_mcp_host_python.py", "test_unity_mcp_settings.py"),
+    "scripts/tests/test_unity_mcp_host_python.py.meta": ("test_unity_mcp_host_python.py",),
     "scripts/mcp_catalog.py": ("test_mcp_catalog.py", "test_mcp_credentials.py", "test_mcp_sync.py"),
     "scripts/mcp_catalog.py.meta": ("test_mcp_catalog.py", "test_mcp_credentials.py", "test_mcp_sync.py"),
     "scripts/tests/test_mcp_catalog.py.meta": ("test_mcp_catalog.py",),

@@ -102,6 +102,30 @@ class CatalogTests(unittest.TestCase):
             self.assertNotIn(b'Python 3.9+', result.stderr)
             self.assertFalse((root / '.mcp.json').exists())
 
+    @unittest.skipUnless(os.name == 'posix' and shutil.which('node'), 'placeholder PATH fixture needs POSIX and Node')
+    def test_legacy_launchers_skip_successful_non_interpreter_placeholders(self) -> None:
+        with tempfile.TemporaryDirectory(prefix='python placeholder ') as directory:
+            root = Path(directory)
+            binary = root / 'bin'
+            binary.mkdir()
+            placeholder = binary / 'python3'
+            placeholder.write_text('#!/bin/sh\nexit 0\n', encoding='utf-8')
+            placeholder.chmod(0o755)
+            (binary / 'python').symlink_to(sys.executable)
+            environment = {key: value for key, value in os.environ.items()
+                           if not key.startswith(('GITHUB_', 'ZAI_', 'Z_AI_', 'UNITY_'))}
+            environment.update(PATH=str(binary), DATAVIZ_MCP_WORKSPACE=str(root), HOME=str(root / 'home'),
+                               CODEX_HOME=str(root / 'codex'), NANOCODER_CONFIG_DIR=str(root / 'nano'))
+            folder = Path(__file__).resolve().parents[2] / '.llm/mcp'
+            for entry, flag, expected in (('configure.mjs', '--check', b'Servers: unity'),
+                                          ('unity-mcp-host.mjs', '--help', b'usage:')):
+                with self.subTest(entry=entry):
+                    result = subprocess.run([str(shutil.which('node')), str(folder / entry), flag], env=environment,
+                                            cwd=root, capture_output=True, check=False)
+                    self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+                    self.assertIn(expected, result.stdout)
+                    self.assertFalse((root / '.mcp.json').exists())
+
     def test_cli_uses_utf8_bytes_under_legacy_stdio_encoding(self) -> None:
         environment = dict(os.environ, PYTHONIOENCODING='cp1252')
         result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / 'mcp_catalog.py')],
