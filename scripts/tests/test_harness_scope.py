@@ -284,7 +284,7 @@ def case_selection_prefers_the_specific_mcp_subject_over_the_coarse_tree(python:
 
 
 def case_selection_maps_the_live_doctor_path_to_its_contract(python: str) -> None:
-    probe = invoke_scope_probe(python, ".llm/mcp/mcp-doctor.mjs")
+    probe = invoke_scope_probe(python, "scripts/mcp_doctor.py")
     assert_true(not probe["selection"]["all"], "the live doctor path must not select the full suite")
     assert_true(
         ",".join(probe["selection"]["names"]) == "test_mcp_credentials.py,test_mcp_sync.py,test_unity_mcp_doctor.py",

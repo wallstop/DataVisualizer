@@ -2,9 +2,8 @@
 """mcp-credentials contract tests (typed Python port of ``test-mcp-credentials.sh``, issue #171).
 
 Every case from the bash original is kept with the same assertions; only
-the driver language changed. The subjects stay the node scripts
-(``configure.mjs``, ``mcp-doctor.mjs``), so each case still drives the
-real script; the probe-stub HTTP endpoint becomes a stdlib in-process
+the driver language changed. Each case drives the real configurator
+or typed Python doctor; the probe-stub HTTP endpoint becomes a stdlib in-process
 server that accepts exactly one bearer token and 401s everything else,
 which keeps the repair cases deterministic.
 
@@ -16,7 +15,7 @@ checked *presence*.
 
 Everything runs in a throwaway workspace with throwaway HOME and synthetic
 placeholder credentials. No real secret is read, written, or printed.
-Cases skip when node is unavailable, like the bash-required cases above.
+Configurator cases skip when Node is unavailable; doctor cases use Python.
 """
 
 from __future__ import annotations
@@ -43,7 +42,7 @@ from _test_helpers import assert_true, new_temp_root, remove_temp_root, run_case
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
 SYNC = REPO_ROOT / ".llm" / "mcp" / "sync_mcp.py"
-DOCTOR = REPO_ROOT / ".llm" / "mcp" / "mcp-doctor.mjs"
+DOCTOR = REPO_ROOT / "scripts" / "mcp_doctor.py"
 CONFIGURE = REPO_ROOT / ".llm" / "mcp" / "configure.mjs"
 
 # Synthetic, obviously-fake placeholders. These are NOT credentials.
@@ -156,7 +155,7 @@ class Sandbox:
         if extra_env:
             env.update(extra_env)
         completed = subprocess.run(
-            ["node", str(script), *arguments],
+            [sys.executable if script.suffix == ".py" else "node", str(script), *arguments],
             cwd=str(self.root),
             env=env,
             capture_output=True,
@@ -495,10 +494,8 @@ def main() -> int:
     assert_true(SYNC.is_file(), f"sync script not found at {SYNC}")
     assert_true(DOCTOR.is_file(), f"doctor not found at {DOCTOR}")
     print("== mcp-credentials contract tests ==")
-    if shutil.which("node") is None:
-        print("    SKIP: node not found on PATH; mcp-credentials contract tests drive node subjects.")
-        return 0
-    failures = run_cases([(case.__name__, case) for case in CASES])
+    cases = CASES if shutil.which("node") else tuple(case for case in CASES if not case.__name__.startswith("case_sync_"))
+    failures = run_cases([(case.__name__, case) for case in cases])
     print(f"== mcp-credentials: {failures} failure(s) ==")
     return 1 if failures else 0
 
