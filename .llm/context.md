@@ -6,7 +6,7 @@ are thin pointers to this file. Skills are standard [Agent Skills](https://agent
 ## Repository Overview
 
 - **Package**: com.wallstop-studios.data-visualizer
-- **Version**: 0.1.0
+- **Version**: 0.1.1
 - **Unity**: 2021.3+
 - **Root namespace**: `WallstopStudios.DataVisualizer` (editor: `WallstopStudios.DataVisualizer.Editor`, tests: `WallstopStudios.DataVisualizer.Tests.Editor`)
 - **License**: MIT
