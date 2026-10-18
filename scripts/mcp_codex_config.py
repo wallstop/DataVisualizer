@@ -107,7 +107,7 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         if options.operation == 'prune':
             changed, note = prune_workspace(options.workspace, options.check)
         else:
-            data: object = json.load(sys.stdin)
+            data: object = json.loads(sys.stdin.buffer.read().decode('utf-8'))
             if not isinstance(data, dict):
                 raise ValueError('Managed servers must be a JSON object.')
             entries = cast(Dict[str, Any], data)
@@ -116,10 +116,11 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
             home = Path(os.environ.get('CODEX_HOME') or Path.home() / '.codex')
             changed = write_config(options.workspace, home, entries, options.check)
             note = ''
-        print(json.dumps({'changed': changed, 'note': note}, ensure_ascii=False))
+        response = json.dumps({'changed': changed, 'note': note}, ensure_ascii=False) + '\n'
+        sys.stdout.buffer.write(response.encode('utf-8'))
         return 0
     except (OSError, ValueError, KeyError, TypeError) as error:
-        print(f'Cannot update Codex MCP configuration: {error}', file=sys.stderr)
+        sys.stderr.buffer.write(f'Cannot update Codex MCP configuration: {error}\n'.encode('utf-8', errors='replace'))
         return 1
 
 

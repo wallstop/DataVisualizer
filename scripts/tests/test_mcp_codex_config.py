@@ -119,6 +119,32 @@ class CodexConfigTests(unittest.TestCase):
         remote = config.server_table('remote', {'url': 'http://bridge/mcp', 'http_headers': {'X-Quoted': value}})
         self.assertEqual(parser.loads(remote)['mcp_servers']['remote']['http_headers']['X-Quoted'], value)
 
+    def test_cli_uses_utf8_bytes_even_when_python_stdio_uses_windows_1252(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / 'home'
+            command = 'C:\\Users\\日本語\\uv.exe'
+            payload = json.dumps({'local': {'command': command, 'args': ['日本語']}}, ensure_ascii=False).encode('utf-8')
+            environment = {**os.environ, 'CODEX_HOME': str(home), 'PYTHONIOENCODING': 'cp1252', 'PYTHONUTF8': '0'}
+            result = subprocess.run(
+                [sys.executable, str(Path(config.__file__)), 'write', '--workspace', str(root)],
+                input=payload, env=environment, capture_output=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+            self.assertEqual(json.loads(result.stdout.decode('utf-8')), {'changed': True, 'note': ''})
+            content = (home / 'config.toml').read_bytes().decode('utf-8')
+            self.assertIn('command = ' + config.toml_string(command), content)
+            self.assertIn('args = ["日本語"]', content)
+            folder = root / '.codex'
+            folder.mkdir()
+            (folder / 'config.toml').write_text('[mcp_servers.user]\ncommand = "keep"', encoding='utf-8')
+            result = subprocess.run(
+                [sys.executable, str(Path(config.__file__)), 'prune', '--workspace', str(root)],
+                env=environment, capture_output=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+            self.assertIn('—', json.loads(result.stdout.decode('utf-8'))['note'])
+
 
 if __name__ == '__main__':
     unittest.main()
