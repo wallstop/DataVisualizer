@@ -20,6 +20,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 sys.dont_write_bytecode = True
 
+from env_local import load_environment
+
 from _lifecycle_common import (
     ENV_BLOCK_BEGIN,
     ENV_BLOCK_END,
@@ -104,50 +106,20 @@ def repair_cache_ownership(home: Path) -> None:
         repair_ownership(npm_cache)
 
 
-def child_env_with_env_local(repo_root: Path) -> Optional[Dict[str, str]]:
-    """Load .env.local with file precedence in a child bash and capture its environment.
+def child_env_with_env_local(repo_root: Path) -> Dict[str, str]:
+    """Load credentials for child tools without spawning a shell.
 
-    The bash original sourced ``env-local.sh`` into its own shell so every later
-    child saw the loaded credentials; a Python process cannot source bash, so
-    the same loader runs in a child that prints its final environment with
-    ``env -0``. devcontainer remoteEnv forwards ``${localEnv:VAR}`` once at
-    container start, and OpenCode's shared ``serve --service`` inherits the
-    environment of whichever client started it, so a credential rotated in
-    .env.local is otherwise invisible until the container is rebuilt. Scoped to
-    credential names by the loader; PATH and all other vars keep "non-empty
-    preexisting wins".
-
-    Returns None when the loader is missing; exits with the loader's code when
-    it fails, matching the bash original's ``set -e`` behavior.
+    File precedence applies only to managed credentials; PATH and unrelated
+    non-empty variables retain their inherited values.
     """
-    if not (repo_root / ".devcontainer" / "env-local.sh").is_file():
-        return None
-    script = (
-        '. "$1/.devcontainer/env-local.sh" 1>&2 || exit 10\n'
-        "DATAVIZ_ENV_LOCAL_PRECEDENCE=file\n"
-        'load_env_local "$1/.env.local" 1>&2 || exit 11\n'
-        "env -0"
-    )
-    completed = subprocess.run(
-        ["bash", "-c", script, "env-local-loader", str(repo_root)],
-        capture_output=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        sys.stderr.buffer.write(completed.stderr or b"")
-        raise SystemExit(completed.returncode)
-    entries: Dict[str, str] = {}
-    for record in (completed.stdout or b"").split(b"\0"):
-        if not record or b"=" not in record:
-            continue
-        name, value = record.split(b"=", 1)
-        entries[name.decode("utf-8", errors="surrogateescape")] = value.decode("utf-8", errors="surrogateescape")
-    if not entries:
-        # An environment dump with no entries cannot be an honest snapshot;
-        # abort instead of silently continuing with stale credentials.
-        print("env-local loader produced an empty environment; aborting.", file=sys.stderr)
-        raise SystemExit(1)
-    return entries
+    environment = dict(os.environ)
+    if 'DATAVIZ_ENV_LOCAL_PRECEDENCE' in environment:
+        environment['DATAVIZ_ENV_LOCAL_PRECEDENCE'] = 'file'
+    try:
+        return load_environment(repo_root / '.env.local', environment, prefer_file=True)
+    except OSError:
+        print('Cannot read .env.local; aborting startup.', file=sys.stderr)
+        raise SystemExit(11)
 
 
 def repair_credential_aliases(workspace: Path, env: Optional[Dict[str, str]]) -> None:
