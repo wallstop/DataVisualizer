@@ -180,7 +180,7 @@ class Doctor:
             self.ok(f"Bridge healthz: ok={str(health.get('ok')).lower()} cli={json.dumps(health.get('cli'))}")
         except (OSError, ValueError) as error:
             self.fail(f'Bridge HTTP health failed on {base}: {error}. Check the host /healthz URL, bridge port, and firewall; '
-                      'start it on the host with: npm run unity:mcp:host')
+                      'start it on the host with: npm run unity:mcp:host. If TCP connects but HTTP hangs, stop forwarding the bridge port in VS Code Ports; a reverse tunnel can send requests back to a closed container port.')
             return
         headers = {'content-type': 'application/json', 'accept': 'application/json, text/event-stream'}
         token = self.environment.get('UNITY_MCP_TOKEN') or self.local.get('UNITY_MCP_TOKEN') or ''

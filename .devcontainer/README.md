@@ -82,8 +82,9 @@ unity mcp configure <client>
 
 Container agents connect to `http://host.docker.internal:<port>/mcp` (default 9020, configured automatically by `npm run mcp:sync`). Automatic port forwarding, restoration, and
 forwarding on URL open are disabled: these create host-to-container tunnels, while Unity needs container-to-host access. A tunnel on the bridge port can shadow the Windows host
-listener and return no HTTP bytes. If an older session still forwards a bridge port, stop it in VS Code's Ports view, then reload the window. Explicit forwarding for container
-services remains available in that view. Full details: `.llm/mcp/README.md`.
+listener and return no HTTP bytes. These settings do not close tunnels already active in a running VS Code window. If an older session still forwards a bridge port, stop it in VS
+Code's Ports view. Restart the host bridge; Windows startup now checks the Docker host route and selects another port if that route is intercepted. Explicit forwarding for
+container services remains available in that view. Full details: `.llm/mcp/README.md`.
 
 ## Host networking note (Linux)
 

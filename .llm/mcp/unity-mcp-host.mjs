@@ -17,7 +17,8 @@
 // already owns the preferred port, re-running exits 0 without a second
 // instance; if something else owns it, the next free port is bound, the choice
 // is persisted to .env.local (UNITY_MCP_HTTP_PORT) and the MCP client configs
-// for every agentic frontend are re-synced automatically.
+// for every agentic frontend are re-synced automatically. On Windows, the
+// Docker host route must answer as the same bridge before a port is accepted.
 //
 // The bridge is transparent: JSON-RPC requests are forwarded verbatim to the
 // CLI process (request ids are remapped so concurrent HTTP requests cannot
@@ -282,123 +283,135 @@ function sendEarlyResponse(request, response, status, headers = {}, body = "") {
 }
 
 function startHttpServer(port, host, onListening) {
-    const token = resolveToken();
-    const server = http.createServer((request, response) => {
-        const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
-        if (url.pathname === "/healthz") {
-            sendEarlyResponse(
-                request,
-                response,
-                200,
-                { "content-type": "application/json" },
-                JSON.stringify({
-                    bridge: "dataviz-unity-mcp",
-                    instanceId: INSTANCE_ID,
-                    bridgePid: process.pid,
-                    ok: Boolean(child && child.exitCode === null),
-                    cli: `${cliCommand} ${cliArgs.join(" ")}`.trim(),
-                    projectPath,
-                    authRequired: Boolean(token),
-                    pid: child?.pid ?? null,
-                }),
-            );
-            return;
-        }
-        if (url.pathname !== "/mcp") {
-            sendEarlyResponse(request, response, 404);
-            return;
-        }
-        if (token) {
-            const authorization = request.headers.authorization || "";
-            const provided = authorization.startsWith("Bearer ")
-                ? authorization.slice(7)
-                : "";
-            if (!provided || !timingSafeEqual(provided, token)) {
-                sendEarlyResponse(request, response, 401, { "content-type": "application/json" }, JSON.stringify({ error: "unauthorized" }));
-                return;
-            }
-        }
-        if (request.method === "DELETE") {
-            sendEarlyResponse(request, response, 204);
-            return;
-        }
-        if (request.method !== "POST") {
-            sendEarlyResponse(request, response, 405, { allow: "POST, DELETE" });
-            return;
-        }
-        const chunks = [];
-        request.on("data", (chunk) => chunks.push(chunk));
-        request.on("end", () => {
-            let message;
-            try {
-                message = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-            } catch (error) {
-                response.writeHead(400, { "content-type": "application/json" });
-                response.end(
-                    JSON.stringify(jsonRpcError(null, -32700, `Parse error: ${error.message}`)),
+    return new Promise((resolve, reject) => {
+        const token = resolveToken();
+        const server = http.createServer((request, response) => {
+            const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
+            if (url.pathname === "/healthz") {
+                sendEarlyResponse(
+                    request,
+                    response,
+                    200,
+                    { "content-type": "application/json" },
+                    JSON.stringify({
+                        bridge: "dataviz-unity-mcp",
+                        instanceId: INSTANCE_ID,
+                        bridgePid: process.pid,
+                        ok: Boolean(child && child.exitCode === null),
+                        cli: `${cliCommand} ${cliArgs.join(" ")}`.trim(),
+                        projectPath,
+                        authRequired: Boolean(token),
+                        pid: child?.pid ?? null,
+                    }),
                 );
                 return;
             }
-            handleRpcMessage(message)
-                .then((result) => {
-                    if (result === null) {
-                        response.writeHead(202).end();
-                        return;
-                    }
-                    response.writeHead(200, { "content-type": "application/json" });
-                    response.end(JSON.stringify(result));
+            if (url.pathname !== "/mcp") {
+                sendEarlyResponse(request, response, 404);
+                return;
+            }
+            if (token) {
+                const authorization = request.headers.authorization || "";
+                const provided = authorization.startsWith("Bearer ")
+                    ? authorization.slice(7)
+                    : "";
+                if (!provided || !timingSafeEqual(provided, token)) {
+                    sendEarlyResponse(request, response, 401, { "content-type": "application/json" }, JSON.stringify({ error: "unauthorized" }));
+                    return;
+                }
+            }
+            if (request.method === "DELETE") {
+                sendEarlyResponse(request, response, 204);
+                return;
+            }
+            if (request.method !== "POST") {
+                sendEarlyResponse(request, response, 405, { allow: "POST, DELETE" });
+                return;
+            }
+            const chunks = [];
+            request.on("data", (chunk) => chunks.push(chunk));
+            request.on("end", () => {
+                let message;
+                try {
+                    message = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+                } catch (error) {
+                    response.writeHead(400, { "content-type": "application/json" });
+                    response.end(
+                        JSON.stringify(jsonRpcError(null, -32700, `Parse error: ${error.message}`)),
+                    );
+                    return;
+                }
+                handleRpcMessage(message)
+                    .then((result) => {
+                        if (result === null) {
+                            response.writeHead(202).end();
+                            return;
+                        }
+                        response.writeHead(200, { "content-type": "application/json" });
+                        response.end(JSON.stringify(result));
+                    })
+                    .catch((error) => {
+                        response.writeHead(200, { "content-type": "application/json" });
+                        response.end(
+                            JSON.stringify(jsonRpcError(null, -32603, error?.message || String(error))),
+                        );
+                    });
+            });
+        });
+        server.listen(port, host, () => {
+            const displayedHost = host === "0.0.0.0" ? "<all interfaces>" : host;
+            console.log(`[unity-mcp] Official Unity CLI MCP bridge: ${cliCommand} ${cliArgs.join(" ")}`.trim());
+            console.log(`[unity-mcp] HTTP MCP server listening on http://${displayedHost}:${port}/mcp`);
+            console.log(`[unity-mcp] Health: http://${displayedHost}:${port}/healthz`);
+            console.log(`[unity-mcp] Auth: ${token ? "bearer token required" : "OPEN (no UNITY_MCP_TOKEN configured)"}`);
+            // A listen callback proves only that a socket was bound. Check the
+            // actual HTTP response and instance identity before publishing configs.
+            verifyLocalHttp(port, host)
+                .then(async () => {
+                    console.log(`[unity-mcp] Local HTTP self-check passed (bridge PID ${process.pid}, instance ${INSTANCE_ID}).`);
+                    await verifyDockerHostRoute(port, host, INSTANCE_ID);
+                    if (onListening) await onListening();
+                    console.log("[unity-mcp] Startup complete.");
+                    resolve();
                 })
                 .catch((error) => {
-                    response.writeHead(200, { "content-type": "application/json" });
-                    response.end(
-                        JSON.stringify(jsonRpcError(null, -32603, error?.message || String(error))),
-                    );
+                    console.error(`[unity-mcp] Startup failed: ${error.message}`);
+                    console.error("[unity-mcp] Check the port's owning process and VS Code Ports view for a reverse tunnel. Unity has not been verified.");
+                    process.removeListener("SIGINT", shutdown);
+                    process.removeListener("SIGTERM", shutdown);
+                    failPending("Bridge startup failed.");
+                    child?.kill();
+                    child = null;
+                    server.closeAllConnections();
+                    server.close(() => reject(error));
                 });
         });
-    });
-    server.listen(port, host, () => {
-        const displayedHost = host === "0.0.0.0" ? "<all interfaces>" : host;
-        console.log(`[unity-mcp] Official Unity CLI MCP bridge: ${cliCommand} ${cliArgs.join(" ")}`.trim());
-        console.log(`[unity-mcp] HTTP MCP server listening on http://${displayedHost}:${port}/mcp`);
-        console.log(`[unity-mcp] Health: http://${displayedHost}:${port}/healthz`);
-        console.log(`[unity-mcp] Auth: ${token ? "bearer token required" : "OPEN (no UNITY_MCP_TOKEN configured)"}`);
-        // A listen callback proves only that a socket was bound. Check the
-        // actual HTTP response and instance identity before publishing configs.
-        verifyLocalHttp(port, host)
-            .then(async () => {
-                console.log(`[unity-mcp] Local HTTP self-check passed (bridge PID ${process.pid}, instance ${INSTANCE_ID}).`);
-                if (onListening) await onListening();
-                console.log("[unity-mcp] Startup complete.");
-            })
-            .catch((error) => {
-                console.error(`[unity-mcp] Startup failed: ${error.message}`);
-                console.error("[unity-mcp] Check the port's owning process and VS Code Ports view for a reverse tunnel. Unity has not been verified.");
-                process.exitCode = 1;
-                failPending("Bridge startup failed.");
+        const shutdown = () => {
+            try {
                 child?.kill();
-                server.closeAllConnections();
-                server.close();
-            });
+            } catch {
+                // already dead
+            }
+            server.close(() => process.exit(0));
+            setTimeout(() => process.exit(0), 2000).unref();
+        };
+        process.on("SIGINT", shutdown);
+        process.on("SIGTERM", shutdown);
+        server.once("error", (error) => {
+            process.removeListener("SIGINT", shutdown);
+            process.removeListener("SIGTERM", shutdown);
+            reject(error);
+        });
     });
-    const shutdown = () => {
-        try {
-            child?.kill();
-        } catch {
-            // already dead
-        }
-        server.close(() => process.exit(0));
-        setTimeout(() => process.exit(0), 2000).unref();
-    };
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
 }
 
 // ---------------------------------------------------------------------------
 // Startup: idempotent start, dynamic port fallback, persistence, client sync
 // ---------------------------------------------------------------------------
 
-function verifyLocalHttp(port, host) {
-    const hostname = host === "0.0.0.0" ? "127.0.0.1" : host === "::" ? "::1" : host;
+class DockerHostRouteError extends Error {}
+
+function readHealth(port, hostname) {
     return new Promise((resolve, reject) => {
         // Core http bypasses HTTP_PROXY, ALL_PROXY, and fetch dispatchers.
         const request = http.get({
@@ -411,20 +424,47 @@ function verifyLocalHttp(port, host) {
             response.on("data", (chunk) => { body += chunk; });
             response.on("end", () => {
                 try {
-                    const health = JSON.parse(body);
-                    if (response.statusCode !== 200 || health.instanceId !== INSTANCE_ID) {
-                        throw new Error("the loopback endpoint did not answer as this bridge instance");
-                    }
-                    resolve();
+                    if (response.statusCode !== 200) throw new Error(`HTTP ${response.statusCode}`);
+                    resolve(JSON.parse(body));
                 } catch (error) {
-                    reject(new Error(`Local HTTP self-check failed on ${hostname}:${port}: ${error.message}`));
+                    reject(error);
                 }
             });
         });
-        request.on("error", (error) => reject(new Error(
-            `Local HTTP self-check failed on ${hostname}:${port}: ${error.message}`,
-        )));
+        request.on("error", reject);
     });
+}
+
+async function verifyLocalHttp(port, host) {
+    const hostname = host === "0.0.0.0" ? "127.0.0.1" : host === "::" ? "::1" : host;
+    try {
+        const health = await readHealth(port, hostname);
+        if (health.instanceId !== INSTANCE_ID) throw new Error("the loopback endpoint did not answer as this bridge instance");
+    } catch (error) {
+        throw new Error(`Local HTTP self-check failed on ${hostname}:${port}: ${error.message}`);
+    }
+}
+
+async function verifyDockerHostRoute(port, host, instanceId) {
+    // Windows Docker Desktop routes container requests through this hostname.
+    // A VS Code reverse tunnel can intercept it while IPv4 loopback still works.
+    if (os.platform() !== "win32" || !["0.0.0.0", "::"].includes(host)) return;
+    try {
+        const health = await readHealth(port, "host.docker.internal");
+        if (!instanceId || health.instanceId !== instanceId) {
+            throw new Error("the Docker host endpoint answered as a different listener");
+        }
+        console.log(`[unity-mcp] Docker host route verified on port ${port} (instance ${instanceId}).`);
+    } catch (error) {
+        if (error.code === "ENOTFOUND") {
+            console.log("[unity-mcp] Docker host name is unavailable; only the local route was verified.");
+            return;
+        }
+        throw new DockerHostRouteError(
+            `Docker host route failed on host.docker.internal:${port}: ${error.message}. ` +
+            "Remove this port from VS Code's Ports view; trying another port.",
+        );
+    }
 }
 
 function canBindPort(port, host) {
@@ -449,16 +489,16 @@ async function isPortFree(port, host) {
 
 // Detect an already-running unity-mcp bridge (ours) so re-running the npm
 // script is a no-op instead of a second instance or an EADDRINUSE crash.
-async function probeExistingBridge(port) {
+async function probeExistingBridge(port, host) {
     try {
-        const response = await fetch(`http://127.0.0.1:${port}/healthz`, {
-            signal: AbortSignal.timeout(1500),
-        });
-        if (!response.ok) return false;
-        const body = await response.json();
-        return body?.bridge === "dataviz-unity-mcp" ||
+        const body = await readHealth(port, "127.0.0.1");
+        const isBridge = body?.bridge === "dataviz-unity-mcp" ||
             (typeof body?.cli === "string" && /(?:^|[/\\])unity(?:\.exe)? mcp(?: |$)/.test(body.cli));
-    } catch {
+        if (!isBridge) return false;
+        await verifyDockerHostRoute(port, host, body.instanceId);
+        return true;
+    } catch (error) {
+        if (error instanceof DockerHostRouteError) console.error(`[unity-mcp] ${error.message}`);
         return false;
     }
 }
@@ -523,8 +563,8 @@ Bridges the official Unity CLI MCP server (\`unity mcp\`) to HTTP for MCP
 clients that cannot run host binaries (devcontainer agents).
 
 Startup semantics:
-  - If a healthy unity-mcp bridge already serves the preferred port, exit 0
-    (idempotent — safe to re-run).
+  - Reuse a healthy bridge only after verifying its client-facing host route.
+  - On Windows, skip ports intercepted on host.docker.internal.
   - If another process owns the port, bind the next free port, persist
     UNITY_MCP_HTTP_PORT to .env.local, and re-sync MCP client configs
     (disable with UNITY_MCP_AUTO_SYNC=0).
@@ -550,52 +590,44 @@ Environment:
         process.exit(1);
     }
 
-    if (await probeExistingBridge(preferred)) {
+    if (await probeExistingBridge(preferred, host)) {
         console.log(
             `[unity-mcp] A healthy unity-mcp bridge is already running on port ${preferred}; nothing to do.`,
         );
         return;
     }
 
-    let port = preferred;
-    if (!(await isPortFree(port, host))) {
-        let allocated = 0;
-        for (let candidate = port + 1; candidate < port + 101; candidate++) {
-            if (await isPortFree(candidate, host)) {
-                allocated = candidate;
-                break;
-            }
+    for (let port = preferred; port <= Math.min(preferred + 100, 65535); port++) {
+        if (!(await isPortFree(port, host))) {
+            console.log(`[unity-mcp] Port ${port} is busy; trying another port.`);
+            continue;
         }
-        if (!allocated) {
-            console.error(
-                `❌ Port ${preferred} is busy and no free port was found in ` +
-                    `${preferred + 1}-${preferred + 100}. Free the port or pass ` +
-                    "--port <n> / set UNITY_MCP_HTTP_PORT.",
-            );
-            process.exit(1);
-        }
-        console.log(
-            `[unity-mcp] Port ${preferred} is busy; dynamically selected port ${allocated}.`,
-        );
-        port = allocated;
-    }
-
-    startHttpServer(port, host, async () => {
-        if (!(await persistPort(port))) return;
-        console.log(
-            `[unity-mcp] Persisted UNITY_MCP_HTTP_PORT=${port} to .env.local so client configs follow.`,
-        );
-        if (settings.autoSync === "0") {
-            console.log("[unity-mcp] AUTO_SYNC disabled; run `npm run mcp:sync` to update MCP clients.");
+        try {
+            await startHttpServer(port, host, async () => {
+                if (!(await persistPort(port))) return;
+                console.log(
+                    `[unity-mcp] Persisted UNITY_MCP_HTTP_PORT=${port} to .env.local so client configs follow.`,
+                );
+                if (settings.autoSync === "0") {
+                    console.log("[unity-mcp] AUTO_SYNC disabled; run `npm run mcp:sync` to update MCP clients.");
+                    return;
+                }
+                console.log("[unity-mcp] Syncing MCP client configs across agentic frontends…");
+                if (await syncClientConfigs(port)) {
+                    console.log("[unity-mcp] MCP client configs updated (unity URL follows the new port).");
+                } else {
+                    console.log("[unity-mcp] ⚠️ Config sync failed; run `npm run mcp:sync` manually.");
+                }
+            });
             return;
+        } catch (error) {
+            if (!(error instanceof DockerHostRouteError)) throw error;
         }
-        console.log("[unity-mcp] Syncing MCP client configs across agentic frontends…");
-        if (await syncClientConfigs(port)) {
-            console.log("[unity-mcp] MCP client configs updated (unity URL follows the new port).");
-        } else {
-            console.log("[unity-mcp] ⚠️ Config sync failed; run `npm run mcp:sync` manually.");
-        }
-    });
+    }
+    throw new Error(`No verified bridge port is available in ${preferred}-${Math.min(preferred + 100, 65535)}. Remove VS Code reverse tunnels or check Docker Desktop networking.`);
 }
 
-main();
+main().catch((error) => {
+    console.error(`[unity-mcp] ${error.message}`);
+    process.exitCode = 1;
+});

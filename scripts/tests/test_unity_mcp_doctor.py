@@ -109,8 +109,10 @@ class DoctorTests(unittest.TestCase):
         for method, code, failures, warnings in [('health', 1, 1, 0), ('initialize', 1, 1, 0), ('tools/list', 1, 1, 0), ('tools/call', 1, 1, 0)]:
             with self.subTest(method=method):
                 self.error_method = method
-                doctor, result, _ = self.run_doctor()
+                doctor, result, output = self.run_doctor()
                 self.assertEqual((result, doctor.failures, doctor.warnings), (code, failures, warnings))
+                if method == 'health':
+                    self.assertIn('stop forwarding the bridge port in VS Code Ports', output)
 
     def test_empty_tools_wrong_editor_and_unpinned_bridge(self) -> None:
         self.responses['tools/list'] = {'result': {'tools': []}}
