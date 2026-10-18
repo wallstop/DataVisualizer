@@ -472,6 +472,88 @@ http.createServer = (handler) => createServer((request, response) => {
         self.assertNotIn('Local HTTP self-check passed', result.stdout)
         self.assertEqual(before, self.env_file.read_text(encoding='utf-8'))
 
+    def test_intercepted_docker_route_selects_and_publishes_a_verified_port(self) -> None:
+        self.stop()
+        for mode in ('wrong-instance', 'silent', 'missing-dns'):
+            with self.subTest(mode=mode), contextlib.ExitStack() as cleanup:
+                cleanup.callback(self.stop)
+                preload = self.root / 'docker-route.mjs'
+                preload.write_text("""
+import http from 'node:http';
+import os from 'node:os';
+os.platform = () => 'win32';
+const createServer = http.createServer;
+http.createServer = (handler) => createServer((request, response) => {
+    if (request.url === '/intercepted') {
+        if (process.env.ROUTE_MODE === 'silent') return;
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ instanceId: 'different-listener' }));
+        return;
+    }
+    handler(request, response);
+});
+const get = http.get;
+http.get = (options, callback) => {
+    if (options.hostname !== 'host.docker.internal') return get(options, callback);
+    if (process.env.ROUTE_MODE === 'missing-dns') {
+        return get({ ...options, hostname: 'localhost', lookup: (_host, _options, done) => {
+            const error = new Error('No Docker Desktop DNS');
+            error.code = 'ENOTFOUND';
+            done(error);
+        } }, callback);
+    }
+    return get({ ...options, hostname: '127.0.0.1',
+        path: String(options.port) === process.env.INTERCEPT_PORT ? '/intercepted' : options.path,
+    }, callback);
+};
+""", encoding='utf-8')
+                initial = self.port
+                self.env.update(ROUTE_MODE=mode, INTERCEPT_PORT=str(initial))
+                self.node_options = ['--import', preload.as_uri()]
+                offset = len(self.logs())
+                command = self.command()
+                del command[-4:-2]  # Remove --host 127.0.0.1, retaining Node preload.
+                self.launch(command)
+                selected = next(line.split('=', 1)[1] for line in self.env_file.read_text(encoding='utf-8').splitlines() if line.startswith('UNITY_MCP_HTTP_PORT='))
+                self.port = int(selected)
+                if mode == 'missing-dns':
+                    self.assertEqual(self.port, initial)
+                    self.assertIn('only the local route was verified', self.logs()[offset:])
+                else:
+                    self.assertNotEqual(self.port, initial)
+                    self.assertIn('Docker host route failed', self.logs()[offset:])
+                    self.assertIn('Docker host route verified', self.logs()[offset:])
+                self.assertEqual(self.http('/healthz')[1]['bridgePid'], self.process.pid)
+                self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
+
+    def test_existing_bridge_with_intercepted_docker_route_is_not_reused(self) -> None:
+        old = self.process
+        self.addCleanup(old.wait, 5)
+        self.addCleanup(old.terminate)
+        preload = self.root / 'existing-docker-route.mjs'
+        preload.write_text("""
+import http from 'node:http';
+import os from 'node:os';
+os.platform = () => 'win32';
+const get = http.get;
+http.get = (options, callback) => get(options.hostname === 'host.docker.internal'
+    ? { ...options, hostname: '127.0.0.1',
+        path: String(options.port) === process.env.INTERCEPT_PORT ? '/intercepted' : options.path }
+    : options, callback);
+""", encoding='utf-8')
+        self.env['INTERCEPT_PORT'] = str(self.port)
+        self.node_options = ['--import', preload.as_uri()]
+        command = self.command()
+        del command[-4:-2]
+        initial = self.port
+        offset = len(self.logs())
+        self.launch(command)
+        self.port = int(next(line.split('=', 1)[1] for line in self.env_file.read_text(encoding='utf-8').splitlines() if line.startswith('UNITY_MCP_HTTP_PORT=')))
+        self.assertNotEqual(self.port, initial)
+        self.assertNotIn('nothing to do', self.logs()[offset:])
+        self.assertIn('Docker host route verified', self.logs()[offset:])
+        self.assertEqual(self.http('/healthz')[1]['bridgePid'], self.process.pid)
+
     def test_repeated_start_recognizes_absolute_cli_path(self) -> None:
         before = self.env_file.read_text(encoding='utf-8')
         result = subprocess.run(self.command(), cwd=self.root, env=self.env, capture_output=True, text=True, timeout=5)

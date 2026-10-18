@@ -120,7 +120,9 @@ regardless of which project-path alias each source uses. HTTP and CLI process ha
 Container agents connect to `http://host.docker.internal:9020/mcp` (written automatically by `npm run mcp:sync`). The bridge is transparent: JSON-RPC requests are forwarded to the
 CLI with per-request id remapping, client notifications are passed through, and a crashed CLI is respawned lazily on the next request. Startup also verifies a proxy-free local HTTP
 roundtrip against a unique bridge instance ID before updating client configs. `/healthz` includes `bridgePid` and `instanceId`; `pid` identifies the lazy Unity CLI child. A failed
-self-check exits with code 1. Port persistence uses asynchronous file I/O so it cannot block HTTP handling.
+self-check exits with code 1. Windows wildcard listeners also verify `host.docker.internal` against the same instance before publishing a port. A silent or different listener on
+that route causes startup to close the candidate and try the next port. Reusing an existing bridge requires the same route check. Hosts without Docker DNS retain local-only
+verification. Port persistence uses asynchronous file I/O so it cannot block HTTP handling.
 
 Environment (process variables override the gitignored workspace `.env.local`):
 
