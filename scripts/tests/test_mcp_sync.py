@@ -69,7 +69,7 @@ class Sandbox:
         self.stdout = ""
         self.stderr = ""
 
-    def run_sync(self) -> None:
+    def run_sync(self, *flags: str) -> None:
         env = dict(os.environ)
         for key in SCRUBBED_KEYS:
             env.pop(key, None)
@@ -79,6 +79,7 @@ class Sandbox:
                 "DATAVIZ_IN_CONTAINER": "1",
                 "CODEX_HOME": str(self.codex_home),
                 "HOME": str(self.home),
+                "NANOCODER_CONFIG_DIR": str(self.home / ".config" / "nanocoder"),
                 "UNITY_MCP_HTTP_PORT": UNITY_MCP_HTTP_PORT,
             }
         )
@@ -87,7 +88,7 @@ class Sandbox:
             # names pointing inside the sandbox.
             env["USERPROFILE"] = str(self.home)
         completed = subprocess.run(
-            [sys.executable, str(SYNC), str(self.root)],
+            [sys.executable, str(SYNC), str(self.root), *flags],
             cwd=str(self.root),
             env=env,
             capture_output=True,
@@ -412,6 +413,54 @@ def case_codex_persistence_uses_python_when_uv_is_absent() -> None:
         sandbox.destroy()
 
 
+def case_sync_reports_blocked_writes_and_continues_other_frontends() -> None:
+    outputs = ('.mcp.json', 'codex-home/config.toml', 'opencode.json', '.nanocoder/mcp.json', '.vscode/mcp.json', '.cursor/mcp.json')
+    cases = (
+        ('.mcp.json', 'Claude Code'),
+        ('.claude/settings.local.json', 'Claude Code'),
+        ('home/.claude.json', 'Claude Code'),
+        ('codex-home/config.toml', 'Codex ('),
+        ('opencode.json', 'OpenCode'),
+        ('.nanocoder/mcp.json', 'Nanocoder'),
+        ('home/.config/nanocoder/nanocoder-preferences.json', 'Nanocoder'),
+        ('agents.config.json', 'Nanocoder'),
+        ('.vscode/mcp.json', 'VS Code'),
+        ('.cursor/mcp.json', 'Cursor'),
+    )
+    for relative, label in cases:
+        sandbox = Sandbox()
+        try:
+            sandbox.path(relative).mkdir(parents=True)
+            before = sorted(path.relative_to(sandbox.root).as_posix() for path in sandbox.root.rglob('*'))
+            sandbox.run_sync('--check')
+            assert_eq(f'dry run for {relative} exits zero', 0, sandbox.last_exit, sandbox.run_failure_context())
+            after = sorted(path.relative_to(sandbox.root).as_posix() for path in sandbox.root.rglob('*'))
+            assert_true(before == after, f'dry run for {relative} must not create outputs')
+            sandbox.run_sync()
+            assert_eq(f'blocked {relative} exits one', 1, sandbox.last_exit, sandbox.run_failure_context())
+            assert_true('❌ ' + label in sandbox.stdout, f'failure must identify {label}: {sandbox.run_failure_context()}')
+            assert_true(sandbox.path(relative).is_dir(), 'failed replacement must preserve the existing directory')
+            for output in outputs:
+                if output != relative:
+                    assert_true(sandbox.path(output).is_file(), f'{relative} must not prevent independent output {output}')
+        finally:
+            sandbox.destroy()
+
+
+def case_successful_and_unchanged_syncs_exit_zero() -> None:
+    sandbox = Sandbox()
+    try:
+        sandbox.run_sync()
+        assert_eq('successful sync exits zero', 0, sandbox.last_exit, sandbox.run_failure_context())
+        before = {path.relative_to(sandbox.root).as_posix(): path.read_bytes() for path in sandbox.root.rglob('*') if path.is_file()}
+        sandbox.run_sync()
+        assert_eq('unchanged sync exits zero', 0, sandbox.last_exit, sandbox.run_failure_context())
+        after = {path.relative_to(sandbox.root).as_posix(): path.read_bytes() for path in sandbox.root.rglob('*') if path.is_file()}
+        assert_true(before == after, 'unchanged sync must preserve output contents')
+    finally:
+        sandbox.destroy()
+
+
 def main() -> int:
     assert_true(SYNC.is_file(), f"sync script not found at {SYNC}")
     print("== mcp-sync contract tests ==")
@@ -423,6 +472,8 @@ def main() -> int:
     run_case('case_unity_auth_and_url_are_consistent', case_unity_auth_and_url_are_consistent)
     run_case("case_wrapper_forwards_workspace_flags_and_exit_status", case_wrapper_forwards_workspace_flags_and_exit_status)
     run_case('case_codex_persistence_uses_python_when_uv_is_absent', case_codex_persistence_uses_python_when_uv_is_absent)
+    run_case('case_sync_reports_blocked_writes_and_continues_other_frontends', case_sync_reports_blocked_writes_and_continues_other_frontends)
+    run_case('case_successful_and_unchanged_syncs_exit_zero', case_successful_and_unchanged_syncs_exit_zero)
     for case in CASES:
         run_case(case.__name__, case)
     failures = failure_count()
