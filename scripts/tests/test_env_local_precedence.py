@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """env-local precedence contract tests (typed Python port of ``test-env-local-precedence.sh``, issue #171).
 
-Every case from the bash original is kept with the same assertions; only
-the driver language changed. The subject stays the sourced bash loader
-(``env-local.sh``), so each case still resolves one variable through a
-fresh bash that sources it, exactly like the bash suite's ``resolve``.
+The suite compares the typed Python loader with the sourced Bash loader
+(``env-local.sh``). Existing precedence cases remain, and direct Python
+cases run even when Bash is unavailable.
 
 Background: a repaired GitHub PAT in .env.local had no effect because the
 stale value was already exported into the container's long-lived process
@@ -13,8 +12,7 @@ pinned it there until a full rebuild. DATAVIZ_ENV_LOCAL_PRECEDENCE=file
 inverts that rule for MCP credential names only.
 
 These tests use synthetic placeholder values and never read the real
-.env.local. The cases skip on hosts without bash (the subject is a bash
-loader), printing a SKIP line like the previous wrapper did.
+.env.local. Shell-equivalence cases skip when Bash is unavailable.
 """
 
 from __future__ import annotations
@@ -24,7 +22,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 
@@ -33,6 +32,8 @@ from _test_helpers import assert_true, failure_count, new_temp_root, remove_temp
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent.parent
 LOADER = REPO_ROOT / ".devcontainer" / "env-local.sh"
+sys.path.insert(0, str(LOADER.parent))
+from env_local import load_environment
 
 
 def bash_path(path: Path) -> str:
@@ -83,7 +84,11 @@ def resolve(env_file: Path, variable: str, overrides: Optional[Dict[str, str]] =
         errors="replace",
         check=False,
     )
-    return completed.stdout.strip()
+    assert_true(completed.returncode == 0, f"the sourced loader must succeed: {completed.stderr}")
+    actual = completed.stdout
+    direct = load_environment(env_file, env).get(variable, '')
+    assert_eq('Python and sourced-shell loaders agree', actual, direct)
+    return actual
 
 
 def case_fills_empty_preexisting_variable() -> None:
@@ -246,6 +251,40 @@ def case_missing_file_is_not_an_error() -> None:
     )
 
 
+def case_python_loader_preserves_literal_formats_and_precedence() -> None:
+    from post_start import child_env_with_env_local
+    from recycle_stale_opencode_service import read_env_file_values
+    fixture = new_temp_root(prefix='env-python-') / '.env.local'
+    cases: List[Tuple[str, Dict[str, str], str, str]] = [
+        ('\ufeff export TOKEN = " spaced = value "\r\n', {}, 'TOKEN', ' spaced = value '),
+        ("TOKEN='$(never-run) `never-run` $HOME # literal'\n", {}, 'TOKEN', '$(never-run) `never-run` $HOME # literal'),
+        ('TOKEN=first\nTOKEN=second\n', {}, 'TOKEN', 'first'),
+        ('TOKEN=\nTOKEN=second', {}, 'TOKEN', 'second'),
+        ('ZAI_API_KEY=first\nZAI_API_KEY=second', {'DATAVIZ_ENV_LOCAL_PRECEDENCE': 'file'}, 'ZAI_API_KEY', 'second'),
+        ('DATAVIZ_ENV_LOCAL_PRECEDENCE=file\nZAI_API_KEY=repaired', {'ZAI_API_KEY': 'stale'}, 'ZAI_API_KEY', 'repaired'),
+        ('# ignored\ninvalid-key=bad\nTOKEN=kept\n', {}, 'TOKEN', 'kept'),
+    ]
+    try:
+        for content, environment, key, expected in cases:
+            fixture.write_bytes(content.encode('utf-8'))
+            before = dict(environment)
+            result = load_environment(fixture, environment)
+            assert_eq('literal Python loader result', expected, result.get(key, ''))
+            assert_true(environment == before, 'loading must not mutate the caller environment')
+            if skip_guard():
+                assert_eq('format agrees with sourced shell', expected, resolve(fixture, key, environment))
+        fixture.write_text('GITHUB_MCP_PAT=synthetic-file-value\n', encoding='utf-8')
+        with patch.dict(os.environ, {'GITHUB_MCP_PAT': 'synthetic-stale-value'}, clear=True):
+            assert_eq('startup loads without a shell', 'synthetic-file-value', child_env_with_env_local(fixture.parent)['GITHUB_MCP_PAT'])
+            assert_true(read_env_file_values(fixture) == {'GITHUB_MCP_PAT': 'synthetic-file-value'}, 'recycler reads only file values')
+        with patch.object(Path, 'read_bytes', side_effect=PermissionError('synthetic read failure')):
+            assert_true(read_env_file_values(fixture) == {}, 'unreadable credentials must not judge a service')
+        fixture.unlink()
+        assert_true(load_environment(fixture, {'TOKEN': 'keep'}) == {'TOKEN': 'keep'}, 'a missing file leaves inherited values intact')
+    finally:
+        remove_temp_root(fixture.parent)
+
+
 CASES = (
     case_fills_empty_preexisting_variable,
     case_nonempty_preexisting_variable_wins_by_default,
@@ -260,16 +299,17 @@ CASES = (
 
 
 def skip_guard() -> bool:
-    """Report whether the suite can run: the subject is a sourced bash loader."""
+    """Report whether shell-equivalence cases can run."""
     return shutil.which("bash") is not None
 
 
 def main() -> int:
     assert_true(LOADER.is_file(), f"loader not found at {LOADER}")
     print("== env-local precedence contract tests ==")
+    run_case(case_python_loader_preserves_literal_formats_and_precedence.__name__, case_python_loader_preserves_literal_formats_and_precedence)
     if not skip_guard():
-        print("    SKIP: bash not found on PATH; env-local precedence tests require a POSIX shell.")
-        return 0
+        print("    SKIP: bash not found on PATH; skipping shell-equivalence cases.")
+        return 1 if failure_count() else 0
     for case in CASES:
         run_case(case.__name__, case)
     failures = failure_count()

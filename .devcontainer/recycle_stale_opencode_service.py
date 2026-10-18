@@ -13,21 +13,11 @@ sessions still fail: they are fine, the singleton behind them is not. Killing
 it lets the next client respawn it from the corrected environment, which is
 the only fix that does not require rebuilding the container.
 
-Bash stays in the loop for the operations whose semantics must not fork:
-
-* Reading the env file sources ``env-local.sh`` so the loader's rules (BOM,
-  CRLF, ``export `` prefix, symmetric quotes) keep exactly one implementation.
-  A hand-rolled parser that disagrees with the loader would compare the service
-  against a string the loader never produces and recycle a healthy service on
-  every start - the exact bug that moved parsing behind the loader once before.
-  The child unsets every candidate key first, so a value inherited from the
-  caller can never read as present in the file, and it sets
-  ``DATAVIZ_ENV_LOCAL_PRECEDENCE=file`` so the file's value wins for the
-  managed credential names.
-* Probing, signalling, and reading the environment of the service process run
-  through bash's ``kill`` and ``/proc``, so pid namespaces stay consistent on
-  every host: MSYS pid tables differ from Windows pids, and ``os.kill(pid, 0)``
-  on Windows terminates the process instead of probing it.
+Environment-file parsing uses the same typed loader as startup and backend
+launchers. Shell-equivalence tests pin BOM, CRLF, quote, and precedence rules.
+Only values actually defined in the file may judge the service's credentials.
+Bash still probes and signals processes so the PID namespace stays consistent
+on MSYS, where Windows process IDs differ and os.kill(pid, 0) is unsafe.
 
 Safety properties, each covered by a contract test:
 
@@ -35,7 +25,7 @@ Safety properties, each covered by a contract test:
 * A record whose pid is gone is removed (clients must not attach to it).
 * No .env.local means nothing to compare against, so nothing to do.
 * Credential VALUES are never printed - only variable NAMES.
-* Missing evidence fails safe: a missing loader, an unreadable environment, or
+* Missing evidence fails safe: an unreadable environment or
   an empty file value leaves a key unjudged, and an unjudged key never kills.
 
 The recycler is a Linux devcontainer component: it reads the service's
@@ -61,6 +51,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from env_local import load_environment
+
 # Credential names worth comparing. The github pair and the z.ai pair are the
 # ones that circulate under two names; the rest are single-name secrets whose
 # rotation has the same staleness problem.
@@ -72,29 +64,9 @@ CREDENTIAL_KEYS: Tuple[str, ...] = (
     "Z_AI_API_KEY",
 )
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-
 # The bash child templates. Each one is a fixed string, so nothing the record
 # or the environment contains can reach a shell parser: pids and paths travel
 # as argv, never as interpolated script text.
-ENV_VALUES_CHILD = """
-loader="$1"
-env_file="$2"
-shift 2
-for key in "$@"; do
-    unset "$key"
-done
-. "$loader"
-DATAVIZ_ENV_LOCAL_PRECEDENCE=file
-load_env_local "$env_file"
-for key in "$@"; do
-    value="${!key-}"
-    if [ -n "$value" ]; then
-        printf '%s=%s\\0' "$key" "$value"
-    fi
-done
-"""
-
 SERVICE_ENVIRON_CHILD = 'cat "/proc/$1/environ" 2>/dev/null'
 
 PID_ALIVE_CHILD = 'kill -0 "$1" 2>/dev/null'
@@ -105,9 +77,8 @@ SIGNAL_CHILD_TEMPLATE = 'kill {signal} "$1" 2>/dev/null'
 def _bash_child_output(script: str, arguments: Sequence[str]) -> bytes:
     """Run one bash child and return its stdout bytes, or empty on any failure.
 
-    A failed child (missing bash, a loader that cannot source, a dead pid's
-    unreadable /proc entry) returns empty output; every caller treats empty as
-    "no evidence", which is the fail-safe direction.
+    A failed child (missing bash or an unreadable /proc entry) returns empty
+    output. Callers treat it as no evidence and leave the service alone.
     """
     try:
         completed = subprocess.run(
@@ -154,19 +125,12 @@ def _parse_env_entries(raw: bytes) -> Dict[str, str]:
 
 
 def read_env_file_values(env_file: Path) -> Dict[str, str]:
-    """Return the tracked credential keys the env file defines, with their values.
-
-    The values come from the sanctioned loader, so the recycle decision compares
-    the service against exactly the strings a real session would load.
-    """
-    loader = SCRIPT_DIR / "env-local.sh"
-    if not loader.is_file():
-        # Standalone fallback the bash original had (a copied script without
-        # its sibling loader) is deliberately gone: without the loader there
-        # are no file values, and no file values means nothing is killed.
+    """Return non-empty tracked values defined by the file, without inherited keys."""
+    try:
+        values = load_environment(env_file, {}, prefer_file=True)
+    except OSError:
         return {}
-    raw = _bash_child_output(ENV_VALUES_CHILD, [str(loader), str(env_file), *CREDENTIAL_KEYS])
-    return _parse_env_entries(raw)
+    return {key: value for key, value in values.items() if key in CREDENTIAL_KEYS and value}
 
 
 def service_environment(pid: int) -> Dict[str, str]:

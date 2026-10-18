@@ -25,26 +25,14 @@ import sys
 from pathlib import Path
 from typing import Callable, Dict, List, NoReturn, Optional, Sequence, Tuple
 
+from env_local import load_environment
+
 PROFILE_NAME = "devcontainer-zai"
 OPENROUTER_PROFILE_NAME = "devcontainer-openrouter"
 ZAI_ANTHROPIC_URL = "https://api.z.ai/api/anthropic"
 OPENROUTER_ANTHROPIC_URL = "https://openrouter.ai/api"
 
 LAUNCHER_NAMES = ("codex-zai", "claude-zai", "codex-openrouter", "claude-openrouter")
-
-# Credential names whose .env.local value may override an already-exported
-# stale copy when DATAVIZ_ENV_LOCAL_PRECEDENCE=file. Deliberately narrow:
-# PATH and every other variable keep "non-empty preexisting wins".
-MCP_CREDENTIAL_KEYS = frozenset(
-    {
-        "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "GITHUB_MCP_PAT",
-        "GITHUB_TOKEN",
-        "ZAI_API_KEY",
-        "Z_AI_API_KEY",
-        "UNITY_MCP_TOKEN",
-    }
-)
 
 # Environment variables each Claude launch action unsets before re-exporting.
 # Membership matches the bash original's unset list; order is not observable.
@@ -126,29 +114,7 @@ def load_env_local(env_file: Optional[str] = None) -> None:
     else:
         return
 
-    precedence_inverted = os.environ.get("DATAVIZ_ENV_LOCAL_PRECEDENCE") == "file"
-    with open(resolved, "r", encoding="utf-8", newline="") as handle:
-        content = handle.read()
-    if content.startswith("\ufeff"):
-        content = content[1:]
-    for raw_line in content.split("\n"):
-        line = raw_line.rstrip("\r").strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        if key.startswith("export "):
-            key = key[len("export "):]
-        key = key.strip()
-        value = value.strip()
-        if len(value) >= 1 and value[0] == value[-1] and value[0] in ('"', "'"):
-            value = value[1:-1]
-        if not key or any(not (character.isalnum() or character == "_") for character in key):
-            continue
-        if os.environ.get(key):
-            overwrite = precedence_inverted and key in MCP_CREDENTIAL_KEYS
-            if not overwrite:
-                continue
-        os.environ[key] = value
+    os.environ.update(load_environment(Path(resolved), os.environ))
 
 
 def resolve_action(invoked_as: str, first_argument: Optional[str]) -> str:

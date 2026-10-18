@@ -18,6 +18,7 @@ emulate.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -50,6 +51,7 @@ TEST_ENV_KEYS = (
 
 STUB_SCRIPT = """#!/usr/bin/env python3
 import os
+import shutil
 import sys
 
 lines = [f"cmd: {os.path.basename(sys.argv[0])}"]
@@ -132,7 +134,7 @@ class Sandbox:
         self._symlinked = True
 
     def copy_launcher_pair(self, broken_state_writer: bool) -> None:
-        """Stage the launcher + state writer as a copied self-contained pair.
+        """Stage the launcher, environment helper, and optional failing state writer.
 
         A copied launcher computes its workspace from its own location, so a
         deliberately broken ``backend_state.py`` beside it exercises the
@@ -142,6 +144,7 @@ class Sandbox:
         target = devcontainer / "ai_backends.py"
         target.write_bytes(LAUNCHER.read_text(encoding="utf-8").encode("utf-8"))
         target.chmod(0o755)
+        shutil.copy(LAUNCHER.parent / "env_local.py", devcontainer / "env_local.py")
         if broken_state_writer:
             writer = devcontainer / "backend_state.py"
             writer.write_bytes("import sys\nsys.exit(1)\n".encode("utf-8"))
