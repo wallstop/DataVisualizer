@@ -149,9 +149,9 @@ Security: the bridge listens on all interfaces by default (Linux Docker cannot r
   persists `UNITY_MCP_HTTP_PORT` to `.env.local`, and re-syncs every frontend config automatically. No fixed port is required anywhere: `configure.mjs`, the devcontainer health
   check, and the doctors all read the persisted value.
 - **`npm run mcp:sync` on the host.** It runs the cross-platform Node adapter `configure.mjs`. Codex persistence and workspace cleanup use `scripts/mcp_codex_config.py`; JSON
-  persistence uses `scripts/mcp_json_config.py`. Credential aliases use `scripts/mcp_aliases.py`, preserving BOM and line endings and emitting statuses only. These tools run
-  through uv or Python 3.9+ when uv is absent. Container hooks use `sync_mcp.py` (`uv run .llm/mcp/sync_mcp.py [workspace_dir] [flags...]`). Command discovery uses `where` on
-  Windows.
+  persistence uses `scripts/mcp_json_config.py`. Credential aliases use `scripts/mcp_aliases.py`, preserving BOM and line endings and emitting statuses only. The managed server
+  catalog uses `scripts/mcp_catalog.py`. These tools run through uv or Python 3.9+ when uv is absent. Container hooks use `sync_mcp.py`
+  (`uv run .llm/mcp/sync_mcp.py [workspace_dir] [flags...]`). Command discovery uses `where` on Windows.
 - **Shared configs are environment-agnostic.** Sync produces identical files from the host and the container (verified by hash): the unity bridge URL always uses
   `host.docker.internal` (resolves on the host under Docker Desktop too), and zai-image uses the PATH-resolved `uv` runner with a workspace-relative script. Never reintroduce
   `127.0.0.1` or absolute binaries into shared entries — they silently break the other environment.
