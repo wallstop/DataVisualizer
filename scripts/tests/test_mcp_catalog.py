@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -49,14 +50,15 @@ class CatalogTests(unittest.TestCase):
             self.assertFalse(unity['opencode']['oauth'])
             self.assertEqual(unity['opencode']['timeout'], 300000)
 
-    @unittest.skipUnless(shutil.which('bash'), 'shell round-trip requires Bash')
     def test_wrapper_quotes_url_as_one_argument_without_execution(self) -> None:
         unity = build_catalog(**settings())['unity']
         shell = unity['vscode']['command'][-1]
         command = shell[shell.index('exec npx'):].replace('exec npx', 'capture', 1)
-        script = 'capture() { printf "%s\\n" "$@"; }; ' + command
-        result = subprocess.run(['bash', '-c', script], capture_output=True, text=True, check=True)
-        self.assertEqual(result.stdout.splitlines()[-1], settings()['unity_url'])
+        self.assertEqual(shlex.split(command)[-1], settings()['unity_url'])
+        if os.name == 'posix' and shutil.which('bash'):
+            script = 'capture() { printf "%s\\n" "$@"; }; ' + command
+            result = subprocess.run(['bash', '-c', script], capture_output=True, text=True, encoding='utf-8', check=True)
+            self.assertEqual(result.stdout.splitlines()[-1], settings()['unity_url'])
 
     def test_paths_and_credential_syntax_follow_frontend_contracts(self) -> None:
         catalog = build_catalog(**settings())
