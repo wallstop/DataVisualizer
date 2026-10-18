@@ -14,9 +14,9 @@ projects upgrade without edits.
 
 ## What stayed the same
 
-- The package name, `com.wallstop-studios.data-visualizer`, and the install URL, `https://github.com/wallstop/DataVisualizer.git`. The dependency key in `Packages/manifest.json`
-  keeps resolving. Both repoint when the repository moves to Ambiguous-Interactive ([#151](https://github.com/wallstop/DataVisualizer/issues/151)); this page will be updated with
-  the move.
+- The package name and dependency key in `Packages/manifest.json`: `com.wallstop-studios.data-visualizer`.
+- Existing Git installs from `https://github.com/wallstop/DataVisualizer.git` keep resolving through GitHub's repository redirect. New installs use
+  `https://github.com/Ambiguous-Interactive/DxVisualizer.git`.
 - The C# namespaces `WallstopStudios.DataVisualizer` and `WallstopStudios.DataVisualizer.Editor`, and every public type: `BaseDataObject`, `CustomDataVisualizationAttribute`,
   `IDataProcessor`, `IGUIProvider`, `DataVisualizerGUIContext`, and the lifecycle interfaces.
 - Saved state: `DataVisualizerUserState.json`, the `DataVisualizerSettings` asset at `Assets/Editor/DataVisualizerSettings.asset`, ordering, selections, label filters, processor
@@ -24,11 +24,17 @@ projects upgrade without edits.
 - Theme tokens: every `--dataviz-*` custom property and the `.dataviz-root` scope. Custom themes keep working.
 - Asset GUIDs and the `.meta` files behind them, so references from your assets to package types are untouched.
 
+## Repository and documentation move
+
+The repository is now [Ambiguous-Interactive/DxVisualizer](https://github.com/Ambiguous-Interactive/DxVisualizer), and the documentation home is
+<https://ambiguous-interactive.github.io/DxVisualizer/>. Update documentation bookmarks: GitHub Pages does not redirect the old project site after a repository transfer. Existing
+Git dependencies keep working through GitHub's redirect as long as the old repository name stays unused.
+
 ## Update the package
 
 1. Open **Window → Package Manager**.
 2. Select the package entry under **Packages: In Project**.
-3. Select **Update**, or re-add the package from the git URL `https://github.com/wallstop/DataVisualizer.git`.
+3. Select **Update**, or re-add the package from the git URL `https://github.com/Ambiguous-Interactive/DxVisualizer.git`.
 
 ## Keep the previous look
 

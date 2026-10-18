@@ -2,9 +2,9 @@
 # gitignored and excluded from the UPM and npm package payloads.
 site_name: DxVisualizer
 site_description: Your game data, one window. Find, inspect, organize, and edit ScriptableObject data in one Unity editor window.
-site_url: https://wallstop.github.io/DataVisualizer/
-repo_url: https://github.com/wallstop/DataVisualizer
-repo_name: wallstop/DataVisualizer
+site_url: https://ambiguous-interactive.github.io/DxVisualizer/
+repo_url: https://github.com/Ambiguous-Interactive/DxVisualizer
+repo_name: Ambiguous-Interactive/DxVisualizer
 edit_uri: edit/main/docs/
 copyright: DxVisualizer · Wallstop Studios · Ambiguous Interactive
 
@@ -79,7 +79,7 @@ extra_css:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/wallstop/DataVisualizer
+      link: https://github.com/Ambiguous-Interactive/DxVisualizer
       name: DxVisualizer on GitHub
 
 nav:

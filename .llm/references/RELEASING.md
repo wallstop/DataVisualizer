@@ -39,17 +39,17 @@ workflow does not approve its own PR or bypass policy.
 
 Configure package `com.wallstop-studios.data-visualizer` on npmjs.com → package settings → Trusted Publisher → GitHub Actions.
 
-| Field                | Value               |
-| -------------------- | ------------------- |
-| Organization or user | `wallstop`          |
-| Repository           | `DataVisualizer`    |
-| Workflow filename    | `release.yml`       |
-| Environment name     | leave empty         |
-| Allowed actions      | allow `npm publish` |
+| Field                | Value                   |
+| -------------------- | ----------------------- |
+| Organization or user | `Ambiguous-Interactive` |
+| Repository           | `DxVisualizer`          |
+| Workflow filename    | `release.yml`           |
+| Environment name     | leave empty             |
+| Allowed actions      | allow `npm publish`     |
 
-The manifest must use `git+https://github.com/wallstop/DataVisualizer.git`. Identity is case-sensitive. Preparation checks it before remote writes; publication checks it before
-packing. The workflow uses Node 24 and verifies npm is at least 11.5.1. Prereleases use `next`; stable releases use `latest`. The publisher registration is private npm
-configuration; public metadata cannot verify it.
+The manifest must use `git+https://github.com/Ambiguous-Interactive/DxVisualizer.git`. Identity is case-sensitive. Preparation checks it before remote writes; publication checks it
+before packing. The workflow uses Node 24 and verifies npm is at least 11.5.1. Prereleases use `next`; stable releases use `latest`. The publisher registration is private npm
+configuration; public metadata cannot verify it. After the repository transfer, update this registration before publishing from the new owner.
 
 ## Rerun and recovery
 

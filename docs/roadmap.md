@@ -1,7 +1,7 @@
 # Roadmap
 
 DxVisualizer works with ScriptableObject assets today. This page lists the data sources planned beyond them. Nothing here has a release date; the
-[issue tracker](https://github.com/wallstop/DataVisualizer/issues) has the current state of each item.
+[issue tracker](https://github.com/Ambiguous-Interactive/DxVisualizer/issues) has the current state of each item.
 
 ## Current scope
 
@@ -20,4 +20,4 @@ public API, saved state, and theme tokens stay compatible.
 
 ## Suggest a source
 
-Open a [feature request](https://github.com/wallstop/DataVisualizer/issues/new/choose) with the data you edit today, where it lives, and how you find it.
+Open a [feature request](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/new/choose) with the data you edit today, where it lives, and how you find it.

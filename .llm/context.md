@@ -10,7 +10,7 @@ are thin pointers to this file. Skills are standard [Agent Skills](https://agent
 - **Unity**: 2021.3+
 - **Root namespace**: `WallstopStudios.DataVisualizer` (editor: `WallstopStudios.DataVisualizer.Editor`, tests: `WallstopStudios.DataVisualizer.Tests.Editor`)
 - **License**: MIT
-- **Repository**: https://github.com/wallstop/DataVisualizer
+- **Repository**: https://github.com/Ambiguous-Interactive/DxVisualizer
 - A Unity UPM package providing a UI Toolkit editor window for managing, inspecting, and batch-editing ScriptableObject assets, plus a small runtime API (`BaseDataObject`,
   lifecycle interfaces, display attributes).
 - This folder is the git repo root (nested under the Unity project's `Packages/`). Open agent frontends with this folder as the workspace root.
@@ -176,8 +176,8 @@ heavier reflective results. The full ladder below gates review.
 On WSL2 devcontainers the `/workspaces` checkout is a 9p drvfs mount of the Windows host drive, and 9p metadata traffic dominates spawn-heavy harness work: same-window A/B on
 2026-10-11 measured the fast-check plan floor 4.4s → 0.3s, a whole dirty-tree `check:fast` 25.6s → 12.1s, and the full 28-file self-test suite 86s → 40s for an identical tree
 cloned onto the container-native filesystem. For agent iteration loops, clone the repo under the Linux home directory
-(`git clone https://github.com/wallstop/DataVisualizer.git ~/repo`, one-time `npm install` ≈ 2s), edit, commit, and push branches from there; keep `/workspaces` for Unity
-host-bridge and IDE-integration work.
+(`git clone https://github.com/Ambiguous-Interactive/DxVisualizer.git ~/repo`, one-time `npm install` ≈ 2s), edit, commit, and push branches from there; keep `/workspaces` for
+Unity host-bridge and IDE-integration work.
 
 ```bash
 npm run check:gate

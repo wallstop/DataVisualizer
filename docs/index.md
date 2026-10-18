@@ -27,7 +27,7 @@ in the free package.
 
 1. Open **Window → Package Manager**.
 2. Select **+**, then **Add package from git URL**.
-3. Enter `https://github.com/wallstop/DataVisualizer.git` and select **Add**.
+3. Enter `https://github.com/Ambiguous-Interactive/DxVisualizer.git` and select **Add**.
 
 Open the window with **Tools → Wallstop Studios → DxVisualizer**. [Getting started](getting-started.md) walks through the first session.
 
@@ -47,4 +47,4 @@ Open the window with **Tools → Wallstop Studios → DxVisualizer**. [Getting s
 - [Troubleshooting](troubleshooting.md): missing types, hidden rows, processors, and themes.
 - [Migrating from Data Visualizer](migration.md): what the rename changed, and what it didn't.
 - [Roadmap](roadmap.md): data sources planned beyond ScriptableObjects.
-- [Issues](https://github.com/wallstop/DataVisualizer/issues): known problems and feature requests.
+- [Issues](https://github.com/Ambiguous-Interactive/DxVisualizer/issues): known problems and feature requests.

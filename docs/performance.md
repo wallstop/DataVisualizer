@@ -22,8 +22,8 @@ interrupt synchronous fixture staging; teardown runs when control returns to the
 ## Recorded environment
 
 The run started at 22:43:42 UTC and generated its report at 23:24:07 UTC on 2026-10-14. The measured Unity source matches
-[main at ec085b1](https://github.com/wallstop/DataVisualizer/commit/ec085b1596775eac6be5071b23f5da9870097973), including the type-only asset relevance change from
-[#228](https://github.com/wallstop/DataVisualizer/pull/228). [Download the unchanged raw report](performance-baseline-2026-10-14.json).
+[main at ec085b1](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/ec085b1596775eac6be5071b23f5da9870097973), including the type-only asset relevance change from
+[#228](https://github.com/Ambiguous-Interactive/DxVisualizer/pull/228). [Download the unchanged raw report](performance-baseline-2026-10-14.json).
 
 | Property                                     | Value                                                |
 | -------------------------------------------- | ---------------------------------------------------- |
@@ -36,7 +36,7 @@ The run started at 22:43:42 UTC and generated its report at 23:24:07 UTC on 2026
 | ScriptableObject assets outside the fixtures | 214, verified after cleanup                          |
 
 The raw report's `preExistingScriptableObjectAssets` field says 10,214 because it was captured before teardown and includes the final 10,000 fixtures. The raw file is preserved as
-emitted. New reports exclude the benchmark fixture folder from this count; see [#243](https://github.com/wallstop/DataVisualizer/issues/243).
+emitted. New reports exclude the benchmark fixture folder from this count; see [#243](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/243).
 
 ## Results
 
@@ -62,9 +62,9 @@ Reading the numbers:
   1,000-asset warm phase and the 10,000-asset warm phase. The driver does not time fixture creation separately, so this report cannot identify that interval's exact cause or
   establish fast end-to-end creation/import.
 
-The [earlier 100-/1,000-asset baseline](https://github.com/wallstop/DataVisualizer/blob/51b37b8/docs/performance.md) remains in repository history. These are separate sessions, not
-a controlled before/after comparison. In particular, the 561 ms final refresh does not prove that the import-stall acceptance criterion in
-[#226](https://github.com/wallstop/DataVisualizer/issues/226) is satisfied.
+The [earlier 100-/1,000-asset baseline](https://github.com/Ambiguous-Interactive/DxVisualizer/blob/51b37b8/docs/performance.md) remains in repository history. These are separate
+sessions, not a controlled before/after comparison. In particular, the 561 ms final refresh does not prove that the import-stall acceptance criterion in
+[#226](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/226) is satisfied.
 
 ## Current gaps
 
