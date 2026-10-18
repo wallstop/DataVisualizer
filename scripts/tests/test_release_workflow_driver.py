@@ -33,6 +33,7 @@ class WorkflowTests(unittest.TestCase):
         return subprocess.CompletedProcess(['fixture'], code, text, '')
 
     def test_commands_capture_utf8_and_fail_closed(self) -> None:
+        self.driver.environment['PYTHONIOENCODING'] = 'cp1252'
         result = self.driver.run([sys.executable, '-c', "print('release 日本')"], capture=True)
         self.assertEqual(result.stdout.strip(), 'release 日本')
         with self.assertRaisesRegex(ValueError, r'failed \(3\): fixture failure'):
@@ -160,7 +161,7 @@ class WorkflowTests(unittest.TestCase):
                 commands = [call.args[0] for call in run.call_args_list]
                 self.assertEqual(commands[1][2], 'edit' if exists else 'create')
                 self.assertIn('--prerelease', commands[1])
-                self.assertIn('dist/fixture.unitypackage.sha256', commands[-1])
+                self.assertIn(str(Path('dist') / 'fixture.unitypackage.sha256'), commands[-1])
                 self.assertIn('--clobber' if exists else '--verify-tag', commands[-1])
 
     def test_retained_tools_survive_switching_to_an_old_source(self) -> None:

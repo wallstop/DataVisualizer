@@ -38,7 +38,7 @@ class ReleaseWorkflow:
         return self.environment.get(key, '')
 
     def run(self, command: Sequence[str], capture: bool = False, check: bool = True) -> subprocess.CompletedProcess[str]:
-        result = subprocess.run([shutil.which(command[0]) or command[0], *command[1:]], cwd=self.root, env=self.environment, capture_output=capture,
+        result = subprocess.run([shutil.which(command[0]) or command[0], *command[1:]], cwd=self.root, env={**self.environment, 'PYTHONIOENCODING': 'utf-8'}, capture_output=capture,
                                 text=True, encoding='utf-8', errors='replace', check=False)
         if check and result.returncode:
             raise ValueError(f"{command[0]} failed ({result.returncode}): {(result.stderr or '').strip()}")
