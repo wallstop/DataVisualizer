@@ -119,65 +119,26 @@ function ensureUnityMcpToken() {
     return env("UNITY_MCP_TOKEN");
 }
 
-// The Z.ai credential circulates under two names: the MCP configs and the
-// devcontainer remoteEnv forward use ZAI_API_KEY, while the official
-// @z_ai/mcp-server reads Z_AI_API_KEY first. Mirror whichever one exists into
-// the other (in .env.local) so every harness and server sees the key.
-function appendEnvLocalAlias(key, value) {
-    const envLocalPath = path.join(WORKSPACE_ROOT, ".env.local");
-    let content = "";
-    try {
-        content = fs.readFileSync(envLocalPath, "utf8").replace(/^\uFEFF/, "");
-    } catch {
-        content = "# Machine-local credentials (gitignored).\n";
+function synchronizeAliases() {
+    let launcher = HAS_UV ? [UV_BIN, "run", "--no-project"] : null;
+    if (!launcher) {
+        for (const command of ["python3", "python"]) {
+            try {
+                const probe = execFileSync(command, ["-c", "import sys; assert sys.version_info >= (3, 9); print('mcp-alias-python')"], {
+                    encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+                });
+                if (probe.trim() === "mcp-alias-python") { launcher = [command]; break; }
+            } catch {
+                // Validate an interpreter before any credential-file writes.
+            }
+        }
     }
-    if (content.length > 0 && !content.endsWith("\n")) content += "\n";
-    content += `\n# Auto-generated alias by configure.mjs on ${new Date().toISOString()}\n${key}=${value}\n`;
-    fs.mkdirSync(path.dirname(envLocalPath), { recursive: true });
-    fs.writeFileSync(envLocalPath, content, { mode: 0o600 });
-}
-
-function ensureZaiKeyAlias() {
-    const canonical = env("ZAI_API_KEY");
-    const alternate = env("Z_AI_API_KEY");
-    if (!canonical && !alternate) return "missing";
-    // Both names set to DIFFERENT values is the broken state, not success: one
-    // consumer reads ZAI_API_KEY and another Z_AI_API_KEY, so they silently
-    // disagree. Detecting it here is what stopped the GitHub 401 (same shape)
-    // from recurring on the Z.ai key pair.
-    if (canonical && alternate && canonical !== alternate) return "divergent";
-    if (canonical && alternate) return "configured";
-    if (CHECK_ONLY) return "alias-pending";
-    const [missingKey, value] = canonical
-        ? ["Z_AI_API_KEY", canonical]
-        : ["ZAI_API_KEY", alternate];
-    appendEnvLocalAlias(missingKey, value);
-    return "aliased";
-}
-
-// The GitHub credential has the same two-name problem: on_create.py's template
-// and every generated config reference GITHUB_PERSONAL_ACCESS_TOKEN, while
-// some machines only define GITHUB_MCP_PAT. An empty reference makes the
-// hosted GitHub MCP return 401 in the devcontainer even though the PAT is
-// valid — mirror whichever name exists into the other (in .env.local).
-function ensureGithubPatAlias() {
-    const canonical = env("GITHUB_PERSONAL_ACCESS_TOKEN");
-    const alternate = env("GITHUB_MCP_PAT");
-    if (!canonical && !alternate) return "missing";
-    // Both names set to DIFFERENT values is precisely the incident this
-    // function exists to prevent: every generated config references the
-    // canonical name, so a stale canonical value shadows a valid GITHUB_MCP_PAT
-    // and the hosted GitHub MCP answers 401. "Both set" is therefore NOT
-    // success — only "both set and equal" is. `npm run mcp:doctor --repair`
-    // reconciles a divergent pair by probing which value actually authenticates.
-    if (canonical && alternate && canonical !== alternate) return "divergent";
-    if (canonical && alternate) return "configured";
-    if (CHECK_ONLY) return "alias-pending";
-    const [missingKey, value] = canonical
-        ? ["GITHUB_MCP_PAT", canonical]
-        : ["GITHUB_PERSONAL_ACCESS_TOKEN", alternate];
-    appendEnvLocalAlias(missingKey, value);
-    return "aliased";
+    if (!launcher) throw new Error("Python 3.9+ or uv is required for MCP credential aliases.");
+    const [command, ...prefix] = launcher;
+    const script = path.resolve(SCRIPT_DIR, "..", "..", "scripts", "mcp_aliases.py");
+    const args = [...prefix, script, "--workspace", WORKSPACE_ROOT];
+    if (CHECK_ONLY) args.push("--check");
+    return JSON.parse(execFileSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
 }
 
 // ---------------------------------------------------------------------------
@@ -589,8 +550,9 @@ function codexConfig(operation, entries = {}) {
 
 function main() {
     const unityToken = ensureUnityMcpToken();
-    const zaiKeyStatus = ensureZaiKeyAlias();
-    const githubPatStatus = ensureGithubPatAlias();
+    const aliases = synchronizeAliases();
+    const zaiKeyStatus = aliases.zai;
+    const githubPatStatus = aliases.github;
     const catalog = buildCatalog();
 
     const managedClaude = {};
