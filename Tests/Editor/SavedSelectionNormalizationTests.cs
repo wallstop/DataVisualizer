@@ -93,6 +93,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return window;
         }
 
+        private static void LoadWithoutAutoSelection(DataVisualizerWindow window)
+        {
+            /*
+                Continue a load so automatic first-object selection cannot replace the stale
+                GUID before the normalization pump is tested in a populated host.
+            */
+            InvokePrivate(window, "LoadObjectTypesAsync", typeof(TestDataObject), true);
+        }
+
         private static string ReadSavedSelection(DataVisualizerWindow window, string typeFullName)
         {
             return (string)InvokePrivate(window, "GetLastSelectedObjectGuidForType", typeFullName);
@@ -134,7 +143,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 string typeFullName = typeof(TestDataObject).FullName;
                 WriteSavedSelection(window, typeFullName, "stale-saved-guid");
 
-                InvokePrivate(window, "LoadObjectTypesAsync", typeof(TestDataObject), false);
+                LoadWithoutAutoSelection(window);
 
                 Assert.AreEqual("stale-saved-guid", ReadSavedSelection(window, typeFullName), "a busy-window load must keep the persisted saved selection");
                 CollectionAssert.Contains(ReadPrivateField<HashSet<Type>>(window, "_pendingSavedSelectionNormalizationTypes"), typeof(TestDataObject));
@@ -142,8 +151,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
-        [Test]
-        public void ShouldClearInvalidSavedSelectionAfterAssetDatabaseSettles()
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldNormalizeLatestSavedSelectionAfterAssetDatabaseSettles(bool replaceSelection)
         {
             string folder = CreateFixtureFolder();
             object previousInstance = ReadSharedInstance();
@@ -164,13 +174,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 bool isBusy = true;
                 AssetGuidDiscovery.AssetDatabaseBusyOverride = () => isBusy;
-                InvokePrivate(window, "LoadObjectTypesAsync", typeof(TestDataObject), false);
+                LoadWithoutAutoSelection(window);
                 Assert.AreEqual("stale-saved-guid", ReadSavedSelection(window, typeFullName), "a busy-window load must keep the persisted saved selection");
+
+                string assetPath = folder + "/Replacement.asset";
+                AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), assetPath);
+                AssetDatabase.SaveAssets();
+                string replacementGuid = AssetDatabase.AssetPathToGUID(assetPath);
+                if (replaceSelection)
+                {
+                    WriteSavedSelection(window, typeFullName, replacementGuid);
+                }
 
                 isBusy = false;
                 InvokePrivate(window, "ProcessSavedSelectionNormalizations");
 
-                Assert.That(ReadSavedSelection(window, typeFullName) == null, "an invalid saved selection must be cleared once the AssetDatabase settles");
+                Assert.AreEqual(replaceSelection ? replacementGuid : null, ReadSavedSelection(window, typeFullName), "normalize the latest selection, not the deferred snapshot");
                 Assert.IsEmpty(ReadPrivateField<HashSet<Type>>(window, "_pendingSavedSelectionNormalizationTypes"));
             }
         }
@@ -236,7 +255,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 bool isBusy = true;
                 AssetGuidDiscovery.AssetDatabaseBusyOverride = () => isBusy;
-                InvokePrivate(window, "LoadObjectTypesAsync", typeof(TestDataObject), false);
+                LoadWithoutAutoSelection(window);
 
                 SuspendForPlayMode(window);
                 Assert.That(ReadPrivateField<IVisualElementScheduledItem>(window, "_savedSelectionNormalizationTask") == null, "suspending for play mode must stop the pump");
