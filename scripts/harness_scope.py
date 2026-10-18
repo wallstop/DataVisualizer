@@ -65,6 +65,7 @@ SUBJECTS_BY_PATH: Dict[str, Tuple[str, ...]] = {
     ".llm/mcp/unity-mcp-host.mjs": ("test_unity_mcp_host.py",),
     # The live doctor path selects the doctor contract suite alongside the
     # coarse mcp contract suites the subtree prefix already selects (#269).
+    "scripts/mcp_doctor.py": ("test_unity_mcp_doctor.py", "test_mcp_credentials.py", "test_mcp_sync.py"),
     ".llm/mcp/mcp-doctor.mjs": (
         "test_unity_mcp_doctor.py",
         "test_mcp_credentials.py",

@@ -64,10 +64,14 @@ def unity_command(arguments: List[str]) -> str:
     return subprocess.check_output([executable, *arguments], text=True, encoding='utf-8').strip()
 
 
-def request_json(url: str, headers: Dict[str, str], payload: Optional[JsonObject]) -> JsonObject:
+def request_json(url: str, headers: Dict[str, str], payload: Optional[JsonObject], timeout: float = 30) -> JsonObject:
     data = None if payload is None else json.dumps(payload).encode('utf-8')
     try:
-        with urlopen(Request(url, data=data, headers=headers), timeout=30) as response:
+        request = Request(url, data=data, headers=headers)
+        authorization = request.headers.pop('Authorization', None)
+        if authorization:
+            request.add_unredirected_header('Authorization', authorization)
+        with urlopen(request, timeout=timeout) as response:
             body = response.read()
             return object_value(cast(Json, json.loads(body))) if body else {}
     except HTTPError as error:

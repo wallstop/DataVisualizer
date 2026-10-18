@@ -25,7 +25,7 @@ One GitHub PAT circulates under two names: generated configs reference `GITHUB_P
 
 The incident this section exists for: `.env.local` ended up with **both** names set to **different** values — a revoked PAT under the canonical name and a valid one under the
 alternate. Every generated config referenced the stale name, so the hosted GitHub MCP returned `401` while a perfectly good token sat unused one line away. Both `configure.mjs` and
-`mcp-doctor.mjs` reported success because they only ever checked _presence_, never _agreement_.
+`scripts/mcp_doctor.py` (formerly `mcp-doctor.mjs`) reported success because they only ever checked _presence_, never _agreement_.
 
 Current behavior:
 

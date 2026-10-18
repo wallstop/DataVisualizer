@@ -5,16 +5,17 @@ from __future__ import annotations
 import contextlib
 import io
 import json
-import shutil
-import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from email.message import Message
+from http.client import HTTPMessage
 from pathlib import Path
 from unittest.mock import patch
 from typing import Dict, List, Optional
 from urllib.error import HTTPError
+from urllib.request import HTTPRedirectHandler
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -174,18 +175,43 @@ class DoctorTests(unittest.TestCase):
                 self.assertTrue(self.urls[0].startswith('http://host.docker.internal:9020/'))
                 self.assertNotIn('Unity CLI on PATH', output)
 
-    @unittest.skipUnless(shutil.which('node'), 'node is required')
-    def test_js_doctor_normalizes_endpoint_before_health_probe(self) -> None:
-        source = (Path(__file__).resolve().parents[2] / '.llm/mcp/mcp-doctor.mjs').read_text(encoding='utf-8')
-        section = source.split('console.log("--- Unity bridge ---");', 1)[1].split('} // end SKIP_NETWORK_PROBES guard', 1)[0]
+    def test_mcp_doctor_normalizes_endpoint_before_health_probe(self) -> None:
+        from mcp_doctor import Doctor as McpDoctor
         for endpoint in ['http://bridge:9021/mcp', 'http://bridge:9021/mcp///']:
-            with self.subTest(endpoint=endpoint):
-                bootstrap = ('const urls=[]; const env=name=>name==="UNITY_MCP_HTTP_URL"?' + json.dumps(endpoint) + ':"";'
-                             'const ok=()=>{}; const fail=message=>{throw Error(message)};'
-                             'const fetch=async url=>{urls.push(url);return {ok:true,json:async()=>({result:{serverInfo:{name:"fixture"}}})}};')
-                result = subprocess.run([str(shutil.which('node')), '--input-type=module'], input=bootstrap + section + '\nconsole.log(JSON.stringify(urls));',
-                                        capture_output=True, text=True, encoding='utf-8', timeout=10, check=True)
-                self.assertEqual(json.loads(result.stdout.splitlines()[-1]), ['http://bridge:9021/healthz', 'http://bridge:9021/mcp'])
+            with self.subTest(endpoint=endpoint), contextlib.redirect_stdout(io.StringIO()):
+                doctor = McpDoctor(self.root, {'UNITY_MCP_HTTP_URL': endpoint})
+                with patch('mcp_doctor.request_json', return_value={'result': {'serverInfo': {'name': 'fixture'}}}) as request:
+                    doctor.check_bridge()
+                self.assertEqual([call.args[0] for call in request.call_args_list], ['http://bridge:9021/healthz', 'http://bridge:9021/mcp'])
+                self.assertEqual(doctor.failures, 0)
+
+    def test_http_transport_does_not_forward_bearer_on_redirect(self) -> None:
+        with patch('unity_mcp_doctor.urlopen') as transport:
+            transport.return_value.__enter__.return_value.read.return_value = b'{}'
+            request_json('https://bridge/mcp', {'Authorization': 'synthetic-bearer'}, None)
+        request = transport.call_args.args[0]
+        redirected = HTTPRedirectHandler().redirect_request(request, io.BytesIO(), 302, 'Found', HTTPMessage(), 'https://other/mcp')
+        self.assertEqual(request.get_header('Authorization'), 'synthetic-bearer')
+        self.assertIsNotNone(redirected)
+        assert redirected is not None
+        self.assertIsNone(redirected.get_header('Authorization'))
+
+    def test_mcp_doctor_counts_stdio_outcomes_and_redacts_secrets(self) -> None:
+        from mcp_doctor import Doctor as McpDoctor
+        for script, expected in [
+            ('import json,sys;sys.stdin.readline();print(json.dumps({"result":{"serverInfo":{"name":"fixture"}}}))', 0),
+            ('import json,sys;sys.stdin.readline();print(json.dumps({"error":{"message":"synthetic-secret"}}))', 1),
+            ('import subprocess,sys,time;sys.stdin.readline();subprocess.Popen([sys.executable,"-c","import time;time.sleep(10)"]);print(\'{"result":{"serverInfo":{"name":"fixture"}}}\',flush=True);time.sleep(10)', 0),
+            ('import sys;sys.stdin.readline()', 1),
+            ('import time;time.sleep(10)', 1),
+        ]:
+            with self.subTest(script=script), contextlib.redirect_stdout(io.StringIO()) as output:
+                doctor = McpDoctor(self.root, {'ZAI_API_KEY': 'synthetic-secret'})
+                started = time.monotonic()
+                doctor.spawn_probe('fixture', [sys.executable, '-u', '-c', script], {}, timeout=0.3 if script.startswith('import time;') else 5)
+                self.assertLess(time.monotonic() - started, 5)
+                self.assertEqual(doctor.failures, expected)
+                self.assertNotIn('synthetic-secret', output.getvalue())
 
     def test_custom_endpoint_and_rpc_errors_fail(self) -> None:
         for method in ['initialize', 'tools/list', 'tools/call']:
