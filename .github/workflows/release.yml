@@ -1,8 +1,7 @@
 name: Release
 
-# One release entrypoint: prepare a version/changelog PR, then tag and publish
-# its merged commit. npm and GitHub Release publication run in the same job;
-# no custom GitHub or npm credential is needed.
+# Prepare, validate, merge, and publish in one run. Token-authored merges do
+# not start workflows, so publication consumes the explicit merge output.
 on:
   pull_request:
     types: [closed]
@@ -12,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: "Prepare a release PR or publish an existing tag"
+        description: "Prepare and release automatically, or resume publication"
         type: choice
         options: [prepare, publish]
         default: prepare
@@ -26,7 +25,7 @@ on:
         type: string
         default: ""
       tag:
-        description: "Existing vX.Y.Z tag for publication or recovery"
+        description: "Existing vX.Y.Z tag (blank uses the current package version)"
         type: string
         default: ""
       dry_run:
@@ -46,11 +45,15 @@ jobs:
     name: Prepare release
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'prepare'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: write # push the release branch
       pull-requests: write # open the release pull request
       actions: write # dispatch release-branch CI
+    outputs:
+      version: ${{ steps.prep.outputs.version }}
+      branch: ${{ steps.prep.outputs.branch }}
+      merge_sha: ${{ steps.merge.outputs.merge_sha }}
     steps:
       - name: Require the default branch
         env:
@@ -76,6 +79,11 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
+
+      - name: Check npm provenance identity
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/release/repository_identity.py --repository "${REPOSITORY}"
 
       - name: Bump version and rotate the changelog
         id: prep
@@ -121,6 +129,7 @@ jobs:
           python3 scripts/release/extract_release_notes.py --version "${version}" --output "${candidate_dir}/release-notes.md"
 
       - name: Commit and push the release branch
+        id: candidate
         if: ${{ inputs.dry_run == false }}
         env:
           BRANCH: ${{ steps.prep.outputs.branch }}
@@ -139,10 +148,12 @@ jobs:
               echo "::error::${BRANCH} already exists with different content. Inspect it before preparing another release."
               exit 1
             fi
+            git switch --detach FETCH_HEAD
             echo "::notice::Reusing the existing release branch ${BRANCH}."
           else
             git push origin "${BRANCH}"
           fi
+          echo "head=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
       - name: Open the release pull request
         if: ${{ inputs.dry_run == false }}
@@ -159,28 +170,27 @@ jobs:
           fi
           body_file="${RUNNER_TEMP}/release-pr-body.md"
           cat > "${body_file}" <<EOF
-          Release v${VERSION} prepares the package and changelog for publication.
+          DISCLOSURE: LLM-GENERATED TEXT
 
-          ## Behavior
-          - Bump ${PREVIOUS_VERSION} to ${VERSION} and date the Unreleased notes.
-          - Merge to create the tag, publish npm, and attach the verified Unity package.
+          **Why:** Release v${VERSION} publishes the prepared package changes.
 
-          ## Validation
-          - Repository lint and npm payload preview passed on the prepared tree.
-          - Unity archive and release notes passed validation.
+          **What:**
 
-          ## Risk / Rollback
-          - npm versions are permanent. Recover with a new patch version.
+          - Bump ${PREVIOUS_VERSION} to ${VERSION} and date the release notes.
+          - Publish npm and GitHub artifacts after automated validation and merge.
           EOF
           gh pr create --base main --head "${BRANCH}" \
             --title "Release v${VERSION}" --body-file "${body_file}"
 
-      - name: Dispatch release branch validation
+      - name: Validate and merge the release pull request
+        id: merge
         if: ${{ inputs.dry_run == false }}
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ steps.prep.outputs.branch }}
-        run: gh workflow run llm-lint.yml --ref "${BRANCH}"
+          CANDIDATE_HEAD: ${{ steps.candidate.outputs.head }}
+          REQUEST: release-${{ github.run_id }}-${{ github.run_attempt }}
+        run: python3 scripts/release/complete_release_pr.py --branch "${BRANCH}" --request "${REQUEST}" --head "${CANDIDATE_HEAD}"
 
       - name: Dry-run summary
         if: ${{ inputs.dry_run == true }}
@@ -189,17 +199,31 @@ jobs:
 
   release:
     name: Tag and publish release
+    needs: prepare
     if: >-
+      always() && !cancelled() && (
+      (needs.prepare.result == 'success' && needs.prepare.outputs.merge_sha != '') ||
       (github.event_name == 'workflow_dispatch' && inputs.operation == 'publish') ||
       github.event_name == 'push' ||
       (github.event.pull_request.merged == true &&
-        startsWith(github.event.pull_request.head.ref, 'release/v'))
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        startsWith(github.event.pull_request.head.ref, 'release/v')))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: write # create the annotated tag and GitHub Release
       id-token: write # npm Trusted Publishing
     steps:
+      # Keep current workflow tooling when recovering an older immutable tag.
+      - name: Checkout release tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Retain release tooling
+        run: cp -R scripts/release "${RUNNER_TEMP}/release-tools"
+
       - name: Resolve the release source
         id: resolve
         env:
@@ -208,11 +232,18 @@ jobs:
           INPUT_TAG: ${{ inputs.tag }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PREPARED_SHA: ${{ needs.prepare.outputs.merge_sha }}
+          PREPARED_BRANCH: ${{ needs.prepare.outputs.branch }}
         run: |
           set -euo pipefail
           create_tag=false
           branch=""
-          if [ "${EVENT}" = "pull_request" ]; then
+          if [ -n "${PREPARED_SHA}" ]; then
+            branch="${PREPARED_BRANCH}"
+            tag="${branch#release/}"
+            checkout_ref="${PREPARED_SHA}"
+            create_tag=true
+          elif [ "${EVENT}" = "pull_request" ]; then
             branch="${HEAD_REF}"
             tag="${branch#release/}"
             checkout_ref="${MERGE_SHA}"
@@ -226,7 +257,7 @@ jobs:
               echo "::error::Only publish releases from main."
               exit 1
             fi
-            tag="${INPUT_TAG}"
+            tag="${INPUT_TAG:-v$(node -p "require('./package.json').version")}"
             checkout_ref="refs/tags/${tag}"
           fi
           if ! printf '%s' "${tag}" | grep -qE '^v[0-9]'; then
@@ -255,6 +286,11 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
+      - name: Check or repair npm provenance identity
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: python3 "${RUNNER_TEMP}/release-tools/repository_identity.py" --root . --repository "${REPOSITORY}" --repair-legacy
+
       - name: Tag the merged release commit
         if: ${{ steps.resolve.outputs.create_tag == 'true' }}
         env:
@@ -271,7 +307,7 @@ jobs:
               exit 1
             }
           else
-            python3 scripts/release/tag_release.py --branch "${BRANCH}"
+            python3 "${RUNNER_TEMP}/release-tools/tag_release.py" --root . --branch "${BRANCH}"
           fi
           git push origin "refs/tags/${TAG}"
 
@@ -286,7 +322,7 @@ jobs:
           TAG: ${{ steps.resolve.outputs.tag }}
         run: |
           set -euo pipefail
-          output="$(python3 scripts/release/verify_release.py --tag "${TAG}")"
+          output="$(python3 "${RUNNER_TEMP}/release-tools/verify_release.py" --root . --tag "${TAG}")"
           printf '%s\n' "${output}"
           for key in pkg version npm_tag package_file entries; do
             value="$(printf '%s\n' "${output}" | sed -n "s/^${key}: //p")"
@@ -312,7 +348,7 @@ jobs:
       - name: Build the release .unitypackage
         run: |
           set -euo pipefail
-          python3 scripts/release/build_unitypackage.py --output dist
+          python3 "${RUNNER_TEMP}/release-tools/build_unitypackage.py" --root . --output dist
           ls dist
 
       - name: Validate the release .unitypackage
@@ -323,7 +359,7 @@ jobs:
             echo "::error::The builder produced no .unitypackage."
             exit 1
           fi
-          python3 scripts/release/validate_unitypackage.py --archive "${archive}"
+          python3 "${RUNNER_TEMP}/release-tools/validate_unitypackage.py" --root . --archive "${archive}"
 
       - name: Prepare release notes and the npm tarball checksum
         id: artifacts
@@ -333,7 +369,7 @@ jobs:
           PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
         run: |
           set -euo pipefail
-          python3 scripts/release/extract_release_notes.py --version "${VERSION}" --output dist/release-notes.md
+          python3 "${RUNNER_TEMP}/release-tools/extract_release_notes.py" --root . --version "${VERSION}" --output dist/release-notes.md
           if [ ! -f "${PACKAGE_FILE}" ]; then
             echo "::error::Expected the npm tarball '${PACKAGE_FILE}' in the repository root."
             exit 1

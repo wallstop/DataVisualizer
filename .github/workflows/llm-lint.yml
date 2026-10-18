@@ -1,7 +1,14 @@
 name: LLM Instructions Lint
 
+run-name: ${{ inputs.release_request || github.workflow }}
+
 on:
   workflow_dispatch:
+    inputs:
+      release_request:
+        description: "Release validation correlation (set by Release)"
+        type: string
+        default: ""
   push:
     branches: [main]
     paths:
