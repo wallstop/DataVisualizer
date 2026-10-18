@@ -23,6 +23,7 @@ from unittest.mock import Mock, patch
 
 sys.dont_write_bytecode = True
 REPO = Path(__file__).resolve().parents[2]
+PYTHON = str(getattr(sys, "_base_executable", sys.executable))
 
 
 def cleanup_fixture_directory(path: Path) -> None:
@@ -227,7 +228,7 @@ class HostTests(unittest.TestCase):
         self.env = {key: value for key, value in os.environ.items() if not key.startswith('UNITY_')}
         self.env.update(HOME=str(self.home), USERPROFILE=str(self.home), UNITY_MCP_AUTO_SYNC='0')
         self.env_file = self.root / '.env.local'
-        self.env_file.write_text(f'\ufeffexport UNITY_CLI="{sys.executable}"\nUNITY_MCP_PROJECT="{self.project}"\nUNITY_MCP_TOKEN=fixture-secret\nUNITY_MCP_TIMEOUT_MS=1500\n', encoding='utf-8')
+        self.env_file.write_text(f'\ufeffexport UNITY_CLI="{PYTHON}"\nUNITY_MCP_PROJECT="{self.project}"\nUNITY_MCP_TOKEN=fixture-secret\nUNITY_MCP_TIMEOUT_MS=1500\n', encoding='utf-8')
         self.log = (self.root / 'bridge.log').open('w+', encoding='utf-8')
         self.addCleanup(self.log.close)
         self.node_options: list[str] = []
@@ -265,7 +266,7 @@ http.createServer = (handler) => createServer((request, response) => {
             time.sleep(0.02)
 
     def command(self) -> list[str]:
-        launcher = [sys.executable] if self.python_bridge else [str(shutil.which('node')), *self.node_options]
+        launcher = [PYTHON] if self.python_bridge else [str(shutil.which('node')), *self.node_options]
         return [*launcher, str(self.script), '--host', '127.0.0.1', '--port', str(self.port)]
 
     def logs(self) -> str:
