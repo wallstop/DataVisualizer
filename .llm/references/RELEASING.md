@@ -1,29 +1,26 @@
 # Releasing com.wallstop-studios.data-visualizer
 
-One workflow owns release preparation, tagging, and publication: [release.yml](../../.github/workflows/release.yml). The agent procedure is in
+[release.yml](../../.github/workflows/release.yml) owns preparation, CI, merge, tagging, and publication. The agent procedure is
 [bump-version-release](../skills/bump-version-release/SKILL.md).
 
-The workflow never runs Unity. EditMode and PlayMode suites remain local release gates (see `.llm/context.md`). Unity archives are built and validated without an editor or Unity
-license.
+The workflow builds and validates Unity archives without an editor. EditMode and PlayMode remain local release gates; see `.llm/context.md`.
 
 ## Release flow
 
-1. Add user-facing entries under `CHANGELOG.md` `## [Unreleased]`.
-2. Run `release.yml` on `main` with `operation=prepare`. Choose `bump` (`patch`, `minor`, or `major`) or an `explicit_version`. The default `dry_run=true` validates the candidate
-   on the runner without remote writes.
-3. Set `dry_run=false` to open `release/vX.Y.Z`. Preparation bumps `package.json`, syncs `.llm/context.md`, dates the changelog section, validates the Unity archive and notes, and
-   explicitly starts `llm-lint.yml` for the branch.
-4. Merge the validated release PR into `main`. The `release` job checks out that exact merge commit, creates and pushes annotated `vX.Y.Z`, builds and validates both packages, and
-   extracts the notes from the dated changelog section.
-5. After artifact validation passes, the same job publishes npm and creates or updates the GitHub Release. It attaches the npm tarball and Unity package, each with a SHA-256
-   checksum. Validated artifacts are retained for 14 days.
+1. Add user-facing notes under `CHANGELOG.md` `## [Unreleased]`.
+2. Run Release on `main` with `operation=prepare`, select a bump or `explicit_version`, and set `dry_run=false`.
+3. Preparation checks the npm repository identity, bumps the version, syncs `.llm/context.md`, rotates the changelog, and validates candidate artifacts.
+4. The workflow opens or reuses `release/vX.Y.Z`, dispatches Linux and Windows CI, and waits for that exact request and commit. Failed or missing CI stops the run.
+5. It merges the validated PR head with the repository's normal squash-merge API. Changed heads and repository merge restrictions stop the run. No policy bypass is used.
+6. The same workflow consumes the returned merge SHA, creates an annotated tag, validates both packages and notes, publishes npm, and creates the GitHub Release.
 
-An externally pushed `v*` tag also runs the publication job. It checks out that exact tag and requires the package version and changelog notes to match.
+No manual PR merge or second dispatch is needed. GitHub does not start workflows for `GITHUB_TOKEN` merges or pushes, so explicit CI dispatch and the merge output connect the
+chain. An externally merged release PR or externally pushed `v*` tag also publishes. Fork PRs cannot trigger publication through a release branch name.
 
-The `prepare` job and `release` job run on different events in the same workflow. Tagging and publication run in the same job. No release workflow dispatch chain or custom release
-credential is needed.
+The default `dry_run=true` validates the bumped candidate without pushing, opening or merging a PR, tagging, or publishing. Publication dry runs retain validated artifacts for 14
+days.
 
-## Authentication
+## Authentication and repository policy
 
 <!-- release-secrets:begin -->
 
@@ -31,17 +28,16 @@ No custom secrets are required.
 
 <!-- release-secrets:end -->
 
-GitHub writes use the built-in per-run `GITHUB_TOKEN`. npm publication uses OIDC. No npm token, PAT, or GitHub App is needed.
+GitHub writes use the built-in `GITHUB_TOKEN`; npm uses OIDC. No npm token, PAT, or GitHub App is needed. Preparation needs Contents, Pull requests, and Actions write permissions.
+Publication needs Contents and ID token write permissions.
 
-Preparation declares Contents, Pull requests, and Actions write permissions. It explicitly dispatches branch CI because a token-authored push does not start another workflow.
-Publication declares Contents and ID token write permissions. Its tag push does not need to trigger another workflow: publication continues in the same job.
-
-For automatic PR creation, enable GitHub repository Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests. This setting was
-enabled during the release audit. The workflow only creates PRs. Manual dispatches must run from `main`.
+Enable Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests. Allow squash merges. Repository policies must permit the bot
+to merge after CI passes. A required human review or deployment approval remains a human gate; remove that requirement for release PRs if zero-touch releases are required. The
+workflow does not approve its own PR or bypass policy.
 
 ## npm Trusted Publisher setup
 
-Configure `com.wallstop-studios.data-visualizer` on npmjs.com under package settings → Trusted Publisher → GitHub Actions.
+Configure package `com.wallstop-studios.data-visualizer` on npmjs.com → package settings → Trusted Publisher → GitHub Actions.
 
 | Field                | Value               |
 | -------------------- | ------------------- |
@@ -51,56 +47,44 @@ Configure `com.wallstop-studios.data-visualizer` on npmjs.com under package sett
 | Environment name     | leave empty         |
 | Allowed actions      | allow `npm publish` |
 
-If a publisher entry already names `npm-publish.yml`, update it to `release.yml` before using the consolidated workflow. npm must trust the file that contains the publish command;
-preparation, automatic publication, and manual recovery all use this single file.
-
-- Values are case-sensitive. Enter only the workflow filename and extension.
-- The workflow calls `npm publish` directly, so allow that action. A publisher that only allows staged publication will reject it.
-- Trusted publishing requires npm CLI 11.5.1 or later and Node 22.14.0 or later. The workflow uses Node 24 and checks the npm minimum before publication.
-- Publication uses a GitHub-hosted runner. No local npm login is needed.
-- `package.json` `repository.url` already matches this GitHub repository.
-
-npm Trusted Publisher settings cannot be verified through public package metadata. An owner must verify the registration above.
+The manifest must use `git+https://github.com/wallstop/DataVisualizer.git`. Identity is case-sensitive. Preparation checks it before remote writes; publication checks it before
+packing. The workflow uses Node 24 and verifies npm is at least 11.5.1. Prereleases use `next`; stable releases use `latest`. The publisher registration is private npm
+configuration; public metadata cannot verify it.
 
 ## Rerun and recovery
 
-| State                                | Action                                                                                                                                                                                                    |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Release PR was not opened            | Re-dispatch `operation=prepare`. An identical existing branch is reused. If its content differs, inspect it before choosing a new version or opening the existing branch's PR. No branch is force-pushed. |
-| Release failed before tagging        | Fix the cause and rerun the failed job for the merged PR.                                                                                                                                                 |
-| Tag exists, publication stopped      | Dispatch `release.yml` with `operation=publish`, `tag=vX.Y.Z`, and `dry_run=false`.                                                                                                                       |
-| npm published, GitHub Release failed | Use the same publish dispatch. npm skips the existing version; release notes and assets are updated.                                                                                                      |
-| Verify an existing tag               | Dispatch `operation=publish`, `tag=vX.Y.Z`, and `dry_run=true`.                                                                                                                                           |
+Run Release on `main` with `operation=publish` and `dry_run=false` to resume the current package version's existing tag. The tag input can stay blank; set it to resume another
+version. Set `dry_run=true` to build and retain artifacts without publication. A missing tag fails at checkout rather than silently releasing current main.
 
-A rerun of the merged PR job reuses its tag only when the tag still points at that exact merge commit. It never moves an existing tag. A conflicting tag fails. Direct publication
-checks out the requested tag rather than current main.
+Recovery uses tooling from the workflow revision and checks out the exact source tag. This lets fixes to the build process recover old releases. Tags are never moved. A merged-PR
+job rerun accepts an existing tag only if it points at the same merge commit.
 
-npm publication is permanent. Recover from a bad release with a new patch version. The pipeline is recoverable across registries, not a transaction: npm may succeed before the
-GitHub Release API fails.
+If preparation failed after branch creation, rerun it with the same inputs. An identical existing branch and open PR are reused. Different content fails without force-pushing. If
+preparation already merged, rerun the failed publication job or use Publish. Preparing a new release after a completed preparation would bump the version again.
 
-## Validation
+npm versions are permanent. If npm succeeded before GitHub publication failed, Publish skips that existing version and finishes the release assets and notes. Both archives, their
+SHA-256 checksums, and changelog notes must validate before publication. The two registries do not provide an atomic transaction.
 
-| Script                     | Rejects                                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `prepare_release.py`       | unsupported versions, missing or empty Unreleased notes, invalid changelog rotation                     |
-| `tag_release.py`           | branch/version disagreement, missing or duplicated dated notes, an existing tag, a dirty tree           |
-| `verify_release.py`        | tag/version disagreement, packed files outside the allowlist, missing payload files                     |
-| `build_unitypackage.py`    | unsafe paths, missing metadata, duplicate or malformed GUIDs                                            |
-| `validate_unitypackage.py` | corrupt archives, unsafe or duplicate members, checksum failures, disagreement with the tracked payload |
-| `extract_release_notes.py` | missing, empty, or duplicated version notes                                                             |
+## 0.1.1 incident and recovery
 
-Both archives, checksums, and release notes must be ready before npm publication. Pinned action revisions are tracked by Dependabot. Workflow contract tests run with the
-cross-platform script suite.
+[Preparation run 39084091695](https://github.com/wallstop/DataVisualizer/actions/runs/39084091695) opened [PR #275](https://github.com/wallstop/DataVisualizer/pull/275). The old
+design stopped there and needed a manual merge.
+
+[Publication run 39084443871](https://github.com/wallstop/DataVisualizer/actions/runs/39084443871) created `v0.1.1` and validated all artifacts. npm authenticated, generated
+provenance, then rejected the upload with E422: `package.json` named `Ambiguous-Interactive/DxVisualizer` while provenance named `wallstop/DataVisualizer`. The registry did not
+publish `0.1.1`, and GitHub publication was skipped. The prior guide incorrectly claimed that the manifest identity already matched.
+
+[Recovery run 39086226932](https://github.com/wallstop/DataVisualizer/actions/runs/39086226932) failed earlier: Publish received an empty tag, and the old resolver required one.
+Rerunning the old tag's tooling would also keep the incorrect manifest identity.
+
+The fixed Publish path repairs only `repository.url` in the build tree for package `com.wallstop-studios.data-visualizer` version `0.1.1`, only when the URL is the exact known
+legacy value and the publishing repository is `wallstop/DataVisualizer`. Code, version, release notes, and the existing tag stay intact. Both archives contain the same repaired
+metadata. Unrelated repositories, versions, and metadata mismatches fail. The repair is idempotent and is recorded in the workflow log.
+
+Regression tests cover identity rejection before preparation, the narrow metadata repair, automatic CI/merge failure boundaries, and the complete package build chain.
 
 ## References
 
-The audit compared release workflows in [DxCommandTerminal](https://github.com/wallstop/DxCommandTerminal/tree/master/.github/workflows),
-[unity-helpers](https://github.com/Ambiguous-Interactive/unity-helpers/tree/main/.github/workflows), and
-[DxMessaging](https://github.com/Ambiguous-Interactive/DxMessaging/tree/master/.github/workflows). They share curated changelog rotation, tags, required Unity archives, and npm
-publication after artifact validation.
-
-Preparation [run 37553208060](https://github.com/wallstop/DataVisualizer/actions/runs/37553208060) left `release/v0.1.0` after GitHub rejected automatic PR creation. Inspect that
-branch before preparing the same version again.
-
+- [npm provenance requirements](https://docs.npmjs.com/generating-provenance-statements/)
 - [GitHub workflow triggers](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
 - [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/)

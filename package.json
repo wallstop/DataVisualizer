@@ -18,15 +18,15 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Ambiguous-Interactive/DxVisualizer.git"
+    "url": "git+https://github.com/wallstop/DataVisualizer.git"
   },
   "bugs": {
-    "url": "https://github.com/Ambiguous-Interactive/DxVisualizer/issues"
+    "url": "https://github.com/wallstop/DataVisualizer/issues"
   },
   "author": "wallstop studios <wallstop@wallstopstudios.com> (https://wallstopstudios.com)",
-  "homepage": "https://ambiguous-interactive.github.io/DxVisualizer/",
-  "documentationUrl": "https://ambiguous-interactive.github.io/DxVisualizer/",
-  "changelogUrl": "https://github.com/Ambiguous-Interactive/DxVisualizer/blob/main/CHANGELOG.md",
+  "homepage": "https://wallstop.github.io/DataVisualizer/",
+  "documentationUrl": "https://wallstop.github.io/DataVisualizer/",
+  "changelogUrl": "https://github.com/wallstop/DataVisualizer/blob/main/CHANGELOG.md",
   "main": "README.md",
   "files": [
     "Editor",

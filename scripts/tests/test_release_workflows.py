@@ -10,12 +10,16 @@ drives the same release scripts over a git fixture.
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import uuid
 from pathlib import Path
-from typing import Tuple
+from typing import Any, Dict, List, Tuple
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 
@@ -34,6 +38,10 @@ TESTS_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = TESTS_DIR.parent
 REPO_ROOT = SCRIPTS_DIR.parent
 RELEASE_SCRIPTS = SCRIPTS_DIR / "release"
+sys.path.insert(0, str(SCRIPTS_DIR))
+from release import complete_release_pr
+from release.repository_identity import CANONICAL_URL, LEGACY_URL, REPOSITORY, verify_identity
+
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/release.yml"
 
 workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
@@ -74,7 +82,9 @@ def sha256_text(path: Path) -> str:
 
 def case_uses_one_release_workflow() -> None:
     assert_true(re.search("secrets.RELEASE_TOKEN", workflow, re.IGNORECASE) is None, "Release workflow must not need a custom token.")
-    assert_true("gh workflow run llm-lint.yml" in prep, "Preparation must start release-branch CI.")
+    assert_true("complete_release_pr.py" in prep, "Preparation must wait for CI and merge its release PR.")
+    assert_true("needs: prepare" in publish and "always() && !cancelled()" in publish, "Recovery must run even when preparation is skipped.")
+    assert_true("needs.prepare.outputs.merge_sha" in publish, "Bot merges must continue publication in the same run.")
     assert_true(re.search("gh workflow run", publish, re.IGNORECASE) is None, "Tagging and publication must execute in the same job.")
     assert_true("id-token: write" in publish, "npm requires OIDC permission.")
     assert_true(
@@ -86,6 +96,10 @@ def case_uses_one_release_workflow() -> None:
 
 
 def case_validates_all_artifacts_before_npm_publication() -> None:
+    assert_true("repository_identity.py" in prep, "Provenance mismatch must fail before the release branch push.")
+    assert_true(prep.find("repository_identity.py") < prep.find("git push origin"), "Check identity before remote writes.")
+    assert_true('INPUT_TAG:-v$(node' in publish, "Blank recovery tags must use the current package version.")
+    assert_true("github.workflow_sha" in publish and "release-tools/repository_identity.py" in publish, "Recovery must use current tooling on immutable old tags.")
     publication = publish.find("- name: Publish to npm with trusted publishing")
     for step in ("Build the release .unitypackage", "Validate the release .unitypackage", "Prepare release notes and the npm tarball checksum"):
         index = publish.find(f"- name: {step}")
@@ -162,9 +176,118 @@ def case_prepares_tags_and_builds_a_complete_release(python: str) -> None:
         remove_temp_root(root)
 
 
+
+
+def case_resolves_publish_and_automatic_merge_sources() -> None:
+    bash = shutil.which("bash")
+    if bash is None:
+        print("  SKIP: release source shell probe requires bash; Linux CI runs it.")
+        return
+    marker = publish.index("      - name: Resolve the release source")
+    start = publish.index("        run: |\n", marker) + len("        run: |\n")
+    end = publish.index("\n      - name:", start)
+    script = "\n".join(line[10:] for line in publish[start:end].splitlines())
+    root = new_temp_root(prefix="release-source-")
+    try:
+        version = json.loads((REPO_ROOT / "package.json").read_text())["version"]
+        for event, input_tag, prepared_sha, expected_tag, expected_ref in [
+            ("workflow_dispatch", "", "", f"v{version}", f"refs/tags/v{version}"),
+            ("workflow_dispatch", "v0.1.0", "", "v0.1.0", "refs/tags/v0.1.0"),
+            ("workflow_dispatch", "", "validated-merge", "v0.1.2", "validated-merge"),
+            ("push", "", "", "v0.1.0", "refs/tags/v0.1.0"),
+        ]:
+            output = root / "outputs"
+            output.write_text("")
+            env = {**os.environ, "EVENT": event, "INPUT_TAG": input_tag, "PREPARED_SHA": prepared_sha,
+                   "PREPARED_BRANCH": "release/v0.1.2", "HEAD_REF": "", "MERGE_SHA": "",
+                   "REF": "refs/tags/v0.1.0" if event == "push" else "refs/heads/main", "GITHUB_OUTPUT": str(output)}
+            result = subprocess.run([bash, "-c", script], cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False)
+            assert_exit_code(0, f"resolve {event} {input_tag or 'current version'}", result.returncode)
+            values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+            assert_true(values["tag"] == expected_tag and values["checkout_ref"] == expected_ref, "Resolve the exact tag or validated merge.")
+            assert_true(values["create_tag"] == ("true" if prepared_sha else "false"), "Only prepared merges create tags.")
+    finally:
+        remove_temp_root(root)
+
+def case_provenance_identity_and_narrow_recovery() -> None:
+    root = new_temp_root(prefix="release-identity-")
+    try:
+        original: Dict[str, Any] = {"name": "com.wallstop-studios.data-visualizer", "version": "0.1.1",
+                                    "repository": {"type": "git", "url": LEGACY_URL}, "files": ["Runtime"], "description": "Keep this."}
+        path = root / "package.json"
+        path.write_text(json.dumps(original), encoding="utf-8")
+        try:
+            verify_identity(root, REPOSITORY)
+            raise AssertionError("Preparation accepted the exact provenance mismatch that broke 0.1.1.")
+        except ValueError as error:
+            assert_true("provenance requires" in str(error), "Explain the metadata mismatch.")
+        assert_true(json.loads(path.read_text()) == original, "Validation must not mutate metadata.")
+        assert_true(verify_identity(root, REPOSITORY, True), "Recover the observed legacy release.")
+        repaired = json.loads(path.read_text())
+        repaired["repository"]["url"] = LEGACY_URL
+        assert_true(repaired == original, "Recovery may change only repository.url.")
+        assert_true(not verify_identity(root, REPOSITORY, True), "Recovery must be idempotent.")
+        for version, repository, url in [("0.1.2", REPOSITORY, LEGACY_URL), ("0.1.1", "other/repo", LEGACY_URL),
+                                         ("0.1.1", REPOSITORY, "git+https://github.com/unknown/repo.git")]:
+            original["version"] = version
+            original["repository"]["url"] = url
+            path.write_text(json.dumps(original), encoding="utf-8")
+            try:
+                verify_identity(root, repository, True)
+                raise AssertionError("Recovery accepted an unrelated identity or version.")
+            except ValueError:
+                pass
+        package = json.loads((REPO_ROOT / "package.json").read_text())
+        assert_true(package["repository"]["url"] == CANONICAL_URL, "The committed manifest must match provenance.")
+    finally:
+        remove_temp_root(root)
+
+
+def case_automation_waits_for_exact_ci_and_merges_exact_head() -> None:
+    pr = {"number": 42, "headRefOid": "candidate", "baseRefName": "main", "isCrossRepository": False, "state": "OPEN"}
+    unrelated = {"display_title": "another-run", "head_sha": "candidate", "status": "completed", "conclusion": "success"}
+    success = {"display_title": "request", "head_sha": "candidate", "status": "completed", "conclusion": "success"}
+    with patch.dict(os.environ, {"GITHUB_REPOSITORY": REPOSITORY}), patch.object(complete_release_pr.time, "sleep"):
+        with patch.object(complete_release_pr, "gh", side_effect=[pr, None, {"workflow_runs": [unrelated]},
+                                                                 {"workflow_runs": [success]}, {"merged": True, "sha": "merged"}]) as mock:
+            assert_true(complete_release_pr.complete("release/v0.1.2", "request", "candidate") == "merged", "Report the actual merge commit.")
+            arguments = mock.call_args_list[-1].args[0]
+            assert_true("sha=candidate" in arguments, "Merge must compare the validated head atomically.")
+        for runs, merge_result in [([{**success, "conclusion": "failure", "html_url": "https://ci.invalid"}], None),
+                                    ([success], {"merged": False, "message": "Policy denied"})]:
+            responses: List[Any] = [pr, None, {"workflow_runs": runs}]
+            if merge_result is not None:
+                responses.append(merge_result)
+            with patch.object(complete_release_pr, "gh", side_effect=responses) as mock:
+                try:
+                    complete_release_pr.complete("release/v0.1.2", "request", "candidate")
+                    raise AssertionError("Failed CI or merge policy must stop publication.")
+                except ValueError:
+                    pass
+                if merge_result is None:
+                    assert_true(mock.call_count == 3, "Failed CI must not attempt a merge.")
+        with patch.object(complete_release_pr, "gh", return_value=pr) as mock:
+            try:
+                complete_release_pr.complete("release/v0.1.2", "request", "changed")
+                raise AssertionError("Changed candidates must fail before dispatch.")
+            except ValueError:
+                pass
+            assert_true(mock.call_count == 1, "Changed candidates must not dispatch or merge.")
+        with patch.object(complete_release_pr, "gh", side_effect=[pr, None]) as mock:
+            try:
+                complete_release_pr.complete("release/v0.1.2", "request", "candidate", timeout=0)
+                raise AssertionError("Missing CI must time out without merge.")
+            except ValueError:
+                pass
+            assert_true(mock.call_count == 2, "Timeout must not merge.")
+
+
 def main() -> int:
     python = find_python()
 
+    run_case("Resolves_Publish_And_Automatic_Merge_Sources", case_resolves_publish_and_automatic_merge_sources)
+    run_case("Provenance_Identity_And_Narrow_Recovery", case_provenance_identity_and_narrow_recovery)
+    run_case("Automation_Waits_For_Exact_CI_And_Merges_Exact_Head", case_automation_waits_for_exact_ci_and_merges_exact_head)
     run_case("Uses_OneReleaseWorkflow_WithBuiltInAuthentication", case_uses_one_release_workflow)
     run_case("Validates_AllArtifacts_BeforeNpmPublication", case_validates_all_artifacts_before_npm_publication)
     run_case("Rehearses_WithoutPublishing", case_rehearses_without_publishing)

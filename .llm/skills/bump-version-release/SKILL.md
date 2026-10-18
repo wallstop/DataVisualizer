@@ -19,17 +19,25 @@ a clone or after a partial failure.
    Choose `bump` or `explicit_version`; use the default `dry_run=true` first.
 3. Set `dry_run=false` to open the release PR. The workflow bumps `package.json`,
    syncs `.llm/context.md`, dates the changelog, and validates the artifacts.
-4. Merge the validated `release/vX.Y.Z` PR. The same release workflow tags the
-   merged commit, validates both packages and notes, then publishes npm and the
-   GitHub Release. The artifacts must pass before publication.
+   It then dispatches and waits for CI, merges the exact validated PR head,
+   and publishes the resulting merge commit in the same run.
+4. Wait for the workflow to finish. No manual PR merge is needed. Repository
+   rules must permit the bot to squash-merge after CI; the workflow does not
+   bypass required human approvals. Both packages and notes must validate
+   before npm and GitHub publication.
 5. Recover a partial release by dispatching `release.yml` with
-   `operation=publish`, `tag=vX.Y.Z`, and `dry_run=false`. A dry run validates
+   `operation=publish` and `dry_run=false`. A blank tag uses the current
+   package version; set `tag=vX.Y.Z` to resume another version. A dry run validates
    that existing tag and retains artifacts without publishing.
 
 For a local version bump, edit `package.json`, run `npm run lint:llm:fix`, and
 verify `npm pack`. Commit `package.json`, `.llm/context.md`, and the dated
 changelog together with subject `Bump version from X to Y`. Do not run automated
 preparation on a version that has already been bumped locally.
+
+Preparation checks the case-sensitive npm repository identity before writes.
+Recovery uses current tooling against immutable source tags. See the release
+reference for the narrow `0.1.1` legacy repository metadata repair.
 
 ## Changelog
 
