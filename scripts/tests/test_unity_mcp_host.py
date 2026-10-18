@@ -475,7 +475,8 @@ http.createServer = (handler) => createServer((request, response) => {
     def test_intercepted_docker_route_selects_and_publishes_a_verified_port(self) -> None:
         self.stop()
         for mode in ('wrong-instance', 'silent', 'missing-dns'):
-            with self.subTest(mode=mode):
+            with self.subTest(mode=mode), contextlib.ExitStack() as cleanup:
+                cleanup.callback(self.stop)
                 preload = self.root / 'docker-route.mjs'
                 preload.write_text("""
 import http from 'node:http';
@@ -524,7 +525,6 @@ http.get = (options, callback) => {
                     self.assertIn('Docker host route verified', self.logs()[offset:])
                 self.assertEqual(self.http('/healthz')[1]['bridgePid'], self.process.pid)
                 self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
-                self.stop()
 
     def test_existing_bridge_with_intercepted_docker_route_is_not_reused(self) -> None:
         old = self.process
