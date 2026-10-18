@@ -101,9 +101,9 @@ from its `previous/` folder and remove listed new outputs before retrying. Keep 
 `uv run scripts/export_docs_webp.py --check` to verify the committed copies. Pillow is pinned by the export script and installed only for that local command; the site build uses
 the committed images.
 
-Known capture limit, recorded on [#114](https://github.com/wallstop/DataVisualizer/issues/114): Unity's offscreen panel renderer on macOS 6000.4 omitted several inspector and list
-subtrees (the same window paints them fully on screen and on Windows 6000.5). The driver detects that host gap and fails closed rather than publishing blanked imagery; every
-committed PNG was produced and pixel-verified on Windows 6000.5.
+Known capture limit, recorded on [#114](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/114): Unity's offscreen panel renderer on macOS 6000.4 omitted several
+inspector and list subtrees (the same window paints them fully on screen and on Windows 6000.5). The driver detects that host gap and fails closed rather than publishing blanked
+imagery; every committed PNG was produced and pixel-verified on Windows 6000.5.
 
 ## Regenerate the creation-controls animation
 
@@ -132,5 +132,5 @@ recompile, and report up to date before the next edit, then re-run.
 - [Search and filtering](search-and-filter.md) — what each finder matches.
 - [Managing assets](managing-assets.md) — asset operations and processors.
 - [Organizing your data](organizing.md) — layout, themes, persistence.
-- [Issues](https://github.com/wallstop/DataVisualizer/issues) — known problems and where to report new ones. DxVisualizer is alpha software; a report with the console output and
-  Unity version helps a lot.
+- [Issues](https://github.com/Ambiguous-Interactive/DxVisualizer/issues) — known problems and where to report new ones. DxVisualizer is alpha software; a report with the console
+  output and Unity version helps a lot.

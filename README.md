@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/brand/dxvisualizer-banner.png" alt="DxVisualizer. Your game data, one window." width="800">
+  <img src="https://raw.githubusercontent.com/Ambiguous-Interactive/DxVisualizer/main/docs/images/brand/dxvisualizer-banner.png" alt="DxVisualizer. Your game data, one window." width="800">
 </p>
 
 # DxVisualizer
@@ -11,14 +11,14 @@ pick, and the inspector for the asset you selected. You edit, reorder, and batch
 
 **Alpha:** built for Wallstop Studios' internal use. There is no support commitment yet, and any release can break compatibility.
 
-Documentation: <https://wallstop.github.io/DataVisualizer/>
+Documentation: <https://ambiguous-interactive.github.io/DxVisualizer/>
 
-![DxVisualizer layout with namespace, object, and inspector columns](https://raw.githubusercontent.com/wallstop/DataVisualizer/main/docs/images/data-visualizer-layout.webp)
+![DxVisualizer layout with namespace, object, and inspector columns](https://raw.githubusercontent.com/Ambiguous-Interactive/DxVisualizer/main/docs/images/data-visualizer-layout.webp)
 
 _Captured from the live window by the docs capture pipeline._
 
 DxVisualizer was called Data Visualizer until 0.2.0. Namespaces, the package name, saved state, and theme tokens are unchanged; see
-[Migrating from Data Visualizer](https://wallstop.github.io/DataVisualizer/migration/).
+[Migrating from Data Visualizer](https://ambiguous-interactive.github.io/DxVisualizer/migration/).
 
 ## Install
 
@@ -26,9 +26,9 @@ Unity 2021.3 or newer. No other package dependencies.
 
 1. Open **Window → Package Manager**.
 2. Select **+**, then **Add package from git URL**.
-3. Enter `https://github.com/wallstop/DataVisualizer.git` and select **Add**.
+3. Enter `https://github.com/Ambiguous-Interactive/DxVisualizer.git` and select **Add**.
 
-Each [GitHub Release](https://github.com/wallstop/DataVisualizer/releases) also carries a `.unitypackage`.
+Each [GitHub Release](https://github.com/Ambiguous-Interactive/DxVisualizer/releases) also carries a `.unitypackage`.
 
 Open the window with **Tools → Wallstop Studios → DxVisualizer** and dock it next to the Inspector.
 
@@ -43,12 +43,12 @@ Open the window with **Tools → Wallstop Studios → DxVisualizer** and dock it
 
 ## Documentation
 
-- [Getting started](https://wallstop.github.io/DataVisualizer/getting-started/): install, open the window, and edit your first asset.
-- [Search and filtering](https://wallstop.github.io/DataVisualizer/search-and-filter/): global search, the type filter, and label filtering.
-- [Managing assets](https://wallstop.github.io/DataVisualizer/managing-assets/): create, clone, rename, move, delete, and processors.
-- [Organizing your data](https://wallstop.github.io/DataVisualizer/organizing/): ordering, themes, persistence, and Play Mode.
-- [Extending the window](https://wallstop.github.io/DataVisualizer/extending/): attributes, `BaseDataObject`, processors, and custom inspector content.
-- [Troubleshooting](https://wallstop.github.io/DataVisualizer/troubleshooting/): missing types, hidden rows, processors, themes.
+- [Getting started](https://ambiguous-interactive.github.io/DxVisualizer/getting-started/): install, open the window, and edit your first asset.
+- [Search and filtering](https://ambiguous-interactive.github.io/DxVisualizer/search-and-filter/): global search, the type filter, and label filtering.
+- [Managing assets](https://ambiguous-interactive.github.io/DxVisualizer/managing-assets/): create, clone, rename, move, delete, and processors.
+- [Organizing your data](https://ambiguous-interactive.github.io/DxVisualizer/organizing/): ordering, themes, persistence, and Play Mode.
+- [Extending the window](https://ambiguous-interactive.github.io/DxVisualizer/extending/): attributes, `BaseDataObject`, processors, and custom inspector content.
+- [Troubleshooting](https://ambiguous-interactive.github.io/DxVisualizer/troubleshooting/): missing types, hidden rows, processors, themes.
 - [Video walkthrough](https://youtu.be/3oUxUSKNyhw): a tour of the window, recorded before the rename.
 
 ## Free forever

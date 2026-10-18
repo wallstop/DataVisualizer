@@ -1,19 +1,19 @@
 # Getting started
 
-This page takes you from an empty project to an edited asset. It covers the first session only. The [README](https://github.com/wallstop/DataVisualizer#readme) documents the full
-feature set, including themes, processors, and extension points.
+This page takes you from an empty project to an edited asset. It covers the first session only. The [README](https://github.com/Ambiguous-Interactive/DxVisualizer#readme) documents
+the full feature set, including themes, processors, and extension points.
 
 ## Requirements
 
 - Unity 2021.3 or newer. `package.json` declares that floor, and the window is developed and tested on Unity 6. The 2021.3 editor is not part of the local validation yet, which
-  [#86](https://github.com/wallstop/DataVisualizer/issues/86) tracks.
+  [#86](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/86) tracks.
 - No additional package dependencies.
 
 ## Install the package
 
 1. Open **Window → Package Manager**.
 2. Select **+**, then **Add package from git URL**.
-3. Enter `https://github.com/wallstop/DataVisualizer.git` and select **Add**.
+3. Enter `https://github.com/Ambiguous-Interactive/DxVisualizer.git` and select **Add**.
 
 Unity imports the package, and the menu item appears.
 

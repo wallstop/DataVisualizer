@@ -40,7 +40,7 @@ REPO_ROOT = SCRIPTS_DIR.parent
 RELEASE_SCRIPTS = SCRIPTS_DIR / "release"
 sys.path.insert(0, str(SCRIPTS_DIR))
 from release import complete_release_pr
-from release.repository_identity import CANONICAL_URL, LEGACY_URL, REPOSITORY, verify_identity
+from release.repository_identity import LEGACY_URL, REPOSITORY, verify_identity
 
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/release.yml"
 
@@ -238,7 +238,9 @@ def case_provenance_identity_and_narrow_recovery() -> None:
             except ValueError:
                 pass
         package = json.loads((REPO_ROOT / "package.json").read_text())
-        assert_true(package["repository"]["url"] == CANONICAL_URL, "The committed manifest must match provenance.")
+        assert_true(package["repository"]["url"] == LEGACY_URL, "The transferred manifest must use the new Actions identity.")
+        assert_true(not verify_identity(REPO_ROOT, "Ambiguous-Interactive/DxVisualizer"), "Preparation must accept the transferred repository.")
+        assert_true(not verify_identity(REPO_ROOT, "Ambiguous-Interactive/DxVisualizer", True), "Publication must preserve transferred metadata.")
     finally:
         remove_temp_root(root)
 
