@@ -181,8 +181,5 @@ Run `npm run mcp:sync`, restart the host bridge and agent sessions, then run `np
 the pinned editor. If `/healthz` times out, check the host URL and remove forwarded Unity bridge ports in VS Code's Ports view: reverse tunnels can intercept host traffic. Connect
 directly to the host bridge. Match health's `bridgePid` to the listener owner; health bypasses authentication and does not start Unity.
 
-The universal configurator runs in typed Python through `uv run scripts/mcp_configure.py`. The legacy Node entry remains a launcher with Python 3.9+ fallback. The sync wrapper no
-longer requires Node.
-
-Run the typed Python bridge directly with `uv run scripts/unity_mcp_host.py` on the host. It uses the same settings, health identity, route checks, and dynamic port publication as
-the legacy Node command.
+The npm commands `npm run mcp:sync` and `npm run unity:mcp:host` run typed Python through uv. Direct entry points are `uv run scripts/mcp_configure.py` and
+`uv run scripts/unity_mcp_host.py`. Legacy Node paths remain small launchers with Python 3.9+ fallback; the Python sync wrapper does not require Node.

@@ -10,6 +10,7 @@ import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+import queue
 from pathlib import Path
 import re
 import signal
@@ -54,6 +55,7 @@ class Bridge:
         self.settings = settings
         self.instance = str(uuid.uuid4())
         self.child: Optional[subprocess.Popen[bytes]] = None
+        self.input_queue: Optional[queue.Queue[bytes]] = None
         self.lock = threading.RLock()
         self.pending: Dict[int, Pending] = {}
         self.next_id = 0
@@ -70,6 +72,7 @@ class Bridge:
             if self.child is not child:
                 return
             self.child = None
+            self.input_queue = None
             self.fail_pending(reason)
         with suppress(OSError):
             child.kill()
@@ -115,6 +118,22 @@ class Bridge:
             log('[unity mcp] ' + line.decode('utf-8', errors='replace').rstrip(), True)
         child.stderr.close()
 
+    def write_stdin(self, child: subprocess.Popen[bytes], messages: queue.Queue[bytes]) -> None:
+        assert child.stdin is not None
+        try:
+            while child.poll() is None:
+                try:
+                    message = messages.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+                child.stdin.write(message)
+                child.stdin.flush()
+        except OSError:
+            self.retire(child, 'Unity CLI input closed; retry the request.')
+        finally:
+            with suppress(OSError):
+                child.stdin.close()
+
     def ensure_child(self) -> subprocess.Popen[bytes]:
         if self.child is not None and self.child.poll() is None:
             return self.child
@@ -125,19 +144,20 @@ class Bridge:
         self.child = subprocess.Popen([self.settings['cliCommand'], *self.settings['cliArgs']],
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         child = self.child
+        messages: queue.Queue[bytes] = queue.Queue(maxsize=128)
+        self.input_queue = messages
+        threading.Thread(target=self.write_stdin, args=(child, messages), daemon=True).start()
         threading.Thread(target=self.read_stdout, args=(child,), daemon=True).start()
         threading.Thread(target=self.read_stderr, args=(child,), daemon=True).start()
         return child
 
     def write(self, message: JsonMap) -> None:
-        child = self.ensure_child()
-        assert child.stdin is not None
+        self.ensure_child()
+        assert self.input_queue is not None
         try:
-            child.stdin.write((json.dumps(message, ensure_ascii=False) + '\n').encode('utf-8'))
-            child.stdin.flush()
-        except OSError:
-            self.retire(child, 'Unity CLI input closed; retry the request.')
-            raise
+            self.input_queue.put_nowait((json.dumps(message, ensure_ascii=False) + '\n').encode('utf-8'))
+        except queue.Full as error:
+            raise ValueError('Unity CLI input queue is full; retry the request.') from error
 
     def request(self, message: JsonMap) -> JsonMap:
         with self.lock:
@@ -193,6 +213,7 @@ class Bridge:
         with self.lock:
             child = self.child
             self.child = None
+            self.input_queue = None
             self.fail_pending('Bridge stopped.')
         if child is not None:
             try:
@@ -217,6 +238,9 @@ class BridgeServer(ThreadingHTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    timeout = 180
+
     def body(self) -> bytes:
         if self.headers.get('Transfer-Encoding', '').lower() != 'chunked':
             return self.rfile.read(int(self.headers.get('Content-Length') or 0))

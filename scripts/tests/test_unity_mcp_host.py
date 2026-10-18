@@ -8,6 +8,7 @@ import http.client
 import json
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -127,7 +128,7 @@ class FixtureDirectoryCleanupTests(unittest.TestCase):
             self.assertFalse(root.exists())
 
 FAKE_CLI = r"""
-import json, os, sys, time
+import json, os, sys, threading, time
 for line in sys.stdin:
     message = json.loads(line)
     if message.get('method') == 'crash':
@@ -141,6 +142,8 @@ for line in sys.stdin:
     result = dict(serverInfo=dict(name='fixture'), capabilities={}, protocolVersion='2025-03-26') if message.get('method') == 'initialize' else dict(method=message.get('method'), params=message.get('params'))
     time.sleep(0.005)
     print(json.dumps(dict(jsonrpc='2.0', id=message['id'], result=result)), flush=True)
+    if message.get('method') == 'pause-input':
+        threading.Event().wait()
 """
 
 PYTHON_CONFIG_SYNC_FIXTURE = """
@@ -203,6 +206,7 @@ fs.writeFileSync = (path, data, ...options) => {
 
 
 @unittest.skipUnless(shutil.which('node'), 'node is required')
+@unittest.skip('Retired Node implementation; Python subclass runs the shared contracts.')
 class HostTests(unittest.TestCase):
     python_bridge = False
 
@@ -215,6 +219,8 @@ class HostTests(unittest.TestCase):
         source = REPO / ('scripts/unity_mcp_host.py' if self.python_bridge else '.llm/mcp/unity-mcp-host.mjs')
         self.script = self.root / source.relative_to(REPO)
         shutil.copyfile(source, self.script)
+        if self.python_bridge:
+            shutil.copyfile(REPO / '.llm/mcp/unity-mcp-host.mjs', script_dir / 'unity-mcp-host.mjs')
         shutil.copyfile(REPO / 'scripts' / 'unity_mcp_settings.py', self.root / 'scripts' / 'unity_mcp_settings.py')
         (self.root / 'mcp').write_text(FAKE_CLI, encoding='utf-8')
         self.home = self.root / 'home'
@@ -625,6 +631,53 @@ http.get = (options, callback) => get(options.hostname === 'host.docker.internal
 class PythonHostTests(HostTests):
     __unittest_skip__ = False
     python_bridge = True
+
+    def test_stalled_cli_input_does_not_block_request_timeouts_or_health(self) -> None:
+        self.rpc('initialize')
+        child_pid = self.http('/healthz')[1]['pid']
+
+        def stop_input_reader() -> None:
+            with contextlib.suppress(OSError):
+                os.kill(child_pid, signal.SIGTERM)
+
+        self.addCleanup(stop_input_reader)
+        self.assertIn('result', self.rpc('pause-input'))
+        payload = dict(jsonrpc='2.0', id='blocked', method='large', params={'text': 'x' * 1000000})
+        status, result = self.http('/mcp', payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(result['id'], 'blocked')
+        self.assertIn('Timed out after 1500ms', result['error']['message'])
+        self.assertEqual(self.http('/healthz')[0], 200)
+
+    @unittest.skipUnless(shutil.which('node'), 'legacy Node entry requires Node')
+    def test_legacy_node_entry_reuses_the_python_bridge(self) -> None:
+        script = self.root / '.llm/mcp/unity-mcp-host.mjs'
+        result = subprocess.run([str(shutil.which('node')), str(script), '--host', '127.0.0.1', '--port', str(self.port)],
+                                cwd=self.root, env=self.env, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+        self.assertIn(b'already running', result.stdout)
+        self.assertEqual(self.http('/healthz')[1]['bridgePid'], self.process.pid)
+
+    def test_http_continue_and_reused_connections_keep_protocol_compatibility(self) -> None:
+        payload = json.dumps(dict(jsonrpc='2.0', id='expect', method='expect')).encode('utf-8')
+        with socket.create_connection(('127.0.0.1', self.port), timeout=5) as client:
+            headers = (f'POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer fixture-secret\r\n'
+                       f'Content-Length: {len(payload)}\r\nExpect: 100-continue\r\n\r\n')
+            client.sendall(headers.encode('ascii'))
+            with client.makefile('rb') as interim:
+                self.assertEqual(interim.readline(), b'HTTP/1.1 100 Continue\r\n')
+                self.assertEqual(interim.readline(), b'\r\n')
+            client.sendall(payload)
+            with http.client.HTTPResponse(client) as response:
+                response.begin()
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.version, 11)
+                self.assertEqual(json.load(response)['id'], 'expect')
+            client.sendall(b'GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n')
+            with http.client.HTTPResponse(client) as response:
+                response.begin()
+                self.assertEqual(response.status, 200)
+                self.assertEqual(json.load(response)['bridgePid'], self.process.pid)
 
 
 class CleanupTests(unittest.TestCase):
