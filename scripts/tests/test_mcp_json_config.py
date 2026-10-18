@@ -123,6 +123,11 @@ class JsonConfigTests(unittest.TestCase):
         shutil.copyfile(source, script)
         helper = self.root / 'scripts/mcp_json_config.py'
         helper.parent.mkdir()
+        for dependency in (source.parents[2] / 'scripts').glob('mcp_*.py'):
+            shutil.copyfile(dependency, helper.parent / dependency.name)
+        backend = self.root / '.devcontainer/backend_state.py'
+        backend.parent.mkdir()
+        shutil.copyfile(source.parents[2] / '.devcontainer/backend_state.py', backend)
         helper.write_text("from pathlib import Path\nimport sys\nwith Path('writer-runs').open('a') as stream: stream.write('run\\n')\n"
                           "print('synthetic writer failure', file=sys.stderr)\nsys.exit(1)\n", encoding='utf-8')
         result = subprocess.run([str(shutil.which('node')), str(script)], env=self.environment(), cwd=self.root, capture_output=True, check=False)
