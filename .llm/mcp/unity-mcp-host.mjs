@@ -47,61 +47,37 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKSPACE_ROOT = path.resolve(SCRIPT_DIR, "..", "..");
 const INSTANCE_ID = crypto.randomUUID();
 
-function readEnvLocal(filePath) {
-    const vars = {};
-    let text;
-    try {
-        text = fs.readFileSync(filePath, "utf8");
-    } catch {
-        return vars;
-    }
-    for (const rawLine of text.replace(/^\uFEFF/, "").split(/\r?\n/)) {
-        const line = rawLine.trim();
-        if (!line || line.startsWith("#")) continue;
-        const eq = line.indexOf("=");
-        if (eq <= 0) continue;
-        const key = line.slice(0, eq).trim().replace(/^export\s+/, "");
-        let value = line.slice(eq + 1).trim();
-        if (
-            (value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))
-        ) {
-            value = value.slice(1, -1);
+function loadSettings() {
+    const script = path.join(WORKSPACE_ROOT, "scripts", "unity_mcp_settings.py");
+    for (const [command, prefix] of [["uv", ["run", "--no-project"]], ["python3", []], ["python", []]]) {
+        try {
+            return JSON.parse(execFileSync(command, [...prefix, script, "--workspace", WORKSPACE_ROOT, "--home", os.homedir()], {
+                encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+            }));
+        } catch {
+            // Settings resolution is read-only; another available interpreter may work.
         }
-        if (key) vars[key] = value;
     }
-    return vars;
+    throw new Error("Cannot load Unity MCP startup settings; verify Python 3.9+ or uv and scripts/unity_mcp_settings.py.");
 }
 
-// Only host launch settings may fall back to the legacy home file. Shared
-// transport settings must match configure.mjs and the container workspace.
-const hostEnvLocal = readEnvLocal(path.join(os.homedir(), ".unity-mcp", ".env.local"));
-const envLocal = {
-    UNITY_CLI: hostEnvLocal.UNITY_CLI,
-    UNITY_MCP_PROJECT: hostEnvLocal.UNITY_MCP_PROJECT,
-    UNITY_PROJECT_PATH: hostEnvLocal.UNITY_PROJECT_PATH,
-    UNITY_MCP_CLI_ARGS: hostEnvLocal.UNITY_MCP_CLI_ARGS,
-    ...readEnvLocal(path.join(WORKSPACE_ROOT, ".env.local")),
-};
-const REQUEST_TIMEOUT_MS = Number(process.env.UNITY_MCP_TIMEOUT_MS || envLocal.UNITY_MCP_TIMEOUT_MS || 180000);
-
-// Preferred HTTP port: process env wins, then .env.local, then the historical
-// default of 9020. When the preferred port is busy the bridge binds the next
-// free port instead (see main), persists the chosen value back to .env.local,
-// and re-syncs the MCP client configs so every frontend follows the new port.
-const CONFIGURED_PORT = Number(
-    process.env.UNITY_MCP_HTTP_PORT || envLocal.UNITY_MCP_HTTP_PORT || 9020,
-);
+const settings = loadSettings();
+const REQUEST_TIMEOUT_MS = Number(settings.timeout);
+const CONFIGURED_PORT = Number(settings.port);
+const cliCommand = settings.cliCommand;
+const cliArgs = settings.cliArgs;
+const projectPath = settings.projectPath;
+for (const warning of settings.warnings) process.stderr.write(warning + "\n");
 
 function resolveToken() {
-    return process.env.UNITY_MCP_TOKEN || envLocal.UNITY_MCP_TOKEN || "";
+    return settings.token;
 }
 
 function timingSafeEqual(a, b) {
@@ -114,82 +90,6 @@ function timingSafeEqual(a, b) {
 // ---------------------------------------------------------------------------
 // CLI process management
 // ---------------------------------------------------------------------------
-
-const cliCommand = process.env.UNITY_CLI || envLocal.UNITY_CLI || "unity";
-const cliArgs = ["mcp"];
-
-function isUnityProjectRoot(dir) {
-    try {
-        return fs
-            .statSync(path.join(dir, "ProjectSettings", "ProjectVersion.txt"))
-            .isFile();
-    } catch {
-        return false;
-    }
-}
-
-// Walk up from `start` (inclusive) to find the enclosing Unity project root.
-function findEnclosingUnityProject(start) {
-    let dir = path.resolve(start);
-    for (let i = 0; i < 32; i++) {
-        if (isUnityProjectRoot(dir)) return dir;
-        const parent = path.dirname(dir);
-        if (parent === dir) return null;
-        dir = parent;
-    }
-    return null;
-}
-
-// Project pin precedence: process env (UNITY_MCP_PROJECT, then the Unity CLI's
-// own UNITY_PROJECT_PATH alias) > .env.local (same two keys). A configured
-// value that is not a project root self-heals to the enclosing Unity project
-// so a stale or half-path config (e.g. `<project>/Packages`) cannot silently
-// unpick the pin — an unpinned `unity mcp` attaches to whichever Editor
-// happens to be running, which drives the wrong project.
-const configuredProject =
-    process.env.UNITY_MCP_PROJECT ||
-    process.env.UNITY_PROJECT_PATH ||
-    envLocal.UNITY_MCP_PROJECT ||
-    envLocal.UNITY_PROJECT_PATH ||
-    "";
-
-let projectPath = "";
-if (configuredProject) {
-    projectPath = path.resolve(configuredProject);
-    if (!isUnityProjectRoot(projectPath)) {
-        const enclosing = findEnclosingUnityProject(projectPath);
-        if (enclosing) {
-            process.stderr.write(
-                `[unity-mcp] WARNING: UNITY_MCP_PROJECT '${configuredProject}' is not a Unity ` +
-                    `project root (no ProjectSettings/ProjectVersion.txt); using enclosing ` +
-                    `project '${enclosing}' instead.\n`,
-            );
-            projectPath = enclosing;
-        } else {
-            process.stderr.write(
-                `[unity-mcp] WARNING: UNITY_MCP_PROJECT '${configuredProject}' is not a Unity ` +
-                    `project root and no enclosing Unity project was found; starting WITHOUT ` +
-                    `a project pin — the MCP server may attach to the wrong running Editor.\n`,
-            );
-            projectPath = "";
-        }
-    }
-}
-if (!projectPath) {
-    const enclosing = findEnclosingUnityProject(WORKSPACE_ROOT);
-    if (enclosing) {
-        process.stderr.write(
-            `[unity-mcp] No project pin configured; using the enclosing Unity project of ` +
-                `this workspace: '${enclosing}'.\n`,
-        );
-        projectPath = enclosing;
-    }
-}
-if (projectPath) cliArgs.push("--project-path", projectPath);
-const extraCliArgs = process.env.UNITY_MCP_CLI_ARGS || envLocal.UNITY_MCP_CLI_ARGS;
-if (extraCliArgs) {
-    cliArgs.push(...extraCliArgs.split(" ").filter(Boolean));
-}
 
 let child = null;
 let stdoutBuffer = "";
@@ -685,7 +585,7 @@ Environment:
         console.log(
             `[unity-mcp] Persisted UNITY_MCP_HTTP_PORT=${port} to .env.local so client configs follow.`,
         );
-        if ((process.env.UNITY_MCP_AUTO_SYNC || envLocal.UNITY_MCP_AUTO_SYNC) === "0") {
+        if (settings.autoSync === "0") {
             console.log("[unity-mcp] AUTO_SYNC disabled; run `npm run mcp:sync` to update MCP clients.");
             return;
         }

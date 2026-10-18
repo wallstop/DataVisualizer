@@ -114,6 +114,9 @@ The `unity` CLI is a host binary and the pipeline server inside the editor binds
 npm run unity:mcp:host   # host: spawns `unity mcp`, serves http://0.0.0.0:9020/mcp
 ```
 
+Startup settings resolve through `scripts/unity_mcp_settings.py` using uv or Python 3.9+. Project pins prefer process variables, then workspace settings, then the legacy home file,
+regardless of which project-path alias each source uses. HTTP and CLI process handling remain in the Node bridge.
+
 Container agents connect to `http://host.docker.internal:9020/mcp` (written automatically by `npm run mcp:sync`). The bridge is transparent: JSON-RPC requests are forwarded to the
 CLI with per-request id remapping, client notifications are passed through, and a crashed CLI is respawned lazily on the next request. Startup also verifies a proxy-free local HTTP
 roundtrip against a unique bridge instance ID before updating client configs. `/healthz` includes `bridgePid` and `instanceId`; `pid` identifies the lazy Unity CLI child. A failed
