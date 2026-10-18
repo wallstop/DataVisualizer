@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import socket
+import os
 import sys
 import threading
 import unittest
@@ -83,6 +84,37 @@ class StartupTests(unittest.TestCase):
         for server in servers:
             server.shutdown.assert_called_once()
             server.server_close.assert_called_once()
+
+    def test_spawn_failure_preserves_an_earlier_inflight_request(self) -> None:
+        bridge = host.Bridge(settings())
+        self.addCleanup(bridge.close)
+        earlier = host.Pending('earlier')
+        bridge.next_id = 9
+        bridge.pending[9] = earlier
+        with patch.object(bridge, 'ensure_child', side_effect=ValueError('spawn cooldown')):
+            result = bridge.request({'id': 'later', 'method': 'test'})
+        self.assertEqual(result['id'], 'later')
+        self.assertIn('spawn cooldown', result['error']['message'])
+        self.assertIs(bridge.pending.get(9), earlier)
+        self.assertFalse(earlier.ready.is_set())
+        bridge.fail_pending('CLI exited')
+        self.assertTrue(earlier.ready.is_set())
+        self.assertEqual(earlier.response, host.rpc_error('earlier', -32000, 'CLI exited'))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows socket reuse semantics')
+    def test_reusable_windows_listener_is_not_available_to_probe_or_server(self) -> None:
+        with socket.socket() as occupant:
+            occupant.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            occupant.bind(('127.0.0.1', 0))
+            occupant.listen(8)
+            port = occupant.getsockname()[1]
+            self.assertFalse(host.port_free(port, '127.0.0.1'))
+            self.assertFalse(host.port_free(port, '0.0.0.0'))
+            bridge = host.Bridge(settings())
+            self.addCleanup(bridge.close)
+            with self.assertRaises(OSError):
+                with host.BridgeServer('127.0.0.1', port, bridge):
+                    pass
 
     def test_invalid_json_and_batch_notifications_keep_protocol_responses(self) -> None:
         bridge = host.Bridge(settings())

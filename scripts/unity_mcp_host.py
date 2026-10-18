@@ -141,6 +141,7 @@ class Bridge:
 
     def request(self, message: JsonMap) -> JsonMap:
         with self.lock:
+            identifier: Optional[int] = None
             try:
                 self.ensure_child()
                 self.next_id += 1
@@ -149,7 +150,8 @@ class Bridge:
                 self.pending[identifier] = pending
                 self.write({**message, 'id': identifier})
             except (OSError, ValueError) as error:
-                self.pending.pop(self.next_id, None)
+                if identifier is not None:
+                    self.pending.pop(identifier, None)
                 return rpc_error(message['id'], -32000, str(error))
         timeout = float(self.settings['timeout']) / 1000
         if not pending.ready.wait(timeout):
@@ -204,6 +206,7 @@ class Bridge:
 
 
 class BridgeServer(ThreadingHTTPServer):
+    allow_reuse_address = sys.platform != 'win32'
     daemon_threads = True
     bridge: Bridge
 
@@ -310,7 +313,9 @@ def port_free(port: int, host: str) -> bool:
     for address in (host, '127.0.0.1') if host in ('0.0.0.0', '::', 'localhost') else (host,):
         try:
             with socket.socket(socket.AF_INET6 if ':' in address else socket.AF_INET) as probe:
-                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                # Windows reuse can claim an active port; default binding also permits TIME_WAIT reuse.
+                if sys.platform != 'win32':
+                    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 probe.bind((address, port))
         except OSError:
             return False
