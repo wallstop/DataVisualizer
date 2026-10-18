@@ -85,11 +85,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const int AsyncLoadPriorityBatchSize = 100;
 
         /*
-            Uniform row height for the virtualized object ListView. Measured live: the .object-item
-            box renders at ~40px; the slot is forced to this height and centers the box, so the extra
-            6px becomes a 3px gap above and below each row.
+            Keep the fixed-height object ListView slots close to the card height to reduce
+            empty vertical space. Card padding and controls keep their existing dimensions.
         */
-        private const float ObjectRowFixedHeight = 46f;
+        private const float ObjectRowFixedHeight = 40f;
 
         internal static DataVisualizer Instance;
 
