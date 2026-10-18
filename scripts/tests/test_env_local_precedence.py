@@ -50,6 +50,7 @@ def bash_path(path: Path) -> str:
 # mirroring the bash suite's BASH_BIN.
 BASE_PATH = os.environ.get("PATH", os.defpath)
 HOME = os.environ.get("HOME") or "/home/vscode"
+UV_BIN = (shutil.which('uv') or 'uv').replace('\\', '/')
 
 
 def assert_eq(description: str, expected: str, actual: str) -> None:
@@ -67,13 +68,13 @@ def resolve(env_file: Path, variable: str, overrides: Optional[Dict[str, str]] =
     bash = shutil.which("bash")
     if bash is None:
         raise RuntimeError("bash must be on PATH; the loader subject is a bash script")
-    env: Dict[str, str] = {"PATH": BASE_PATH, "HOME": HOME}
+    env: Dict[str, str] = {"PATH": BASE_PATH, "HOME": HOME, "DATAVIZ_ENV_UV": UV_BIN}
     if overrides:
         env.update(overrides)
     # ``printf %s "${!3}"`` prints the variable named by the third argument.
     # MSYS Bash can prepend its runtime paths at process startup. Set the
     # fixture PATH after startup so this tests the loader's precedence alone.
-    script = 'PATH="$4"; . "$1"; load_env_local "$2"; printf %s "${!3}"'
+    script = 'PATH="$4"; . "$1"; load_env_local "$2" || exit; printf %s "${!3}"'
     command = [bash, "-c", script, "_", bash_path(LOADER), bash_path(env_file), variable, env["PATH"]]
     completed = subprocess.run(
         command,
@@ -214,7 +215,7 @@ def case_repeated_load_is_idempotent() -> None:
         bash = shutil.which("bash")
         if bash is None:
             raise RuntimeError("bash must be on PATH; the loader subject is a bash script")
-        script = '. "$1"; load_env_local "$2"; load_env_local "$2"; printf %s "${!3}"'
+        script = '. "$1"; load_env_local "$2" || exit; load_env_local "$2" || exit; printf %s "${!3}"'
         completed = subprocess.run(
             [
                 bash,
@@ -285,6 +286,72 @@ def case_python_loader_preserves_literal_formats_and_precedence() -> None:
         remove_temp_root(fixture.parent)
 
 
+def case_shell_adapter_preserves_values_and_applies_exports_atomically() -> None:
+    bash = shutil.which('bash')
+    if bash is None:
+        return
+    fixture = new_temp_root(prefix='env-adapter-') / 'fixture.env'
+    environment = {'PATH': BASE_PATH, 'HOME': HOME, 'DATAVIZ_ENV_UV': UV_BIN}
+    script = '. "$1"; load_env_local "$2"; result=$?; printf "%s:%s" "$result" "${TOKEN-unset}"'
+    try:
+        cases = [
+            (b'TOKEN="$(exit 8) `exit 9` $HOME # literal"\r\n', '0:$(exit 8) `exit 9` $HOME # literal'),
+            (b'TOKEN=" trailing spaces "\n', '0: trailing spaces '),
+            (b'TOKEN=valid\nOTHER=invalid\0value\n', '1:unset'),
+        ]
+        for content, expected in cases:
+            fixture.write_bytes(content)
+            result = subprocess.run(
+                [bash, '-c', script, '_', bash_path(LOADER), bash_path(fixture)],
+                env=environment, capture_output=True, text=True, encoding='utf-8', check=False,
+            )
+            assert_eq('shell adapter result', expected, result.stdout)
+            assert_true('invalid' not in result.stderr, 'failure diagnostics must not contain file values')
+        fixture.write_text('TOKEN=from-file\n', encoding='utf-8')
+        environment['DATAVIZ_ENV_UV'] = bash_path(fixture.parent / 'missing-uv')
+        result = subprocess.run(
+            [bash, '-c', script, '_', bash_path(LOADER), bash_path(fixture)],
+            env=environment, capture_output=True, text=True, encoding='utf-8', check=False,
+        )
+        assert_eq('a missing launcher fails without exports', '1:unset', result.stdout)
+    finally:
+        remove_temp_root(fixture.parent)
+
+
+def case_shell_adapter_preserves_unexported_values_and_file_selection() -> None:
+    bash = shutil.which('bash')
+    if bash is None:
+        return
+    fixture = new_temp_root(prefix='env-shell-')
+    workspace = fixture / 'workspace'
+    workspace.mkdir()
+    explicit = fixture / 'explicit.env'
+    explicit.write_text('TOKEN=explicit\nGITHUB_MCP_PAT=rotated\n', encoding='utf-8')
+    (workspace / '.env.local').write_text('TOKEN=workspace\n', encoding='utf-8')
+    (fixture / '.env.local').write_text('TOKEN=cwd\n', encoding='utf-8')
+    environment = {'PATH': BASE_PATH, 'HOME': HOME, 'DATAVIZ_ENV_UV': UV_BIN}
+    cases: List[Tuple[str, Dict[str, str], str]] = [
+        ('load_env_local "$2"', {}, 'explicit'),
+        ('load_env_local', {'AI_BACKENDS_ENV_FILE': bash_path(explicit)}, 'explicit'),
+        ('load_env_local', {'WORKSPACE_ROOT': bash_path(workspace)}, 'workspace'),
+        ('load_env_local', {}, 'cwd'),
+        ('TOKEN=unexported; load_env_local "$2"', {}, 'unexported'),
+        ('TOKEN=; load_env_local "$2"', {}, 'explicit'),
+        ('GITHUB_MCP_PAT=stale; DATAVIZ_ENV_LOCAL_PRECEDENCE=file; load_env_local "$2"; TOKEN=$GITHUB_MCP_PAT', {}, 'rotated'),
+    ]
+    try:
+        for command, overrides, expected in cases:
+            script = '. "$1"; ' + command + ' || exit; printf %s "$TOKEN"'
+            result = subprocess.run(
+                [bash, '-c', script, '_', bash_path(LOADER), bash_path(explicit)],
+                env={**environment, **overrides}, cwd=fixture, capture_output=True, text=True, encoding='utf-8', check=False,
+            )
+            assert_true(result.returncode == 0, f'loader must succeed: {result.stderr}')
+            assert_eq('shell values and file selection', expected, result.stdout)
+    finally:
+        remove_temp_root(fixture)
+
+
 CASES = (
     case_fills_empty_preexisting_variable,
     case_nonempty_preexisting_variable_wins_by_default,
@@ -295,6 +362,8 @@ CASES = (
     case_unmanaged_variable_not_overridden_under_file_precedence,
     case_repeated_load_is_idempotent,
     case_missing_file_is_not_an_error,
+    case_shell_adapter_preserves_values_and_applies_exports_atomically,
+    case_shell_adapter_preserves_unexported_values_and_file_selection,
 )
 
 
