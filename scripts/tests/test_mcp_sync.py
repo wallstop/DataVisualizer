@@ -23,6 +23,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, List, Tuple
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 
@@ -391,6 +392,26 @@ def case_wrapper_fails_without_node() -> None:
     assert_true("node is required to sync MCP configuration." in completed.stderr, completed.stderr)
 
 
+def case_codex_persistence_uses_python_when_uv_is_absent() -> None:
+    if os.name != 'posix':
+        print('    SKIP: restricted PATH fixture requires POSIX symlinks.')
+        return
+    sandbox = Sandbox()
+    try:
+        binary = sandbox.path('bin')
+        binary.mkdir()
+        (binary / 'node').symlink_to(shutil.which('node') or 'node')
+        (binary / 'python').symlink_to(sys.executable)
+        with patch.dict(os.environ, {'PATH': str(binary)}):
+            sandbox.run_sync()
+        assert_eq('sync without uv succeeds', 0, sandbox.last_exit, sandbox.run_failure_context())
+        assert_true('❌' not in sandbox.stdout, sandbox.run_failure_context())
+        assert_file_contains(sandbox, 'codex-home/config.toml', '[mcp_servers.unity]', 'Python fallback writes Codex state')
+        assert_true('mcp_servers.zai-image' not in sandbox.path('codex-home/config.toml').read_text(encoding='utf-8'), 'uv-gated server stays optional')
+    finally:
+        sandbox.destroy()
+
+
 def main() -> int:
     assert_true(SYNC.is_file(), f"sync script not found at {SYNC}")
     print("== mcp-sync contract tests ==")
@@ -401,6 +422,7 @@ def main() -> int:
         return 1 if failure_count() else 0
     run_case('case_unity_auth_and_url_are_consistent', case_unity_auth_and_url_are_consistent)
     run_case("case_wrapper_forwards_workspace_flags_and_exit_status", case_wrapper_forwards_workspace_flags_and_exit_status)
+    run_case('case_codex_persistence_uses_python_when_uv_is_absent', case_codex_persistence_uses_python_when_uv_is_absent)
     for case in CASES:
         run_case(case.__name__, case)
     failures = failure_count()

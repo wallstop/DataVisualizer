@@ -548,138 +548,36 @@ function writeMergedJsonMap(filePath, rootKey, managedEntries, mode = 0o600) {
     return changed;
 }
 
-const TOML_BEGIN = "# >>> dataviz-mcp (managed by npm run mcp:sync) >>>";
-const TOML_END = "# <<< dataviz-mcp <<<";
-
-function codexServerTable(name, definition) {
-    const lines = [`[mcp_servers.${name}]`];
-    if (definition.url) {
-        lines.push(`url = "${definition.url}"`);
-        if (definition.bearer_token_env_var) {
-            lines.push(`bearer_token_env_var = "${definition.bearer_token_env_var}"`);
-        }
-        if (definition.http_headers) {
-            lines.push("");
-            lines.push(`[mcp_servers.${name}.http_headers]`);
-            for (const [header, value] of Object.entries(definition.http_headers)) {
-                lines.push(`${JSON.stringify(header)} = ${JSON.stringify(value)}`);
+// Codex persistence is typed Python; keep the Node server catalog until its port.
+let codexWriterLauncher;
+function codexConfig(operation, entries = {}) {
+    if (!codexWriterLauncher) {
+        if (HAS_UV) {
+            codexWriterLauncher = [UV_BIN, "run", "--no-project"];
+        } else {
+            // uv-gated servers remain optional. Probe execution because Windows
+            // may expose a python3 App Execution Alias without an interpreter.
+            for (const command of ["python3", "python"]) {
+                try {
+                    execFileSync(command, ["-c", "import sys; assert sys.version_info >= (3, 9)"], { stdio: "ignore" });
+                    codexWriterLauncher = [command];
+                    break;
+                } catch {
+                    // Try the next interpreter before reporting a missing tool.
+                }
             }
         }
-    } else {
-        lines.push(`command = "${definition.command}"`);
-        lines.push(`args = [${definition.args.map((arg) => JSON.stringify(arg)).join(", ")}]`);
-        if (definition.env_vars?.length) {
-            lines.push(
-                `env_vars = [${definition.env_vars.map((v) => JSON.stringify(v)).join(", ")}]`,
-            );
-        }
-        if (definition.startup_timeout_sec) {
-            lines.push(`startup_timeout_sec = ${definition.startup_timeout_sec}`);
-        }
     }
-    return lines.join("\n");
-}
-
-const MANAGED_TOML_RE = new RegExp(
-    `\\n?${TOML_BEGIN.replace(/[()]/g, "\\$&")}[\\s\\S]*?${TOML_END}\\n?`,
-    "g",
-);
-
-function stripManagedTomlBlocks(text) {
-    return text.replace(MANAGED_TOML_RE, "\n").trimEnd();
-}
-
-function writeCodexConfig(managedEntries) {
-    // Codex reads $CODEX_HOME/config.toml (default ~/.codex/config.toml).
-    // NOTE: Codex >= 0.153 additionally deep-merges a trusted workspace
-    // `.codex/config.toml` into the effective config (project trust recorded
-    // via [projects."<path>"] trust_level in the home config). MCP servers
-    // therefore live solely in the home config — per-machine, with the
-    // container/host-appropriate URL — and the workspace copy is kept MCP-free
-    // (pruneCodexWorkspaceConfig): a stale stdio entry there conflicts with the
-    // home config's HTTP entry and hard-fails every codex startup with
-    // "url is not supported for stdio in `mcp_servers.unity`".
-    //
-    // This workspace's trust entry is (re)written AFTER the managed block so
-    // syncs never drop it (older managed outputs embedded it inside the block,
-    // and each sync stripped it); the same rewrite also migrates such embedded
-    // entries out. Other projects' trust entries are left untouched.
-    const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
-    const filePath = path.join(codexHome, "config.toml");
-    let existing = "";
-    try {
-        existing = fs.readFileSync(filePath, "utf8");
-    } catch {
-        existing = "";
-    }
-    const trustHeader = `[projects.${JSON.stringify(WORKSPACE_ROOT)}]`;
-    const trustBlock = `${trustHeader}\ntrust_level = "trusted"`;
-    const trustEntryRe = new RegExp(
-        `\\n?${trustHeader.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[^[]*)`,
-        "g",
-    );
-    const stripped = stripManagedTomlBlocks(existing)
-        .replace(trustEntryRe, "\n")
-        .trimEnd();
-    const block = [
-        "",
-        TOML_BEGIN,
-        ...Object.entries(managedEntries).map(([name, definition]) =>
-            codexServerTable(name, definition),
-        ),
-        TOML_END,
-        "",
-    ].join("\n");
-    const next = `${stripped}${block}${trustBlock}\n`;
-    const changed = next !== existing;
-    if (changed && !CHECK_ONLY) {
-        writeAtomic(filePath, next, 0o600);
-    }
-    return changed;
-}
-
-// Codex >= 0.153 deep-merges a trusted workspace `.codex/config.toml` into the
-// effective config, so MCP servers shipped here would fight the ones managed
-// in $CODEX_HOME/config.toml (a transport mismatch there — e.g. a leftover
-// stdio unity entry — hard-fails config loading at every codex startup). Strip
-// managed blocks; delete the file once nothing user-owned remains. If the
-// remainder still defines MCP servers, surface a warning instead of touching
-// user-owned content.
-function pruneCodexWorkspaceConfig() {
-    const filePath = path.join(WORKSPACE_ROOT, ".codex", "config.toml");
-    let existing;
-    try {
-        existing = fs.readFileSync(filePath, "utf8");
-    } catch {
-        return { changed: false, note: "" };
-    }
-    const remainder = stripManagedTomlBlocks(existing);
-    if (remainder.trim().length === 0) {
-        if (!CHECK_ONLY) {
-            fs.rmSync(filePath, { force: true });
-            try {
-                fs.rmdirSync(path.dirname(filePath));
-            } catch {
-                // `.codex` still has other content — leave the folder alone.
-            }
-        }
-        return {
-            changed: true,
-            note: "stale managed block removed (MCP lives in $CODEX_HOME/config.toml; Codex 0.153+ merges this file)",
-        };
-    }
-    if (remainder !== existing) {
-        if (!CHECK_ONLY) {
-            writeAtomic(filePath, `${remainder}\n`, 0o600);
-        }
-        return { changed: true, note: "managed block stripped; user content kept" };
-    }
-    return {
-        changed: false,
-        note: /\[mcp_servers\./.test(remainder)
-            ? "has user-defined [mcp_servers.*] entries — transports must match $CODEX_HOME/config.toml or Codex 0.153+ merge hard-fails startup"
-            : "",
-    };
+    if (!codexWriterLauncher) throw new Error("Python 3.9+ or uv is required for Codex MCP configuration.");
+    const [command, ...prefix] = codexWriterLauncher;
+    const script = path.resolve(SCRIPT_DIR, "..", "..", "scripts", "mcp_codex_config.py");
+    const args = [...prefix, script, operation, "--workspace", WORKSPACE_ROOT];
+    if (CHECK_ONLY) args.push("--check");
+    return JSON.parse(execFileSync(command, args, {
+        input: JSON.stringify(entries),
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+    }));
 }
 
 function writeClaudeSettings() {
@@ -829,12 +727,12 @@ function main() {
         },
         {
             label: `Codex (${process.env.CODEX_HOME || "~/.codex"}/config.toml managed block)`,
-            write: () => writeCodexConfig(managedCodex),
+            write: () => codexConfig("write", managedCodex).changed,
         },
         {
             label: "Codex workspace (.codex/config.toml pruned — Codex 0.153+ merges it)",
             write: () => {
-                codexWorkspaceOutcome = pruneCodexWorkspaceConfig();
+                codexWorkspaceOutcome = codexConfig("prune");
                 return codexWorkspaceOutcome.changed;
             },
             after: () => {
