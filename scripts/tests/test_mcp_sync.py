@@ -77,6 +77,7 @@ class Sandbox:
             {
                 "DATAVIZ_MCP_WORKSPACE": str(self.root),
                 "DATAVIZ_IN_CONTAINER": "1",
+                "UV_NO_CACHE": "1",
                 "CODEX_HOME": str(self.codex_home),
                 "HOME": str(self.home),
                 "NANOCODER_CONFIG_DIR": str(self.home / ".config" / "nanocoder"),
