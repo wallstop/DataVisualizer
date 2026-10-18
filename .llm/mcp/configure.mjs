@@ -815,15 +815,18 @@ function main() {
         },
     ];
 
+    let failed = false;
     for (const entry of plan) {
         try {
             const changed = entry.write();
             results.push(`${changed ? "✅" : "·"} ${entry.label}${changed && !CHECK_ONLY ? " updated" : ""}`);
             if (entry.after) entry.after();
         } catch (error) {
+            failed = true;
             results.push(`❌ ${entry.label}: ${error.message}`);
         }
     }
+    if (failed) process.exitCode = 1;
 
     const container = isContainer();
     console.log("");
