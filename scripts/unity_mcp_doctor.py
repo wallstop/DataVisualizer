@@ -67,7 +67,11 @@ def unity_command(arguments: List[str]) -> str:
 def request_json(url: str, headers: Dict[str, str], payload: Optional[JsonObject], timeout: float = 30) -> JsonObject:
     data = None if payload is None else json.dumps(payload).encode('utf-8')
     try:
-        with urlopen(Request(url, data=data, headers=headers), timeout=timeout) as response:
+        request = Request(url, data=data, headers=headers)
+        authorization = request.headers.pop('Authorization', None)
+        if authorization:
+            request.add_unredirected_header('Authorization', authorization)
+        with urlopen(request, timeout=timeout) as response:
             body = response.read()
             return object_value(cast(Json, json.loads(body))) if body else {}
     except HTTPError as error:

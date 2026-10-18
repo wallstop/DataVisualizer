@@ -56,7 +56,10 @@ class Doctor:
             headers['authorization'] = f'Bearer {token}'
         try:
             try:
-                with urlopen(Request(url, data=json.dumps(INITIALIZE).encode(), headers=headers), timeout=self.timeout) as response:
+                request = Request(url, data=json.dumps(INITIALIZE).encode(), headers=headers)
+                if token:
+                    request.add_unredirected_header('Authorization', request.headers.pop('Authorization'))
+                with urlopen(request, timeout=self.timeout) as response:
                     status = response.status
             except HTTPError as error:
                 status = error.code

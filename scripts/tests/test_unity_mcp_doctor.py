@@ -10,10 +10,12 @@ import tempfile
 import time
 import unittest
 from email.message import Message
+from http.client import HTTPMessage
 from pathlib import Path
 from unittest.mock import patch
 from typing import Dict, List, Optional
 from urllib.error import HTTPError
+from urllib.request import HTTPRedirectHandler
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -176,12 +178,23 @@ class DoctorTests(unittest.TestCase):
     def test_mcp_doctor_normalizes_endpoint_before_health_probe(self) -> None:
         from mcp_doctor import Doctor as McpDoctor
         for endpoint in ['http://bridge:9021/mcp', 'http://bridge:9021/mcp///']:
-            with self.subTest(endpoint=endpoint):
+            with self.subTest(endpoint=endpoint), contextlib.redirect_stdout(io.StringIO()):
                 doctor = McpDoctor(self.root, {'UNITY_MCP_HTTP_URL': endpoint})
                 with patch('mcp_doctor.request_json', return_value={'result': {'serverInfo': {'name': 'fixture'}}}) as request:
                     doctor.check_bridge()
                 self.assertEqual([call.args[0] for call in request.call_args_list], ['http://bridge:9021/healthz', 'http://bridge:9021/mcp'])
                 self.assertEqual(doctor.failures, 0)
+
+    def test_http_transport_does_not_forward_bearer_on_redirect(self) -> None:
+        with patch('unity_mcp_doctor.urlopen') as transport:
+            transport.return_value.__enter__.return_value.read.return_value = b'{}'
+            request_json('https://bridge/mcp', {'Authorization': 'synthetic-bearer'}, None)
+        request = transport.call_args.args[0]
+        redirected = HTTPRedirectHandler().redirect_request(request, io.BytesIO(), 302, 'Found', HTTPMessage(), 'https://other/mcp')
+        self.assertEqual(request.get_header('Authorization'), 'synthetic-bearer')
+        self.assertIsNotNone(redirected)
+        assert redirected is not None
+        self.assertIsNone(redirected.get_header('Authorization'))
 
     def test_mcp_doctor_counts_stdio_outcomes_and_redacts_secrets(self) -> None:
         from mcp_doctor import Doctor as McpDoctor
