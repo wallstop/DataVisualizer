@@ -200,6 +200,8 @@ class HostTests(unittest.TestCase):
         script_dir.mkdir(parents=True)
         self.script = script_dir / 'unity-mcp-host.mjs'
         shutil.copyfile(REPO / '.llm' / 'mcp' / self.script.name, self.script)
+        (self.root / 'scripts').mkdir()
+        shutil.copyfile(REPO / 'scripts' / 'unity_mcp_settings.py', self.root / 'scripts' / 'unity_mcp_settings.py')
         (self.root / 'mcp').write_text(FAKE_CLI, encoding='utf-8')
         self.home = self.root / 'home'
         self.home.mkdir()
@@ -392,6 +394,42 @@ http.createServer = (handler) => createServer((request, response) => {
         self.launch()
         self.assertFalse(self.http('/healthz')[1]['authRequired'])
         self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
+
+    def test_workspace_project_alias_precedes_a_legacy_primary_pin(self) -> None:
+        self.stop()
+        legacy_project = self.root / 'LegacyProject'
+        (legacy_project / 'ProjectSettings').mkdir(parents=True)
+        (legacy_project / 'ProjectSettings' / 'ProjectVersion.txt').write_text('6000.5', encoding='utf-8')
+        legacy = self.home / '.unity-mcp'
+        legacy.mkdir()
+        (legacy / '.env.local').write_text(f'UNITY_MCP_PROJECT={legacy_project}\n', encoding='utf-8')
+        content = self.env_file.read_text(encoding='utf-8').replace('UNITY_MCP_PROJECT=', 'UNITY_PROJECT_PATH=')
+        self.env_file.write_text(content, encoding='utf-8')
+        self.launch()
+        self.assertEqual(self.http('/healthz')[1]['projectPath'], str(self.project))
+
+    @unittest.skipUnless(os.name == 'posix', 'restricted PATH fixture requires POSIX symlinks')
+    def test_settings_use_python_when_uv_is_unavailable(self) -> None:
+        self.stop()
+        binary = self.root / 'bin'
+        binary.mkdir()
+        (binary / 'python').symlink_to(sys.executable)
+        self.env['PATH'] = str(binary)
+        self.launch()
+        self.assertEqual(self.http('/healthz')[1]['projectPath'], str(self.project))
+        self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
+
+    def test_invalid_settings_ports_fail_before_startup(self) -> None:
+        self.stop()
+        before = self.env_file.read_bytes()
+        for value in ('0', '65536', '1.5', 'invalid'):
+            with self.subTest(value=value):
+                environment = {**self.env, 'UNITY_MCP_HTTP_PORT': value}
+                result = subprocess.run(self.command()[:-2], cwd=self.root, env=environment, capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(b'--port must be an integer', result.stderr)
+                self.assertNotIn(b'Startup complete.', result.stdout)
+                self.assertEqual(self.env_file.read_bytes(), before)
 
     def test_default_wildcard_bind_verifies_its_own_http_instance(self) -> None:
         self.stop()
