@@ -1,6 +1,6 @@
 {
   "name": "com.wallstop-studios.data-visualizer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "DxVisualizer",
   "description": "Your game data, one window. Find, inspect, organize, and edit ScriptableObject data in one Unity editor window.",
   "unity": "2021.3",
