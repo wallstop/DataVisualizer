@@ -278,7 +278,7 @@ def case_selection_prefers_the_specific_mcp_subject_over_the_coarse_tree(python:
     probe = invoke_scope_probe(python, ".llm/mcp/configure.mjs")
     assert_true(not probe["selection"]["all"], "the mcp subject must not select the full suite")
     assert_true(
-        ",".join(probe["selection"]["names"]) == "test_mcp_codex_config.py,test_mcp_credentials.py,test_mcp_sync.py",
+        ",".join(probe["selection"]["names"]) == "test_mcp_codex_config.py,test_mcp_credentials.py,test_mcp_json_config.py,test_mcp_sync.py",
         f"the mcp subject must select the mcp test files, got: {','.join(probe['selection']['names'])}",
     )
 
