@@ -70,7 +70,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const int SearchRepetitions = 30;
         private const int SelectionRepetitions = 30;
         private const int SearchCacheTimeoutSeconds = 600;
-        private const int OverallTimeoutMinutes = 45;
+        private const double DefaultTimeoutMinutes = 90;
         private const string SearchQueryFirst = "Player";
         private const string SearchQuerySecond = "World";
 
@@ -121,7 +121,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             report file, and reads the JSON when the summary announces completion;
             every measured duration lives inside this editor process.
         */
-        public static void RunBaseline(string outputDirectory, int[] fixtureSizes = null)
+        public static void RunBaseline(string outputDirectory, int[] fixtureSizes = null, double timeoutMinutes = DefaultTimeoutMinutes)
         {
             if (_active != null)
             {
@@ -138,6 +138,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new ArgumentException("The output directory must not be empty.", nameof(outputDirectory));
             }
 
+            if (double.IsNaN(timeoutMinutes) || double.IsInfinity(timeoutMinutes) || timeoutMinutes <= 0 || 1440 < timeoutMinutes)
+            {
+                throw new ArgumentOutOfRangeException(nameof(timeoutMinutes), "Choose a finite run budget greater than zero and no longer than 24 hours.");
+            }
+
             int[] sizes = fixtureSizes == null ? (int[])FixtureSizes.Clone() : (int[])fixtureSizes.Clone();
             if (sizes.Length == 0)
             {
@@ -152,7 +157,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
             }
 
-            RunState state = new(outputDirectory, sizes);
+            RunState state = new(outputDirectory, sizes, timeoutMinutes);
             _active = state;
             EditorApplication.update += Tick;
             AssemblyReloadEvents.beforeAssemblyReload += Cancel;
@@ -341,9 +346,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 return;
             }
 
-            if (state.Watchdog.Elapsed > TimeSpan.FromMinutes(OverallTimeoutMinutes))
+            if (state.Watchdog.Elapsed > TimeSpan.FromMinutes(state.TimeoutMinutes))
             {
-                FinishWithError(state, $"the run exceeded the {OverallTimeoutMinutes}-minute watchdog in phase {state.Phase}.");
+                FinishWithError(state, $"the run exceeded the {state.TimeoutMinutes}-minute watchdog in phase {state.Phase}.");
                 return;
             }
 
@@ -617,7 +622,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void Finish(RunState state)
         {
-            string json = BuildJson(state.Results);
+            string json = BuildJson(state.Results, state.TimeoutMinutes);
             WriteReport(state.OutputDirectory, json);
             string summary = BuildSummary(state.Results);
             TearDown(state);
@@ -801,12 +806,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return value.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
-        private static string BuildJson(List<SizeResult> results)
+        private static string BuildJson(List<SizeResult> results, double timeoutMinutes)
         {
             StringBuilder json = new(4096);
             json.Append("{\n  \"schema\": \"").Append(SchemaVersion).Append("\",\n");
             json.Append("  \"generatedAtUtc\": \"").Append(DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)).Append("\",\n");
             json.Append("  \"environment\": ").Append(BuildEnvironmentJson()).Append(",\n");
+            json.Append("  \"timeoutMinutes\": ").Append(FormatNumber(timeoutMinutes)).Append(",\n");
             json.Append("  \"repetitions\": {\"cold\": 1, \"warmWarmups\": ")
                 .Append(WarmupRepetitions)
                 .Append(", \"warmSamples\": ")
@@ -854,6 +860,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append("  \"error\": \"").Append(JsonEscape(message)).Append("\",\n");
             json.Append("  \"phase\": \"").Append(state.Phase).Append("\",\n");
             json.Append("  \"environment\": ").Append(BuildEnvironmentJson()).Append(",\n");
+            json.Append("  \"timeoutMinutes\": ").Append(FormatNumber(state.TimeoutMinutes)).Append(",\n");
             json.Append("  \"fixturesCreated\": ").Append(state.Staging?.CreatedCount ?? 0).Append(",\n");
             json.Append("  \"fixturesRequested\": ").Append(state.Current?.Size ?? 0).Append(",\n");
             json.Append("  \"stagingElapsedMs\": ").Append(FormatNumber(state.Staging?.TotalMilliseconds ?? 0)).Append(",\n");
@@ -867,7 +874,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             else
             {
                 json.Append("\n  ");
-                json.Append(BuildJson(state.Results).TrimEnd('\n'));
+                json.Append(BuildJson(state.Results, state.TimeoutMinutes).TrimEnd('\n'));
             }
 
             json.Append("\n}\n");
@@ -1017,6 +1024,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             internal readonly string OutputDirectory;
             internal readonly int[] Sizes;
+            internal readonly double TimeoutMinutes;
             internal readonly Stopwatch Watchdog = Stopwatch.StartNew();
             internal readonly List<SizeResult> Results = new();
             internal Phase Phase = Phase.Idle;
@@ -1031,10 +1039,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal int SelectionRepetition;
             internal string PendingQuery;
 
-            internal RunState(string outputDirectory, int[] sizes)
+            internal RunState(string outputDirectory, int[] sizes, double timeoutMinutes)
             {
                 OutputDirectory = outputDirectory;
                 Sizes = sizes;
+                TimeoutMinutes = timeoutMinutes;
             }
         }
 

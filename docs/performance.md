@@ -18,11 +18,11 @@ Transport latency is not added to each duration.
   match counts saturate at that cap.
 - **Selection** measures the production `SelectObject` call for a mid-list fixture asset.
 
-The run writes a schema-1 JSON report with the environment, raw samples, and repetition counts. A 45-minute watchdog is checked on editor ticks. Each dataset owns a unique
-`Assets/PerfBaselineFixtures-<run-id>` folder; cleanup verifies its GUID and ownership marker before deleting it and preserves pre-existing assets, including the old fixed fixture
-folder. `PerfBaseline.Status()` reports the current phase and fixture count. `PerfBaseline.Cancel()` writes an error report with the phase, created/requested counts, elapsed
-staging time, and completed samples, then cleans up. Assembly reload, editor quit, and entering Play Mode also cancel the run. Start the driver in Edit Mode. Incomplete
-single-sample scenarios contain empty arrays instead of zero-duration results.
+The run writes a schema-1 JSON report with the environment, raw samples, and repetition counts. A configurable watchdog (90 minutes by default) is checked on editor ticks. Each
+dataset owns a unique `Assets/PerfBaselineFixtures-<run-id>` folder; cleanup verifies its GUID and ownership marker before deleting it and preserves pre-existing assets, including
+the old fixed fixture folder. `PerfBaseline.Status()` reports the current phase and fixture count. `PerfBaseline.Cancel()` writes an error report with the phase, created/requested
+counts, elapsed staging time, and completed samples, then cleans up. Assembly reload, editor quit, and entering Play Mode also cancel the run. Start the driver in Edit Mode.
+Incomplete single-sample scenarios contain empty arrays instead of zero-duration results.
 
 ## Recorded environment
 
@@ -82,3 +82,21 @@ Reproduce: run `WallstopStudios.DataVisualizer.Tests.Editor.PerfBaseline.RunFrom
 `Temp/PerfBaseline/perf-baseline.json`. The output directory can be redirected with `-perfBaselineOutputDir` or the `DATAVISUALIZER_PERF_BASELINE_DIR` environment variable. For a
 bounded host run, call `PerfBaseline.RunBaseline("Temp/PerfBaseline", new[] { 100 })`; sizes from 2 to 100,000 are accepted, but the default remains 100/1k/10k. New runs use five
 discarded warm opens and 30 warm-open, search, and selection samples. This does not expand the historical report's sample count or establish large-fixture support.
+
+## Staging instrumentation check (2026-10-19)
+
+A complete 1,000-asset run at [cc4225f](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/cc4225f3a4135e0e529d010eb377c55256c43073) on the Windows 11 / Unity 6000.5.2f1
+host above confirms that creation calls dominate the final refresh. [Download the unchanged raw report](performance-staging-2026-10-19.json). It records the complete environment
+and 30 warm-open, search, and selection samples after five discarded warm opens.
+
+| Staging metric                                     | Milliseconds |
+| -------------------------------------------------- | -----------: |
+| Creation calls, summed                             |    92317.406 |
+| Total staging, including editor time between ticks |   144180.370 |
+| Final refresh                                      |      282.375 |
+| Longest creation call                              |      120.954 |
+| Longest staging tick                               |      194.881 |
+
+This is an instrumentation check, not a controlled speed comparison or large-fixture guarantee. A 4 ms cooperative budget cannot interrupt an individual Unity creation call. The
+100/10k and ordinary-SO/many-type matrices, interaction readiness stages, import bursts, and matched Play/compile controls remain open in
+[#306](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/306).

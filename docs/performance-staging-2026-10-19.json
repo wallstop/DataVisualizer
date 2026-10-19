@@ -1,0 +1,18 @@
+{
+  "schema": "1",
+  "generatedAtUtc": "2026-10-19T21:17:01.4909606Z",
+  "environment": {"unityVersion": "6000.5.2f1", "platform": "WindowsEditor", "operatingSystem": "Windows 11  (10.0.26200)", "processorType": "Snapdragon(R) X Elite - X1E80100 - Qualcomm(R) Oryon(TM) CPU", "processorCount": 12, "systemMemoryMegabytes": 65011, "graphicsDevice": "Qualcomm(R) Adreno(TM) X1-85 GPU", "dpi": 96, "editorPixelsPerPoint": 1, "darkTheme": true, "displayCount": 1, "packageVersion": "0.1.1", "preExistingScriptableObjectAssets": 225},
+  "repetitions": {"cold": 1, "warmWarmups": 5, "warmSamples": 30, "searchSamples": 30, "selectionSamples": 30},
+  "gaps": ["Play-entry and compile timings are not yet measured", "cold is a single sample per size", "cross-host spread is not yet collected"],
+  "scenarios": [
+    {"name": "fixture-create-calls", "unit": "ms", "sizes": [{"size": 1000, "samples": [92317.406], "median": 92317.406, "min": 92317.406, "max": 92317.406}]},
+    {"name": "fixture-staging-total", "unit": "ms", "sizes": [{"size": 1000, "samples": [144180.37], "median": 144180.37, "min": 144180.37, "max": 144180.37}]},
+    {"name": "fixture-longest-create-call", "unit": "ms", "sizes": [{"size": 1000, "samples": [120.954], "median": 120.954, "min": 120.954, "max": 120.954}]},
+    {"name": "fixture-longest-staging-tick", "unit": "ms", "sizes": [{"size": 1000, "samples": [194.881], "median": 194.881, "min": 194.881, "max": 194.881}]},
+    {"name": "fixture-import", "unit": "ms", "sizes": [{"size": 1000, "samples": [282.375], "median": 282.375, "min": 282.375, "max": 282.375}]},
+    {"name": "window-open-to-index-ready", "unit": "ms", "sizes": [{"size": 1000, "samples": [1819.977], "median": 1819.977, "min": 1819.977, "max": 1819.977}]},
+    {"name": "window-open-to-index-ready-warm", "unit": "ms", "sizes": [{"size": 1000, "samples": [1475.976, 1480.983, 1448.118, 1209.431, 1483.423, 1305.254, 850.018, 843.3, 840.399, 848.225, 840.97, 919.123, 844.543, 1350.31, 1154.555, 1085.703, 1124.874, 1088.405, 1073.256, 1080.932, 1047.139, 1146.416, 1039.268, 1035.802, 987.674, 957.758, 1039.382, 944.261, 895.132, 954.053], "median": 1043.26, "min": 840.399, "max": 1483.423}]},
+    {"name": "search-first-results", "unit": "ms", "sizes": [{"size": 1000, "samples": [123.288, 98.308, 86.594, 73.644, 75.893, 102.967, 90.076, 123.553, 58.669, 97.597, 79.424, 114.698, 85.267, 104.465, 80.545, 101.632, 79.26, 97.849, 82.375, 115.115, 55.22, 102.727, 75.522, 100.549, 79.505, 108.752, 51.059, 104.453, 87.909, 108.333], "median": 93.836, "min": 51.059, "max": 123.553, "matchCounts": [25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25]}]},
+    {"name": "selection", "unit": "ms", "sizes": [{"size": 1000, "samples": [21.864, 19.706, 19.164, 17.961, 20.156, 18.628, 18.545, 20.322, 19.749, 21.169, 24.188, 20.696, 18.042, 17.342, 19.584, 19.186, 19.105, 19.9, 19.409, 22.052, 20.072, 21.404, 21.568, 18.366, 21.769, 19.575, 19.954, 18.881, 21.937, 19.772], "median": 19.76, "min": 17.342, "max": 24.188}]}
+  ]
+}

@@ -177,6 +177,30 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual("Idle", PerfBaseline.Status());
         }
 
+        [TestCase(0)]
+        [TestCase(-1)]
+        [TestCase(double.NaN)]
+        [TestCase(double.PositiveInfinity)]
+        [TestCase(1441)]
+        public void ShouldRejectInvalidRunBudgetsBeforeStarting(double timeoutMinutes)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => PerfBaseline.RunBaseline("Temp/Unused", timeoutMinutes: timeoutMinutes));
+            Assert.AreEqual("Idle", PerfBaseline.Status());
+        }
+
+        [Test]
+        public void ShouldReportTheExplicitBudgetWhenCancelledBeforeStaging()
+        {
+            string output = "Temp/PerfBaselineBudgetTests-" + Guid.NewGuid().ToString("N");
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(output, timeoutMinutes: 120);
+            PerfBaseline.Cancel();
+            string report = System.IO.File.ReadAllText(output + "/perf-baseline.json");
+            StringAssert.Contains("\"timeoutMinutes\": 120", report);
+        }
+
         [UnityTest]
         public IEnumerator ShouldCancelWithPartialProgressAndWithoutDeletingOtherAssets()
         {
