@@ -40,13 +40,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             root.Add(popover);
             window.ShowUtility();
             yield return null;
-            foreach (float width in new[] { 1200f, 360f, 1200f })
+            foreach (float authoredCap in new[] { 500f, 300f })
             {
-                root.style.width = width;
-                PopoverPlacement.ApplyViewportLimits(popover, new Vector2(width, 600));
-                EditorSurfaceCapture.SettleLayout(window);
-                Assert.That(popover.resolvedStyle.maxWidth.value, Is.EqualTo(Mathf.Min(width, 500f)));
-                Assert.That(popover.resolvedStyle.width <= Mathf.Min(width, 500f));
+                if (authoredCap == 300f)
+                {
+                    popover.style.maxWidth = authoredCap;
+                }
+                foreach (float width in new[] { 1200f, 360f, 1200f })
+                {
+                    root.style.width = width;
+                    PopoverPlacement.ReleaseViewportLimits(popover);
+                    EditorSurfaceCapture.SettleLayout(window);
+                    PopoverPlacement.ApplyViewportLimits(popover, new Vector2(width, 600));
+                    EditorSurfaceCapture.SettleLayout(window);
+                    Assert.That(popover.resolvedStyle.maxWidth.value, Is.EqualTo(authoredCap));
+                    Assert.That(popover.resolvedStyle.width, Is.EqualTo(Mathf.Min(width, authoredCap)).Within(1f));
+                }
             }
         }
 

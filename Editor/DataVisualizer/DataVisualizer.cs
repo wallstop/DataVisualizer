@@ -1728,8 +1728,16 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             FlushPendingSplitterWidths();
             _paneLayout?.Resize(_.newRect.width, new Vector2(_lastSavedOuterWidth, _lastSavedInnerWidth));
-            ClampActivePopover(_activePopover, _.newRect.size);
-            ClampActivePopover(_activeNestedPopover, _.newRect.size);
+            if (_activePopover != null)
+            {
+                PopoverPlacement.ReleaseViewportLimits(_activePopover);
+                ClampActivePopover(_activePopover, _.newRect.size);
+            }
+            if (_activeNestedPopover != null)
+            {
+                PopoverPlacement.ReleaseViewportLimits(_activeNestedPopover);
+                ClampActivePopover(_activeNestedPopover, _.newRect.size);
+            }
             if (_packagePlacementPending)
             {
                 SchedulePackageWindowPlacementCompletion();
@@ -3266,6 +3274,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _activeNestedPopover.style.display = DisplayStyle.None;
+            PopoverPlacement.ReleaseViewportLimits(_activeNestedPopover);
             _activeNestedPopover = null;
         }
 
@@ -3421,6 +3430,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _activePopover.style.display = DisplayStyle.None;
+            PopoverPlacement.ReleaseViewportLimits(_activePopover);
             rootVisualElement.UnregisterCallback<PointerDownEvent>(HandleClickOutsidePopover, TrickleDown.TrickleDown);
 
             _activePopover = null;

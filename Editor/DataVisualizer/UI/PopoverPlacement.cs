@@ -5,15 +5,22 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
 
     public static class PopoverPlacement
     {
-        private const float StyleSheetMaxWidth = 500f;
-        private const float StyleSheetMaxHeight = 500f;
-
         public static void ApplyViewportLimits(VisualElement popover, Vector2 available)
         {
-            bool form = popover.ClassListContains("popover");
-            // Restore the stylesheet cap once the viewport no longer constrains it.
-            popover.style.maxWidth = form && StyleSheetMaxWidth <= available.x ? StyleKeyword.Null : new StyleLength(Mathf.Max(0f, available.x));
-            popover.style.maxHeight = !form && StyleSheetMaxHeight <= available.y ? StyleKeyword.Null : new StyleLength(Mathf.Max(0f, available.y));
+            if (available.x < popover.resolvedStyle.width)
+            {
+                popover.style.width = Mathf.Max(0f, available.x);
+            }
+            if (available.y < popover.resolvedStyle.height)
+            {
+                popover.style.height = Mathf.Max(0f, available.y);
+            }
+        }
+
+        public static void ReleaseViewportLimits(VisualElement popover)
+        {
+            popover.style.width = StyleKeyword.Null;
+            popover.style.height = StyleKeyword.Null;
         }
 
         public static Rect FitToWindow(Rect requested, Vector2 available)
