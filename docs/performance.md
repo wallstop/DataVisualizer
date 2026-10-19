@@ -110,3 +110,11 @@ through `SaveAssetIfDirty`, and verifies that generated BaseDataObject identitie
 
 Benchmark windows clone the current configuration into an owned temporary state file. Closing or cancelling a run removes those files and restores the host's active selection and
 window preferences. Project settings and the user's saved-state JSON remain outside the measurement window's write path.
+
+## Incremental refresh integration check (2026-10-19)
+
+A [single 10,000-real-asset probe](performance-refresh-10k-2026-10-19.json) at
+[83d7771](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/83d7771674fc94aa99718fb5c74bf3c7a735fdcd) preserved 9,999 unrelated row identities and reloaded zero objects
+for rename. Labels, Undo/Redo, move and deletion during an explicit search rebuild passed without restarting row loading. The longest affected-asset refresh slice was 19.649 ms.
+The probe staged fixtures with an explicit 32 ms creation budget and ten-item cap: total staging was 290,550.591 ms, including 194,405.672 ms in batch import flushes; the longest
+staging tick was 308.276 ms. These are one-sample integration observations, not p95, a controlled speed comparison, or evidence for real 100k/ordinary-SO/many-type support.

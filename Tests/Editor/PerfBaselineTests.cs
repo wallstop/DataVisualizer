@@ -247,6 +247,27 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             StringAssert.Contains("\"timeoutMinutes\": 120", report);
         }
 
+        [Test]
+        public void ShouldLeaveHostChangesIntactWhenCancelledBeforeOpeningAWindow()
+        {
+            const string preference = "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
+            string output = "Temp/PerfBaselineUnownedStateTests-" + Guid.NewGuid().ToString("N");
+            UnityEngine.Object[] selection = Selection.objects;
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(DocsImageCapture.WindowPreferenceSnapshot.Capture().Restore);
+            cleanup.Defer(() => Selection.objects = selection);
+            PlayModeDataObject selected = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(selected));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(output, new[] { 2 });
+            Selection.objects = new UnityEngine.Object[] { selected };
+            EditorPrefs.SetString(preference, "changed during staging");
+            PerfBaseline.Cancel();
+            Assert.AreSame(selected, Selection.activeObject);
+            Assert.AreEqual("changed during staging", EditorPrefs.GetString(preference));
+        }
+
         [UnityTest]
         public IEnumerator ShouldRestoreHostStateAndNativeOwnersWhenCancelledAfterOpening()
         {

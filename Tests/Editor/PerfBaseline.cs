@@ -448,6 +448,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void OpenWindow(RunState state, bool cold)
         {
+            if (state.Preferences == null)
+            {
+                state.PreviousSelection = Selection.objects;
+                state.Preferences = DocsImageCapture.WindowPreferenceSnapshot.Capture();
+            }
             FieldInfo instanceField = typeof(DataVisualizerWindow).GetField(InstanceFieldName, StaticMembers);
             if (instanceField == null)
             {
@@ -707,11 +712,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Debug.LogError($"[PerfBaseline] fixture cleanup failed: {error.Message}");
             }
 
-            using (TestCleanupScope restoration = new())
-            {
-                restoration.Defer(state.Preferences.Restore);
-                restoration.Defer(() => Selection.objects = state.PreviousSelection);
-            }
+            if (state.Preferences != null)
+                using (TestCleanupScope restoration = new())
+                {
+                    restoration.Defer(state.Preferences.Restore);
+                    restoration.Defer(() => Selection.objects = state.PreviousSelection);
+                }
             _active = null;
             EditorApplication.update -= Tick;
             AssemblyReloadEvents.beforeAssemblyReload -= Cancel;
@@ -1078,8 +1084,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal PerfFixtureStaging Staging;
             internal DataVisualizerWindow Window;
             internal PerfWindowStateScope WindowState;
-            internal readonly DocsImageCapture.WindowPreferenceSnapshot Preferences = DocsImageCapture.WindowPreferenceSnapshot.Capture();
-            internal readonly UnityEngine.Object[] PreviousSelection = Selection.objects;
+            internal DocsImageCapture.WindowPreferenceSnapshot Preferences;
+            internal UnityEngine.Object[] PreviousSelection;
             internal object PreviousInstance;
             internal readonly Stopwatch PhaseClock = new();
             internal int WarmRepetition;
