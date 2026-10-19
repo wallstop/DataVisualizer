@@ -6,17 +6,37 @@ when the work is on the default branch; keep PR and issue references as the evid
 Status legend: `done` (all known scope on main), `partial`, `open` (no known scope delivered). Re-verify against GitHub issues before selecting work; issues override this file when
 they disagree.
 
+## Current improvement initiative
+
+[Issue #305](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/305) owns the 2026-10-19 audit and its prioritized tasks. Keep Unity 2021.3, the three-pane workflow,
+runtime contracts, authored IDs, and saved arrangements. Prioritize ScriptableObject workflows and measured 10k–100k operation. Prefabs and million-asset support require
+feasibility evidence before a support commitment. Priorities order investigation; they do not authorize implementing the whole backlog in one run.
+
+| Area                                            | Owning tasks                                                                                                                                                                                                                 |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Measurement and scale                           | [#306](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/306), [million-record feasibility #323](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/323)                                                |
+| Incremental refresh and metadata                | [#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308), [#309](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/309)                                                                           |
+| Search and catalog rendering                    | [#310](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/310), [#311](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/311), [#324](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/324) |
+| Controls, panes, and filters                    | [#312](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/312), [#313](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/313), [#314](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/314) |
+| Editor API and JSON                             | [#315](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/315), [#316](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/316)                                                                           |
+| Selected processing, saved searches, validation | [#317](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/317), [#318](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/318), [#319](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/319) |
+| Subasset and prefab feasibility                 | [#320](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/320), [#321](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/321)                                                                           |
+| Documentation correctness and task guides       | [#307](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/307), [#322](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/322)                                                                           |
+
+Each issue owns its evidence, acceptance, dependencies, and exclusions. Reproduce or measure first, change one bounded behavior, then repeat the same scenario. Separate static
+findings, historical measurements, and exploratory UX hypotheses. Do not infer performance from virtualization alone or million-asset support from synthetic metadata.
+
 ## T01 - Local validation harness and baseline (partial)
 
-Ad hoc measurements exist per task (probes recorded on issues and PRs); no standing harness.
+Delivered: `Tests/Editor/PerfBaseline.cs` provides a tick-driven local driver, monotonic timing, raw JSON and environment reporting. The 100/1,000/10,000 report is published in
+`docs/performance.md` (#244); background counting was corrected in #246. The original raw report remains unchanged with its limitation documented.
 
-- [ ] Local driver under `scripts/` with host-project, editor-version, fixture-size, suite, and output-directory arguments; callable through the Unity MCP bridge and direct host
-      execution with explicit path resolution.
-- [ ] Disposable fixture project referencing this package; deterministic datasets of 100 / 1,000 / 10,000 / 50,000 assets (one large type, many-type distribution, `BaseDataObject`
-      subclasses, labels, nested fields, duplicate short names, saved selections); verified seeds.
+- [ ] Extend the existing driver with explicit scenario/fixture controls and stage timings; reuse its host/MCP entrypoints rather than create another harness (#306).
+- [ ] Disposable fixture project referencing this package; deterministic datasets of 100 / 1,000 / 10,000 / 50,000 / 100,000 assets (one large type, many-type distribution,
+      `BaseDataObject` subclasses, labels, nested fields, duplicate short names, saved selections); verified seeds.
 - [ ] Record environment (package/fixture revision, Unity version, OS, CPU, memory, storage, GPU, DPI, theme, window size) and run timing inside Unity with monotonic timers and
       profiler markers; MCP transport excluded.
-- [ ] Machine-readable JSON results plus a readable comparison report.
+- [ ] Extend existing machine-readable JSON with matched before/after comparisons and missing timing/memory metrics.
 - [ ] Measure separately: clean vs incremental compiles; shell construction, first visible rows, inspector readiness, full indexing; search, selection, filtering, scroll, type
       switches; cold index, warm disk, warm session; allocations and realized elements; Play entry with package absent, closed, idle, indexing. Five warm-ups and 30+ repetitions
       for warm scenarios; 5+ samples with spread for expensive scenarios. Package-absent control uses an ordinary-ScriptableObject fixture.
@@ -28,8 +48,7 @@ Done when: the baseline is reproducible locally, distinguishes cold from warm wo
 Delivered: runtime assembly surface pins (#88), persisted-state contract pins (#89), runtime signature pins with per-accessor access/virtualness (#90, #92), enum contract tests,
 malformed user-JSON fail-closed parser (#24), identity regressions, README accuracy corrections (#106).
 
-- [ ] `Tests/Runtime` PlayMode coverage: `BaseDataObject` lifecycle callbacks and serialized asset-state persistence, in a correctly constrained assembly; keep
-      filesystem/editor-callback tests in EditMode.
+- [x] `Tests/Runtime` contains `BaseDataObjectLifecycleTests` and `BaseDataObjectSerializationTests`; keep filesystem/editor-callback tests in EditMode.
 - [ ] Behavior inventory still to capture as executable coverage: duplicate type short names, missing scripts/assets, removed managed types, missing saved selections, empty
       projects, clone/create/rename paths, both persistence modes (dirty state, idempotent writes, mode switching).
 - [ ] Runtime compatibility fixtures deriving from `BaseDataObject`, implementing extension interfaces, and overriding virtuals; preserve fields and `.meta` GUIDs when moving
@@ -62,7 +81,10 @@ suspension (#101), event-driven debounced splitter persistence (#93).
 
 Done when: services are exercisable without opening a window, work ownership is explicit, and no duplicate old/new implementation paths remain.
 
-## T05 - Incremental metadata index and lazy loading (open)
+## T05 - Incremental metadata index and lazy loading (partial)
+
+Foundation delivered: `AssetGuidTypeIndex` classifies paths incrementally with a cooperative budget, and #228 removes object deserialization from import relevance checks. The
+shared browsing/search metadata cache and change-proportional window refresh remain open (#308/#309).
 
 - [ ] Metadata records keyed by asset GUID (path, exact type identity, display name, description, labels, ordering inputs, search payload, status); assembly-qualified identity
       internally; never resolve duplicate short names by first match.
@@ -95,7 +117,8 @@ Delivered: debounced geometry persistence with close/reload flush and teardown f
 
 - [ ] Versioned per-user layout state (pane widths, floating geometry, scale mode and manual scale) with one-time migration from EditorPrefs; distinguish preferred from clamped
       dimensions.
-- [ ] Restore after valid geometry; suppress writes during restoration; let Unity own docked placement; remove platform-specific monitor P/Invoke paths.
+- [ ] Preserve valid-geometry restoration and Unity-owned docking while adding responsive panes. Prefer public geometry APIs; retain necessary tested platform interop unless an
+      equivalent replacement is demonstrated. Placement fixes are delivered; remaining hardware evidence belongs to #270.
 - [ ] Auto scale plus manual 80-150% in 5% steps and Reset; derive package fonts, spacing, control heights, and row heights from one metrics model.
 - [ ] Responsive panes: collapse navigation behind a toggle, list/detail navigation when panes cannot fit, restore preferred arrangement later.
 - [ ] Normalize control padding, borders, alignment, and icons through shared USS classes and metrics; clamp popovers to window bounds.
@@ -106,9 +129,13 @@ Done when: preferred geometry survives restoration without drift and package-own
 
 Delivered: Play Mode suspension, paused indicator, mutation and serialized inspector gating, resume path (#101).
 
+Issue #20 records the four reload configurations, repeated in-flight transitions, asset invalidation, compilation, reopening, and destroy/disable cleanup on Unity 6000.4.6f1. This
+is historical lifecycle evidence, not proof of the timing target or other editor versions. Re-exercise affected scenarios when indexing ownership changes.
+
 - [ ] Matched local benchmark showing added p95 Play-entry latency of at most 20 ms (report window-open and window-closed separately).
-- [ ] Exercise all four domain-reload/scene-reload combinations, including transitions during indexing/search; queue and coalesce invalidation while paused; resume incrementally.
-- [ ] Verify closing the window leaves no scheduler, polling loop, or live asset cache.
+- [x] Exercise all four domain-reload/scene-reload combinations with in-flight work on the recorded 6000.4 host (#20).
+- [x] Exercise close/destroy/disable cleanup and reopening on that host (#20).
+- [ ] Preserve those lifecycle guarantees under incremental refresh and metadata service changes (#308/#309), including retained-reference measurements (#306).
 
 Done when: the benchmark and lifecycle regression tests demonstrate correct cleanup with reload disabled.
 
@@ -129,12 +156,11 @@ Done when: an agent can configure, query, and operate the package through docume
 
 Delivered: Tests-assembly offscreen capture with fail-closed guards (#123), docs-image capture driver with shot manifest and `-executeMethod` CLI (#125).
 
-Blocked: the offscreen capture deterministically omits specific subtrees (unselected rows, asset-name/labels rows, InspectorElement internals) while the on-screen window paints
-them; twelve falsified workarounds recorded on #114.
+Delivered: the reviewed Windows Unity 6000.5 six-shot capture inventory and WebP/GIF exporters are recorded in closed #114/#152. The remaining macOS 6000.4 render gap is
+platform-specific and belongs to #270; it does not block all capture work.
 
-- [ ] Fix the render gap; then regenerate the documented image inventory from production UI.
-- [ ] Scenario inventory and manifest validation (nonempty, distinct, expected dimensions); staged publication preserving the previous complete set; cleanup of textures, windows,
-      and settings.
+- [x] Capture inventory and image validation are implemented; inspect content in addition to dimension checks.
+- [ ] Regenerate affected production UI captures as workflow changes land (#322); preserve the previous complete set on failed capture/export.
 - [ ] Geometry assertions cross-platform; screenshot baselines pinned to OS/Unity/theme/DPI; changed baselines require inspection.
 
 Done when: one local command regenerates the documented image inventory with repeatable evidence and no consumer dependency or CI Unity execution.
@@ -145,9 +171,11 @@ Delivered: MkDocs Material foundation with strict build and Pages publishing wor
 
 - [x] README hero imagery from the capture pipeline (#140, #143); README stays concise and links into the site.
 - [x] Troubleshooting page (incomplete indexing, stale metadata, missing scripts, small windows, capture limits, host/container paths) (#145).
-- [x] Measured performance section with the complete 100/1,000/10,000 baseline (docs/performance.md and its raw report; #244). Background-count correction remains #243.
-- [ ] Complete captures embedded with captions and alt text, validated against the manifest.
+- [x] Measured performance section with the complete 100/1,000/10,000 baseline (docs/performance.md and its raw report; #244). Background-count correction merged in #246.
+- [x] Current six-shot captures embedded with captions and alt text; earlier overhaul closed in #114.
 - [x] Odin behavior documented separately from the default inspector contract (docs/extending.md, #134).
+- [ ] Correct newly verified filter and persisted-ID claims and compile complete examples (#307).
+- [ ] Separate contributor capture procedures from user guides; refresh affected screenshots and label or replace the pre-rename video (#322).
 
 Done when: the published site is accurate with working examples and complete screenshots; unavailable publication access is reported explicitly.
 
@@ -157,11 +185,14 @@ Delivered: Keep a Changelog file and package metadata (#107), release preparatio
 (#112, #113), publish-time package build, validation, and GitHub Release with npm + `.unitypackage` artifacts (#126), credential documentation pinned to workflows (#128), unified
 release preparation and publication (#135), v0.1.0 shipped (#136).
 
-- [ ] Local compatibility matrix: pinned Unity 2021.3, 2022.3, representative Unity 6 LTS, and the confirmed 6000.4.6f1 host; Windows/macOS/Linux; light/dark themes, 100/150/200%
+- [ ] Local compatibility matrix: pinned Unity 2021.3, 2022.3, representative Unity 6 LTS, and the confirmed 6000.5.2f1 host; Windows/macOS/Linux; light/dark themes, 100/150/200%
       DPI, manual scale endpoints, docking, mixed-monitor movement; EditMode + PlayMode + player smoke; optional Odin where licensed; EntityId branch when Unity 6000.5+ is
       available. Treat unavailable combinations as unverified and publish the gaps.
-- [ ] Performance acceptance: warm open p95 <= 100 ms at 10k; indexed search p95 <= 100 ms including debounce; Play-entry p95 <= 20 ms added; 4 ms cooperative slices; cold indexing
-      measured; compile improvement beyond noise; realized rows bounded by viewport; no package-owned memory accumulation. Missed targets are recorded, not silently relaxed.
+- [ ] Performance acceptance: warm usable open p95 <= 100 ms at 10k; indexed search p95 <= 100 ms including debounce; Play-entry p95 <= 20 ms added; 4 ms cooperative slices; cold
+      indexing measured; compile improvement beyond noise; realized rows bounded by viewport; no package-owned memory accumulation. Missed targets are recorded, not silently
+      relaxed.
+- [ ] Record first paint, usable rows, inspector readiness and full index readiness separately. Preserve historical open-to-index-ready results rather than compare unlike metrics.
+- [ ] Establish numeric 100k latency budgets from #306 before optimizing; require bounded live-object retention, responsive cancellation, and change-proportional refresh.
 - [ ] Final milestone acceptance and handoff summary (what changed, what was tested, measured improvements, unverified platforms).
 
 Done when: the support and performance matrix is published with unverified gaps explicit; Unity validation remains a required local release gate.
