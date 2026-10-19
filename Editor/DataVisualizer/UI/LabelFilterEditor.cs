@@ -63,7 +63,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             string inferred = InferMode(config);
             if (!ReferenceEquals(_config, config))
             {
-                _advancedRequested = false;
+                _advancedRequested = inferred == AdvancedMode;
                 _mode.SetValueWithoutNotify(inferred);
             }
             else if (!_advancedRequested && (config?.andLabels is { Count: > 0 } || config?.orLabels is { Count: > 0 }))
@@ -72,6 +72,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             }
             if (inferred == AdvancedMode)
             {
+                _advancedRequested = true;
                 _mode.SetValueWithoutNotify(AdvancedMode);
             }
             _config = config;
@@ -85,13 +86,15 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             {
                 return;
             }
-            _advancedRequested = mode == AdvancedMode;
-            if (!_advancedRequested && InferMode(_config) == AdvancedMode)
+            bool requestedAdvanced = mode == AdvancedMode;
+            if (!requestedAdvanced && InferMode(_config) == AdvancedMode)
             {
+                _advancedRequested = true;
                 _mode.SetValueWithoutNotify(AdvancedMode);
                 _summary.text = "Clear the compound filter before choosing a simple mode. " + Expression();
                 return;
             }
+            _advancedRequested = requestedAdvanced;
             if (!_advancedRequested)
             {
                 List<string> source = mode == AllMode ? _config.orLabels : _config.andLabels;

@@ -5235,7 +5235,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
             _filterStatusLabel.AddToClassList("dataviz-muted");
-            labelContainerContainer.Add(_filterStatusLabel);
+            _labelFilterEditor.Add(_filterStatusLabel);
 
             SetupDropTarget(_availableLabelsContainer, LabelFilterSection.Available);
             SetupDropTarget(_andLabelsContainer, LabelFilterSection.AND);

@@ -85,6 +85,36 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldKeepAdvancedWhileEditingAnExistingCompoundFilter(bool attemptSimpleMode)
+        {
+            using TestCleanupScope cleanup = new();
+            EditorSurfaceCaptureHostWindow window = ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            EditorSurfaceCapture.ShowPopup(window);
+            TypeLabelFilterConfig config = new()
+            {
+                andLabels = new() { "Reviewed" },
+                orLabels = new() { "Urgent" },
+            };
+            VisualElement advanced = new();
+            LabelFilterEditor editor = new(advanced, () => Assert.Fail("Changing presentation must not write filter state."));
+            window.rootVisualElement.Add(editor);
+            editor.Bind(config, new[] { "Reviewed", "Urgent" });
+            DropdownField mode = editor.Q<DropdownField>("label-filter-mode");
+            if (attemptSimpleMode)
+            {
+                mode.value = LabelFilterEditor.AnyMode;
+            }
+            config.orLabels.Clear();
+            editor.Bind(config, new[] { "Reviewed", "Urgent" });
+            Assert.That(mode.value, Is.EqualTo(LabelFilterEditor.AdvancedMode));
+            Assert.That(advanced.style.display.value, Is.EqualTo(DisplayStyle.Flex));
+            mode.value = LabelFilterEditor.AllMode;
+            Assert.That(advanced.style.display.value, Is.EqualTo(DisplayStyle.None));
+        }
+
         [UnityTest]
         public IEnumerator ShouldAddSwitchRemoveAndClearLabelsWithKeyboard()
         {
