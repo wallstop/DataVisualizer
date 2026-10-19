@@ -14,7 +14,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using WallstopStudios.DataVisualizer.Editor.Utilities;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
     using Debug = UnityEngine.Debug;
-    using Object = UnityEngine.Object;
     using PlayModeDataObject = WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject;
 
     /*
@@ -613,8 +612,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             InvokeCleanup(window);
-            window.rootVisualElement.Clear();
-            Object.DestroyImmediate(window);
+            EditorSurfaceCapture.CloseWindow(window);
             AssetGuidTypeIndex.Shared.Cancel();
             typeof(DataVisualizerWindow).GetField(InstanceFieldName, StaticMembers)?.SetValue(null, state.PreviousInstance);
             state.PreviousInstance = null;

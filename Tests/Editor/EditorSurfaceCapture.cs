@@ -167,12 +167,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         /*
-            Closes a window this test suite showed or created, guaranteeing it is destroyed.
-            EditorWindow.Close on a popup-hosted window does not reliably remove it from the
-            editor's window registry, and a leftover capture window of a type another test
-            looks up by name gets reused or close-stomped by later tests; DestroyImmediate
-            removes it unconditionally. Callers that need production teardown run it (for
-            example the window Cleanup method) before calling this.
+            Close releases the native ContainerWindow and its graphics swap chain as well
+            as the EditorWindow wrapper. DestroyImmediate alone leaves a popup's native
+            host alive, accumulating presentation resources across capture/benchmark runs.
         */
         internal static void CloseWindow(EditorWindow window)
         {
@@ -181,8 +178,36 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 return;
             }
 
-            window.rootVisualElement.Clear();
-            Object.DestroyImmediate(window);
+            VisualElement root = window.rootVisualElement;
+            bool hasPanel = root.panel != null;
+            root.Clear();
+            if (hasPanel)
+            {
+                window.Close();
+            }
+            else
+            {
+                // Unity 2021.3–6000.5 Close dereferences a missing parent for an unshown window.
+                Object.DestroyImmediate(window);
+            }
+        }
+
+        internal static int CountNativeWindowHosts()
+        {
+            int count = 0;
+            /*
+                Unity exposes no public ContainerWindow type. Enumerate public resources
+                by type name so the regression observes native owners, not just wrappers.
+            */
+            foreach (ScriptableObject resource in Resources.FindObjectsOfTypeAll<ScriptableObject>())
+            {
+                if (string.Equals(resource.GetType().FullName, "UnityEditor.ContainerWindow", StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         /*

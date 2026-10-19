@@ -198,6 +198,10 @@ runs everything, including the Prettier Markdown check, on ubuntu and windows. C
 
 ### Testing
 
+- Close every shown temporary `EditorWindow` through `EditorWindow.Close()`, including popup captures and benchmarks. `DestroyImmediate(window)` alone leaves its native host and
+  graphics swap chain alive (#338). Unshown windows have no native owner and may require direct destruction because older Unity `Close()` dereferences their missing parent. Use
+  `EditorSurfaceCapture.CloseWindow` for capture/benchmark windows; cycle regressions count native hosts as well as editor-window wrappers.
+
 - Unity Test Framework; EditMode specs live in `Tests/Editor`, grouped by feature (`NamespaceOrderingTests`, `SelectionPersistenceTests`); name methods
   `ShouldExpectationWhenCondition`.
 - Gate pull requests on both EditMode and PlayMode suites; aim for coverage on ordering, filtering, and cloning paths before tagging a release.

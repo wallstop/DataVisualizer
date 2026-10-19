@@ -135,6 +135,40 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             cleanupMethod.Invoke(window, Array.Empty<object>());
         }
 
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public void ShouldReleaseNativeHostsAndWrappersAcrossRepeatedWindowCycles(int showMode)
+        {
+            int initialHosts = EditorSurfaceCapture.CountNativeWindowHosts();
+            int initialWindows = Resources.FindObjectsOfTypeAll<EditorSurfaceCaptureHostWindow>().Length;
+            for (int cycle = 0; cycle < 12; cycle++)
+            {
+                using TestCleanupScope cleanup = new();
+                EditorSurfaceCaptureHostWindow window = ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
+                cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+                switch (showMode)
+                {
+                    case 0:
+                        window.ShowPopup();
+                        break;
+                    case 1:
+                        window.ShowUtility();
+                        break;
+                    case 2:
+                        window.Show();
+                        break;
+                }
+
+                EditorSurfaceCapture.CloseWindow(window);
+                EditorSurfaceCapture.CloseWindow(window);
+                Assert.That(window == null, "Close must destroy the Unity wrapper too.");
+                Assert.AreEqual(initialHosts, EditorSurfaceCapture.CountNativeWindowHosts(), $"Native owner leaked in cycle {cycle}.");
+                Assert.AreEqual(initialWindows, Resources.FindObjectsOfTypeAll<EditorSurfaceCaptureHostWindow>().Length);
+            }
+        }
+
         [Test]
         public void ShouldFailClosedWhenWindowIsNull()
         {
