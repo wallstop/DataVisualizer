@@ -86,7 +86,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             usage.CopyNamesTo(names);
             CollectionAssert.AreEqual(new[] { "Changed", "Second", "Shared" }, names);
             Assert.That(AssetDatabase.DeleteAsset(root + "/Second.asset"));
-            Assert.That(usage.Remove(second));
+            List<ScriptableObject> rows = new() { first, second, null };
+            Assert.AreEqual(2, usage.RemoveDestroyedRows(rows));
+            CollectionAssert.AreEqual(new[] { first }, rows);
+            Assert.That(!usage.Remove(second));
+            Assert.AreEqual(0, usage.RemoveDestroyedRows(rows));
             usage.CopyNamesTo(names);
             CollectionAssert.AreEqual(new[] { "Changed" }, names);
             usage.Clear();

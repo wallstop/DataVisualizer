@@ -4621,7 +4621,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             int index = _selectedObjects.IndexOf(objectToDelete);
             _selectedObjects.Remove(objectToDelete);
             _selectedLabelUsage.Remove(objectToDelete);
-            _selectedObjects.RemoveAll(obj => obj == null);
+            _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects);
             _filteredObjects.Remove(objectToDelete);
             _filteredObjects.RemoveAll(obj => obj == null);
             _selectedObjectOrderIndex.Remove(objectToDelete);
@@ -4640,7 +4640,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     SetLastSelectedObjectGuidForType(deletedTypeFullName, null);
                 }
                 AssetDatabase.Refresh();
-                BuildObjectsView();
+                UpdateLabelAreaAndFilter();
                 if (targetIndex < _selectedObjects.Count)
                 {
                     SelectObject(_selectedObjects[targetIndex]);
@@ -5957,6 +5957,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void UpdateLabelAreaAndFilter()
         {
+            _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects);
             ClearLabelFilterUI();
             if (_namespaceController.SelectedType == null)
             {
@@ -6000,7 +6001,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void BuildObjectsView()
         {
-            _selectedObjects.RemoveAll(obj => obj == null);
+            if (0 < _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects))
+            {
+                _selectedLabelUsage.CopyNamesTo(_currentUniqueLabelsForType);
+                PopulateLabelPillContainers();
+            }
             if (_objectListView == null)
             {
                 return;

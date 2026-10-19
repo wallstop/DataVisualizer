@@ -89,6 +89,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return true;
         }
 
+        public int RemoveDestroyedRows(List<ScriptableObject> rows)
+        {
+            return rows.RemoveAll(RemoveIfDestroyed);
+        }
+
         public bool Update(ScriptableObject asset)
         {
             if (asset == null)
@@ -110,6 +115,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 _counts[label] = count + 1;
             }
 
+            return true;
+        }
+
+        private bool RemoveIfDestroyed(ScriptableObject asset)
+        {
+            if (asset != null)
+                return false;
+            Remove(asset);
             return true;
         }
     }
