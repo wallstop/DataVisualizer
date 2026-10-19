@@ -183,3 +183,6 @@ directly to the host bridge. Match health's `bridgePid` to the listener owner; h
 
 The universal configurator runs in typed Python through `uv run scripts/mcp_configure.py`. The legacy Node entry remains a launcher with Python 3.9+ fallback. The sync wrapper no
 longer requires Node.
+
+Run the typed Python bridge directly with `uv run scripts/unity_mcp_host.py` on the host. It uses the same settings, health identity, route checks, and dynamic port publication as
+the legacy Node command.
