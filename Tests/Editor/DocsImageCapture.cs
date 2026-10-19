@@ -1062,7 +1062,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     StagePopoverForCapture(window, CreatePopoverFieldName, CreateButtonFieldName);
                     break;
                 case ImportShotName:
-                    InvokeWindowMethod(window, "BuildTypeAddList", new[] { typeof(string) }, new object[] { null });
+                    if (ReadWindowElement(window, "_typeAddSearchField") is not TextField typeSearch)
+                    {
+                        throw new InvalidOperationException("The type finder has no search field.");
+                    }
+                    typeSearch.value = "Creation";
                     StagePopoverForCapture(window, TypeAddPopoverFieldName, TypeAddButtonFieldName);
                     break;
                 case SearchShotName:
