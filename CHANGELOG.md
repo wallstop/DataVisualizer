@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Clarify Add types and search controls. Group row commands in Actions menus and add selected-asset keyboard shortcuts (#312).
+
 - Reduce the vertical gap between object rows by at least half (#292).
 
 - Point new installs and documentation links to Ambiguous-Interactive/DxVisualizer. Update site bookmarks to <https://ambiguous-interactive.github.io/DxVisualizer/>; the old Pages

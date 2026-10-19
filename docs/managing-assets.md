@@ -7,7 +7,9 @@ This page covers the operations that change assets on disk, and the processors t
 
 **Create** is the **+** button in the object list header; it always acts on the selected type.
 
-**Clone**, **Rename**, **Move**, and **Delete** are the four buttons on the right of each object row, and they act on that row's object without selecting it first.
+**Clone**, **Rename**, **Move**, and **Delete** are in the **Actions** menu on each object row. They act on that row's object without selecting it first. Tab to **Actions** and
+press Enter or Space to open the menu. Arrow keys choose a command; Escape closes the menu. With the object list focused, **Ctrl/Cmd+D**, **F2**, and **Delete** act on the selected
+asset. Delete still asks for confirmation. These shortcuts do not apply inside text fields.
 
 ![Clone, rename, move, and delete controls on the object rows](images/data-visualizer-instance-actions.webp) _Per-row asset management controls. Regenerated from the live window by
 the docs capture pipeline._

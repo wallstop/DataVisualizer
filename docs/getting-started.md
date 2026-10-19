@@ -27,7 +27,7 @@ Select **Tools → Wallstop Studios → DxVisualizer**, then dock it next to the
 
 ## Add your types
 
-Three controls above the namespace panel fill the catalog:
+The **Add types** menu above the namespace panel offers three commands:
 
 - **Search Types** queries the ScriptableObject types Unity knows about. Add single types or a whole namespace in one action.
 - **Scan Asset Folder** crawls a folder and registers the types and existing assets it finds. Use it to adopt a project that already has data.
@@ -45,8 +45,9 @@ _Type search popover over the namespace panel. Regenerated from the live window 
 2. Select an instance in the middle panel.
 3. Edit a field in the right panel. The change saves immediately, as in Unity's own Inspector.
 
-Each object row carries four action buttons: **Clone** writes a copy with a `Clone` suffix beside the original, **Rename** renames the asset on disk, **Move** retargets it to
-another folder, and **Delete** removes it after you confirm.
+Each object row has an **Actions** menu: **Clone** writes a copy beside the original, **Rename** renames the asset on disk, **Move** retargets it to another folder, and **Delete**
+asks for confirmation. With the object list focused, use **Ctrl/Cmd+D** to clone the selected asset, **F2** to rename it, or **Delete** to request deletion. Text fields keep their
+normal editing keys. Tab to a menu button and press Enter or Space to open it; use the arrow keys to choose a command and Escape to dismiss it.
 
 ## Create an asset
 
@@ -60,9 +61,9 @@ pipeline._
 
 Three finders narrow different things, and they do not affect each other. The [Search and filtering](search-and-filter.md) page covers each one in full.
 
-- The **Search** box in the window header row searches every tracked type, not only the type you selected. It matches asset names, type names, asset GUIDs, and string fields on the
-  assets themselves, so you can find an asset by what is inside it.
-- The filter field above the namespace list narrows the type rows by display name, without case sensitivity. Namespace headers stay visible.
+- The **Search all assets** box in the window header row searches every tracked type, not only the type you selected. It matches asset names, type names, asset GUIDs, and string
+  fields on the assets themselves, so you can find an asset by what is inside it.
+- The **Filter types** field above the namespace list narrows the type rows by display name, without case sensitivity. Namespace headers stay visible.
 - Drag labels from **Available** into the **AND:** or **OR:** rows to show only assets that carry them. Within **AND:** every label is required; within **OR:** any label is
   sufficient. The switch combines those two clauses.
 
