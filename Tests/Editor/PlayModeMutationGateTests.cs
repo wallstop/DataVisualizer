@@ -309,7 +309,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
 
-                CreateFixtureAsset(folder, "First.asset");
+                ScriptableObject fixtureAsset = CreateFixtureAsset(folder, "First.asset");
 
                 SuspendForPlayMode(window);
                 InvokePrivate(window, "LoadObjectTypesAsync", typeof(TestDataObject), false);
@@ -319,10 +319,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 ResumeFromPlayMode(window);
                 InvokePrivate(window, "LoadObjectTypesAsync", typeof(TestDataObject), false);
-                Assert.AreEqual(
-                    1,
-                    ReadPrivateField<List<ScriptableObject>>(window, "_selectedObjects").Count,
-                    "the same manual type load after resume must load the type's objects"
+                while (ReadPrivateField<bool>(window, "_isLoadingObjectsAsync"))
+                {
+                    InvokePrivate(window, "ContinueLoadingObjects", typeof(TestDataObject), ReadPrivateField<int>(window, "_asyncLoadGeneration"));
+                }
+
+                CollectionAssert.Contains(
+                    ReadPrivateField<List<ScriptableObject>>(window, "_selectedObjects"),
+                    fixtureAsset,
+                    "the same manual type load after resume must load the fixture even when other assets exist"
                 );
             }
         }

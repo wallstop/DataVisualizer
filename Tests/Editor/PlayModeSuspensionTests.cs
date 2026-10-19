@@ -112,7 +112,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.IsTrue(index.IsComplete);
 
                 string[] guids = index.GetKnownGuids(typeof(TestDataObject));
-                Assert.AreEqual(3, guids.Length);
                 CollectionAssert.Contains(guids, firstGuid);
                 CollectionAssert.Contains(guids, secondGuid);
                 CollectionAssert.Contains(guids, thirdGuid);
