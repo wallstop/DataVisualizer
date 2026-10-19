@@ -39,7 +39,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         The driver never writes into docs/ by default; callers name an output directory and
         review the results before committing them. Fixture assets are created under
-        Assets/DataVisualizerDocsCapture and deleted on every exit path, and the window
+        a unique Assets/DataVisualizerDocsCapture-* folder and deleted on every exit path. The window
         preferences the arrangement touches are snapshotted and restored, mirroring the
         hygiene of EditorSurfaceCaptureTests.
 
@@ -131,7 +131,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const float CropPadding = 8f;
         private const int PngSignatureLength = 8;
 
-        private const string FixtureFolder = "Assets/DataVisualizerDocsCapture";
+        private const string FixtureFolderPrefix = "DataVisualizerDocsCapture-";
         private const float WindowWidth = 1180f;
         private const float WindowHeight = 780f;
         private const string DefaultOutputDirectory = "Temp/DocsImageCaptures";
@@ -242,7 +242,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string fileName = $"data-visualizer-{shotName}{suffix}.png";
             string capturePath = Path.Combine(outputDirectory, fileName);
 
+            using TestCleanupScope fixtureCleanup = new();
+            using TestCleanupScope cleanup = new();
             WindowPreferenceSnapshot preferences = WindowPreferenceSnapshot.Capture();
+            cleanup.Defer(preferences.Restore);
             FieldInfo instanceField = typeof(DataVisualizerWindow).GetField("Instance", ReflectedStaticMembers);
             if (instanceField == null)
             {
@@ -250,55 +253,45 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             object previousInstance = instanceField.GetValue(null);
+            cleanup.Defer(() => instanceField.SetValue(null, previousInstance));
+            cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
             DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
             PersistedSelectionSnapshot persistedSelection = null;
-            try
-            {
-                preferences.ApplyWidePanes();
-                CreateFixtureAssets();
-                persistedSelection = PersistedSelectionSnapshot.Capture(window);
+            cleanup.Defer(() => persistedSelection?.Restore(window));
+            cleanup.Defer(() => InvokeCleanup(window));
 
-                EditorSurfaceCapture.ShowPopup(window);
-                window.position = new Rect(40f, 40f, width, WindowHeight);
-                window.CreateGUI();
-                InvokeInitialContentLoad(window);
-                NamespaceController controller = GetNamespaceController(window);
-                SelectFixtureType(window, controller);
-                VerifySelectedType(controller);
+            preferences.ApplyWidePanes();
+            string fixtureFolder = CreateFixtureFolder(fixtureCleanup);
+            CreateFixtureAssets(fixtureFolder);
+            persistedSelection = PersistedSelectionSnapshot.Capture(window);
+
+            EditorSurfaceCapture.ShowPopup(window);
+            window.position = new Rect(40f, 40f, width, WindowHeight);
+            window.CreateGUI();
+            InvokeInitialContentLoad(window);
+            NamespaceController controller = GetNamespaceController(window);
+            SelectFixtureType(window, controller);
+            VerifySelectedType(controller);
+            EditorSurfaceCapture.SettleLayout(window);
+            SelectObject(window, LoadFirstFixtureAsset(fixtureFolder));
+            VerifySelectedObject(window);
+            if (!crop)
+            {
                 EditorSurfaceCapture.SettleLayout(window);
-                SelectObject(window, LoadFirstFixtureAsset());
-                VerifySelectedObject(window);
-                if (!crop)
-                {
-                    EditorSurfaceCapture.SettleLayout(window);
-                }
-
-                ArrangeShotState(window, shotName);
-                PauseCaptureRootTasks(window);
-                int stagedSearchGeneration = (int)typeof(DataVisualizerWindow).GetField("_searchCacheGeneration", ReflectedInstanceMembers).GetValue(window);
-
-                EditorSurfaceCaptureResult result = EditorSurfaceCapture.Capture(window, capturePath);
-                if (shotName == SearchShotName)
-                {
-                    VerifySearchFixtures(window, stagedSearchGeneration);
-                }
-                ValidateCapturedRegions(window, capturePath, shotName);
-                return crop ? CropCapturedShot(window, shotName, capturePath, result) : result;
             }
-            finally
+
+            ArrangeShotState(window, shotName, fixtureFolder);
+            PauseCaptureRootTasks(window);
+            int stagedSearchGeneration = (int)typeof(DataVisualizerWindow).GetField("_searchCacheGeneration", ReflectedInstanceMembers).GetValue(window);
+
+            EditorSurfaceCaptureResult result = EditorSurfaceCapture.Capture(window, capturePath);
+            if (shotName == SearchShotName)
             {
-                InvokeCleanup(window);
-                /*
-                    Restore before CloseWindow destroys the window: PersistSettings needs a
-                    live instance, and later teardown steps must not be skipped on a throw.
-                */
-                persistedSelection?.Restore(window);
-                EditorSurfaceCapture.CloseWindow(window);
-                AssetGuidTypeIndex.Shared.Cancel();
-                instanceField.SetValue(null, previousInstance);
-                preferences.Restore();
-                DeleteFixtureAssets();
+                VerifySearchFixtures(window, stagedSearchGeneration, fixtureFolder);
             }
+            ValidateCapturedRegions(window, capturePath, shotName);
+            return crop ? CropCapturedShot(window, shotName, capturePath, result) : result;
         }
 
         internal static int PauseCaptureRootTasks(EditorWindow window)
@@ -687,6 +680,37 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return true;
         }
 
+        internal static string CreateFixtureFolder(TestCleanupScope cleanup)
+        {
+            string folderName = FixtureFolderPrefix + Guid.NewGuid().ToString("N");
+            string folderPath = "Assets/" + folderName;
+            string folderGuid = null;
+            string markerPath = folderPath + "/.capture-owner";
+            bool markerWritten = false;
+            cleanup.Defer(() =>
+            {
+                bool ownsFolder =
+                    !string.IsNullOrEmpty(folderGuid)
+                    && string.Equals(AssetDatabase.AssetPathToGUID(folderPath, AssetPathToGUIDOptions.OnlyExistingAssets), folderGuid, StringComparison.Ordinal);
+                /* Unity can reuse a deleted folder's GUID when the same path is recreated. */
+                bool ownsContents = !markerWritten || (File.Exists(markerPath) && string.Equals(File.ReadAllText(markerPath), folderName, StringComparison.Ordinal));
+                if (ownsFolder && ownsContents)
+                {
+                    AssetDatabase.DeleteAsset(folderPath);
+                }
+            });
+            folderGuid = AssetDatabase.CreateFolder("Assets", folderName);
+            if (string.IsNullOrEmpty(folderGuid))
+            {
+                throw new InvalidOperationException($"Could not create capture fixture folder '{folderPath}'.");
+            }
+            folderPath = AssetDatabase.GUIDToAssetPath(folderGuid);
+            markerPath = folderPath + "/.capture-owner";
+            File.WriteAllText(markerPath, folderName);
+            markerWritten = true;
+            return folderPath;
+        }
+
         /*
             Maps a panel-space rect into the pixel space of a PNG that captured the given
             source bounds: UI Toolkit measures from the top-left while the pixel array starts
@@ -871,36 +895,29 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
-        private static void CreateFixtureAssets()
+        private static void CreateFixtureAssets(string fixtureFolder)
         {
-            if (AssetDatabase.IsValidFolder(FixtureFolder))
-            {
-                AssetDatabase.DeleteAsset(FixtureFolder);
-            }
-
-            AssetDatabase.CreateFolder("Assets", Path.GetFileName(FixtureFolder));
-            for (int index = 0; index < FixtureTitles.Length; index++)
+            using TestCleanupScope transientAssets = new();
+            foreach (string title in FixtureTitles)
             {
                 PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
-                AssetDatabase.CreateAsset(asset, $"{FixtureFolder}/{FixtureTitles[index]}.asset");
+                transientAssets.Defer(() =>
+                {
+                    if (asset != null && !EditorUtility.IsPersistent(asset))
+                    {
+                        Object.DestroyImmediate(asset);
+                    }
+                });
+                AssetDatabase.CreateAsset(asset, $"{fixtureFolder}/{title}.asset");
             }
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
         }
 
-        private static void DeleteFixtureAssets()
+        private static PlayModeDataObject LoadFirstFixtureAsset(string fixtureFolder)
         {
-            if (AssetDatabase.IsValidFolder(FixtureFolder))
-            {
-                AssetDatabase.DeleteAsset(FixtureFolder);
-                AssetDatabase.Refresh();
-            }
-        }
-
-        private static PlayModeDataObject LoadFirstFixtureAsset()
-        {
-            string assetPath = $"{FixtureFolder}/{FixtureTitles[0]}.asset";
+            string assetPath = $"{fixtureFolder}/{FixtureTitles[0]}.asset";
             PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>(assetPath);
             if (asset == null)
             {
@@ -998,7 +1015,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             tick the panel scheduler, so waiting for the scheduled reveal would leave the
             popover hidden.
         */
-        private static void ArrangeShotState(DataVisualizerWindow window, string shotName)
+        private static void ArrangeShotState(DataVisualizerWindow window, string shotName, string fixtureFolder)
         {
             switch (shotName)
             {
@@ -1011,7 +1028,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     StagePopoverForCapture(window, TypeAddPopoverFieldName, TypeAddButtonFieldName);
                     break;
                 case SearchShotName:
-                    StageSearchState(window);
+                    StageSearchState(window, fixtureFolder);
                     break;
                 case SettingsShotName:
                     InvokeWindowMethod(window, "BuildSettingsPopoverContent", Type.EmptyTypes, Array.Empty<object>());
@@ -1036,7 +1053,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             step, and a result-less match fails closed instead of documenting an empty
             popover.
         */
-        private static void VerifySearchFixtures(DataVisualizerWindow window, int stagedGeneration)
+        private static void VerifySearchFixtures(DataVisualizerWindow window, int stagedGeneration, string fixtureFolder)
         {
             if (
                 typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, ReflectedInstanceMembers)?.GetValue(window) is not List<VisualElement> results
@@ -1051,14 +1068,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
             foreach (VisualElement row in results)
             {
-                if (row.userData is not ScriptableObject asset || asset == null || !AssetDatabase.GetAssetPath(asset).StartsWith(FixtureFolder + "/", StringComparison.Ordinal))
+                if (row.userData is not ScriptableObject asset || asset == null || !AssetDatabase.GetAssetPath(asset).StartsWith(fixtureFolder + "/", StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException("The search capture contains an asset outside its owned fixture root.");
                 }
             }
         }
 
-        private static void StageSearchState(DataVisualizerWindow window)
+        private static void StageSearchState(DataVisualizerWindow window, string fixtureFolder)
         {
             FieldInfo cacheField = typeof(DataVisualizerWindow).GetField(SearchCacheFieldName, ReflectedInstanceMembers);
             if (cacheField?.GetValue(window) is not List<ScriptableObject> cache)
@@ -1079,7 +1096,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             cache.Clear();
             for (int index = 0; index < FixtureTitles.Length; index++)
             {
-                PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>($"{FixtureFolder}/{FixtureTitles[index]}.asset");
+                PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>($"{fixtureFolder}/{FixtureTitles[index]}.asset");
                 if (asset == null)
                 {
                     throw new InvalidOperationException($"The fixture asset '{FixtureTitles[index]}' did not load; the search shot " + "would capture an empty index.");

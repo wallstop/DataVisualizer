@@ -3,11 +3,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System;
     using System.Collections.Generic;
     using System.IO;
-    using System.Reflection;
     using NUnit.Framework;
+    using UnityEditor;
     using UnityEngine;
     using UnityEngine.UIElements;
-    using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
     using Object = UnityEngine.Object;
 
     internal sealed class DocsImageCaptureTests
@@ -205,6 +204,57 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(DocsImageCapture.ResolveOutputDirectory(arguments, environmentValue), Is.EqualTo(expected));
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldCleanOnlyOwnedFixturesAfterPartialSetup(bool failSetup)
+        {
+            using TestCleanupScope sentinelCleanup = new();
+            string sentinelRoot = AssetDatabase.GUIDToAssetPath(AssetDatabase.CreateFolder("Assets", "DocsCaptureSentinel-" + Guid.NewGuid().ToString("N")));
+            sentinelCleanup.Defer(() => AssetDatabase.DeleteAsset(sentinelRoot));
+            string sentinelPath = sentinelRoot + "/Sentinel.asset";
+            AssetDatabase.CreateAsset(new TextAsset("keep me"), sentinelPath);
+            string sentinelGuid = AssetDatabase.AssetPathToGUID(sentinelPath);
+            string ownedRoot = null;
+            Action stage = () =>
+            {
+                using TestCleanupScope fixtureCleanup = new();
+                ownedRoot = DocsImageCapture.CreateFixtureFolder(fixtureCleanup);
+                Assert.That(ownedRoot, Is.Not.EqualTo(sentinelRoot));
+                AssetDatabase.CreateAsset(new TextAsset("partial fixture"), ownedRoot + "/Partial.asset");
+                if (failSetup)
+                {
+                    throw new InvalidOperationException("Stop during fixture setup.");
+                }
+            };
+            if (failSetup)
+            {
+                Assert.Throws<InvalidOperationException>(() => stage());
+            }
+            else
+            {
+                stage();
+            }
+            Assert.That(AssetDatabase.IsValidFolder(ownedRoot), Is.False);
+            Assert.That(AssetDatabase.AssetPathToGUID(sentinelPath), Is.EqualTo(sentinelGuid));
+            Assert.That(AssetDatabase.LoadAssetAtPath<TextAsset>(sentinelPath).text, Is.EqualTo("keep me"));
+        }
+
+        [Test]
+        public void ShouldPreserveAReplacementFolderDuringFixtureCleanup()
+        {
+            using TestCleanupScope cleanup = new();
+            string folder = null;
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(folder));
+            using (TestCleanupScope fixtureCleanup = new())
+            {
+                folder = DocsImageCapture.CreateFixtureFolder(fixtureCleanup);
+                AssetDatabase.DeleteAsset(folder);
+                AssetDatabase.CreateFolder("Assets", Path.GetFileName(folder));
+                AssetDatabase.CreateAsset(new TextAsset("replacement"), folder + "/Sentinel.asset");
+            }
+            Assert.That(AssetDatabase.LoadAssetAtPath<TextAsset>(folder + "/Sentinel.asset") != null, Is.True);
+        }
+
         [Test]
         public void ShouldCaptureEveryManifestShotToValidNonBlankPng()
         {
@@ -219,28 +269,26 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Directory.Delete(outputDirectory, recursive: true);
             }
 
-            /*
-                CaptureAll owns the fixture assets, window preferences, and window lifecycle,
-                so the test only restores the window Instance field that predates the run,
-                like EditorSurfaceCaptureTests does around its real-window capture.
-            */
-            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField("Instance", BindingFlags.Static | BindingFlags.NonPublic);
-            Assert.That(instanceField != null, "The window Instance field must exist.");
-            object previousInstance = instanceField.GetValue(null);
-
-            try
+            using TestCleanupScope cleanup = new();
+            const string oldFixtureRoot = "Assets/DataVisualizerDocsCapture";
+            bool createdRoot = !AssetDatabase.IsValidFolder(oldFixtureRoot);
+            if (createdRoot)
             {
-                IReadOnlyList<EditorSurfaceCaptureResult> results = DocsImageCapture.CaptureAll(outputDirectory);
-                Assert.That(results.Count, Is.EqualTo(DocsImageCapture.ShotNames.Count), "One result per manifest shot.");
-                foreach (EditorSurfaceCaptureResult result in results)
-                {
-                    AssertValidPngFile(result);
-                }
+                AssetDatabase.CreateFolder("Assets", Path.GetFileName(oldFixtureRoot));
+                cleanup.Defer(() => AssetDatabase.DeleteAsset(oldFixtureRoot));
             }
-            finally
+            string sentinelPath = oldFixtureRoot + "/Sentinel-" + Guid.NewGuid().ToString("N") + ".asset";
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(sentinelPath));
+            AssetDatabase.CreateAsset(new TextAsset("preserve pre-existing assets"), sentinelPath);
+            string sentinelGuid = AssetDatabase.AssetPathToGUID(sentinelPath);
+            IReadOnlyList<EditorSurfaceCaptureResult> results = DocsImageCapture.CaptureAll(outputDirectory);
+            Assert.That(results.Count, Is.EqualTo(DocsImageCapture.ShotNames.Count), "One result per manifest shot.");
+            foreach (EditorSurfaceCaptureResult result in results)
             {
-                instanceField.SetValue(null, previousInstance);
+                AssertValidPngFile(result);
             }
+            Assert.That(AssetDatabase.AssetPathToGUID(sentinelPath), Is.EqualTo(sentinelGuid));
+            Assert.That(AssetDatabase.LoadAssetAtPath<TextAsset>(sentinelPath).text, Is.EqualTo("preserve pre-existing assets"));
         }
 
         [Test]
