@@ -23,6 +23,42 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(fitted.height, Is.EqualTo(Mathf.Min(height, popoverHeight)));
         }
 
+        [TestCase(360f, 480f, 900f)]
+        [TestCase(1200f, 780f, 100f)]
+        public void ShouldKeepSearchResultsBelowTheQueryField(float width, float height, float resultHeight)
+        {
+            Rect viewport = new(0f, 40f, width, height - 40f);
+            Rect fitted = PopoverPlacement.FitToArea(new Rect(200f, 0f, 500f, resultHeight), viewport);
+            Assert.That(viewport.yMin <= fitted.yMin);
+            Assert.That(fitted.yMax <= height);
+            Assert.That(fitted.width <= width);
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldPauseCaptureRootWorkAndRetainChildControlWork()
+        {
+            using TestCleanupScope cleanup = new();
+            LayoutTestWindow window = ScriptableObject.CreateInstance<LayoutTestWindow>();
+            cleanup.Defer(window.Close);
+            VisualElement child = new();
+            window.rootVisualElement.Add(child);
+            window.ShowUtility();
+            yield return null;
+            int rootCalls = 0;
+            int childCalls = 0;
+            window.rootVisualElement.schedule.Execute(() => rootCalls++).ExecuteLater(1);
+            child.schedule.Execute(() => childCalls++).ExecuteLater(1);
+            int paused = DocsImageCapture.PauseCaptureRootTasks(window);
+            Assert.That(paused, Is.Positive);
+            double deadline = EditorApplication.timeSinceStartup + 2d;
+            while (childCalls == 0 && EditorApplication.timeSinceStartup < deadline)
+            {
+                yield return null;
+            }
+            Assert.That(rootCalls, Is.Zero);
+            Assert.That(childCalls, Is.EqualTo(1));
+        }
+
         [UnityTest]
         public IEnumerator ShouldRestoreStylesheetPopoverCapsAfterViewportExpansion()
         {
@@ -57,6 +93,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     Assert.That(popover.resolvedStyle.width, Is.EqualTo(Mathf.Min(width, authoredCap)).Within(1f));
                 }
             }
+            popover.style.height = 400f;
+            PopoverPlacement.ReleaseViewportLimits(popover);
+            EditorSurfaceCapture.SettleLayout(window);
+            Assert.That(popover.resolvedStyle.height < 400f, "shorter content must not keep a previous viewport height");
         }
 
         [UnityTest]

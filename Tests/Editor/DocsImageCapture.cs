@@ -274,11 +274,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
 
                 ArrangeShotState(window, shotName);
+                PauseCaptureRootTasks(window);
+                int stagedSearchGeneration = (int)typeof(DataVisualizerWindow).GetField("_searchCacheGeneration", ReflectedInstanceMembers).GetValue(window);
 
                 EditorSurfaceCaptureResult result = EditorSurfaceCapture.Capture(window, capturePath);
                 if (shotName == SearchShotName)
                 {
-                    VerifySearchFixtures(window);
+                    VerifySearchFixtures(window, stagedSearchGeneration);
                 }
                 ValidateCapturedRegions(window, capturePath, shotName);
                 return crop ? CropCapturedShot(window, shotName, capturePath, result) : result;
@@ -297,6 +299,36 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 preferences.Restore();
                 DeleteFixtureAssets();
             }
+        }
+
+        internal static int PauseCaptureRootTasks(EditorWindow window)
+        {
+            VisualElement root = window.rootVisualElement;
+            object scheduler = root.panel?.GetType().GetProperty("scheduler", ReflectedInstanceMembers)?.GetValue(root.panel);
+            if (scheduler == null)
+            {
+                throw new InvalidOperationException("The capture panel exposes no scheduler; deferred work cannot be isolated.");
+            }
+            List<IVisualElementScheduledItem> owned = new();
+            foreach (string fieldName in new[] { "m_ScheduledItems", "m_ScheduleTransactions" })
+            {
+                if (scheduler.GetType().GetField(fieldName, ReflectedInstanceMembers)?.GetValue(scheduler) is not System.Collections.IEnumerable items)
+                {
+                    throw new InvalidOperationException($"The capture scheduler exposes no {fieldName} collection; deferred work cannot be isolated.");
+                }
+                foreach (object candidate in items)
+                {
+                    if (candidate is IVisualElementScheduledItem item && item.element == root && item.isActive && !owned.Contains(item))
+                    {
+                        owned.Add(item);
+                    }
+                }
+            }
+            foreach (IVisualElementScheduledItem item in owned)
+            {
+                item.Pause();
+            }
+            return owned.Count;
         }
 
         internal static void StageSearchInput(List<ScriptableObject> cache, TextField field, string query)
@@ -1004,14 +1036,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             step, and a result-less match fails closed instead of documenting an empty
             popover.
         */
-        private static void VerifySearchFixtures(DataVisualizerWindow window)
+        private static void VerifySearchFixtures(DataVisualizerWindow window, int stagedGeneration)
         {
             if (
                 typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, ReflectedInstanceMembers)?.GetValue(window) is not List<VisualElement> results
                 || results.Count != FixtureTitles.Length
             )
             {
-                throw new InvalidOperationException("The search capture must contain exactly the owned fixture results.");
+                int currentGeneration = (int)typeof(DataVisualizerWindow).GetField("_searchCacheGeneration", ReflectedInstanceMembers).GetValue(window);
+                int count = (typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, ReflectedInstanceMembers).GetValue(window) as List<VisualElement>)?.Count ?? -1;
+                throw new InvalidOperationException(
+                    $"The search capture must contain exactly the owned fixture results: count={count}; generation={stagedGeneration}->{currentGeneration}."
+                );
             }
             foreach (VisualElement row in results)
             {

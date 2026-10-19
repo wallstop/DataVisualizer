@@ -1709,6 +1709,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private Rect GetPopoverViewport(VisualElement popover, Vector2 available)
+        {
+            VisualElement trigger =
+                popover == _searchPopover ? _searchField
+                : popover == _typeAddPopover ? _addTypeButton
+                : null;
+            if (trigger == null)
+            {
+                return new Rect(Vector2.zero, available);
+            }
+            Vector2 triggerPosition = rootVisualElement.WorldToLocal(trigger.worldBound.position);
+            float top = Mathf.Clamp(triggerPosition.y + trigger.worldBound.height + 2f, 0f, available.y);
+            return new Rect(0f, top, available.x, available.y - top);
+        }
+
         private void ClampActivePopover(VisualElement popover, Vector2 available)
         {
             if (popover == null || popover.style.display == DisplayStyle.None)
@@ -1718,8 +1733,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             float marginLeft = popover.resolvedStyle.marginLeft;
             float marginTop = popover.resolvedStyle.marginTop;
             Rect requested = new(popover.style.left.value.value + marginLeft, popover.style.top.value.value + marginTop, popover.resolvedStyle.width, popover.resolvedStyle.height);
-            Rect fitted = PopoverPlacement.FitToWindow(requested, available);
-            PopoverPlacement.ApplyViewportLimits(popover, available);
+            Rect viewport = GetPopoverViewport(popover, available);
+            Rect fitted = PopoverPlacement.FitToArea(requested, viewport);
+            PopoverPlacement.ApplyViewportLimits(popover, viewport.size);
             popover.style.left = fitted.x - marginLeft;
             popover.style.top = fitted.y - marginTop;
         }
@@ -2804,6 +2820,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _lastSearchString = searchText;
             _searchPopover.Clear();
+            PopoverPlacement.ReleaseViewportLimits(_searchPopover);
             _currentSearchResultItems.Clear();
             _searchHighlightIndex = -1;
 
@@ -3373,8 +3390,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             else
             {
-                Rect fitted = PopoverPlacement.FitToWindow(new Rect(targetX, targetY, popoverWidth, popoverHeight), new Vector2(windowWidth, windowHeight));
-                PopoverPlacement.ApplyViewportLimits(popover, new Vector2(windowWidth, windowHeight));
+                Rect viewport = GetPopoverViewport(popover, new Vector2(windowWidth, windowHeight));
+                Rect fitted = PopoverPlacement.FitToArea(new Rect(targetX, targetY, popoverWidth, popoverHeight), viewport);
+                PopoverPlacement.ApplyViewportLimits(popover, viewport.size);
                 popover.style.left = fitted.x;
                 popover.style.top = fitted.y;
             }
@@ -4569,6 +4587,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 _typePopoverListContainer.Clear();
+                PopoverPlacement.ReleaseViewportLimits(_typeAddPopover);
 
                 List<string> searchTerms = new();
                 if (!string.IsNullOrWhiteSpace(filter))
@@ -4747,6 +4766,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                             VisualElement currentTypesContainer = header.parent.Q<VisualElement>($"types-subcontainer-{namespaceKey}");
                             if (currentIndicator != null && currentTypesContainer != null)
                             {
+                                PopoverPlacement.ReleaseViewportLimits(_typeAddPopover);
                                 bool nowCollapsed = currentTypesContainer.style.display == DisplayStyle.None;
                                 currentTypesContainer.style.display = nowCollapsed ? DisplayStyle.Flex : DisplayStyle.None;
                                 currentIndicator.text = nowCollapsed ? StyleConstants.ArrowExpanded : StyleConstants.ArrowCollapsed;

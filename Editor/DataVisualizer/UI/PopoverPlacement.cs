@@ -23,6 +23,13 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             popover.style.height = StyleKeyword.Null;
         }
 
+        public static Rect FitToArea(Rect requested, Rect area)
+        {
+            Rect fitted = FitToWindow(new Rect(requested.position - area.position, requested.size), area.size);
+            fitted.position += area.position;
+            return fitted;
+        }
+
         public static Rect FitToWindow(Rect requested, Vector2 available)
         {
             float width = Mathf.Clamp(requested.width, 0f, Mathf.Max(0f, available.x));
