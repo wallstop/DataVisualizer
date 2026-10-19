@@ -39,23 +39,52 @@ Removing a type or namespace only stops DxVisualizer from tracking it. Your asse
 
 _Type search popover over the namespace panel. Regenerated from the live window by the docs capture pipeline._
 
+## Create your first asset
+
+If you already have a ScriptableObject type, use it. For a new project, create the `Assets/GameData` folder and save this complete example as `Assets/GameData/QuestData.cs` and let
+Unity compile:
+
+```csharp
+namespace MyGame.Data
+{
+    using UnityEngine;
+
+    public sealed class QuestData : ScriptableObject
+    {
+        [SerializeField]
+        private string objective = "Meet the guide";
+
+        [SerializeField]
+        private int reward = 100;
+
+        public string Objective => objective;
+        public int Reward => reward;
+    }
+}
+```
+
+1. Open **Add types → Search Types**, find `QuestData`, and add it. Select the type in the left panel.
+2. Open **Settings** and choose a **Data Folder**, such as `Assets/Data`.
+3. Select **+** in the Objects header. Enter `First Quest`, then confirm **Create**.
+4. Select the new object. For this example it is saved under `Assets/Data/MyGame/Data/QuestData/`.
+
+Clones stay beside their original, whatever the Data Folder is. Removing a type from the catalog leaves the asset on disk.
+
+![Create popover asking for a new asset name](images/data-visualizer-create.webp) _Create opens from the **+** in the Objects header. The preview uses representative test data;
+your selected type supplies the new asset's fields._
+
+<span id="create-an-asset"></span>
+
 ## Edit your first asset
 
-1. Select a type in the left panel.
-2. Select an instance in the middle panel.
-3. Edit a field in the right panel. The change saves immediately, as in Unity's own Inspector.
+1. Select `First Quest` in the Objects panel.
+2. Change **Objective** to `Collect three herbs` and **Reward** to `150` in the inspector.
+3. Save the project with **Ctrl/Cmd+S**, close and reopen DxVisualizer, then return to `First Quest` to verify the values. Inspector field edits support Unity's Undo.
+4. Search for `First Quest` in **Search all assets** and select the result to return to it. Searching `Collect` also finds its string field once indexing finishes.
 
 Each object row has an **Actions** menu: **Clone** writes a copy beside the original, **Rename** renames the asset on disk, **Move** retargets it to another folder, and **Delete**
 asks for confirmation. With the object list focused, use **Ctrl/Cmd+D** to clone the selected asset, **F2** to rename it, or **Delete** to request deletion. Text fields keep their
 normal editing keys. Tab to a menu button and press Enter or Space to open it; use the arrow keys to choose a command and Escape to dismiss it.
-
-## Create an asset
-
-Select **Create** to add a new instance of the active type. The asset lands in your **Data Folder**, which you set under **Settings**. Clones always stay beside their original,
-whatever the Data Folder is.
-
-![Create popover asking for a new asset name](images/data-visualizer-create.webp) _Create popover over the object list. Regenerated from the live window by the docs capture
-pipeline._
 
 ## Filter and search
 
@@ -97,4 +126,4 @@ Everything resumes when you leave Play Mode.
 - [Managing assets](managing-assets.md) — where each asset operation lives, where created files go, how clones are named, and how processors are scoped.
 - [Organizing your data](organizing.md) — ordering, themes and their tokens, persistence, and what pauses during Play Mode.
 - [Extending the window](extending.md) — attributes, `BaseDataObject`, lifecycle hooks, processors, and custom inspector content.
-- The [video walkthrough](https://youtu.be/3oUxUSKNyhw) gives a visual tour.
+- The [historical video walkthrough](https://youtu.be/3oUxUSKNyhw) predates the 18 October 2026 rename; use these guides for current controls.

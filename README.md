@@ -49,7 +49,7 @@ Open the window with **Tools → Wallstop Studios → DxVisualizer** and dock it
 - [Organizing your data](https://ambiguous-interactive.github.io/DxVisualizer/organizing/): ordering, themes, persistence, and Play Mode.
 - [Extending the window](https://ambiguous-interactive.github.io/DxVisualizer/extending/): attributes, `BaseDataObject`, processors, and custom inspector content.
 - [Troubleshooting](https://ambiguous-interactive.github.io/DxVisualizer/troubleshooting/): missing types, hidden rows, processors, themes.
-- [Video walkthrough](https://youtu.be/3oUxUSKNyhw): a tour of the window, recorded before the rename.
+- [Video walkthrough](https://youtu.be/3oUxUSKNyhw): historical controls, recorded before the 18 October 2026 rename. Use the guides for the current UI.
 
 ## Free forever
 
