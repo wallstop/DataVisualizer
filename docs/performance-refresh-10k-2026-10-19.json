@@ -1,0 +1,33 @@
+{
+  "collectedAtUtc": "2026-10-19T22:46:17Z",
+  "sourceRevision": "83d7771674fc94aa99718fb5c74bf3c7a735fdcd",
+  "probeSourceSha256": "28af4d7caff2a899d127b8177e445243c0b01d2ac065f0bc52b516802118275d",
+  "protocol": "One warm isolated window, 10000 real PlayModeDataObject main assets, default label filter state. Verified rename, label inclusion/exclusion, Undo/Redo, move, deletion during an explicit full search rebuild.",
+  "fixtureType": "WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject",
+  "fixtureCount": 10000,
+  "creationBudgetMilliseconds": 32,
+  "maximumBatchItems": 10,
+  "stagingWallMilliseconds": 290550.591,
+  "creationCallMilliseconds": 34449.461,
+  "batchImportMilliseconds": 194405.672,
+  "initializationMilliseconds": 1782.858,
+  "finalRefreshMilliseconds": 622.864,
+  "longestStagingTickMilliseconds": 308.276,
+  "unchangedRowIdentitiesPreserved": 9999,
+  "renameObjectLoadCount": 0,
+  "rowLoadGenerationBefore": 3,
+  "rowLoadGenerationAfter": 3,
+  "searchGenerationBeforeChanges": 3,
+  "searchGenerationAfterChanges": 3,
+  "searchGenerationAfterDeliberateRebuild": 4,
+  "processedPaths": 14,
+  "longestRefreshSliceMilliseconds": 19.649,
+  "environment": {
+    "unity": "6000.5.2f1",
+    "os": "Windows 11 (10.0.26200)",
+    "cpu": "Snapdragon X Elite X1E80100",
+    "gpu": "Qualcomm Adreno X1-85"
+  },
+  "rawResult": "PASS fixtures=10000; fixture staging=290550.591ms; CreationMilliseconds=34449.461; BatchImportMilliseconds=194405.672; InitializationMilliseconds=1782.858; RefreshMilliseconds=622.864; LongestSliceMilliseconds=308.276; creationBudget=32ms; maxBatch=10; unchanged identities=9999; rename loaded 0; search generation 3->4; row generation 3->3; labels, Undo/Redo, move, deletion passed; processed=14; longest slice=19.649ms",
+  "limits": "One integration sample, not p95 or a controlled speed comparison; explicit 32ms fixture creation budget versus the default driver 4ms. No real 100k, ordinary-SO or many-type guarantee."
+}

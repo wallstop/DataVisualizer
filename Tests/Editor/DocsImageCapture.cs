@@ -1285,7 +1285,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Snapshot of the five window EditorPrefs keys the arrangement touches, restored
             on Dispose so a capture leaves the host's saved window state untouched.
         */
-        private sealed class WindowPreferenceSnapshot
+        internal sealed class WindowPreferenceSnapshot
         {
             private readonly bool _hadOuter;
             private readonly float _outer;
