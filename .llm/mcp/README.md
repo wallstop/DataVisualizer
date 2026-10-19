@@ -147,9 +147,12 @@ Security: the bridge listens on all interfaces by default (Linux Docker cannot r
 
 - **`unity run unity:mcp:host` fails with "Not a Unity project".** That invoked the Unity CLI, not the npm script: `unity run <project>` expects a project path, so it treats
   `unity:mcp:host` as one. The bridge is an npm script — start it with `npm run unity:mcp:host`.
-- **Port already in use / dynamic ports.** Re-running the bridge is a no-op while a healthy instance holds the port; if something else owns it, the bridge binds the next free port,
-  persists `UNITY_MCP_HTTP_PORT` to `.env.local`, and re-syncs every frontend config automatically. No fixed port is required anywhere: `mcp_configure.py`, the devcontainer health
-  check, and the doctors all read the persisted value.
+- **Port already in use / dynamic ports.** Re-running the bridge is a no-op while an instance for the same project holds the port; if something else owns it, the bridge binds the
+  next free port, persists `UNITY_MCP_HTTP_PORT` to `.env.local`, and re-syncs every frontend config automatically. No fixed port is required anywhere: `mcp_configure.py`, the
+  devcontainer health check, and the doctors all read the persisted value.
+- **Bridge project mismatch.** Startup rejects reuse when the running bridge has a different project pin, including pinned/unpinned differences or unknown ownership. It leaves the
+  running bridge and client settings unchanged. Use another `--port` or stop the old bridge before restarting. Project roots compare by filesystem identity: trailing separators,
+  `..`, and symlink aliases match; Windows case and slash variants match when they name the same directory. Two explicitly unpinned instances can share a bridge.
 - **`npm run mcp:sync` on the host.** It runs the typed Python driver `scripts/mcp_configure.py`. Codex persistence and workspace cleanup use `scripts/mcp_codex_config.py`; JSON
   persistence uses `scripts/mcp_json_config.py`. Credential aliases use `scripts/mcp_aliases.py`, preserving BOM and line endings and emitting statuses only. The managed server
   catalog uses `scripts/mcp_catalog.py`. The npm commands use uv; standalone entry points also support Python 3.9+. Container hooks use `sync_mcp.py`

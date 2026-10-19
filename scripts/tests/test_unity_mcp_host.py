@@ -470,6 +470,52 @@ class HostTests(unittest.TestCase):
         self.assertIn('already running', result.stdout)
         self.assertEqual(before, self.env_file.read_text(encoding='utf-8'))
 
+    def test_repeated_start_requires_matching_project_ownership(self) -> None:
+        other = self.root / 'OtherProject'
+        (other / 'ProjectSettings').mkdir(parents=True)
+        (other / 'ProjectSettings/ProjectVersion.txt').write_text('6000.5', encoding='utf-8')
+        for existing_pin, requested_pin in ((self.project, other), (None, self.project), (self.project, None)):
+            with self.subTest(existing_pin=existing_pin, requested_pin=requested_pin):
+                self.stop()
+                content = f'UNITY_CLI="{PYTHON}"\nUNITY_MCP_TOKEN=fixture-secret\n'
+                if existing_pin is not None:
+                    content += f'UNITY_MCP_PROJECT="{existing_pin}"\n'
+                self.env_file.write_text(content, encoding='utf-8')
+                self.launch()
+                before = self.env_file.read_bytes()
+                original = self.http('/healthz')[1]
+                # Override the file pin; an invalid root resolves to an unpinned invocation.
+                pin = str(requested_pin) if requested_pin is not None else str(self.root / 'Missing')
+                result = subprocess.run(self.command(), cwd=self.root, env={**self.env, 'UNITY_MCP_PROJECT': pin},
+                                        capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('project mismatch', result.stderr)
+                self.assertNotIn('already running', result.stdout)
+                self.assertEqual(self.env_file.read_bytes(), before)
+                current = self.http('/healthz')[1]
+                self.assertEqual(current['instanceId'], original['instanceId'])
+                self.assertEqual(current['projectPath'], original['projectPath'])
+                self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
+
+    def test_repeated_start_accepts_equivalent_project_spellings(self) -> None:
+        aliases = [str(self.project) + os.sep, str(self.project / 'ProjectSettings' / '..')]
+        if os.name == 'nt':
+            aliases.extend((str(self.project).swapcase(), str(self.project).replace('\\', '/')))
+        else:
+            alias = self.root / 'ProjectAlias'
+            alias.symlink_to(self.project, target_is_directory=True)
+            aliases.append(str(alias))
+        before = self.env_file.read_bytes()
+        original = self.http('/healthz')[1]
+        for alias in aliases:
+            with self.subTest(alias=alias):
+                result = subprocess.run(self.command(), cwd=self.root, env={**self.env, 'UNITY_MCP_PROJECT': alias},
+                                        capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('already running', result.stdout)
+                self.assertEqual(self.http('/healthz')[1]['instanceId'], original['instanceId'])
+                self.assertEqual(self.env_file.read_bytes(), before)
+
     def test_slow_config_sync_keeps_http_responsive_and_uses_selected_port(self) -> None:
         self.stop()
         configure = self.root / 'scripts/mcp_configure.py'
