@@ -353,6 +353,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         private float? _lastAddTypeClicked;
         private float? _lastSettingsClicked;
         private float? _lastEnterPressed;
+        private AssetChangeRefreshService _assetChanges;
+        private bool _assetRefreshNeedsViews;
+
         private bool _needsRefresh;
 
         /*
@@ -1345,6 +1348,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             OpenPopover(_typeAddPopover, _addTypeButton);
         }
 
+        public void QueueAssetChanges(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
+        {
+            _assetChanges?.SetSuspended(IsAssetEditingSuspended || EditorApplication.isPlayingOrWillChangePlaymode);
+            _assetChanges?.Enqueue(deleted);
+            _assetChanges?.Enqueue(movedFrom);
+            _assetChanges?.Enqueue(imported);
+            _assetChanges?.Enqueue(moved);
+        }
+
         internal void PersistSettings(Func<DataVisualizerSettings, bool> settingsApplier, Func<DataVisualizerUserState, bool> userStateApplier)
         {
             DataVisualizerSettings settings = Settings;
@@ -1552,6 +1564,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             RestoreWindowMinimumSizeFromPersistedClamp();
             _nextColorIndex = 0;
             Instance = this;
+            _assetChanges?.Dispose();
+            _assetChanges = new AssetChangeRefreshService(IsTrackedAssetType, MarkAssetRefreshNeeded);
+            _assetChanges.SetSuspended(EditorApplication.isPlayingOrWillChangePlaymode);
+            _assetChanges.SliceCompleted += CompleteAssetRefreshSlice;
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             EditorApplication.playModeStateChanged += HandlePlayModeStateChanged;
             AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
@@ -1817,6 +1833,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void Cleanup()
         {
+            _assetChanges?.Dispose();
+            _assetChanges = null;
+            _assetRefreshNeedsViews = false;
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
             if (!AssetGuidTypeIndex.Shared.IsComplete || AssetGuidTypeIndex.Shared.IsSuspended)
@@ -1946,6 +1965,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
+            _assetChanges?.ResetTracking();
+            string settingsPath = AssetDatabase.GetAssetPath(Settings);
+            _assetChanges?.Track(settingsPath, AssetDatabase.AssetPathToGUID(settingsPath));
             foreach (string guid in uniqueGuids)
             {
                 _pendingSearchCacheGuids.Enqueue(guid);
@@ -2016,6 +2038,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 */
                 if (obj != null && _searchCacheManagedTypes.Contains(obj.GetType()))
                 {
+                    // Short-name type queries include unrelated candidates; retain only verified identities.
+                    _assetChanges?.Track(path, guid);
                     loadedObjects.Add(obj);
                 }
             }
@@ -2066,6 +2090,38 @@ namespace WallstopStudios.DataVisualizer.Editor
             PerformSearch(current);
         }
 
+        private bool IsTrackedAssetType(Type type)
+        {
+            if (typeof(DataVisualizerSettings).IsAssignableFrom(type))
+            {
+                return true;
+            }
+
+            foreach (List<Type> types in _scriptableObjectTypes.Values)
+            {
+                if (types.Contains(type))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void MarkAssetRefreshNeeded(string guid, string path, Type type)
+        {
+            _assetRefreshNeedsViews = true;
+        }
+
+        private void CompleteAssetRefreshSlice()
+        {
+            if (_assetRefreshNeedsViews && _assetChanges != null && _assetChanges.PendingCount == 0)
+            {
+                _assetRefreshNeedsViews = false;
+                ScheduleRefresh();
+            }
+        }
+
         private void ScheduleRefresh()
         {
             if (_needsRefresh)
@@ -2091,6 +2147,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void SuspendForPlayMode()
         {
             _suspendedForPlayMode = true;
+            _assetChanges?.SetSuspended(true);
             AssetGuidTypeIndex.Shared.Suspend();
             _asyncLoadTask?.Pause();
             _searchCacheLoadTask?.Pause();
@@ -2102,6 +2159,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void ResumeAfterPlayMode()
         {
             _suspendedForPlayMode = false;
+            _assetChanges?.SetSuspended(false);
             AssetGuidTypeIndex.Shared.Resume();
             SetPackageEditingPaused(false);
             if (_isLoadingObjectsAsync && _asyncLoadTargetType != null && 0 < _pendingObjectGuids.Count)
@@ -8217,6 +8275,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ScriptableObject asset = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
                 if (asset != null && asset.GetType() == type)
                 {
+                    _assetChanges?.Track(path, guid);
                     loadedObjects.Add((guid, asset));
                 }
             }
