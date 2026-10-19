@@ -66,6 +66,8 @@ compare exactly: `Urgent` and `urgent` are different labels.
 A readable expression stays above the controls, including active labels not currently used by any loaded asset. Those labels remain selected until you remove them; loading or
 refreshing a type does not silently broaden its saved filter.
 
+<span id="the-advanced-row"></span>
+
 ### Advanced expressions
 
 Choose **Advanced** to combine two clauses. Existing compound filters open here automatically. Their saved combination, label casing, and result set stay unchanged. To replace a
@@ -130,12 +132,4 @@ Label editing is package-driven asset editing, so it is refused during the Play 
 
 ### Refresh the published search image
 
-After reviewing regenerated captures, use the shared six-shot exporter from the repository root:
-
-```bash
-uv run scripts/export_docs_webp.py
-uv run scripts/export_docs_webp.py --check
-```
-
-Search is a required shot in the [capture inventory](images/capture-manifest.json). The exporter checks its dimensions, distinct image content, and decoded pixel equality with the
-PNG alongside the other five shots. See [capture regeneration](troubleshooting.md#recreating-the-documentation-images) for the complete workflow.
+Contributor instructions moved to the [image workflow](contributing-images.md#recreating-the-documentation-images).

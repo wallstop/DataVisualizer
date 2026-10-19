@@ -55,8 +55,8 @@ The asset keeps its file name.
 
 ## Processors
 
-The **Processors** area sits below the namespace panel. It lists every `IDataProcessor` implementation in your project whose `Accepts` list covers the selected type, sorted by
-name. A processor with no `Accepts` list is never offered. The collapsed header shows how many processors are listed; the area is hidden entirely when none apply.
+The **Processors** area sits below the Objects header. It lists every `IDataProcessor` implementation in your project whose `Accepts` list covers the selected type, sorted by name.
+A processor with no `Accepts` list is never offered. The collapsed header shows how many processors are listed; the area is hidden entirely when none apply.
 
 Clicking a processor opens a confirmation that names the processor and the number of objects it will receive. Confirming runs `Process`, saves assets, refreshes the AssetDatabase,
 and schedules a window refresh. A processor that throws is caught: the exception is logged and an **Error running processor '…'** dialog reports the message. Other processors are
@@ -70,6 +70,18 @@ The **ALL** / **FILTERED** switch above the processor list sets the scope.
 - **FILTERED** passes only the instances the [label filter](search-and-filter.md#label-filter) currently shows. With no label filter, that is the same set as **ALL**.
 
 **FILTERED** is the default.
+
+### Run a repeatable edit safely
+
+1. Save or commit the assets you intend to process so you can restore them.
+2. Add the complete [ItemData and TrimDescriptions examples](extending.md#processors), placing the processor in an **Editor** folder. Wait for compilation.
+3. Add `ItemData` through **Add types**, create two instances, and enter descriptions with surrounding spaces.
+4. Give one asset the `Reviewed` label in its inspector. Choose **Match all labels** and select `Reviewed` to narrow the list to that asset.
+5. Wait for loading to finish, choose **FILTERED**, then select **Trim descriptions**. Check the named type and count in the confirmation before proceeding.
+6. Reopen both assets. The filtered asset's description is trimmed; the other is unchanged. Choose **Clear** to restore the full view.
+
+Use **ALL** only when every instance of the selected type is intended. Processor Undo depends on its implementation; this example does not register Undo. Recover unwanted changes
+from your saved copy or version control.
 
 ### Refusal while loading
 
