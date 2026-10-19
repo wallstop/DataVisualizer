@@ -273,6 +273,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             NamespaceController controller = GetNamespaceController(window);
             SelectFixtureType(window, controller);
             VerifySelectedType(controller);
+            StageFixtureObjects(window, fixtureFolder, cleanup);
             EditorSurfaceCapture.SettleLayout(window);
             SelectObject(window, LoadFirstFixtureAsset(fixtureFolder));
             VerifySelectedObject(window);
@@ -908,11 +909,48 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         Object.DestroyImmediate(asset);
                     }
                 });
+                asset.Title = title;
+                asset.Description = $"Default data for {title.ToLowerInvariant()}.";
                 AssetDatabase.CreateAsset(asset, $"{fixtureFolder}/{title}.asset");
+                /* Stable authored IDs keep image content independent of per-run asset GUIDs. */
+                using SerializedObject serialized = new(asset);
+                serialized.FindProperty(nameof(BaseDataObject._assetGuid)).stringValue = "docs-" + title.Replace(" ", "-").ToLowerInvariant();
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                AssetDatabase.SetLabels(asset, title == FixtureTitles[0] ? new[] { "Reviewed", "Urgent" } : new[] { "Reviewed" });
             }
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
+        }
+
+        private static void StageFixtureObjects(DataVisualizerWindow window, string fixtureFolder, TestCleanupScope cleanup)
+        {
+            if (typeof(DataVisualizerWindow).GetField("_asyncLoadTask", ReflectedInstanceMembers)?.GetValue(window) is IVisualElementScheduledItem pending)
+            {
+                pending.Pause();
+            }
+            typeof(DataVisualizerWindow).GetField("_isLoadingObjectsAsync", ReflectedInstanceMembers).SetValue(window, false);
+            ((Queue<string>)typeof(DataVisualizerWindow).GetField("_pendingObjectGuids", ReflectedInstanceMembers).GetValue(window)).Clear();
+            InvokeWindowMethod(window, "UpdateLoadingIndicator", new[] { typeof(int), typeof(int) }, new object[] { 0, 0 });
+            List<ScriptableObject> objects = (List<ScriptableObject>)typeof(DataVisualizerWindow).GetField("_selectedObjects", ReflectedInstanceMembers).GetValue(window);
+            objects.Clear();
+            foreach (string title in FixtureTitles)
+            {
+                PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>($"{fixtureFolder}/{title}.asset");
+                if (asset == null)
+                {
+                    throw new InvalidOperationException($"Capture fixture '{title}' did not load.");
+                }
+                objects.Add(asset);
+            }
+            objects.Sort(static (left, right) => string.Compare(left.name, right.name, StringComparison.Ordinal));
+
+            TypeLabelFilterConfig original = (TypeLabelFilterConfig)
+                typeof(DataVisualizerWindow).GetProperty("CurrentTypeLabelFilterConfig", ReflectedInstanceMembers).GetValue(window);
+            cleanup.Defer(() => InvokeWindowMethod(window, "SaveLabelFilterConfig", new[] { typeof(TypeLabelFilterConfig) }, new object[] { original }));
+            TypeLabelFilterConfig staged = new() { typeFullName = original.typeFullName, isCollapsed = false };
+            InvokeWindowMethod(window, "SaveLabelFilterConfig", new[] { typeof(TypeLabelFilterConfig) }, new object[] { staged });
+            InvokeWindowMethod(window, "UpdateLabelAreaAndFilter", Type.EmptyTypes, Array.Empty<object>());
         }
 
         private static PlayModeDataObject LoadFirstFixtureAsset(string fixtureFolder)
@@ -1024,7 +1062,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     StagePopoverForCapture(window, CreatePopoverFieldName, CreateButtonFieldName);
                     break;
                 case ImportShotName:
-                    InvokeWindowMethod(window, "BuildTypeAddList", new[] { typeof(string) }, new object[] { null });
+                    if (ReadWindowElement(window, "_typeAddSearchField") is not TextField typeSearch)
+                    {
+                        throw new InvalidOperationException("The type finder has no search field.");
+                    }
+                    typeSearch.value = "Creation";
                     StagePopoverForCapture(window, TypeAddPopoverFieldName, TypeAddButtonFieldName);
                     break;
                 case SearchShotName:

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "description": "Reviewed production controls and balanced inspector layout. Review fresh images before changing dimensions.",
+  "description": "Reviewed current label controls, addable type matches, and populated representative inspector values.",
   "captures": {
     "layout": [
       1180,
@@ -15,8 +15,8 @@
       180
     ],
     "import": [
-      192,
-      492
+      310,
+      210
     ],
     "search": [
       1141,
@@ -28,7 +28,7 @@
     ]
   },
   "provenance": {
-    "revision": "fcff9a2cb0770698ffe20a78f2a8fcf1fd833992",
+    "revision": "4f8d735e824aa30a1c3064c5c44eaff5b804b86c",
     "capturedAt": "2026-10-19",
     "unity": "6000.5.2f1",
     "os": "Windows 11 (10.0.26200)",
@@ -37,7 +37,7 @@
     "pixelsPerPoint": 1,
     "screenDpi": 96,
     "displayCount": 1,
-    "reviewScope": "Six production shots: readable controls, row actions, inspector fields, captions, dimensions, and decoded pixels. Other skin/platform/DPI evidence remains outside this run (#270).",
+    "reviewScope": "Six production shots plus both creation-animation frames: readable current controls, label pills and counts, addable type matches, stable authored fixture IDs, populated inspector fields, captions, and dimensions. Windows dark skin only; other platform/DPI evidence remains #270.",
     "staleAfter": "Changes to window controls, pane allocation, theme tokens, or fixture content require review and recapture."
   }
 }
