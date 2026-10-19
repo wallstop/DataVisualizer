@@ -69,6 +69,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string LabelSuggestionItemClass = "label-suggestion-item";
 
         private const string SearchPlaceholder = "Search...";
+        private const string TypeFilterPlaceholder = "Filter types";
         private const string SelectDataFolderDialogTitle = "Select Data Object Type Load Folder (Must be inside Assets)";
         private const string SelectScriptFolderDialogTitle = "Select Script Load Folder (Must be inside Assets)";
 
@@ -307,8 +308,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private Button _addTypeButton;
         private Label _emptyObjectLabel;
-        private Button _addTypesFromScriptFolderButton;
-        private Button _addTypesFromDataFolderButton;
         private Button _createObjectButton;
         private Button _settingsButton;
         private Label _pausedIndicator;
@@ -1208,9 +1207,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             _settingsButton.AddToClassList(StyleConstants.ClickableClass);
             headerRow.Add(_settingsButton);
 
-            _searchField = new TextField { name = "global-search-field" };
+            _searchField = new TextField("Search all assets") { name = "global-search-field" };
             _searchField.AddToClassList("global-search-field");
             _searchField.SetPlaceholderText(SearchPlaceholder);
+            _searchField.tooltip = "Search all tracked assets by name, type, GUID, or text fields";
             _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue));
             _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
                 static (_, context) =>
@@ -1324,6 +1324,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             ApplyThemeToWindow(GetSelectedTheme());
+        }
+
+        public void OpenTypeSearchPopover()
+        {
+            if (IsAssetEditingSuspended)
+            {
+                return;
+            }
+            CloseActivePopover();
+            BuildTypeAddList();
+            OpenPopover(_typeAddPopover, _addTypeButton);
         }
 
         internal void PersistSettings(Func<DataVisualizerSettings, bool> settingsApplier, Func<DataVisualizerUserState, bool> userStateApplier)
@@ -2086,8 +2097,6 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _createObjectButton?.SetEnabled(!paused);
             _addTypeButton?.SetEnabled(!paused);
-            _addTypesFromDataFolderButton?.SetEnabled(!paused);
-            _addTypesFromScriptFolderButton?.SetEnabled(!paused);
             _inspectorContainer?.SetEnabled(!paused);
         }
 
@@ -2713,7 +2722,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             HashSet<VisualElement> typeElements = new();
             using (ReusableDisposalLease<(DataVisualizer window, HashSet<VisualElement> typeElements)> cleanup = TypeSearchCleanupScopes.Acquire((this, typeElements)))
             {
-                if (string.IsNullOrWhiteSpace(searchText) || string.Equals(SearchPlaceholder, searchText, StringComparison.Ordinal))
+                if (string.IsNullOrWhiteSpace(searchText) || string.Equals(TypeFilterPlaceholder, searchText, StringComparison.Ordinal))
                 {
                     foreach (VisualElement typeItem in _namespaceController._namespaceCache.Values)
                     {
@@ -3438,6 +3447,24 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
+            if (
+                activePopover == null
+                && evt.target is VisualElement target
+                && _objectColumnElement != null
+                && _objectColumnElement.Contains(target)
+                && !(target is TextField)
+                && target.GetFirstAncestorOfType<TextField>() == null
+            )
+            {
+                bool handled = HandleObjectActionShortcut(evt);
+                if (handled)
+                {
+                    evt.PreventDefaultCompat();
+                    evt.StopPropagation();
+                    return;
+                }
+            }
+
             switch (evt.keyCode)
             {
                 case KeyCode.DownArrow:
@@ -3483,6 +3510,40 @@ namespace WallstopStudios.DataVisualizer.Editor
                     break;
                 }
             }
+        }
+
+        private bool HandleObjectActionShortcut(KeyDownEvent evt)
+        {
+            if (_suspendedForPlayMode || _selectedObject == null)
+            {
+                return false;
+            }
+
+            if (evt.keyCode == KeyCode.D && (evt.ctrlKey || evt.commandKey))
+            {
+                CloneObject(_selectedObject);
+                return true;
+            }
+
+            VisualElement row = _objectListView?.Q<VisualElement>($"object-item-row-{_selectedObject.GetObjectIdString()}");
+            VisualElement anchor = row?.Q<Button>("object-actions-button") ?? (VisualElement)_objectListView ?? _objectColumnElement;
+            if (anchor == null)
+            {
+                return false;
+            }
+
+            if (evt.keyCode == KeyCode.F2)
+            {
+                OpenRenamePopover(row?.Q<Label>("object-item-label"), anchor, _selectedObject);
+                return true;
+            }
+            bool deleteRequested = evt.keyCode == KeyCode.Delete || (Application.platform == RuntimePlatform.OSXEditor && evt.keyCode == KeyCode.Backspace);
+            if (deleteRequested)
+            {
+                OpenConfirmDeletePopover(anchor, _selectedObject);
+                return true;
+            }
+            return false;
         }
 
         private void HandlePopoverKeyDown(KeyDownEvent evt)
@@ -4340,6 +4401,52 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private void ShowAddTypesMenu()
+        {
+            if (_suspendedForPlayMode)
+            {
+                return;
+            }
+
+            GenericMenu menu = new();
+            menu.AddItem(new GUIContent("Search Types", "Find ScriptableObject types by name"), false, OpenTypeSearchPopover);
+            menu.AddItem(new GUIContent("Scan Asset Folder", "Add types found in existing assets"), false, () => AddTypesFromFolder(false));
+            menu.AddItem(new GUIContent("Scan Scripts Folder", "Add types found in scripts"), false, () => AddTypesFromFolder(true));
+            menu.DropDown(_addTypeButton.worldBound);
+        }
+
+        private void AddTypesFromFolder(bool scripts)
+        {
+            if (_suspendedForPlayMode || !AssetsFolderUtility.TrySelectAssetsFolder(scripts ? SelectScriptFolderDialogTitle : SelectDataFolderDialogTitle, out string relativePath))
+            {
+                return;
+            }
+
+            List<Type> types = scripts
+                ? CollectAddableTypesFromFolder("t:Monoscript", relativePath, ResolveMonoScriptType)
+                : CollectAddableTypesFromFolder($"t:{nameof(ScriptableObject)}", relativePath, ResolveScriptableObjectType);
+            if (AddManagedTypes(types))
+            {
+                SyncNamespaceChanges();
+            }
+        }
+
+        private void ShowObjectActionsMenu(ScriptableObject dataObject, Button anchor, Label titleLabel)
+        {
+            if (_suspendedForPlayMode || dataObject == null)
+            {
+                return;
+            }
+
+            GenericMenu menu = new();
+            menu.AddItem(new GUIContent("Clone", "Duplicate this asset beside its source"), false, () => CloneObject(dataObject));
+            menu.AddItem(new GUIContent("Rename", "Rename this asset"), false, () => OpenRenamePopover(titleLabel, anchor, dataObject));
+            menu.AddItem(new GUIContent("Move", "Move this asset to another folder"), false, () => MoveObjectToFolder(dataObject));
+            menu.AddSeparator(string.Empty);
+            menu.AddItem(new GUIContent("Delete", "Ask for confirmation before deleting this asset"), false, () => OpenConfirmDeletePopover(anchor, dataObject));
+            menu.DropDown(anchor.worldBound);
+        }
+
         private VisualElement CreateNamespaceColumn()
         {
             VisualElement namespaceColumn = new()
@@ -4363,76 +4470,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement addButtonHeader = new() { style = { flexDirection = FlexDirection.Row, alignItems = Align.FlexEnd } };
             nsHeader.Add(addButtonHeader);
 
-            _addTypeButton = new Button(() =>
+            _addTypeButton = new Button(ShowAddTypesMenu)
             {
-                if (Time.realtimeSinceStartup < _lastEnterPressed + 0.5f)
-                {
-                    return;
-                }
-
-                TogglePopover(_typeAddPopover, _addTypeButton);
-            })
-            {
-                text = "+",
+                text = "Add types",
                 name = "add-type-button",
-                tooltip = "Manage Visible Types",
+                tooltip = "Search Types, Scan Asset Folder, or Scan Scripts Folder",
             };
-            _addTypeButton.AddToClassList("create-button");
-            _addTypeButton.AddToClassList("icon-button");
             _addTypeButton.AddToClassList(StyleConstants.ClickableClass);
-
-            _addTypesFromDataFolderButton = new Button(() =>
-            {
-                if (!AssetsFolderUtility.TrySelectAssetsFolder(SelectDataFolderDialogTitle, out string relativePath))
-                {
-                    return;
-                }
-
-                List<Type> scriptableObjectTypes = CollectAddableTypesFromFolder($"t:{nameof(ScriptableObject)}", relativePath, ResolveScriptableObjectType);
-
-                if (AddManagedTypes(scriptableObjectTypes))
-                {
-                    SyncNamespaceChanges();
-                }
-            })
-            {
-                text = "+",
-                tooltip = "Load Types from Data Folder (Scriptable Object Instances)",
-            };
-            _addTypesFromDataFolderButton.AddToClassList("load-from-data-folder-button");
-            _addTypesFromDataFolderButton.AddToClassList("icon-button");
-            _addTypesFromDataFolderButton.AddToClassList(StyleConstants.ClickableClass);
-
-            _addTypesFromScriptFolderButton = new Button(() =>
-            {
-                if (!AssetsFolderUtility.TrySelectAssetsFolder(SelectScriptFolderDialogTitle, out string relativePath))
-                {
-                    return;
-                }
-
-                List<Type> scriptableObjectTypes = CollectAddableTypesFromFolder("t:Monoscript", relativePath, ResolveMonoScriptType);
-
-                if (AddManagedTypes(scriptableObjectTypes))
-                {
-                    SyncNamespaceChanges();
-                }
-            })
-            {
-                text = "+",
-                tooltip = "Load Types from Scripts (Scripts Folder)",
-            };
-            _addTypesFromScriptFolderButton.AddToClassList("load-from-script-folder-button");
-            _addTypesFromScriptFolderButton.AddToClassList("icon-button");
-            _addTypesFromScriptFolderButton.AddToClassList(StyleConstants.ClickableClass);
-
             addButtonHeader.Add(_addTypeButton);
-            addButtonHeader.Add(_addTypesFromDataFolderButton);
-            addButtonHeader.Add(_addTypesFromScriptFolderButton);
             namespaceColumn.Add(nsHeader);
 
             _typeSearchField = new TextField { name = "type-search-field" };
             _typeSearchField.AddToClassList("type-search-field");
-            _typeSearchField.SetPlaceholderText(SearchPlaceholder, changeValueOnFocus: false);
+            _typeSearchField.SetPlaceholderText(TypeFilterPlaceholder, changeValueOnFocus: false);
+            _typeSearchField.tooltip = "Filter the catalog by type display name";
             _typeSearchField.RegisterValueChangedCallback(evt => PerformTypeSearch(evt.newValue));
             namespaceColumn.Add(_typeSearchField);
 
@@ -5564,6 +5615,108 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 displayOrderByGuid[entry.guid] = displayIndex++;
             }
+        }
+
+        /*
+            Builds the reusable skeleton of an object row (no per-object data) for the ListView's
+            makeItem. Button handlers resolve the current object from the row's userData at click time
+            so the element can be safely reused across items (as ListView virtualization requires).
+        */
+        public VisualElement MakeObjectRow()
+        {
+            /*
+                Outer element: the ListView forces this to fixedItemHeight (FixedHeight virtualization),
+                so it stays a transparent slot that vertically centers the visible box. The box can't
+                carry its own vertical margin without breaking the ListView's fixed-height scroll math,
+                so the inter-row gap comes from centering a shorter box inside the taller slot.
+            */
+            VisualElement row = new() { name = "object-row-slot" };
+            row.AddToClassList(StyleConstants.ClickableClass);
+            row.style.flexDirection = FlexDirection.Column;
+            row.style.justifyContent = Justify.Center;
+            /*
+                Force the slot to the full fixed-item height so the shorter box centers within it
+                (the ListView otherwise shrinks the slot to the box, leaving no room to center/gap).
+            */
+            row.style.height = ObjectRowFixedHeight;
+
+            VisualElement box = new() { name = "object-item-box" };
+            box.AddToClassList(ObjectItemClass);
+            box.AddToClassList(StyleConstants.ClickableClass);
+            box.style.flexDirection = FlexDirection.Row;
+            box.style.alignItems = Align.Center;
+            row.Add(box);
+
+            Button goUpButton = new(() =>
+            {
+                if (row.userData is ScriptableObject o)
+                {
+                    MoveObjectToTop(o);
+                }
+            })
+            {
+                name = "go-up-button",
+                text = "↑",
+            };
+            goUpButton.RegisterCallback(StopRowChildPointerDown);
+            box.Add(goUpButton);
+
+            Button goDownButton = new(() =>
+            {
+                if (row.userData is ScriptableObject o)
+                {
+                    MoveObjectToBottom(o);
+                }
+            })
+            {
+                name = "go-down-button",
+                text = "↓",
+            };
+            goDownButton.RegisterCallback(StopRowChildPointerDown);
+            box.Add(goDownButton);
+
+            VisualElement contentArea = new() { name = "content" };
+            contentArea.AddToClassList(ObjectItemContentClass);
+            contentArea.AddToClassList(StyleConstants.ClickableClass);
+            box.Add(contentArea);
+
+            Label titleLabel = new() { name = "object-item-label" };
+            titleLabel.AddToClassList("object-item__label");
+            titleLabel.AddToClassList(StyleConstants.ClickableClass);
+            contentArea.Add(titleLabel);
+
+            VisualElement actionsArea = new()
+            {
+                name = "actions",
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    alignItems = Align.Center,
+                    flexShrink = 0,
+                },
+            };
+            actionsArea.AddToClassList(ObjectItemActionsClass);
+            actionsArea.RegisterCallback(StopRowChildPointerDown);
+            box.Add(actionsArea);
+
+            Button actionsButton = null;
+            actionsButton = new Button(() =>
+            {
+                if (row.userData is ScriptableObject dataObject && dataObject != null)
+                {
+                    ShowObjectActionsMenu(dataObject, actionsButton, titleLabel);
+                }
+            })
+            {
+                name = "object-actions-button",
+                text = "Actions",
+                tooltip = "Clone, Rename (F2), Move, or Delete this asset",
+            };
+            actionsButton.AddToClassList(StyleConstants.ObjectActionsButtonClass);
+            actionsButton.AddToClassList(StyleConstants.ClickableClass);
+            actionsArea.Add(actionsButton);
+
+            return row;
         }
 
         internal void UpdateLabelAreaAndFilter()
@@ -6968,153 +7121,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void BuildNamespaceView()
         {
             _namespaceController.Build(this, ref _namespaceListContainer);
-        }
-
-        /*
-            Builds the reusable skeleton of an object row (no per-object data) for the ListView's
-            makeItem. Button handlers resolve the current object from the row's userData at click time
-            so the element can be safely reused across items (as ListView virtualization requires).
-        */
-        private VisualElement MakeObjectRow()
-        {
-            /*
-                Outer element: the ListView forces this to fixedItemHeight (FixedHeight virtualization),
-                so it stays a transparent slot that vertically centers the visible box. The box can't
-                carry its own vertical margin without breaking the ListView's fixed-height scroll math,
-                so the inter-row gap comes from centering a shorter box inside the taller slot.
-            */
-            VisualElement row = new() { name = "object-row-slot" };
-            row.AddToClassList(StyleConstants.ClickableClass);
-            row.style.flexDirection = FlexDirection.Column;
-            row.style.justifyContent = Justify.Center;
-            /*
-                Force the slot to the full fixed-item height so the shorter box centers within it
-                (the ListView otherwise shrinks the slot to the box, leaving no room to center/gap).
-            */
-            row.style.height = ObjectRowFixedHeight;
-
-            VisualElement box = new() { name = "object-item-box" };
-            box.AddToClassList(ObjectItemClass);
-            box.AddToClassList(StyleConstants.ClickableClass);
-            box.style.flexDirection = FlexDirection.Row;
-            box.style.alignItems = Align.Center;
-            row.Add(box);
-
-            Button goUpButton = new(() =>
-            {
-                if (row.userData is ScriptableObject o)
-                {
-                    MoveObjectToTop(o);
-                }
-            })
-            {
-                name = "go-up-button",
-                text = "↑",
-            };
-            goUpButton.RegisterCallback(StopRowChildPointerDown);
-            box.Add(goUpButton);
-
-            Button goDownButton = new(() =>
-            {
-                if (row.userData is ScriptableObject o)
-                {
-                    MoveObjectToBottom(o);
-                }
-            })
-            {
-                name = "go-down-button",
-                text = "↓",
-            };
-            goDownButton.RegisterCallback(StopRowChildPointerDown);
-            box.Add(goDownButton);
-
-            VisualElement contentArea = new() { name = "content" };
-            contentArea.AddToClassList(ObjectItemContentClass);
-            contentArea.AddToClassList(StyleConstants.ClickableClass);
-            box.Add(contentArea);
-
-            Label titleLabel = new() { name = "object-item-label" };
-            titleLabel.AddToClassList("object-item__label");
-            titleLabel.AddToClassList(StyleConstants.ClickableClass);
-            contentArea.Add(titleLabel);
-
-            VisualElement actionsArea = new()
-            {
-                name = "actions",
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    flexShrink = 0,
-                },
-            };
-            actionsArea.AddToClassList(ObjectItemActionsClass);
-            actionsArea.RegisterCallback(StopRowChildPointerDown);
-            box.Add(actionsArea);
-
-            Button cloneButton = new(() =>
-            {
-                if (row.userData is ScriptableObject o)
-                {
-                    CloneObject(o);
-                }
-            })
-            {
-                text = "++",
-                tooltip = "Clone Object",
-            };
-            cloneButton.AddToClassList(StyleConstants.ActionButtonClass);
-            cloneButton.AddToClassList("clone-button");
-            actionsArea.Add(cloneButton);
-
-            Button renameButton = null;
-            renameButton = new Button(() =>
-            {
-                if (row.userData is ScriptableObject o)
-                {
-                    OpenRenamePopover(titleLabel, renameButton, o);
-                }
-            })
-            {
-                text = "@",
-                tooltip = "Rename Object",
-            };
-            renameButton.AddToClassList(StyleConstants.ActionButtonClass);
-            renameButton.AddToClassList("rename-button");
-            actionsArea.Add(renameButton);
-
-            Button moveButton = new(() =>
-            {
-                if (row.userData is ScriptableObject o)
-                {
-                    MoveObjectToFolder(o);
-                }
-            })
-            {
-                text = "➔",
-                tooltip = "Move Object",
-            };
-            moveButton.AddToClassList(StyleConstants.ActionButtonClass);
-            moveButton.AddToClassList("move-button");
-            actionsArea.Add(moveButton);
-
-            Button deleteButton = null;
-            deleteButton = new Button(() =>
-            {
-                if (row.userData is ScriptableObject o)
-                {
-                    OpenConfirmDeletePopover(deleteButton, o);
-                }
-            })
-            {
-                text = "X",
-                tooltip = "Delete Object",
-            };
-            deleteButton.AddToClassList(StyleConstants.ActionButtonClass);
-            deleteButton.AddToClassList("delete-button");
-            actionsArea.Add(deleteButton);
-
-            return row;
         }
 
         /*

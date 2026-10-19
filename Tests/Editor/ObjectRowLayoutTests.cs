@@ -21,7 +21,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             cleanup.Defer(() => instanceField.SetValue(null, previousInstance));
             DataVisualizerWindow owner = ScriptableObject.CreateInstance<DataVisualizerWindow>();
             cleanup.Defer(() => Object.DestroyImmediate(owner));
-            MethodInfo makeRow = typeof(DataVisualizerWindow).GetMethod("MakeObjectRow", BindingFlags.Instance | BindingFlags.NonPublic);
+            owner.CreateGUI();
+            owner.OpenTypeSearchPopover();
+            Assert.That(owner.rootVisualElement.Q("type-add-list-content").childCount, Is.Positive, "first Search Types open must build content");
+            owner.OpenTypeSearchPopover();
+            Assert.That(owner.rootVisualElement.Q("type-add-list-content").childCount, Is.Positive, "immediate reopen must rebuild content");
             LayoutTestWindow window = ScriptableObject.CreateInstance<LayoutTestWindow>();
             cleanup.Defer(window.Close);
             window.position = new Rect(100, 100, 700, 200);
@@ -29,12 +33,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             root.AddToClassList("dataviz-root");
             const string folder = "Packages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/Styles/";
             root.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(folder + "DataVisualizerStyles.uss"));
-            VisualElement first = (VisualElement)makeRow.Invoke(owner, null);
-            VisualElement second = (VisualElement)makeRow.Invoke(owner, null);
-            first.Q<Label>("object-item-label").text = "First object";
+            VisualElement first = owner.MakeObjectRow();
+            VisualElement second = owner.MakeObjectRow();
+            first.Q<Label>("object-item-label").text = "An intentionally long asset name with localized text: Objet très long";
+            first.style.width = 220f;
             second.Q<Label>("object-item-label").text = "Second object";
             root.Add(first);
             root.Add(second);
+            int rowPointerEvents = 0;
+            first.RegisterCallback<PointerDownEvent>(_ => rowPointerEvents++);
+            using (PointerDownEvent pointer = PointerDownEvent.GetPooled())
+            {
+                first.Q<Button>("object-actions-button").SendEvent(pointer);
+            }
+            Assert.That(rowPointerEvents, Is.Zero, "Opening row actions must not select the row");
             DataVisualizerThemeSelection selection = new();
             cleanup.Defer(() => selection.Apply(null, null));
             window.ShowUtility();
@@ -58,6 +70,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
                 foreach (VisualElement row in new[] { first, second })
                 {
+                    Button actions = row.Q<Button>("object-actions-button");
+                    Assert.That(actions.text, Is.EqualTo("Actions"));
+                    Assert.That(actions.focusable, Is.True);
+                    Assert.That(actions.tooltip, Does.Contain("Clone"));
+                    Assert.That(row.Query<Button>().ToList().Count, Is.EqualTo(3));
                     VisualElement box = row.Q("object-item-box");
                     Assert.That(row.worldBound.yMin <= box.worldBound.yMin, name);
                     Assert.That(box.worldBound.yMax <= row.worldBound.yMax, name);
@@ -66,6 +83,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         Assert.That(0 < button.worldBound.height, name);
                         Assert.That(box.worldBound.yMin <= button.worldBound.yMin, name);
                         Assert.That(button.worldBound.yMax <= box.worldBound.yMax, name);
+                        Assert.That(box.worldBound.xMin <= button.worldBound.xMin, name);
+                        Assert.That(button.worldBound.xMax <= box.worldBound.xMax, name);
                     }
                 }
             }

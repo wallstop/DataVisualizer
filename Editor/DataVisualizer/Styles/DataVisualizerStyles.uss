@@ -643,6 +643,14 @@
     flex-shrink: 0;
 }
 
+.dataviz-root .object-actions-button {
+    flex-shrink: 0;
+    min-width: 58px;
+    padding: 0 6px;
+    height: 24px;
+    font-size: var(--dataviz-font-size-secondary);
+}
+
 .object-header {
     flex-direction: row;
     justify-content: space-between;
@@ -932,6 +940,12 @@
     flex-grow: 1;
     margin-right: 10px;
     border-radius: 4px;
+}
+
+.global-search-field > .unity-base-field__label {
+    min-width: 130px;
+    width: 130px;
+    flex-shrink: 0;
 }
 
 .type-search-field {

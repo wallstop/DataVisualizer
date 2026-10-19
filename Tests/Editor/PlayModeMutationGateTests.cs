@@ -345,31 +345,26 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(window));
                 window.CreateGUI();
 
-                Label pausedIndicator = ReadPrivateField<Label>(window, "_pausedIndicator");
-                Button createButton = ReadPrivateField<Button>(window, "_createObjectButton");
-                Button addTypeButton = ReadPrivateField<Button>(window, "_addTypeButton");
-                Button loadDataFolderButton = ReadPrivateField<Button>(window, "_addTypesFromDataFolderButton");
-                Button loadScriptFolderButton = ReadPrivateField<Button>(window, "_addTypesFromScriptFolderButton");
+                Label pausedIndicator = window.rootVisualElement.Q<Label>("paused-indicator");
+                Button createButton = window.rootVisualElement.Q<Button>("create-object-button");
+                Button addTypeButton = window.rootVisualElement.Q<Button>("add-type-button");
+                Assert.That(addTypeButton.text, Is.EqualTo("Add types"));
+                Assert.That(window.rootVisualElement.Q<TextField>("global-search-field").label, Is.EqualTo("Search all assets"));
+                Assert.That(window.rootVisualElement.Q<TextField>("type-search-field").value, Is.EqualTo("Filter types"));
 
                 Assert.AreEqual(DisplayStyle.None, pausedIndicator.style.display.value);
                 Assert.IsTrue(createButton.enabledSelf);
                 Assert.IsTrue(addTypeButton.enabledSelf);
-                Assert.IsTrue(loadDataFolderButton.enabledSelf);
-                Assert.IsTrue(loadScriptFolderButton.enabledSelf);
 
                 SuspendForPlayMode(window);
                 Assert.AreEqual(DisplayStyle.Flex, pausedIndicator.style.display.value);
                 Assert.IsFalse(createButton.enabledSelf);
                 Assert.IsFalse(addTypeButton.enabledSelf);
-                Assert.IsFalse(loadDataFolderButton.enabledSelf);
-                Assert.IsFalse(loadScriptFolderButton.enabledSelf);
 
                 ResumeFromPlayMode(window);
                 Assert.AreEqual(DisplayStyle.None, pausedIndicator.style.display.value);
                 Assert.IsTrue(createButton.enabledSelf);
                 Assert.IsTrue(addTypeButton.enabledSelf);
-                Assert.IsTrue(loadDataFolderButton.enabledSelf);
-                Assert.IsTrue(loadScriptFolderButton.enabledSelf);
             }
         }
 
