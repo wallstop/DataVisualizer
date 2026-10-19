@@ -52,8 +52,9 @@ class StartupTests(unittest.TestCase):
             with self.subTest(project=project), \
                     patch.object(host, 'read_health', return_value={'bridge': 'dataviz-unity-mcp', 'projectPath': project}), \
                     patch.object(host, 'verify_docker_host_route'):
-                with self.assertRaisesRegex(ValueError, 'project mismatch'):
+                with self.assertRaisesRegex(ValueError, 'project mismatch') as raised:
                     host.existing_bridge(9020, '127.0.0.1', '')
+                self.assertIn(f"running {project if isinstance(project, str) else '<unknown>'!r}", str(raised.exception))
 
     def test_unpinned_bridge_can_be_reused_by_unpinned_startup(self) -> None:
         with patch.object(host, 'read_health', return_value={'bridge': 'dataviz-unity-mcp', 'projectPath': ''}), \

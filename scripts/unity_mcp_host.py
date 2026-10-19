@@ -367,9 +367,11 @@ def existing_bridge(port: int, host: str, project: str) -> bool:
         verify_docker_host_route(port, host, health.get('instanceId', ''))
     except (OSError, ValueError):
         return False
-    if not same_project(project, health.get('projectPath')):
+    actual = health.get('projectPath')
+    if not same_project(project, actual):
+        running = (actual or '<unpinned>') if isinstance(actual, str) else '<unknown>'
         raise ValueError(f"Bridge project mismatch on port {port}: requested {project or '<unpinned>'!r}, "
-                         f"running {health.get('projectPath', '<unknown>') or '<unpinned>'!r}. "
+                         f"running {running!r}. "
                          'The existing bridge is unchanged. Use a different --port or stop that bridge before restarting.')
     return True
 
