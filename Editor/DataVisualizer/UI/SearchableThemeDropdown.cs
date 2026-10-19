@@ -92,8 +92,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 }
 
                 themes.Add(theme);
-                nameCounts.TryGetValue(theme.name, out int count);
-                nameCounts[theme.name] = count + 1;
+                nameCounts[theme.name] = nameCounts.TryGetValue(theme.name, out int count) ? count + 1 : 1;
             }
 
             themes.Sort(

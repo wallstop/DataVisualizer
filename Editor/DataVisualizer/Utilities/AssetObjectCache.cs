@@ -50,7 +50,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             foreach (KeyValuePair<string, ScriptableObject> entry in _byGuid)
             {
                 if (retained.Contains(entry.Value) && isRelevant(entry.Value.GetType()))
+                {
                     entries.Add((entry.Key, entry.Value, _keys[entry.Value]));
+                }
             }
             Clear();
             foreach (var entry in entries)

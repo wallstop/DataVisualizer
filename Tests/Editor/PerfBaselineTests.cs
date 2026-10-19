@@ -158,7 +158,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 (asset, path) =>
                 {
                     if (attempted++ == 1)
+                    {
                         throw new InvalidOperationException("Expected fixture failure.");
+                    }
                     AssetDatabase.CreateAsset(asset, path);
                 }
             );
@@ -286,9 +288,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             cleanup.Defer(() =>
             {
                 if (existed)
+                {
                     System.IO.File.WriteAllText(userFile, original);
+                }
                 else if (System.IO.File.Exists(userFile))
+                {
                     System.IO.File.Delete(userFile);
+                }
             });
             cleanup.Defer(preferences.Restore);
             cleanup.Defer(() => Selection.objects = selection);
@@ -305,7 +311,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     );
                 tick++
             )
+            {
                 yield return null;
+            }
             StringAssert.StartsWith("InteractionSamples:", PerfBaseline.Status());
             Assert.AreEqual(1, System.IO.Directory.GetFiles(output, "window-state-*.json").Length, "The benchmark must write only to its owned state file.");
             EditorPrefs.SetString(preference, "benchmark mutation");
@@ -313,7 +321,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             PerfBaseline.Cancel();
             Assert.AreEqual(existed, System.IO.File.Exists(userFile));
             if (existed)
+            {
                 Assert.AreEqual(original, System.IO.File.ReadAllText(userFile));
+            }
             Assert.AreEqual(hadPreference, EditorPrefs.HasKey(preference));
             Assert.AreEqual(originalPreference, EditorPrefs.GetString(preference));
             CollectionAssert.AreEqual(selection, Selection.objects);
