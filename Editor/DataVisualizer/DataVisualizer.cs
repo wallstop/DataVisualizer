@@ -1326,6 +1326,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             ApplyThemeToWindow(GetSelectedTheme());
         }
 
+        public void OpenTypeSearchPopover()
+        {
+            if (IsAssetEditingSuspended)
+            {
+                return;
+            }
+            CloseActivePopover();
+            BuildTypeAddList();
+            OpenPopover(_typeAddPopover, _addTypeButton);
+        }
+
         internal void PersistSettings(Func<DataVisualizerSettings, bool> settingsApplier, Func<DataVisualizerUserState, bool> userStateApplier)
         {
             DataVisualizerSettings settings = Settings;
@@ -4398,7 +4409,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             GenericMenu menu = new();
-            menu.AddItem(new GUIContent("Search Types", "Find ScriptableObject types by name"), false, () => OpenPopover(_typeAddPopover, _addTypeButton));
+            menu.AddItem(new GUIContent("Search Types", "Find ScriptableObject types by name"), false, OpenTypeSearchPopover);
             menu.AddItem(new GUIContent("Scan Asset Folder", "Add types found in existing assets"), false, () => AddTypesFromFolder(false));
             menu.AddItem(new GUIContent("Scan Scripts Folder", "Add types found in scripts"), false, () => AddTypesFromFolder(true));
             menu.DropDown(_addTypeButton.worldBound);

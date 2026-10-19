@@ -21,6 +21,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             cleanup.Defer(() => instanceField.SetValue(null, previousInstance));
             DataVisualizerWindow owner = ScriptableObject.CreateInstance<DataVisualizerWindow>();
             cleanup.Defer(() => Object.DestroyImmediate(owner));
+            owner.CreateGUI();
+            owner.OpenTypeSearchPopover();
+            Assert.That(owner.rootVisualElement.Q("type-add-list-content").childCount, Is.Positive, "first Search Types open must build content");
+            owner.OpenTypeSearchPopover();
+            Assert.That(owner.rootVisualElement.Q("type-add-list-content").childCount, Is.Positive, "immediate reopen must rebuild content");
             LayoutTestWindow window = ScriptableObject.CreateInstance<LayoutTestWindow>();
             cleanup.Defer(window.Close);
             window.position = new Rect(100, 100, 700, 200);
