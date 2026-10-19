@@ -320,7 +320,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.That(MonitorUtility.TryParseSize(EditorPrefs.GetString(TemporaryWindowClampSizeKey), out Vector2 clampedSize), Is.True);
                 Assert.That(clampedSize, Is.EqualTo(systemShrunkSize));
                 Assert.That(EditorPrefs.GetString(PreferredWindowSizeKey), Is.EqualTo(MonitorUtility.SerializeSize(preferredSize)));
-                Assert.That(window.minSize, Is.EqualTo(MonitorUtility.CalculateWindowMinimumSize(new Vector2(860f, 480f), clampedSize, true)));
+                Assert.That(window.minSize, Is.EqualTo(MonitorUtility.CalculateWindowMinimumSize(new Vector2(360f, 480f), clampedSize, true)));
             }
         }
 

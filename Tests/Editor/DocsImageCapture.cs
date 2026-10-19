@@ -223,7 +223,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return CaptureFrame(shotName, outputDirectory, crop: true);
         }
 
-        internal static EditorSurfaceCaptureResult CaptureFrame(string shotName, string outputDirectory, bool crop)
+        internal static EditorSurfaceCaptureResult CaptureFrame(string shotName, string outputDirectory, bool crop, float width = WindowWidth)
         {
             if (!IsKnownShot(shotName))
             {
@@ -259,12 +259,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 persistedSelection = PersistedSelectionSnapshot.Capture(window);
 
                 EditorSurfaceCapture.ShowPopup(window);
-                window.position = new Rect(40f, 40f, WindowWidth, WindowHeight);
+                window.position = new Rect(40f, 40f, width, WindowHeight);
                 window.CreateGUI();
                 InvokeInitialContentLoad(window);
                 NamespaceController controller = GetNamespaceController(window);
                 SelectFixtureType(window, controller);
                 VerifySelectedType(controller);
+                EditorSurfaceCapture.SettleLayout(window);
                 SelectObject(window, LoadFirstFixtureAsset());
                 VerifySelectedObject(window);
                 if (!crop)
@@ -273,8 +274,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
 
                 ArrangeShotState(window, shotName);
+                PauseCaptureRootTasks(window);
+                int stagedSearchGeneration = (int)typeof(DataVisualizerWindow).GetField("_searchCacheGeneration", ReflectedInstanceMembers).GetValue(window);
 
                 EditorSurfaceCaptureResult result = EditorSurfaceCapture.Capture(window, capturePath);
+                if (shotName == SearchShotName)
+                {
+                    VerifySearchFixtures(window, stagedSearchGeneration);
+                }
                 ValidateCapturedRegions(window, capturePath, shotName);
                 return crop ? CropCapturedShot(window, shotName, capturePath, result) : result;
             }
@@ -292,6 +299,36 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 preferences.Restore();
                 DeleteFixtureAssets();
             }
+        }
+
+        internal static int PauseCaptureRootTasks(EditorWindow window)
+        {
+            VisualElement root = window.rootVisualElement;
+            object scheduler = root.panel?.GetType().GetProperty("scheduler", ReflectedInstanceMembers)?.GetValue(root.panel);
+            if (scheduler == null)
+            {
+                throw new InvalidOperationException("The capture panel exposes no scheduler; deferred work cannot be isolated.");
+            }
+            List<IVisualElementScheduledItem> owned = new();
+            foreach (string fieldName in new[] { "m_ScheduledItems", "m_ScheduleTransactions" })
+            {
+                if (scheduler.GetType().GetField(fieldName, ReflectedInstanceMembers)?.GetValue(scheduler) is not System.Collections.IEnumerable items)
+                {
+                    throw new InvalidOperationException($"The capture scheduler exposes no {fieldName} collection; deferred work cannot be isolated.");
+                }
+                foreach (object candidate in items)
+                {
+                    if (candidate is IVisualElementScheduledItem item && item.element == root && item.isActive && !owned.Contains(item))
+                    {
+                        owned.Add(item);
+                    }
+                }
+            }
+            foreach (IVisualElementScheduledItem item in owned)
+            {
+                item.Pause();
+            }
+            return owned.Count;
         }
 
         internal static void StageSearchInput(List<ScriptableObject> cache, TextField field, string query)
@@ -940,7 +977,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static void SelectObject(DataVisualizerWindow window, ScriptableObject asset)
         {
             MethodInfo selectObject = typeof(DataVisualizerWindow).GetMethod(
-                "SelectObject",
+                "SelectObjectAndNavigate",
                 ReflectedInstanceMembers,
                 binder: null,
                 types: new[] { typeof(ScriptableObject) },
@@ -999,6 +1036,28 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             step, and a result-less match fails closed instead of documenting an empty
             popover.
         */
+        private static void VerifySearchFixtures(DataVisualizerWindow window, int stagedGeneration)
+        {
+            if (
+                typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, ReflectedInstanceMembers)?.GetValue(window) is not List<VisualElement> results
+                || results.Count != FixtureTitles.Length
+            )
+            {
+                int currentGeneration = (int)typeof(DataVisualizerWindow).GetField("_searchCacheGeneration", ReflectedInstanceMembers).GetValue(window);
+                int count = (typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, ReflectedInstanceMembers).GetValue(window) as List<VisualElement>)?.Count ?? -1;
+                throw new InvalidOperationException(
+                    $"The search capture must contain exactly the owned fixture results: count={count}; generation={stagedGeneration}->{currentGeneration}."
+                );
+            }
+            foreach (VisualElement row in results)
+            {
+                if (row.userData is not ScriptableObject asset || asset == null || !AssetDatabase.GetAssetPath(asset).StartsWith(FixtureFolder + "/", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("The search capture contains an asset outside its owned fixture root.");
+                }
+            }
+        }
+
         private static void StageSearchState(DataVisualizerWindow window)
         {
             FieldInfo cacheField = typeof(DataVisualizerWindow).GetField(SearchCacheFieldName, ReflectedInstanceMembers);
@@ -1013,6 +1072,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new InvalidOperationException("The DataVisualizer window exposes no search-cache flag; the capture " + "driver cannot stage the search results.");
             }
 
+            if (typeof(DataVisualizerWindow).GetField("_searchCacheLoadTask", ReflectedInstanceMembers)?.GetValue(window) is IVisualElementScheduledItem pendingSearch)
+            {
+                pendingSearch.Pause();
+            }
             cache.Clear();
             for (int index = 0; index < FixtureTitles.Length; index++)
             {
@@ -1237,14 +1300,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             /*
-                The docs layout needs wide namespace and object panes, so the saved splitter
-                widths are set before the window builds its UI; the window's own one-time
+                The docs layout uses the default balanced pane widths, set before the
+                window builds its UI; the window's own one-time
                 sizing keys are cleared so the fixed capture rectangle survives.
             */
             internal void ApplyWidePanes()
             {
-                EditorPrefs.SetFloat(PrefsSplitterOuterKey, 330f);
-                EditorPrefs.SetFloat(PrefsSplitterInnerKey, 620f);
+                EditorPrefs.SetFloat(PrefsSplitterOuterKey, 320f);
+                EditorPrefs.SetFloat(PrefsSplitterInnerKey, 280f);
                 EditorPrefs.DeleteKey(PrefsInitialSizeAppliedKey);
                 EditorPrefs.DeleteKey(PrefsPreferredWindowSizeKey);
                 EditorPrefs.DeleteKey(PrefsTemporaryWindowClampSizeKey);

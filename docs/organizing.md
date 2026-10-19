@@ -32,9 +32,17 @@ The arrow on a namespace header collapses and expands its types. Collapse state 
 
 ## Pane widths
 
-The two splitters between the three panels save their widths, so the arrangement survives a reopen. Widths are saved per user through Unity's editor preferences, independently of
-the persistence setting below. A width is normalized so it cannot go below the pane's minimum, and the window remembers your preferred size separately from a size the window had to
-clamp to, so shrinking the editor and growing it back does not overwrite your choice.
+The two splitters save preferred widths per user in Unity's editor preferences, independently of the persistence setting below. A new layout starts with 320 points for types and
+280 for objects, leaving the rest for the inspector. The expanded inspector reserves at least 360 points.
+
+Use **Hide types** and **Hide list** above the panes to give the inspector more space. Their buttons change to **Show types** and **Show list** so you can restore them.
+**Inspector** collapses both browsing panes. These controls keep your selection and preferred splitter widths.
+
+Below 912 points, the window shows one pane at a time. Use **Types**, **Objects**, and **Inspector** to move between them. Choosing a type opens its object list; selecting an asset
+opens its inspector. Return with **Objects** or **Types**. Search results also open the inspector. The window can narrow to 360 points without undocking.
+
+Temporary clamping and pane navigation do not overwrite preferred widths. Expand the window to restore them; splitter changes save when all three panes fit at their preferred
+widths. The window also keeps its preferred size separately from operating-system placement constraints.
 
 ## Persistence
 

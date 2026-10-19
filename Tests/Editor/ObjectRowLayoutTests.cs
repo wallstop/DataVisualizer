@@ -40,6 +40,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             second.Q<Label>("object-item-label").text = "Second object";
             root.Add(first);
             root.Add(second);
+            TextField assetSearch = new("Search all assets");
+            assetSearch.AddToClassList("global-search-field");
+            root.Add(assetSearch);
             int rowPointerEvents = 0;
             first.RegisterCallback<PointerDownEvent>(_ => rowPointerEvents++);
             using (PointerDownEvent pointer = PointerDownEvent.GetPooled())
@@ -59,6 +62,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 selection.Apply(root, theme);
                 yield return null;
                 EditorSurfaceCapture.SettleLayout(window);
+                float searchLabelWidth = assetSearch
+                    .labelElement.MeasureTextSize(assetSearch.label, 0, VisualElement.MeasureMode.Undefined, 0, VisualElement.MeasureMode.Undefined)
+                    .x;
+                Assert.That(assetSearch.labelElement.worldBound.width, Is.GreaterThanOrEqualTo(searchLabelWidth), name + " search label must remain readable");
                 VisualElement firstBox = first.Q("object-item-box");
                 VisualElement secondBox = second.Q("object-item-box");
                 float gap = secondBox.worldBound.yMin - firstBox.worldBound.yMax;

@@ -46,8 +46,8 @@ an asset whose script is gone. If your selection drops after a recompile, the un
 
 ## The window will not shrink below a certain size
 
-The window enforces a minimum of 860x480 pixels, and each pane enforces its own minimum width: 320 px for namespaces, 220 px for the object list, and 260 px for the inspector.
-Layout below a pane minimum is refused rather than persisted, so shrinking and growing the window back does not corrupt your saved widths.
+The window enforces a minimum of 360x480 points. Below 912 points it shows one pane at a time; use **Types**, **Objects**, and **Inspector** to move between panes. At wider sizes,
+**Hide types**, **Hide list**, and **Inspector** can free space for editing. Preferred splitter widths survive these temporary layouts.
 
 When the operating system cannot honor the minimum — a small monitor or a tight side-docked placement — the window clamps to the available space and treats that as temporary: your
 preferred size is kept separately and restored when the space returns. See [Pane widths](organizing.md#pane-widths).
