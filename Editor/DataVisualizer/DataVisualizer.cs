@@ -1965,7 +1965,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            _assetChanges?.ResetTracking();
+            // Keep verified identities until disposal; a rebuild must not blind queued deletions.
             string settingsPath = AssetDatabase.GetAssetPath(Settings);
             _assetChanges?.Track(settingsPath, AssetDatabase.AssetPathToGUID(settingsPath));
             foreach (string guid in uniqueGuids)

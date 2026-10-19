@@ -153,12 +153,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return count;
         }
 
-        public void ResetTracking()
-        {
-            _guidByPath.Clear();
-            _pathByGuid.Clear();
-        }
-
         public void SetSuspended(bool suspended)
         {
             _suspended = suspended;
