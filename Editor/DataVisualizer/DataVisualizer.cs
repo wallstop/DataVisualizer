@@ -1272,10 +1272,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             root.Add(_confirmActionPopover);
             _searchPopover = new VisualElement { name = "search-popover" };
             _searchPopover.AddToClassList("search-popover");
+            _searchPopover.RegisterCallback<GeometryChangedEvent>(HandlePopoverGeometryChanged);
             root.Add(_searchPopover);
 
             _typeAddPopover = new VisualElement { name = "type-add-popover" };
             _typeAddPopover.AddToClassList("type-add-popover");
+            _typeAddPopover.RegisterCallback<GeometryChangedEvent>(HandlePopoverGeometryChanged);
 
             _inspectorLabelSuggestionsPopover = CreatePopoverBase("inspector-label-suggestions-popover");
             root.Add(_inspectorLabelSuggestionsPopover);
@@ -1699,18 +1701,27 @@ namespace WallstopStudios.DataVisualizer.Editor
             EditorPrefs.DeleteKey(PrefsTemporaryWindowClampSizeKey);
         }
 
+        private void HandlePopoverGeometryChanged(GeometryChangedEvent evt)
+        {
+            if (evt.currentTarget is VisualElement popover)
+            {
+                ClampActivePopover(popover, rootVisualElement.contentRect.size);
+            }
+        }
+
         private void ClampActivePopover(VisualElement popover, Vector2 available)
         {
             if (popover == null || popover.style.display == DisplayStyle.None)
             {
                 return;
             }
-            Rect requested = new(popover.resolvedStyle.left, popover.resolvedStyle.top, popover.resolvedStyle.width, popover.resolvedStyle.height);
+            float marginLeft = popover.resolvedStyle.marginLeft;
+            float marginTop = popover.resolvedStyle.marginTop;
+            Rect requested = new(popover.style.left.value.value + marginLeft, popover.style.top.value.value + marginTop, popover.resolvedStyle.width, popover.resolvedStyle.height);
             Rect fitted = PopoverPlacement.FitToWindow(requested, available);
-            popover.style.maxWidth = Mathf.Max(0f, available.x - fitted.x);
-            popover.style.maxHeight = Mathf.Max(0f, available.y - fitted.y);
-            popover.style.left = fitted.x;
-            popover.style.top = fitted.y;
+            PopoverPlacement.ApplyViewportLimits(popover, available);
+            popover.style.left = fitted.x - marginLeft;
+            popover.style.top = fitted.y - marginTop;
         }
 
         private void HandleWindowGeometryChanged(GeometryChangedEvent _)
@@ -3127,6 +3138,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             VisualElement popover = new() { name = popoverName, focusable = true };
             popover.AddToClassList("popover");
+            popover.RegisterCallback<GeometryChangedEvent>(HandlePopoverGeometryChanged);
 
             VisualElement dragHandle = new() { name = $"{popoverName}-drag-handle" };
             dragHandle.AddToClassList("popover-drag-handle");
@@ -3353,8 +3365,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             else
             {
                 Rect fitted = PopoverPlacement.FitToWindow(new Rect(targetX, targetY, popoverWidth, popoverHeight), new Vector2(windowWidth, windowHeight));
-                popover.style.maxWidth = Mathf.Max(0f, windowWidth - fitted.x);
-                popover.style.maxHeight = Mathf.Max(0f, windowHeight - fitted.y);
+                PopoverPlacement.ApplyViewportLimits(popover, new Vector2(windowWidth, windowHeight));
                 popover.style.left = fitted.x;
                 popover.style.top = fitted.y;
             }

@@ -110,6 +110,11 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 }
             }
 
+            if (!compact && ((_active == PaneNavigation.Types && !_showTypes) || (_active == PaneNavigation.Objects && !_showObjects)))
+            {
+                _active = PaneNavigation.Inspector;
+            }
+
             bool typesVisible = compact ? _active == PaneNavigation.Types : _showTypes;
             bool objectsVisible = compact ? _active == PaneNavigation.Objects : _showObjects;
             bool inspectorVisible = !compact || _active == PaneNavigation.Inspector;

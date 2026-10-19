@@ -24,6 +24,33 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
+        public IEnumerator ShouldRestoreStylesheetPopoverCapsAfterViewportExpansion()
+        {
+            using TestCleanupScope cleanup = new();
+            LayoutTestWindow window = ScriptableObject.CreateInstance<LayoutTestWindow>();
+            cleanup.Defer(window.Close);
+            window.position = new Rect(40, 40, 1200, 600);
+            VisualElement root = window.rootVisualElement;
+            root.AddToClassList("dataviz-root");
+            root.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>("Packages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/Styles/DataVisualizerStyles.uss"));
+            VisualElement popover = new();
+            popover.AddToClassList("popover");
+            popover.style.display = DisplayStyle.Flex;
+            popover.Add(new Label(new string('x', 200)));
+            root.Add(popover);
+            window.ShowUtility();
+            yield return null;
+            foreach (float width in new[] { 1200f, 360f, 1200f })
+            {
+                root.style.width = width;
+                PopoverPlacement.ApplyViewportLimits(popover, new Vector2(width, 600));
+                EditorSurfaceCapture.SettleLayout(window);
+                Assert.That(popover.resolvedStyle.maxWidth.value, Is.EqualTo(Mathf.Min(width, 500f)));
+                Assert.That(popover.resolvedStyle.width <= Mathf.Min(width, 500f));
+            }
+        }
+
+        [UnityTest]
         public IEnumerator ShouldRestorePreferredWidthsAfterRepeatedClampingAndNavigation()
         {
             using TestCleanupScope cleanup = new();
@@ -108,6 +135,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 layout.Show(PaneNavigation.Types);
                 EditorSurfaceCapture.SettleLayout(window);
                 Assert.That(types.resolvedStyle.width, Is.EqualTo(preferred.x).Within(1f));
+            }
+
+            foreach (PaneNavigation hidden in new[] { PaneNavigation.Types, PaneNavigation.Objects })
+            {
+                layout.Show(hidden);
+                root.style.width = 360;
+                layout.Resize(360, preferred);
+                EditorSurfaceCapture.SettleLayout(window);
+                Assert.That(inspector.resolvedStyle.width, Is.EqualTo(360f).Within(1f), "shrinking must not reopen the pane just hidden");
+                Assert.That(inner.resolvedStyle.display, Is.EqualTo(DisplayStyle.Flex));
+                Assert.That(objects.resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+                root.style.width = 1600;
+                layout.Resize(1600, preferred);
+                layout.Show(hidden);
+                EditorSurfaceCapture.SettleLayout(window);
             }
         }
     }
