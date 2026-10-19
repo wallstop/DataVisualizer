@@ -100,3 +100,10 @@ and 30 warm-open, search, and selection samples after five discarded warm opens.
 This is an instrumentation check, not a controlled speed comparison or large-fixture guarantee. A 4 ms cooperative budget cannot interrupt an individual Unity creation call. The
 100/10k and ordinary-SO/many-type matrices, interaction readiness stages, import bursts, and matched Play/compile controls remain open in
 [#306](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/306).
+
+## Bounded fixture import batches
+
+Fixture staging now groups creation calls within each editor tick, up to ten assets and a 4 ms creation budget. Every batch resumes imports before returning to the editor,
+including when creation fails. Reports separate creation calls, batch import flushes, fixture identity initialization/verification, final Refresh, and total staging wall time. The
+longest import flush and complete staging tick remain visible because a cooperative budget cannot interrupt Unity's import work. Fixture initialization saves only the owned assets
+through `SaveAssetIfDirty`, and verifies that generated BaseDataObject identities persist after reload.

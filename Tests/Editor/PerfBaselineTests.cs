@@ -121,9 +121,55 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(staging.IsComplete, Is.False, "Completion requires the final refresh.");
             staging.Refresh();
             Assert.That(staging.IsComplete);
-            Assert.That(staging.TotalMilliseconds, Is.GreaterThanOrEqualTo(staging.CreationMilliseconds + staging.RefreshMilliseconds));
+            Assert.That(
+                staging.TotalMilliseconds,
+                Is.GreaterThanOrEqualTo(staging.CreationMilliseconds + staging.BatchImportMilliseconds + staging.InitializationMilliseconds + staging.RefreshMilliseconds)
+            );
             Assert.That(staging.LongestCreateMilliseconds, Is.GreaterThan(0));
             Assert.That(staging.LongestSliceMilliseconds, Is.GreaterThanOrEqualTo(staging.LongestCreateMilliseconds));
+        }
+
+        [Test]
+        public void ShouldImportBatchedFixturesWithDistinctPersistentIdentitiesBeforeYielding()
+        {
+            using PerfFixtureStaging staging = new(3);
+            staging.Advance(double.MaxValue, 3);
+            Assert.AreEqual(3, staging.CreatedCount);
+            for (int index = 0; index < 3; index++)
+            {
+                string path = $"{staging.Folder}/{PerfBaseline.FixtureName(index)}.asset";
+                PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>(path);
+                Assert.That(asset != null);
+                string authoredId = PerfBaseline.FixtureId(index);
+                Assert.AreEqual(authoredId, asset.Id);
+                Resources.UnloadAsset(asset);
+                Assert.AreEqual(authoredId, AssetDatabase.LoadAssetAtPath<PlayModeDataObject>(path).Id);
+            }
+            Assert.That(0 < staging.BatchImportMilliseconds);
+            Assert.That(staging.LongestBatchImportMilliseconds <= staging.LongestSliceMilliseconds);
+        }
+
+        [Test]
+        public void ShouldResumeImportsWhenFixtureCreationThrowsInsideABatch()
+        {
+            int attempted = 0;
+            using PerfFixtureStaging staging = new(
+                3,
+                (asset, path) =>
+                {
+                    if (attempted++ == 1)
+                        throw new InvalidOperationException("Expected fixture failure.");
+                    AssetDatabase.CreateAsset(asset, path);
+                }
+            );
+            Assert.Throws<InvalidOperationException>(() => staging.Advance(double.MaxValue));
+            Assert.AreEqual(1, staging.CreatedCount);
+            string probePath = staging.Folder + "/Resume.txt";
+            System.IO.File.WriteAllText(probePath, "imports resumed");
+            AssetDatabase.ImportAsset(probePath, ImportAssetOptions.ForceSynchronousImport);
+            Assert.That(AssetDatabase.LoadAssetAtPath<TextAsset>(probePath) != null);
+            Assert.That(0 < staging.BatchImportMilliseconds);
+            Assert.That(staging.LongestBatchImportMilliseconds <= staging.BatchImportMilliseconds);
         }
 
         [Test]

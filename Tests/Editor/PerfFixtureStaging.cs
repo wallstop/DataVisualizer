@@ -5,6 +5,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.IO;
     using UnityEditor;
     using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor.Utilities;
     using Debug = UnityEngine.Debug;
     using PlayModeDataObject = WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject;
 
@@ -17,24 +18,51 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         internal bool IsComplete { get; private set; }
         internal double CreationMilliseconds { get; private set; }
         internal double RefreshMilliseconds { get; private set; }
+        internal double BatchImportMilliseconds { get; private set; }
+        internal double InitializationMilliseconds { get; private set; }
+        internal double LongestBatchImportMilliseconds { get; private set; }
         internal double TotalMilliseconds => _clock.Elapsed.TotalMilliseconds;
         internal double LongestCreateMilliseconds { get; private set; }
         internal double LongestSliceMilliseconds { get; private set; }
 
         private readonly Stopwatch _clock = new();
+        private readonly ReusableDisposalScope<PerfFixtureStaging> _importScopes = new(EndImportBatch);
+        private readonly Action<ScriptableObject, string> _createAsset;
+        private bool _importBatchActive;
+        private Exception _importFailure;
         private string _folderGuid;
         private bool _disposed;
         private bool _markerWritten;
 
-        internal PerfFixtureStaging(int count)
+        internal PerfFixtureStaging(int count, Action<ScriptableObject, string> createAsset = null)
         {
             if (count < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
             }
 
+            _createAsset = createAsset ?? AssetDatabase.CreateAsset;
             TargetCount = count;
             Folder = "Assets/PerfBaselineFixtures-" + Guid.NewGuid().ToString("N");
+        }
+
+        private static void EndImportBatch(PerfFixtureStaging staging)
+        {
+            if (!staging._importBatchActive)
+                return;
+            staging._importBatchActive = false;
+            Stopwatch flush = Stopwatch.StartNew();
+            try
+            {
+                AssetDatabase.StopAssetEditing();
+            }
+            catch (Exception error)
+            {
+                staging._importFailure = error;
+            }
+            double elapsed = flush.Elapsed.TotalMilliseconds;
+            staging.BatchImportMilliseconds += elapsed;
+            staging.LongestBatchImportMilliseconds = Math.Max(staging.LongestBatchImportMilliseconds, elapsed);
         }
 
         public void Dispose()
@@ -104,33 +132,54 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 _markerWritten = true;
             }
 
+            if (CreatedCount == TargetCount)
+                return;
+            int firstCreated = CreatedCount;
             int items = 0;
-            while (CreatedCount < TargetCount && items < maximumItems && (items == 0 || slice.Elapsed.TotalMilliseconds < budgetMilliseconds))
+            using (TestCleanupScope cleanup = new())
             {
-                using TestCleanupScope cleanup = new();
-                PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
-                cleanup.Defer(() =>
+                using (ReusableDisposalLease<PerfFixtureStaging> import = _importScopes.Acquire(this))
                 {
-                    if (asset != null && !AssetDatabase.Contains(asset))
+                    // Stop imports in this call, including failures; never hold editing across editor ticks.
+                    _importBatchActive = true;
+                    AssetDatabase.StartAssetEditing();
+                    while (CreatedCount < TargetCount && items < maximumItems && (items == 0 || slice.Elapsed.TotalMilliseconds < budgetMilliseconds))
                     {
-                        UnityEngine.Object.DestroyImmediate(asset);
+                        Stopwatch initializeAsset = Stopwatch.StartNew();
+                        PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
+                        cleanup.Defer(() =>
+                        {
+                            if (asset != null && !AssetDatabase.Contains(asset))
+                                UnityEngine.Object.DestroyImmediate(asset);
+                        });
+                        asset.name = PerfBaseline.FixtureName(CreatedCount);
+                        asset.BeforeCreate();
+                        asset._assetGuid = PerfBaseline.FixtureId(CreatedCount);
+                        InitializationMilliseconds += initializeAsset.Elapsed.TotalMilliseconds;
+                        Stopwatch create = Stopwatch.StartNew();
+                        _createAsset(asset, $"{Folder}/{asset.name}.asset");
+                        double elapsed = create.Elapsed.TotalMilliseconds;
+                        CreationMilliseconds += elapsed;
+                        LongestCreateMilliseconds = Math.Max(LongestCreateMilliseconds, elapsed);
+                        CreatedCount++;
+                        items++;
                     }
-                });
-                asset.name = PerfBaseline.FixtureName(CreatedCount);
-                Stopwatch create = Stopwatch.StartNew();
-                AssetDatabase.CreateAsset(asset, $"{Folder}/{asset.name}.asset");
-                double elapsed = create.Elapsed.TotalMilliseconds;
-                CreationMilliseconds += elapsed;
-                LongestCreateMilliseconds = Math.Max(LongestCreateMilliseconds, elapsed);
-                if (!AssetDatabase.Contains(asset))
-                {
-                    throw new InvalidOperationException("Fixture creation did not persist an asset: " + asset.name);
                 }
-
-                CreatedCount++;
-                items++;
+                if (_importFailure != null)
+                    throw new InvalidOperationException("The fixture import batch failed.", _importFailure);
+                Stopwatch initialization = Stopwatch.StartNew();
+                for (int index = firstCreated; index < CreatedCount; index++)
+                {
+                    string path = $"{Folder}/{PerfBaseline.FixtureName(index)}.asset";
+                    PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>(path);
+                    if (asset == null)
+                        throw new InvalidOperationException("Fixture import did not persist the expected type: " + path);
+                    asset.AfterCreate();
+                    if (!string.Equals(asset.Id, PerfBaseline.FixtureId(index), StringComparison.Ordinal))
+                        throw new InvalidOperationException("Fixture import changed its authored identity: " + path);
+                }
+                InitializationMilliseconds += initialization.Elapsed.TotalMilliseconds;
             }
-
             LongestSliceMilliseconds = Math.Max(LongestSliceMilliseconds, slice.Elapsed.TotalMilliseconds);
             // Refresh is a separate tick so cancellation can run after the final creation.
         }
