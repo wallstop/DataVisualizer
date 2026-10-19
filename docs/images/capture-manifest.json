@@ -1,30 +1,43 @@
 {
   "schema": 1,
-  "description": "Reviewed Windows Unity 6000.5 captures at pixelsPerPoint 1. Review dimension changes before updating this inventory.",
+  "description": "Reviewed production controls and balanced inspector layout. Review fresh images before changing dimensions.",
   "captures": {
     "layout": [
       1180,
       780
     ],
     "instance-actions": [
-      604,
-      749
+      296,
+      723
     ],
     "create": [
-      917,
-      146
+      337,
+      180
     ],
     "import": [
-      271,
-      462
+      192,
+      492
     ],
     "search": [
       1141,
       262
     ],
     "settings": [
-      332,
-      177
+      340,
+      183
     ]
+  },
+  "provenance": {
+    "revision": "fcff9a2cb0770698ffe20a78f2a8fcf1fd833992",
+    "capturedAt": "2026-10-19",
+    "unity": "6000.5.2f1",
+    "os": "Windows 11 (10.0.26200)",
+    "theme": "Dx",
+    "editorSkin": "dark",
+    "pixelsPerPoint": 1,
+    "screenDpi": 96,
+    "displayCount": 1,
+    "reviewScope": "Six production shots: readable controls, row actions, inspector fields, captions, dimensions, and decoded pixels. Other skin/platform/DPI evidence remains outside this run (#270).",
+    "staleAfter": "Changes to window controls, pane allocation, theme tokens, or fixture content require review and recapture."
   }
 }
