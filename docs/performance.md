@@ -107,3 +107,6 @@ Fixture staging now groups creation calls within each editor tick, up to ten ass
 including when creation fails. Reports separate creation calls, batch import flushes, fixture identity initialization/verification, final Refresh, and total staging wall time. The
 longest import flush and complete staging tick remain visible because a cooperative budget cannot interrupt Unity's import work. Fixture initialization saves only the owned assets
 through `SaveAssetIfDirty`, and verifies that generated BaseDataObject identities persist after reload.
+
+Benchmark windows clone the current configuration into an owned temporary state file. Closing or cancelling a run removes those files and restores the host's active selection and
+window preferences. Project settings and the user's saved-state JSON remain outside the measurement window's write path.

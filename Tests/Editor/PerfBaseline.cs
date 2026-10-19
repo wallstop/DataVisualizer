@@ -11,6 +11,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using UnityEngine;
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.Editor;
+    using WallstopStudios.DataVisualizer.Editor.Data;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
     using Debug = UnityEngine.Debug;
@@ -456,6 +457,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             state.PreviousInstance = instanceField.GetValue(null);
             DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
             state.Window = window;
+            DataVisualizerSettings settings = typeof(DataVisualizerWindow).GetProperty("Settings", Members)?.GetValue(window) as DataVisualizerSettings;
+            DataVisualizerUserState userState = typeof(DataVisualizerWindow).GetProperty("UserState", Members)?.GetValue(window) as DataVisualizerUserState;
+            state.WindowState = new PerfWindowStateScope(settings, userState, state.OutputDirectory);
+            // Set the owned path first so even a later setup failure cannot save into the host file.
+            SetWindowField(window, "_userStateFilePath", state.WindowState.FilePath);
+            SetWindowField(window, "_userState", state.WindowState.UserState);
+            SetWindowField(window, "_settings", state.WindowState.Settings);
             window.ShowPopup();
             window.position = new Rect(40f, 40f, 1180f, 780f);
             state.PhaseClock.Restart();
@@ -610,20 +618,34 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             state.Phase = Phase.WarmOpen;
         }
 
+        private static void SetWindowField(DataVisualizerWindow window, string name, object value)
+        {
+            FieldInfo field = typeof(DataVisualizerWindow).GetField(name, Members);
+            if (field == null)
+                throw new InvalidOperationException("The baseline cannot isolate window state: " + name);
+            field.SetValue(window, value);
+        }
+
         private static void CloseWindow(RunState state)
         {
             DataVisualizerWindow window = state.Window;
+            PerfWindowStateScope isolatedState = state.WindowState;
             state.Window = null;
-            if (window == null)
-            {
+            state.WindowState = null;
+            // A destroyed wrapper still owns restoration; a run that never opened a window does not.
+            if (ReferenceEquals(window, null) && isolatedState == null)
                 return;
-            }
-
-            InvokeCleanup(window);
-            EditorSurfaceCapture.CloseWindow(window);
-            AssetGuidTypeIndex.Shared.Cancel();
-            typeof(DataVisualizerWindow).GetField(InstanceFieldName, StaticMembers)?.SetValue(null, state.PreviousInstance);
-            state.PreviousInstance = null;
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() =>
+            {
+                typeof(DataVisualizerWindow).GetField(InstanceFieldName, StaticMembers)?.SetValue(null, state.PreviousInstance);
+                state.PreviousInstance = null;
+            });
+            cleanup.Defer(AssetGuidTypeIndex.Shared.Cancel);
+            cleanup.Defer(() => isolatedState?.Dispose());
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            if (window != null)
+                InvokeCleanup(window);
         }
 
         private static void Finish(RunState state)
@@ -685,6 +707,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Debug.LogError($"[PerfBaseline] fixture cleanup failed: {error.Message}");
             }
 
+            using (TestCleanupScope restoration = new())
+            {
+                restoration.Defer(state.Preferences.Restore);
+                restoration.Defer(() => Selection.objects = state.PreviousSelection);
+            }
             _active = null;
             EditorApplication.update -= Tick;
             AssemblyReloadEvents.beforeAssemblyReload -= Cancel;
@@ -1050,6 +1077,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal SizeResult Current;
             internal PerfFixtureStaging Staging;
             internal DataVisualizerWindow Window;
+            internal PerfWindowStateScope WindowState;
+            internal readonly DocsImageCapture.WindowPreferenceSnapshot Preferences = DocsImageCapture.WindowPreferenceSnapshot.Capture();
+            internal readonly UnityEngine.Object[] PreviousSelection = Selection.objects;
             internal object PreviousInstance;
             internal readonly Stopwatch PhaseClock = new();
             internal int WarmRepetition;

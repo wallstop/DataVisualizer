@@ -248,6 +248,50 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
+        public IEnumerator ShouldRestoreHostStateAndNativeOwnersWhenCancelledAfterOpening()
+        {
+            const string preference = "WallstopStudios.Editor.DataVisualizer.PreferredWindowSize";
+            string output = "Temp/PerfBaselineHostStateTests-" + Guid.NewGuid().ToString("N");
+            string userFile = System.IO.Path.Combine(Application.persistentDataPath, "DataVisualizerUserState.json");
+            bool existed = System.IO.File.Exists(userFile);
+            string original = existed ? System.IO.File.ReadAllText(userFile) : null;
+            UnityEngine.Object[] selection = Selection.objects;
+            DocsImageCapture.WindowPreferenceSnapshot preferences = DocsImageCapture.WindowPreferenceSnapshot.Capture();
+            bool hadPreference = EditorPrefs.HasKey(preference);
+            string originalPreference = EditorPrefs.GetString(preference);
+            int nativeHosts = EditorSurfaceCapture.CountNativeWindowHosts();
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(() =>
+            {
+                if (existed)
+                    System.IO.File.WriteAllText(userFile, original);
+                else if (System.IO.File.Exists(userFile))
+                    System.IO.File.Delete(userFile);
+            });
+            cleanup.Defer(preferences.Restore);
+            cleanup.Defer(() => Selection.objects = selection);
+            PlayModeDataObject selected = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(selected));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(output, new[] { 2 });
+            for (int tick = 0; tick < 600 && !PerfBaseline.Status().StartsWith("InteractionSamples:", StringComparison.Ordinal); tick++)
+                yield return null;
+            StringAssert.StartsWith("InteractionSamples:", PerfBaseline.Status());
+            EditorPrefs.SetString(preference, "benchmark mutation");
+            Selection.objects = new UnityEngine.Object[] { selected };
+            PerfBaseline.Cancel();
+            Assert.AreEqual(existed, System.IO.File.Exists(userFile));
+            if (existed)
+                Assert.AreEqual(original, System.IO.File.ReadAllText(userFile));
+            Assert.AreEqual(hadPreference, EditorPrefs.HasKey(preference));
+            Assert.AreEqual(originalPreference, EditorPrefs.GetString(preference));
+            CollectionAssert.AreEqual(selection, Selection.objects);
+            Assert.AreEqual(nativeHosts, EditorSurfaceCapture.CountNativeWindowHosts());
+            Assert.AreEqual(0, System.IO.Directory.GetFiles(output, "window-state-*.json").Length);
+        }
+
+        [UnityTest]
         public IEnumerator ShouldCancelWithPartialProgressAndWithoutDeletingOtherAssets()
         {
             string output = "Temp/PerfBaselineTests-" + Guid.NewGuid().ToString("N");
