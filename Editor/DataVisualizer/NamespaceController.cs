@@ -497,6 +497,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             dataVisualizer.BuildProcessorColumnView();
             dataVisualizer.UpdateCreateObjectButtonStyle();
             dataVisualizer.UpdateLabelAreaAndFilter();
+            dataVisualizer.ShowObjectPaneIfCompact();
         }
 
         public void Build(DataVisualizer dataVisualizer, ref VisualElement namespaceListContainer)

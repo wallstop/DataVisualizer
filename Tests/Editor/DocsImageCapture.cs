@@ -223,7 +223,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return CaptureFrame(shotName, outputDirectory, crop: true);
         }
 
-        internal static EditorSurfaceCaptureResult CaptureFrame(string shotName, string outputDirectory, bool crop)
+        internal static EditorSurfaceCaptureResult CaptureFrame(string shotName, string outputDirectory, bool crop, float width = WindowWidth)
         {
             if (!IsKnownShot(shotName))
             {
@@ -259,12 +259,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 persistedSelection = PersistedSelectionSnapshot.Capture(window);
 
                 EditorSurfaceCapture.ShowPopup(window);
-                window.position = new Rect(40f, 40f, WindowWidth, WindowHeight);
+                window.position = new Rect(40f, 40f, width, WindowHeight);
                 window.CreateGUI();
                 InvokeInitialContentLoad(window);
                 NamespaceController controller = GetNamespaceController(window);
                 SelectFixtureType(window, controller);
                 VerifySelectedType(controller);
+                EditorSurfaceCapture.SettleLayout(window);
                 SelectObject(window, LoadFirstFixtureAsset());
                 VerifySelectedObject(window);
                 if (!crop)
@@ -940,7 +941,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static void SelectObject(DataVisualizerWindow window, ScriptableObject asset)
         {
             MethodInfo selectObject = typeof(DataVisualizerWindow).GetMethod(
-                "SelectObject",
+                "SelectObjectAndNavigate",
                 ReflectedInstanceMembers,
                 binder: null,
                 types: new[] { typeof(ScriptableObject) },
@@ -1237,14 +1238,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             /*
-                The docs layout needs wide namespace and object panes, so the saved splitter
-                widths are set before the window builds its UI; the window's own one-time
+                The docs layout uses the default balanced pane widths, set before the
+                window builds its UI; the window's own one-time
                 sizing keys are cleared so the fixed capture rectangle survives.
             */
             internal void ApplyWidePanes()
             {
-                EditorPrefs.SetFloat(PrefsSplitterOuterKey, 330f);
-                EditorPrefs.SetFloat(PrefsSplitterInnerKey, 620f);
+                EditorPrefs.SetFloat(PrefsSplitterOuterKey, 320f);
+                EditorPrefs.SetFloat(PrefsSplitterInnerKey, 280f);
                 EditorPrefs.DeleteKey(PrefsInitialSizeAppliedKey);
                 EditorPrefs.DeleteKey(PrefsPreferredWindowSizeKey);
                 EditorPrefs.DeleteKey(PrefsTemporaryWindowClampSizeKey);

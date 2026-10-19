@@ -943,8 +943,8 @@
 }
 
 .global-search-field > .unity-base-field__label {
-    min-width: 130px;
-    width: 130px;
+    min-width: 0;
+    width: auto;
     flex-shrink: 0;
 }
 
@@ -1598,3 +1598,14 @@
 
 /* Manual pagination was replaced by the virtualized object ListView; its page-controller styles
    are intentionally removed. */
+
+.pane-navigation {
+    flex-direction: row;
+    flex-shrink: 0;
+    padding: 2px 4px;
+}
+
+.pane-navigation > .unity-button {
+    flex-shrink: 0;
+    min-width: 75px;
+}

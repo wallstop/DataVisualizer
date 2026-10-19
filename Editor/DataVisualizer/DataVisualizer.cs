@@ -74,12 +74,12 @@ namespace WallstopStudios.DataVisualizer.Editor
         private const string SelectScriptFolderDialogTitle = "Select Script Load Folder (Must be inside Assets)";
 
         private const int MaxSearchResults = 25;
-        private const float DefaultOuterSplitWidth = 350f;
-        private const float DefaultInnerSplitWidth = 250f;
+        private const float DefaultOuterSplitWidth = 320f;
+        private const float DefaultInnerSplitWidth = 280f;
         private const float MinNamespacePaneWidth = 320f;
         private const float MinObjectPaneWidth = 220f;
-        private const float MinInspectorPaneWidth = 260f;
-        private const float MinWindowWidth = MinNamespacePaneWidth + MinObjectPaneWidth + MinInspectorPaneWidth + 60f;
+        private const float MinInspectorPaneWidth = ResponsivePaneLayout.InspectorMinimum;
+        private const float MinWindowWidth = 360f;
         private const float MinWindowHeight = 480f;
         private const int SplitterWidthSaveDebounceMilliseconds = 250;
         private const int AsyncLoadBatchSize = 100;
@@ -223,6 +223,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         // Guards the ListView selection callback while selection is set programmatically.
         private bool _suppressListSelectionCallback;
 
+        private ResponsivePaneLayout _paneLayout;
         private TwoPaneSplitView _outerSplitView;
         private TwoPaneSplitView _innerSplitView;
         private VisualElement _namespaceColumnElement;
@@ -1242,7 +1243,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             _outerSplitView = new TwoPaneSplitView(0, (int)initialOuterWidth, TwoPaneSplitViewOrientation.Horizontal) { name = "outer-split-view", style = { flexGrow = 1 } };
             _outerSplitView.Add(_namespaceColumnElement);
             _outerSplitView.Add(_innerSplitView);
+            VisualElement paneNavigation = new() { name = "pane-navigation" };
+            paneNavigation.AddToClassList(StyleConstants.PaneNavigationClass);
+            root.Add(paneNavigation);
             root.Add(_outerSplitView);
+            _paneLayout = new ResponsivePaneLayout(_outerSplitView, _innerSplitView, paneNavigation, PreparePaneNavigation);
+            _paneLayout.Resize(root.resolvedStyle.width, new Vector2(_lastSavedOuterWidth, _lastSavedInnerWidth));
 
             /*
                 Pane-width persistence is event-driven: a resolved pane geometry change schedules a
@@ -1693,8 +1699,26 @@ namespace WallstopStudios.DataVisualizer.Editor
             EditorPrefs.DeleteKey(PrefsTemporaryWindowClampSizeKey);
         }
 
+        private void ClampActivePopover(VisualElement popover, Vector2 available)
+        {
+            if (popover == null || popover.style.display == DisplayStyle.None)
+            {
+                return;
+            }
+            Rect requested = new(popover.resolvedStyle.left, popover.resolvedStyle.top, popover.resolvedStyle.width, popover.resolvedStyle.height);
+            Rect fitted = PopoverPlacement.FitToWindow(requested, available);
+            popover.style.maxWidth = Mathf.Max(0f, available.x - fitted.x);
+            popover.style.maxHeight = Mathf.Max(0f, available.y - fitted.y);
+            popover.style.left = fitted.x;
+            popover.style.top = fitted.y;
+        }
+
         private void HandleWindowGeometryChanged(GeometryChangedEvent _)
         {
+            FlushPendingSplitterWidths();
+            _paneLayout?.Resize(_.newRect.width, new Vector2(_lastSavedOuterWidth, _lastSavedInnerWidth));
+            ClampActivePopover(_activePopover, _.newRect.size);
+            ClampActivePopover(_activeNestedPopover, _.newRect.size);
             if (_packagePlacementPending)
             {
                 SchedulePackageWindowPlacementCompletion();
@@ -2308,6 +2332,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private void PreparePaneNavigation()
+        {
+            FlushPendingSplitterWidths();
+            CloseActivePopover();
+        }
+
         private void HandleSplitterPaneGeometryChanged(GeometryChangedEvent _)
         {
             ScheduleSplitterWidthSave();
@@ -2315,7 +2345,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void ScheduleSplitterWidthSave()
         {
-            if (_namespaceColumnElement == null || _objectColumnElement == null)
+            if (_namespaceColumnElement == null || _objectColumnElement == null || (_paneLayout != null && !_paneLayout.CanSaveWidths))
             {
                 return;
             }
@@ -2374,6 +2404,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _splitterWidthSaveTask = null;
+            _paneLayout?.Resize(rootVisualElement.resolvedStyle.width, new Vector2(_lastSavedOuterWidth, _lastSavedInnerWidth));
         }
 
         private void FlushPendingSplitterWidths()
@@ -3062,6 +3093,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 _namespaceController.SelectType(this, targetType);
+                ShowInspectorIfCompact();
                 CloseActivePopover();
                 return;
             }
@@ -3080,12 +3112,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
 
                 LoadObjectTypesAsync(targetType, priorityLoad: false);
+                ShowInspectorIfCompact();
                 CloseActivePopover();
                 return;
             }
 
             BuildObjectsView();
             SelectObject(targetObject);
+            ShowInspectorIfCompact();
             CloseActivePopover();
         }
 
@@ -3318,15 +3352,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             else
             {
-                float clampedX = Mathf.Max(0, targetX);
-                clampedX = Mathf.Min(clampedX, windowWidth - popoverWidth);
-                clampedX = Mathf.Max(0, clampedX);
-                float clampedY = Mathf.Max(0, targetY);
-                clampedY = Mathf.Min(clampedY, windowHeight - popoverHeight);
-                clampedY = Mathf.Max(0, clampedY);
-
-                popover.style.left = clampedX;
-                popover.style.top = clampedY;
+                Rect fitted = PopoverPlacement.FitToWindow(new Rect(targetX, targetY, popoverWidth, popoverHeight), new Vector2(windowWidth, windowHeight));
+                popover.style.maxWidth = Mathf.Max(0f, windowWidth - fitted.x);
+                popover.style.maxHeight = Mathf.Max(0f, windowHeight - fitted.y);
+                popover.style.left = fitted.x;
+                popover.style.top = fitted.y;
             }
             popover.style.display = DisplayStyle.Flex;
             if (!isNested)
@@ -6213,6 +6243,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        internal void ShowObjectPaneIfCompact()
+        {
+            if (_paneLayout != null && _paneLayout.IsCompact)
+            {
+                _paneLayout.Show(PaneNavigation.Objects);
+            }
+        }
+
         internal void SelectObjectAndNavigate(ScriptableObject dataObject)
         {
             if (dataObject == null)
@@ -6223,6 +6261,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             // SelectObject drives the ListView selection + ScrollToItem by index; no manual paging.
             SelectObject(dataObject);
+            ShowInspectorIfCompact();
 
             // Re-scroll once async layout settles (the item may not have had geometry yet).
             if (_objectListView != null && _filteredObjects.Contains(dataObject))
@@ -6379,6 +6418,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             PersistSettings(settings => settings.SetLastObjectForType(typeFullName, objectGuid), userState => userState.SetLastObjectForType(typeFullName, objectGuid));
+        }
+
+        private void ShowInspectorIfCompact()
+        {
+            if (_paneLayout != null && _paneLayout.IsCompact)
+            {
+                _paneLayout.Show(PaneNavigation.Inspector);
+            }
         }
 
         private void ListenForPropertyChange(InspectorElement inspectorElement)
@@ -7143,6 +7190,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (titleLabel != null)
             {
                 titleLabel.text = dataObjectName;
+                titleLabel.tooltip = dataObjectName;
             }
 
             Button goUpButton = row.Q<Button>("go-up-button");
@@ -8444,6 +8492,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (selected != null)
             {
                 SelectObject(selected);
+                ShowInspectorIfCompact();
             }
         }
 
