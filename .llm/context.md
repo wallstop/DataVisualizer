@@ -228,7 +228,7 @@ runs everything, including the Prettier Markdown check, on ubuntu and windows. C
 - Gateway launchers (`codex-zai`, `claude-zai`, `codex-openrouter`, `claude-openrouter`) come from `.devcontainer/ai_backends.py`. They self-load the gitignored `.env.local` for
   keys not already exported (preexisting environment variables win), so they work in non-interactive shells too. Python startup, backend, and service tools share
   `.devcontainer/env_local.py`; the sourced Bash loader remains for parent-shell exports, with parity pinned by `scripts/tests/test_env_local_precedence.py`.
-- `npm run mcp:sync` regenerates machine-local MCP configs for Claude Code, Codex, OpenCode, Nanocoder, VS Code, and Cursor from `.llm/mcp/configure.mjs`. Those outputs are
+- `npm run mcp:sync` regenerates machine-local MCP configs for Claude Code, Codex, OpenCode, Nanocoder, VS Code, and Cursor through `scripts/mcp_configure.py`. Those outputs are
   gitignored and must never be committed.
 - Secrets live in gitignored `.env.local` (template: `.env.local.example`); config files reference env vars instead of embedding credentials.
 - Unity MCP: the **official Unity CLI** MCP server (`unity mcp`, ~140 tools). Container agents reach it through the host HTTP bridge (`npm run unity:mcp:host` →

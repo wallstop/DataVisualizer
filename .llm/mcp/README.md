@@ -115,7 +115,7 @@ npm run unity:mcp:host   # host: spawns `unity mcp`, serves http://0.0.0.0:9020/
 ```
 
 Startup settings resolve through `scripts/unity_mcp_settings.py` using uv or Python 3.9+. Project pins prefer process variables, then workspace settings, then the legacy home file,
-regardless of which project-path alias each source uses. HTTP and CLI process handling remain in the Node bridge.
+regardless of which project-path alias each source uses. HTTP and CLI process handling use `scripts/unity_mcp_host.py`.
 
 Container agents connect to `http://host.docker.internal:9020/mcp` (written automatically by `npm run mcp:sync`). The bridge is transparent: JSON-RPC requests are forwarded to the
 CLI with per-request id remapping, client notifications are passed through, and a crashed CLI is respawned lazily on the next request. Startup also verifies a proxy-free local HTTP
@@ -148,12 +148,12 @@ Security: the bridge listens on all interfaces by default (Linux Docker cannot r
 - **`unity run unity:mcp:host` fails with "Not a Unity project".** That invoked the Unity CLI, not the npm script: `unity run <project>` expects a project path, so it treats
   `unity:mcp:host` as one. The bridge is an npm script — start it with `npm run unity:mcp:host`.
 - **Port already in use / dynamic ports.** Re-running the bridge is a no-op while a healthy instance holds the port; if something else owns it, the bridge binds the next free port,
-  persists `UNITY_MCP_HTTP_PORT` to `.env.local`, and re-syncs every frontend config automatically. No fixed port is required anywhere: `configure.mjs`, the devcontainer health
+  persists `UNITY_MCP_HTTP_PORT` to `.env.local`, and re-syncs every frontend config automatically. No fixed port is required anywhere: `mcp_configure.py`, the devcontainer health
   check, and the doctors all read the persisted value.
-- **`npm run mcp:sync` on the host.** It runs the cross-platform Node adapter `configure.mjs`. Codex persistence and workspace cleanup use `scripts/mcp_codex_config.py`; JSON
+- **`npm run mcp:sync` on the host.** It runs the typed Python driver `scripts/mcp_configure.py`. Codex persistence and workspace cleanup use `scripts/mcp_codex_config.py`; JSON
   persistence uses `scripts/mcp_json_config.py`. Credential aliases use `scripts/mcp_aliases.py`, preserving BOM and line endings and emitting statuses only. The managed server
-  catalog uses `scripts/mcp_catalog.py`. These tools run through uv or Python 3.9+ when uv is absent. Container hooks use `sync_mcp.py`
-  (`uv run .llm/mcp/sync_mcp.py [workspace_dir] [flags...]`). Command discovery uses `where` on Windows.
+  catalog uses `scripts/mcp_catalog.py`. The npm commands use uv; standalone entry points also support Python 3.9+. Container hooks use `sync_mcp.py`
+  (`uv run .llm/mcp/sync_mcp.py [workspace_dir] [flags...]`). Command discovery follows platform PATH rules.
 - **Shared configs are environment-agnostic.** Sync produces identical files from the host and the container (verified by hash): the unity bridge URL always uses
   `host.docker.internal` (resolves on the host under Docker Desktop too), and zai-image uses the PATH-resolved `uv` runner with a workspace-relative script. Never reintroduce
   `127.0.0.1` or absolute binaries into shared entries — they silently break the other environment.
@@ -182,4 +182,4 @@ the pinned editor. If `/healthz` times out, check the host URL and remove forwar
 directly to the host bridge. Match health's `bridgePid` to the listener owner; health bypasses authentication and does not start Unity.
 
 The npm commands `npm run mcp:sync` and `npm run unity:mcp:host` run typed Python through uv. Direct entry points are `uv run scripts/mcp_configure.py` and
-`uv run scripts/unity_mcp_host.py`. Legacy Node paths remain small launchers with Python 3.9+ fallback; the Python sync wrapper does not require Node.
+`uv run scripts/unity_mcp_host.py`. Legacy configuration and bridge Node paths remain small launchers with Python 3.9+ fallback; the Python sync wrapper does not require Node.

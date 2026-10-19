@@ -154,38 +154,29 @@ Path('sync-port.pending').replace('sync-port')
 time.sleep(1.8)
 """
 
-
-CONFIG_SYNC_FIXTURE = """
-import fs from 'node:fs';
-fs.writeFileSync('sync-port.pending', process.env.UNITY_MCP_HTTP_PORT);
-fs.renameSync('sync-port.pending', 'sync-port');
-setTimeout(() => process.exit(0), 1800);
-"""
-
-
-@unittest.skipUnless(shutil.which('node'), 'node is required')
 class ConfigSyncPublicationTests(unittest.TestCase):
     def test_port_is_published_only_after_the_write_completes(self) -> None:
         with contextlib.ExitStack() as cleanup:
             directory = cleanup.enter_context(tempfile.TemporaryDirectory(prefix='config-sync-publication-'))
             root = Path(directory)
-            preload = root / 'pause-write.mjs'
+            preload = root / 'pause_write.py'
             preload.write_text("""
-import fs from 'node:fs';
-const write = fs.writeFileSync;
-fs.writeFileSync = (path, data, ...options) => {
-    write(path, '');
-    write('writer-ready', '');
-    fs.readSync(0, Buffer.alloc(1), 0, 1, null);
-    return write(path, data, ...options);
-};
+import runpy, sys
+from pathlib import Path
+write = Path.write_text
+def paused(path, data, *args, **options):
+    write(path, '')
+    write(Path('writer-ready'), '')
+    sys.stdin.buffer.read(1)
+    return write(path, data, *args, **options)
+Path.write_text = paused
+runpy.run_path(sys.argv[1], run_name='__main__')
 """, encoding='utf-8')
-            fixture = root / 'configure.mjs'
-            # Publication is synchronous; this test does not need the bridge's background delay.
-            fixture.write_text(CONFIG_SYNC_FIXTURE + '\nprocess.exit(0);', encoding='utf-8')
+            fixture = root / 'configure.py'
+            fixture.write_text(PYTHON_CONFIG_SYNC_FIXTURE.replace('time.sleep(1.8)', ''), encoding='utf-8')
             env = dict(os.environ, UNITY_MCP_HTTP_PORT='53386')
             process = cleanup.enter_context(subprocess.Popen(
-                [str(shutil.which('node')), '--import', preload.as_uri(), str(fixture)],
+                [PYTHON, str(preload), str(fixture)],
                 cwd=root, env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
             ))
             cleanup.callback(process.kill)
@@ -205,22 +196,16 @@ fs.writeFileSync = (path, data, ...options) => {
             self.assertEqual(port_file.read_text(encoding='utf-8'), '53386')
 
 
-@unittest.skipUnless(shutil.which('node'), 'node is required')
-@unittest.skip('Retired Node implementation; Python subclass runs the shared contracts.')
 class HostTests(unittest.TestCase):
-    python_bridge = False
-
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix='unity-mcp-host-'))
         self.addCleanup(cleanup_fixture_directory, self.root)
         script_dir = self.root / '.llm' / 'mcp'
         script_dir.mkdir(parents=True)
         (self.root / 'scripts').mkdir()
-        source = REPO / ('scripts/unity_mcp_host.py' if self.python_bridge else '.llm/mcp/unity-mcp-host.mjs')
-        self.script = self.root / source.relative_to(REPO)
-        shutil.copyfile(source, self.script)
-        if self.python_bridge:
-            shutil.copyfile(REPO / '.llm/mcp/unity-mcp-host.mjs', script_dir / 'unity-mcp-host.mjs')
+        self.script = self.root / 'scripts/unity_mcp_host.py'
+        shutil.copyfile(REPO / 'scripts/unity_mcp_host.py', self.script)
+        shutil.copyfile(REPO / '.llm/mcp/unity-mcp-host.mjs', script_dir / 'unity-mcp-host.mjs')
         shutil.copyfile(REPO / 'scripts' / 'unity_mcp_settings.py', self.root / 'scripts' / 'unity_mcp_settings.py')
         (self.root / 'mcp').write_text(FAKE_CLI, encoding='utf-8')
         self.home = self.root / 'home'
@@ -237,27 +222,6 @@ class HostTests(unittest.TestCase):
         self.env_file.write_text(f'\ufeffexport UNITY_CLI="{PYTHON}"\nUNITY_MCP_PROJECT="{self.project}"\nUNITY_MCP_TOKEN=fixture-secret\nUNITY_MCP_TIMEOUT_MS=1500\n', encoding='utf-8')
         self.log = (self.root / 'bridge.log').open('w+', encoding='utf-8')
         self.addCleanup(self.log.close)
-        self.node_options: list[str] = []
-        if not self.python_bridge and self._testMethodName == 'test_auth_notifications_and_parallel_request_ids':
-            observer = self.root / 'observe-response-end.mjs'
-            observer.write_text("""
-import http from 'node:http';
-const createServer = http.createServer;
-http.createServer = (handler) => createServer((request, response) => {
-    const end = response.end.bind(response);
-    response.end = (...args) => {
-        if (request.headers['x-dataviz-drain-probe']) {
-            console.log('[drain-probe]' + JSON.stringify({
-                probe: request.headers['x-dataviz-drain-probe'],
-                drained: request.readableEnded,
-            }));
-        }
-        return end(...args);
-    };
-    handler(request, response);
-});
-""", encoding='utf-8')
-            self.node_options = ['--import', observer.as_uri()]
         self.launch()
         self.addCleanup(self.stop)
 
@@ -272,8 +236,7 @@ http.createServer = (handler) => createServer((request, response) => {
             time.sleep(0.02)
 
     def command(self) -> list[str]:
-        launcher = [PYTHON] if self.python_bridge else [str(shutil.which('node')), *self.node_options]
-        return [*launcher, str(self.script), '--host', '127.0.0.1', '--port', str(self.port)]
+        return [PYTHON, str(self.script), '--host', '127.0.0.1', '--port', str(self.port)]
 
     def logs(self) -> str:
         self.log.flush()
@@ -372,10 +335,7 @@ http.createServer = (handler) => createServer((request, response) => {
                             self.assertEqual(response.getheader('Allow'), 'POST, DELETE')
                     client.sendall(b'{}')
                     self.assertEqual(client.recv(1), b'', 'Close only after consuming the complete request.')
-                observations = [json.loads(line.split('[drain-probe]', 1)[1])
-                                for line in self.logs().splitlines() if '[drain-probe]' in line]
-                if not self.python_bridge:
-                    self.assertIn({'probe': probe, 'drained': True}, observations)
+
 
         # An abandoning client must leave the bridge responsive, without a retry.
         with socket.create_connection(('127.0.0.1', self.port), timeout=5) as client:
@@ -501,105 +461,7 @@ http.createServer = (handler) => createServer((request, response) => {
             self.assertEqual(self.http('/healthz')[1]['bridgePid'], self.process.pid)
             self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
 
-    def test_failed_self_check_exits_before_publishing_port(self) -> None:
-        if self.python_bridge:
-            self.skipTest("Python startup failures are covered by route-injection unit tests.")
-        self.stop()
-        preload = self.root / 'redirect-health.mjs'
-        preload.write_text("import http from 'node:http'; const get = http.get; http.get = (options, callback) => get({ ...options, path: '/wrong-endpoint' }, callback);", encoding='utf-8')
-        env = dict(self.env, NODE_OPTIONS=f'--import={preload.as_uri()}')
-        before = self.env_file.read_text(encoding='utf-8')
-        result = subprocess.run(self.command(), cwd=self.root, env=env, capture_output=True, text=True, timeout=8)
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn('Local HTTP self-check failed', result.stderr)
-        self.assertNotIn('Local HTTP self-check passed', result.stdout)
-        self.assertEqual(before, self.env_file.read_text(encoding='utf-8'))
 
-    def test_intercepted_docker_route_selects_and_publishes_a_verified_port(self) -> None:
-        if self.python_bridge:
-            self.skipTest("Python startup failures are covered by route-injection unit tests.")
-        self.stop()
-        for mode in ('wrong-instance', 'silent', 'missing-dns'):
-            with self.subTest(mode=mode), contextlib.ExitStack() as cleanup:
-                cleanup.callback(self.stop)
-                preload = self.root / 'docker-route.mjs'
-                preload.write_text("""
-import http from 'node:http';
-import os from 'node:os';
-os.platform = () => 'win32';
-const createServer = http.createServer;
-http.createServer = (handler) => createServer((request, response) => {
-    if (request.url === '/intercepted') {
-        if (process.env.ROUTE_MODE === 'silent') return;
-        response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ instanceId: 'different-listener' }));
-        return;
-    }
-    handler(request, response);
-});
-const get = http.get;
-http.get = (options, callback) => {
-    if (options.hostname !== 'host.docker.internal') return get(options, callback);
-    if (process.env.ROUTE_MODE === 'missing-dns') {
-        return get({ ...options, hostname: 'localhost', lookup: (_host, _options, done) => {
-            const error = new Error('No Docker Desktop DNS');
-            error.code = 'ENOTFOUND';
-            done(error);
-        } }, callback);
-    }
-    return get({ ...options, hostname: '127.0.0.1',
-        path: String(options.port) === process.env.INTERCEPT_PORT ? '/intercepted' : options.path,
-    }, callback);
-};
-""", encoding='utf-8')
-                initial = self.port
-                self.env.update(ROUTE_MODE=mode, INTERCEPT_PORT=str(initial))
-                self.node_options = ['--import', preload.as_uri()]
-                offset = len(self.logs())
-                command = self.command()
-                del command[-4:-2]  # Remove --host 127.0.0.1, retaining Node preload.
-                self.launch(command)
-                selected = next(line.split('=', 1)[1] for line in self.env_file.read_text(encoding='utf-8').splitlines() if line.startswith('UNITY_MCP_HTTP_PORT='))
-                self.port = int(selected)
-                if mode == 'missing-dns':
-                    self.assertEqual(self.port, initial)
-                    self.assertIn('only the local route was verified', self.logs()[offset:])
-                else:
-                    self.assertNotEqual(self.port, initial)
-                    self.assertIn('Docker host route failed', self.logs()[offset:])
-                    self.assertIn('Docker host route verified', self.logs()[offset:])
-                self.assertEqual(self.http('/healthz')[1]['bridgePid'], self.process.pid)
-                self.assertEqual(self.rpc('initialize')['result']['serverInfo']['name'], 'fixture')
-
-    def test_existing_bridge_with_intercepted_docker_route_is_not_reused(self) -> None:
-        if self.python_bridge:
-            self.skipTest("Python startup failures are covered by route-injection unit tests.")
-        old = self.process
-        self.addCleanup(old.wait, 5)
-        self.addCleanup(old.terminate)
-        preload = self.root / 'existing-docker-route.mjs'
-        preload.write_text("""
-import http from 'node:http';
-import os from 'node:os';
-os.platform = () => 'win32';
-const get = http.get;
-http.get = (options, callback) => get(options.hostname === 'host.docker.internal'
-    ? { ...options, hostname: '127.0.0.1',
-        path: String(options.port) === process.env.INTERCEPT_PORT ? '/intercepted' : options.path }
-    : options, callback);
-""", encoding='utf-8')
-        self.env['INTERCEPT_PORT'] = str(self.port)
-        self.node_options = ['--import', preload.as_uri()]
-        command = self.command()
-        del command[-4:-2]
-        initial = self.port
-        offset = len(self.logs())
-        self.launch(command)
-        self.port = int(next(line.split('=', 1)[1] for line in self.env_file.read_text(encoding='utf-8').splitlines() if line.startswith('UNITY_MCP_HTTP_PORT=')))
-        self.assertNotEqual(self.port, initial)
-        self.assertNotIn('nothing to do', self.logs()[offset:])
-        self.assertIn('Docker host route verified', self.logs()[offset:])
-        self.assertEqual(self.http('/healthz')[1]['bridgePid'], self.process.pid)
 
     def test_repeated_start_recognizes_absolute_cli_path(self) -> None:
         before = self.env_file.read_text(encoding='utf-8')
@@ -610,8 +472,8 @@ http.get = (options, callback) => get(options.hostname === 'host.docker.internal
 
     def test_slow_config_sync_keeps_http_responsive_and_uses_selected_port(self) -> None:
         self.stop()
-        configure = self.root / 'scripts/mcp_configure.py' if self.python_bridge else self.script.parent / 'configure.mjs'
-        configure.write_text(PYTHON_CONFIG_SYNC_FIXTURE if self.python_bridge else CONFIG_SYNC_FIXTURE, encoding='utf-8')
+        configure = self.root / 'scripts/mcp_configure.py'
+        configure.write_text(PYTHON_CONFIG_SYNC_FIXTURE, encoding='utf-8')
         self.env['UNITY_MCP_AUTO_SYNC'] = '1'
         self.env['UNITY_MCP_HTTP_PORT'] = '9020'
         self.env_file.write_text(self.env_file.read_text(encoding='utf-8').replace(f'UNITY_MCP_HTTP_PORT={self.port}', 'UNITY_MCP_HTTP_PORT=9020'), encoding='utf-8')
@@ -626,11 +488,6 @@ http.get = (options, callback) => get(options.hostname === 'host.docker.internal
         self.assertLess(time.monotonic() - start, 1)
         self.assertEqual(port_file.read_text(encoding='utf-8'), str(self.port))
         time.sleep(1.8)
-
-
-class PythonHostTests(HostTests):
-    __unittest_skip__ = False
-    python_bridge = True
 
     def test_stalled_cli_input_does_not_block_request_timeouts_or_health(self) -> None:
         self.rpc('initialize')
