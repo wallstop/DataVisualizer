@@ -3,11 +3,14 @@
 The runtime assembly is part of the package and carries the extension surface, so your types compile against it in both the editor and a player build. Everything on this page is
 public API. Code identifiers keep the `DataVisualizer` name — namespaces, types, and assemblies are unchanged by the rebrand, so your code needs no edits.
 
+Each code block is a separate example. Put each ScriptableObject class in a file with the same name. Except for the processor, the examples compile in editor and player assemblies.
+
 ## Display attributes
 
 `[CustomDataVisualization]` overrides how a type appears in the catalog.
 
 ```csharp
+using UnityEngine;
 using WallstopStudios.DataVisualizer;
 
 [CustomDataVisualization(Namespace = "Weapons", TypeName = "Weapon")]
@@ -40,12 +43,15 @@ public sealed class ItemData : BaseDataObject
 
 It provides:
 
-- `Id`, the asset's GUID, kept in sync with the AssetDatabase.
+- `Id`, a persisted identifier. In the editor, an empty or whitespace ID is initialized from the asset GUID once an asset path is available. Existing nonempty IDs are preserved,
+  including authored IDs that differ from the asset GUID. Validation, rename, and move do not synchronize them. Player builds read the serialized ID without AssetDatabase access.
 - `Title`, the display name. A blank title falls back to the asset name, so you only set it when the asset name is not what you want to show.
 - `Description`.
 - Ordering by title, then asset name, then Id, then description.
 
-The serialized fields `_assetGuid`, `_title`, and `_description` are shown in the inspector under a **Base Data** header, read-only.
+The serialized fields `_assetGuid`, `_title`, and `_description` appear under a **Base Data** header. Only `_assetGuid` is read-only; title and description remain editable.
+
+Use the asset GUID when identifying a file through editor APIs. Do not assume an authored `Id` equals that GUID or is unique across independently authored assets.
 
 ## Lifecycle hooks
 
@@ -57,10 +63,18 @@ Each hook is a `virtual` method on `BaseDataObject` and also a standalone interf
 | `ICreatable`  | `BeforeCreate()`, `AfterCreate()`                                                 | Around [Create](managing-assets.md#create) |
 | `IRenamable`  | `BeforeRename(string newName)`, `AfterRename(string newName)`                     | Around [Rename](managing-assets.md#rename) |
 
-Override only what you need. The default implementations already do the work you would otherwise repeat: `BeforeClone` clears the inherited asset GUID so the copy does not share
-the original's identity, and `AfterClone` refreshes the GUID from the new asset path and applies the `(Clone)`, `(Clone 1)`, `(Clone 2)`, … suffix to the title.
+Override only what you need, and call the base implementation when retaining its identity and title behavior. The default implementations already do the work you would otherwise
+repeat: `BeforeClone` clears the inherited ID so the copy does not share the original's identity, and `AfterClone` initializes the empty ID from the new asset path and applies the
+`(Clone)`, `(Clone 1)`, `(Clone 2)`, … suffix to the title.
+
+The rename example guards its editor-only call so it also compiles in a player assembly:
 
 ```csharp
+using WallstopStudios.DataVisualizer;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 public sealed class ItemData : BaseDataObject
 {
     public override void BeforeRename(string newName)
@@ -70,7 +84,9 @@ public sealed class ItemData : BaseDataObject
 
     public override void AfterRename(string newName)
     {
+#if UNITY_EDITOR
         EditorUtility.SetDirty(this);
+#endif
     }
 }
 ```
@@ -102,6 +118,9 @@ editor-only members in a player build, so a `BuildGUI` override compiles in both
 Implement `IDisplayable` to control the name shown for an object. `BaseDataObject` implements it through `Title`. For a plain `ScriptableObject`, implement it yourself:
 
 ```csharp
+using UnityEngine;
+using WallstopStudios.DataVisualizer;
+
 public sealed class ItemData : ScriptableObject, IDisplayable
 {
     [SerializeField]
@@ -115,19 +134,22 @@ The row label, the search result name, and the drag ghost all read `Title` when 
 
 ## Processors
 
-A processor is a plain class implementing `IDataProcessor`. The window discovers every implementation in your project, so no registration is needed.
+A processor is a plain class implementing `IDataProcessor`. The window discovers every implementation in your project, so no registration is needed. Place this example in an
+**Editor** folder; its `UnityEditor` calls are editor-only. Use the `ItemData` example from [BaseDataObject](#basedataobject), whose public `Description` property is available
+here.
 
 ```csharp
 using System;
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 using WallstopStudios.DataVisualizer;
 
-public sealed class RecalculateRarity : IDataProcessor
+public sealed class TrimDescriptions : IDataProcessor
 {
-    public string Name => "Recalculate rarity";
+    public string Name => "Trim descriptions";
 
-    public string Description => "Recomputes each item's rarity from its level.";
+    public string Description => "Removes surrounding whitespace from item descriptions.";
 
     public IEnumerable<Type> Accepts => new[] { typeof(ItemData) };
 
@@ -137,7 +159,7 @@ public sealed class RecalculateRarity : IDataProcessor
         {
             if (obj is ItemData item)
             {
-                item.Rarity = Rarity.FromLevel(item.Level);
+                item.Description = item.Description?.Trim();
                 EditorUtility.SetDirty(item);
             }
         }

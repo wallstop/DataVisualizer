@@ -65,10 +65,27 @@ Drag a label pill from **Available** into **AND:** or **OR:** to filter, and dra
 
 The **AND &&** / **OR ||** switch above the OR row picks how the two clauses combine.
 
-In **AND** mode an object must satisfy every clause that has labels. An empty clause adds no constraint.
+Within **AND:**, an asset must have every listed label. Within **OR:**, it must have at least one listed label. The switch combines those two row results:
 
-In **OR** mode an object must satisfy at least one clause **that has labels**. An empty clause never counts as a match. This matters: if you only fill the AND row and switch to OR,
-nothing matches, because the empty OR clause is not a pass.
+| Configured rows | AND mode                                  | OR mode                                   |
+| --------------- | ----------------------------------------- | ----------------------------------------- |
+| Neither         | All assets pass                           | All assets pass                           |
+| AND only        | Every AND label is present                | Every AND label is present                |
+| OR only         | At least one OR label is present          | At least one OR label is present          |
+| Both            | Every AND label and at least one OR label | Every AND label, or at least one OR label |
+
+For example, with **AND:** `Urgent`, `Reviewed` and **OR:** `Weapon`, `Armor`:
+
+| Asset labels                   | AND mode | OR mode  |
+| ------------------------------ | -------- | -------- |
+| `Urgent`, `Reviewed`, `Weapon` | Match    | Match    |
+| `Urgent`, `Reviewed`           | No match | Match    |
+| `Armor`                        | No match | Match    |
+| `Urgent`                       | No match | No match |
+| None                           | No match | No match |
+
+An empty row adds no constraint in AND mode and cannot independently satisfy OR mode. If only **AND:** `Urgent` is configured, an asset labeled `Urgent` passes in either mode. With
+no labels configured, both modes show every asset.
 
 Labels compare exactly, so `Urgent` and `urgent` are two different labels.
 
