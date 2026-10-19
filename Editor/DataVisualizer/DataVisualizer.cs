@@ -1943,16 +1943,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void PopulateSearchCacheAsync()
         {
             var cacheStartTime = System.Diagnostics.Stopwatch.StartNew();
-            _assetObjectCache?.Clear();
-            // Visible rows still need identity-based reconciliation while search batches reload.
-            foreach (ScriptableObject visible in _selectedObjects)
-            {
-                if (visible != null && IsTrackedAssetType(visible.GetType()))
-                {
-                    string visiblePath = AssetDatabase.GetAssetPath(visible);
-                    _assetObjectCache.Upsert(AssetDatabase.AssetPathToGUID(visiblePath), visible, sorted: false);
-                }
-            }
+            // Keep GUIDs and captured sort keys even when deletion already destroyed a visible wrapper.
+            _assetObjectCache.ResetRetainingRows(_selectedObjects, IsTrackedAssetType);
             _pendingSearchCacheGuids.Clear();
             _isLoadingSearchCacheAsync = true;
             // The cache is being rebuilt; it is not searchable until the batches below finish.

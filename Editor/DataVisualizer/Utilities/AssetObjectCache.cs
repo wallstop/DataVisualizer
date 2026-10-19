@@ -43,6 +43,25 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _keys.Clear();
         }
 
+        public int ResetRetainingRows(IReadOnlyList<ScriptableObject> rows, Func<Type, bool> isRelevant)
+        {
+            HashSet<ScriptableObject> retained = new(rows);
+            List<(string Guid, ScriptableObject Value, (string Name, string Type) Key)> entries = new();
+            foreach (KeyValuePair<string, ScriptableObject> entry in _byGuid)
+            {
+                if (retained.Contains(entry.Value) && isRelevant(entry.Value.GetType()))
+                    entries.Add((entry.Key, entry.Value, _keys[entry.Value]));
+            }
+            Clear();
+            foreach (var entry in entries)
+            {
+                _byGuid.Add(entry.Guid, entry.Value);
+                _ordered.Add(entry.Value);
+                _keys.Add(entry.Value, entry.Key);
+            }
+            return entries.Count;
+        }
+
         public bool Remove(string guid)
         {
             if (string.IsNullOrEmpty(guid) || !_byGuid.TryGetValue(guid, out ScriptableObject previous))

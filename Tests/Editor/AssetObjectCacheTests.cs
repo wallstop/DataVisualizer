@@ -51,7 +51,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             cache.Upsert("guid", original, true);
             cache.Upsert("guid", replacement, true);
             CollectionAssert.AreEqual(new[] { replacement }, ordered);
+            cache.Upsert("other", original, true);
             UnityEngine.Object.DestroyImmediate(replacement);
+            Assert.AreEqual(1, cache.ResetRetainingRows(new ScriptableObject[] { replacement }, type => type == typeof(PlayModeDataObject)));
+            Assert.That(cache.TryGet("guid", out ScriptableObject destroyed));
+            Assert.That(ReferenceEquals(replacement, destroyed));
+            Assert.That(!cache.Contains("other"));
             Assert.That(!cache.Contains("guid"));
             Assert.That(cache.Remove("guid"));
             Assert.AreEqual(0, cache.Count);
