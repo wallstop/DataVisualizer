@@ -276,6 +276,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 ArrangeShotState(window, shotName);
 
                 EditorSurfaceCaptureResult result = EditorSurfaceCapture.Capture(window, capturePath);
+                if (shotName == SearchShotName)
+                {
+                    VerifySearchFixtures(window);
+                }
                 ValidateCapturedRegions(window, capturePath, shotName);
                 return crop ? CropCapturedShot(window, shotName, capturePath, result) : result;
             }
@@ -1000,6 +1004,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             step, and a result-less match fails closed instead of documenting an empty
             popover.
         */
+        private static void VerifySearchFixtures(DataVisualizerWindow window)
+        {
+            if (
+                typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, ReflectedInstanceMembers)?.GetValue(window) is not List<VisualElement> results
+                || results.Count != FixtureTitles.Length
+            )
+            {
+                throw new InvalidOperationException("The search capture must contain exactly the owned fixture results.");
+            }
+            foreach (VisualElement row in results)
+            {
+                if (row.userData is not ScriptableObject asset || asset == null || !AssetDatabase.GetAssetPath(asset).StartsWith(FixtureFolder + "/", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("The search capture contains an asset outside its owned fixture root.");
+                }
+            }
+        }
+
         private static void StageSearchState(DataVisualizerWindow window)
         {
             FieldInfo cacheField = typeof(DataVisualizerWindow).GetField(SearchCacheFieldName, ReflectedInstanceMembers);
@@ -1014,6 +1036,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new InvalidOperationException("The DataVisualizer window exposes no search-cache flag; the capture " + "driver cannot stage the search results.");
             }
 
+            if (typeof(DataVisualizerWindow).GetField("_searchCacheLoadTask", ReflectedInstanceMembers)?.GetValue(window) is IVisualElementScheduledItem pendingSearch)
+            {
+                pendingSearch.Pause();
+            }
             cache.Clear();
             for (int index = 0; index < FixtureTitles.Length; index++)
             {
