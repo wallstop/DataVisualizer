@@ -11,8 +11,8 @@ This page covers the operations that change assets on disk, and the processors t
 press Enter or Space to open the menu. Arrow keys choose a command; Escape closes the menu. With the object list focused, **Ctrl/Cmd+D**, **F2**, and **Delete** act on the selected
 asset. On Mac keyboards, the Delete key sends Backspace and also opens confirmation. Delete still asks for confirmation. These shortcuts do not apply inside text fields.
 
-![Clone, rename, move, and delete controls on the object rows](images/data-visualizer-instance-actions.webp) _Per-row asset management controls. Regenerated from the live window by
-the docs capture pipeline._
+![Actions menu buttons beside the object names in the object list](images/data-visualizer-instance-actions.webp) _Open **Actions** on a row for Clone, Rename, Move, or Delete.
+Regenerated from the live window by the docs capture pipeline._
 
 ## Create
 
