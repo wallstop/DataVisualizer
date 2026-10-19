@@ -128,6 +128,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new InvalidOperationException("A performance-baseline run is already active in this editor.");
             }
 
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                throw new InvalidOperationException("Run the performance baseline in Edit Mode.");
+            }
+
             if (string.IsNullOrWhiteSpace(outputDirectory))
             {
                 throw new ArgumentException("The output directory must not be empty.", nameof(outputDirectory));
@@ -151,6 +156,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             _active = state;
             EditorApplication.update += Tick;
             AssemblyReloadEvents.beforeAssemblyReload += Cancel;
+            EditorApplication.quitting += Cancel;
+            EditorApplication.playModeStateChanged += CancelForPlayMode;
             Debug.Log($"[PerfBaseline] run started; report will be written to {outputDirectory}.");
         }
 
@@ -314,6 +321,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             catch (Exception)
             {
                 return -1;
+            }
+        }
+
+        private static void CancelForPlayMode(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.ExitingEditMode)
+            {
+                Cancel();
             }
         }
 
@@ -662,6 +677,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             _active = null;
             EditorApplication.update -= Tick;
             AssemblyReloadEvents.beforeAssemblyReload -= Cancel;
+            EditorApplication.quitting -= Cancel;
+            EditorApplication.playModeStateChanged -= CancelForPlayMode;
         }
 
         private static bool IsSearchCachePopulated(DataVisualizerWindow window)

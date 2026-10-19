@@ -21,7 +21,8 @@ Transport latency is not added to each duration.
 The run writes a schema-1 JSON report with the environment, raw samples, and repetition counts. A 45-minute watchdog is checked on editor ticks. Each dataset owns a unique
 `Assets/PerfBaselineFixtures-<run-id>` folder; cleanup verifies its GUID and ownership marker before deleting it and preserves pre-existing assets, including the old fixed fixture
 folder. `PerfBaseline.Status()` reports the current phase and fixture count. `PerfBaseline.Cancel()` writes an error report with the phase, created/requested counts, elapsed
-staging time, and completed samples, then cleans up. Assembly reload also cancels the run. Incomplete single-sample scenarios contain empty arrays instead of zero-duration results.
+staging time, and completed samples, then cleans up. Assembly reload, editor quit, and entering Play Mode also cancel the run. Start the driver in Edit Mode. Incomplete
+single-sample scenarios contain empty arrays instead of zero-duration results.
 
 ## Recorded environment
 
