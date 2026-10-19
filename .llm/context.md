@@ -36,7 +36,7 @@ Runtime/                         Runtime assembly (WallstopStudios.DataVisualize
   Helper/                        Directory/Path/Reflection helpers
 Tests/Editor/                    EditMode tests (WallstopStudios.DataVisualizer.Tests.Editor.asmdef)
 docs/                            Screenshots and README assets
-scripts/                         PowerShell automation for this .llm harness
+scripts/                         Typed Python automation for this .llm harness
 .llm/                            This harness (context, skills, code samples, references)
 .llm/mcp/                        MCP servers + multi-frontend configurator (see mcp/README.md)
 .devcontainer/                   VS Code devcontainer (agent CLIs, Z.ai backends, MCP sync)

@@ -55,17 +55,6 @@ jobs:
       branch: ${{ steps.prep.outputs.branch }}
       merge_sha: ${{ steps.merge.outputs.merge_sha }}
     steps:
-      - name: Require the default branch
-        env:
-          EVENT: ${{ github.event_name }}
-          REF: ${{ github.ref }}
-        run: |
-          set -euo pipefail
-          if [ "${EVENT}" = "workflow_dispatch" ] && [ "${REF}" != "refs/heads/main" ]; then
-            echo "::error::Only prepare releases from main."
-            exit 1
-          fi
-
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,6 +62,15 @@ jobs:
           # dropped credential would make the release-branch push fail. The runner is
           # ephemeral, so the stored token does not outlive the job.
           persist-credentials: true
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Require the default branch
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: uv run --no-project scripts/release/workflow.py require-main
 
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -83,50 +81,17 @@ jobs:
       - name: Check npm provenance identity
         env:
           REPOSITORY: ${{ github.repository }}
-        run: python3 scripts/release/repository_identity.py --repository "${REPOSITORY}"
+        run: uv run --no-project scripts/release/repository_identity.py --repository "${REPOSITORY}"
 
       - name: Bump version and rotate the changelog
         id: prep
         env:
           BUMP: ${{ inputs.bump }}
           EXPLICIT_VERSION: ${{ inputs.explicit_version }}
-        run: |
-          set -euo pipefail
-          args=(--root .)
-          if [ -n "${EXPLICIT_VERSION}" ]; then
-            args+=(--version "${EXPLICIT_VERSION}")
-          else
-            args+=(--bump "${BUMP}")
-          fi
-          output="$(python3 scripts/release/prepare_release.py "${args[@]}")"
-          printf '%s\n' "${output}"
-          previous_version="$(printf '%s\n' "${output}" | sed -n 's/^previous-version: //p')"
-          version="$(printf '%s\n' "${output}" | sed -n 's/^next-version: //p')"
-          if [ -z "${previous_version}" ] || [ -z "${version}" ]; then
-            echo "::error::The preparation script did not report previous-version/next-version."
-            exit 1
-          fi
-          {
-            echo "previous_version=${previous_version}"
-            echo "version=${version}"
-            echo "branch=release/v${version}"
-          } >> "${GITHUB_OUTPUT}"
+        run: uv run --no-project scripts/release/workflow.py prepare
 
       - name: Validate the release tree
-        run: |
-          set -euo pipefail
-          # The lint runs with the image-guaranteed python3 like every other
-          # script in this workflow: `npm run lint:llm` shells out to uv,
-          # which a fresh runner never has, so every preparation dispatch
-          # died here with exit 127 before anything else could run.
-          python3 scripts/lint_llm_instructions.py
-          npm pack --dry-run
-          candidate_dir="$(mktemp -d "${RUNNER_TEMP}/release-candidate.XXXXXX")"
-          python3 scripts/release/build_unitypackage.py --output "${candidate_dir}"
-          archive="${candidate_dir}/$(node -p "require('./package.json').name + '-' + require('./package.json').version + '.unitypackage'")"
-          python3 scripts/release/validate_unitypackage.py --archive "${archive}"
-          version="$(node -p "require('./package.json').version")"
-          python3 scripts/release/extract_release_notes.py --version "${version}" --output "${candidate_dir}/release-notes.md"
+        run: uv run --no-project scripts/release/workflow.py validate-tree
 
       - name: Commit and push the release branch
         id: candidate
@@ -135,25 +100,7 @@ jobs:
           BRANCH: ${{ steps.prep.outputs.branch }}
           PREVIOUS_VERSION: ${{ steps.prep.outputs.previous_version }}
           VERSION: ${{ steps.prep.outputs.version }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "${BRANCH}"
-          git add package.json CHANGELOG.md .llm/context.md
-          git commit -m "Bump version from ${PREVIOUS_VERSION} to ${VERSION}"
-          if git ls-remote --exit-code --heads origin "refs/heads/${BRANCH}" >/dev/null; then
-            git fetch origin "refs/heads/${BRANCH}"
-            if ! git diff --quiet HEAD FETCH_HEAD; then
-              echo "::error::${BRANCH} already exists with different content. Inspect it before preparing another release."
-              exit 1
-            fi
-            git switch --detach FETCH_HEAD
-            echo "::notice::Reusing the existing release branch ${BRANCH}."
-          else
-            git push origin "${BRANCH}"
-          fi
-          echo "head=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+        run: uv run --no-project scripts/release/workflow.py commit-push
 
       - name: Open the release pull request
         if: ${{ inputs.dry_run == false }}
@@ -162,25 +109,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PREVIOUS_VERSION: ${{ steps.prep.outputs.previous_version }}
           VERSION: ${{ steps.prep.outputs.version }}
-        run: |
-          set -euo pipefail
-          if gh pr view "${BRANCH}" --json state --jq .state 2>/dev/null | grep -qx OPEN; then
-            echo "::notice::The release pull request is already open."
-            exit 0
-          fi
-          body_file="${RUNNER_TEMP}/release-pr-body.md"
-          cat > "${body_file}" <<EOF
-          DISCLOSURE: LLM-GENERATED TEXT
-
-          **Why:** Release v${VERSION} publishes the prepared package changes.
-
-          **What:**
-
-          - Bump ${PREVIOUS_VERSION} to ${VERSION} and date the release notes.
-          - Publish npm and GitHub artifacts after automated validation and merge.
-          EOF
-          gh pr create --base main --head "${BRANCH}" \
-            --title "Release v${VERSION}" --body-file "${body_file}"
+        run: uv run --no-project scripts/release/workflow.py open-pr
 
       - name: Validate and merge the release pull request
         id: merge
@@ -190,12 +119,14 @@ jobs:
           BRANCH: ${{ steps.prep.outputs.branch }}
           CANDIDATE_HEAD: ${{ steps.candidate.outputs.head }}
           REQUEST: release-${{ github.run_id }}-${{ github.run_attempt }}
-        run: python3 scripts/release/complete_release_pr.py --branch "${BRANCH}" --request "${REQUEST}" --head "${CANDIDATE_HEAD}"
+        run: uv run --no-project scripts/release/complete_release_pr.py --branch "${BRANCH}" --request "${REQUEST}" --head "${CANDIDATE_HEAD}"
 
       - name: Dry-run summary
         if: ${{ inputs.dry_run == true }}
-        run: |
-          echo "Dry run: would prepare release v${{ steps.prep.outputs.version }} (branch ${{ steps.prep.outputs.branch }}); candidate validated on the runner; no branch pushed and no PR opened."
+        env:
+          VERSION: ${{ steps.prep.outputs.version }}
+          BRANCH: ${{ steps.prep.outputs.branch }}
+        run: uv run --no-project scripts/release/workflow.py dry-summary
 
   release:
     name: Tag and publish release
@@ -221,8 +152,11 @@ jobs:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
       - name: Retain release tooling
-        run: cp -R scripts/release "${RUNNER_TEMP}/release-tools"
+        run: uv run --no-project scripts/release/workflow.py retain-tools
 
       - name: Resolve the release source
         id: resolve
@@ -234,43 +168,7 @@ jobs:
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           PREPARED_SHA: ${{ needs.prepare.outputs.merge_sha }}
           PREPARED_BRANCH: ${{ needs.prepare.outputs.branch }}
-        run: |
-          set -euo pipefail
-          create_tag=false
-          branch=""
-          if [ -n "${PREPARED_SHA}" ]; then
-            branch="${PREPARED_BRANCH}"
-            tag="${branch#release/}"
-            checkout_ref="${PREPARED_SHA}"
-            create_tag=true
-          elif [ "${EVENT}" = "pull_request" ]; then
-            branch="${HEAD_REF}"
-            tag="${branch#release/}"
-            checkout_ref="${MERGE_SHA}"
-            create_tag=true
-            test -n "${checkout_ref}"
-          elif [ "${EVENT}" = "push" ]; then
-            tag="${REF#refs/tags/}"
-            checkout_ref="refs/tags/${tag}"
-          else
-            if [ "${REF}" != "refs/heads/main" ]; then
-              echo "::error::Only publish releases from main."
-              exit 1
-            fi
-            tag="${INPUT_TAG:-v$(node -p "require('./package.json').version")}"
-            checkout_ref="refs/tags/${tag}"
-          fi
-          if ! printf '%s' "${tag}" | grep -qE '^v[0-9]'; then
-            echo "::error::Publication requires an existing vX.Y.Z tag or a merged release/vX.Y.Z PR."
-            exit 1
-          fi
-          git check-ref-format "refs/tags/${tag}"
-          {
-            echo "tag=${tag}"
-            echo "branch=${branch}"
-            echo "checkout_ref=${checkout_ref}"
-            echo "create_tag=${create_tag}"
-          } >> "${GITHUB_OUTPUT}"
+        run: uv run --no-project scripts/release/workflow.py resolve
 
       - name: Checkout the exact release source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -289,77 +187,32 @@ jobs:
       - name: Check or repair npm provenance identity
         env:
           REPOSITORY: ${{ github.repository }}
-        run: python3 "${RUNNER_TEMP}/release-tools/repository_identity.py" --root . --repository "${REPOSITORY}" --repair-legacy
+        run: uv run --no-project "${RUNNER_TEMP}/release-tools/repository_identity.py" --root . --repository "${REPOSITORY}" --repair-legacy
 
       - name: Tag the merged release commit
         if: ${{ steps.resolve.outputs.create_tag == 'true' }}
         env:
           TAG: ${{ steps.resolve.outputs.tag }}
           BRANCH: ${{ steps.resolve.outputs.branch }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-            # A rerun may find its tag already pushed. Never move it.
-            test "$(git rev-parse "refs/tags/${TAG}^{commit}")" = "$(git rev-parse HEAD)" || {
-              echo "::error::Existing ${TAG} points at a different commit."
-              exit 1
-            }
-          else
-            python3 "${RUNNER_TEMP}/release-tools/tag_release.py" --root . --branch "${BRANCH}"
-          fi
-          git push origin "refs/tags/${TAG}"
+        run: uv run --no-project "${RUNNER_TEMP}/release-tools/workflow.py" tag
 
       - name: Run non-Unity repository validation
-        # Same uv-free interpreter as the preparation job (see above): the
-        # npm script shells out to uv, which runners never have.
-        run: python3 scripts/lint_llm_instructions.py
+        run: uv run --no-project scripts/lint_llm_instructions.py
 
       - name: Verify the release tag and packed payload
         id: verify
         env:
           TAG: ${{ steps.resolve.outputs.tag }}
-        run: |
-          set -euo pipefail
-          output="$(python3 "${RUNNER_TEMP}/release-tools/verify_release.py" --root . --tag "${TAG}")"
-          printf '%s\n' "${output}"
-          for key in pkg version npm_tag package_file entries; do
-            value="$(printf '%s\n' "${output}" | sed -n "s/^${key}: //p")"
-            if [ -z "${value}" ]; then
-              echo "::error::The verification script did not report '${key}'."
-              exit 1
-            fi
-            echo "${key}=${value}" >> "${GITHUB_OUTPUT}"
-          done
+        run: uv run --no-project "${RUNNER_TEMP}/release-tools/workflow.py" verify
 
       - name: Verify npm trusted publishing toolchain
-        run: |
-          set -euo pipefail
-          node --version
-          npm --version
-          required_npm="11.5.1"
-          current_npm="$(npm --version)"
-          if [ "$(printf '%s\n' "${required_npm}" "${current_npm}" | sort -V | head -n1)" != "${required_npm}" ]; then
-            echo "::error::npm ${current_npm} is too old; trusted publishing requires npm >= ${required_npm}."
-            exit 1
-          fi
+        run: uv run --no-project "${RUNNER_TEMP}/release-tools/workflow.py" toolchain
 
       - name: Build the release .unitypackage
-        run: |
-          set -euo pipefail
-          python3 "${RUNNER_TEMP}/release-tools/build_unitypackage.py" --root . --output dist
-          ls dist
+        run: uv run --no-project "${RUNNER_TEMP}/release-tools/workflow.py" build
 
       - name: Validate the release .unitypackage
-        run: |
-          set -euo pipefail
-          archive="$(find dist -maxdepth 1 -name '*.unitypackage' | head -n1)"
-          if [ -z "${archive}" ]; then
-            echo "::error::The builder produced no .unitypackage."
-            exit 1
-          fi
-          python3 "${RUNNER_TEMP}/release-tools/validate_unitypackage.py" --root . --archive "${archive}"
+        run: uv run --no-project "${RUNNER_TEMP}/release-tools/workflow.py" validate-archive
 
       - name: Prepare release notes and the npm tarball checksum
         id: artifacts
@@ -367,16 +220,7 @@ jobs:
           TAG: ${{ steps.resolve.outputs.tag }}
           VERSION: ${{ steps.verify.outputs.version }}
           PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
-        run: |
-          set -euo pipefail
-          python3 "${RUNNER_TEMP}/release-tools/extract_release_notes.py" --root . --version "${VERSION}" --output dist/release-notes.md
-          if [ ! -f "${PACKAGE_FILE}" ]; then
-            echo "::error::Expected the npm tarball '${PACKAGE_FILE}' in the repository root."
-            exit 1
-          fi
-          hash="$(sha256sum "${PACKAGE_FILE}" | awk '{print $1}')"
-          printf '%s  %s\n' "${hash}" "${PACKAGE_FILE}" > "${PACKAGE_FILE}.sha256"
-          cat "${PACKAGE_FILE}.sha256"
+        run: uv run --no-project "${RUNNER_TEMP}/release-tools/workflow.py" artifacts
 
       # Every archive and the changelog notes must pass before publication.
       # Reruns finish the GitHub Release when the npm version already exists.
@@ -387,17 +231,7 @@ jobs:
           VER: ${{ steps.verify.outputs.version }}
           NPM_TAG: ${{ steps.verify.outputs.npm_tag }}
           PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
-        run: |
-          set -euo pipefail
-          # Re-runnable: skip if this exact name@version is already on the registry (a prior
-          # run may have published it before failing downstream). npm publish is otherwise
-          # irreversible.
-          if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
-            echo "::notice::${PKG}@${VER} is already on the registry; skipping publish."
-          else
-            npm publish "${PACKAGE_FILE}" --access public --tag "${NPM_TAG}"
-            echo "::notice::Published ${PKG}@${VER} to dist-tag '${NPM_TAG}'."
-          fi
+        run: uv run --no-project "${RUNNER_TEMP}/release-tools/workflow.py" publish-npm
 
       - name: Create or update the GitHub Release
         if: ${{ inputs.dry_run != true }}
@@ -406,21 +240,7 @@ jobs:
           TAG: ${{ steps.resolve.outputs.tag }}
           NPM_TAG: ${{ steps.verify.outputs.npm_tag }}
           PACKAGE_FILE: ${{ steps.verify.outputs.package_file }}
-        run: |
-          set -euo pipefail
-          prerelease_args=()
-          if [ "${NPM_TAG}" = "next" ]; then
-            prerelease_args+=(--prerelease)
-          fi
-          artifacts=("${PACKAGE_FILE}" "${PACKAGE_FILE}.sha256" dist/*.unitypackage dist/*.unitypackage.sha256)
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release edit "${TAG}" --title "${TAG}" --notes-file dist/release-notes.md "${prerelease_args[@]}"
-            gh release upload "${TAG}" --clobber "${artifacts[@]}"
-            echo "::notice::Updated GitHub Release ${TAG}."
-          else
-            gh release create "${TAG}" --verify-tag --title "${TAG}" --notes-file dist/release-notes.md "${prerelease_args[@]}" "${artifacts[@]}"
-            echo "::notice::Created GitHub Release ${TAG}."
-          fi
+        run: uv run --no-project "${RUNNER_TEMP}/release-tools/workflow.py" publish-github
 
       - name: Upload validated release artifacts
         if: ${{ always() && steps.artifacts.outcome == 'success' }}

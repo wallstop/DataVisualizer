@@ -46,13 +46,12 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-          # Cache the mkdocs wheel set keyed on the pinned requirements; a
-          # cache hit skips the download on every docs build.
-          cache: pip
-          cache-dependency-path: requirements-docs.txt
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
 
       - name: Build the site (strict)
-        run: python3 scripts/build_docs.py --installer pip
+        run: uv run --no-project scripts/build_docs.py --installer uv
 
       - name: Upload the built site
         # Only a main push can deploy, so a pull-request build would upload an
