@@ -5,8 +5,8 @@ the full feature set, including themes, processors, and extension points.
 
 ## Requirements
 
-- Unity 2021.3 or newer. `package.json` declares that floor, and the window is developed and tested on Unity 6. The 2021.3 editor is not part of the local validation yet, which
-  [#86](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/86) tracks.
+- Unity 2021.3 or newer. `package.json` declares that floor, and the window is developed and tested on Unity 6. The declared minimum is not a completed compatibility matrix. Follow
+  [version validation](troubleshooting.md#validate-your-unity-version) before adopting the package.
 - No additional package dependencies.
 
 ## Install the package
@@ -63,8 +63,8 @@ Three finders narrow different things, and they do not affect each other. The [S
 - The **Search** box in the window header row searches every tracked type, not only the type you selected. It matches asset names, type names, asset GUIDs, and string fields on the
   assets themselves, so you can find an asset by what is inside it.
 - The filter field above the namespace list narrows the type rows by display name, without case sensitivity. Namespace headers stay visible.
-- Drag labels from **Available** into the **AND:** or **OR:** rows to show only assets that carry them. The **AND &&** and **OR ||** switch chooses between matching every label you
-  dragged and matching any of them.
+- Drag labels from **Available** into the **AND:** or **OR:** rows to show only assets that carry them. Within **AND:** every label is required; within **OR:** any label is
+  sufficient. The switch combines those two clauses.
 
 ## Keep your arrangement
 

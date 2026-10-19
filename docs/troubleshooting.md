@@ -126,6 +126,19 @@ When the package checkout is edited inside a container while Unity runs on the h
 not edit files while a test suite or capture run is in progress on the host: the host watcher racing a mid-run edit can fail the run with unrelated errors. Let the host finish,
 recompile, and report up to date before the next edit, then re-run.
 
+## Validate your Unity version
+
+The package declares Unity 2021.3 as its minimum. The current local host is Windows Unity 6000.5.2f1; that evidence does not prove other editor versions or operating systems.
+
+In a disposable project on your target editor version, install the package, check the Console for compile errors, then add a type, create an asset, edit it, search, filter, clone,
+and reopen the window. Check saved selection and order, and enter and exit Play Mode. Contributors should enable the package's tests and run its EditMode and PlayMode suites.
+Record the package revision, editor version, OS, theme, and display scale with failures.
+
+The remaining version matrix belongs to
+[the validation roadmap](https://github.com/Ambiguous-Interactive/DxVisualizer/blob/main/.llm/references/roadmap.md#t12---acceptance-matrix-and-release-evidence-partial).
+[Issue #270](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/270) owns the remaining physical display, DPI, and platform smoke evidence. A passing host run is not a
+claim that those cells passed.
+
 ## Still stuck
 
 - [Getting started](getting-started.md) — the first-session walkthrough.
