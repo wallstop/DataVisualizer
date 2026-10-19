@@ -354,6 +354,17 @@ namespace WallstopStudios.DataVisualizer.Editor
         private float? _lastSettingsClicked;
         private float? _lastEnterPressed;
         private AssetChangeRefreshService _assetChanges;
+        private AssetObjectCache _assetObjectCache;
+        private readonly AssetLabelUsage _selectedLabelUsage = new();
+        private bool _assetRowsChanged;
+        private int _assetRefreshObjectLoadCount;
+        private bool _assetLabelsChanged;
+        private bool _assetSearchChanged;
+        private bool _assetSelectionChanged;
+        private ScriptableObject _assetSelectionReplacement;
+        private int _nextIncrementalDisplayOrder;
+        private string _settingsAssetGuid;
+        private readonly Dictionary<Type, HashSet<string>> _removedAssetOrders = new();
         private bool _assetRefreshNeedsViews;
 
         private bool _needsRefresh;
@@ -1565,7 +1576,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             _nextColorIndex = 0;
             Instance = this;
             _assetChanges?.Dispose();
-            _assetChanges = new AssetChangeRefreshService(IsTrackedAssetType, MarkAssetRefreshNeeded);
+            _assetObjectCache = new AssetObjectCache(_allManagedObjectsCache);
+            _assetChanges = new AssetChangeRefreshService(IsTrackedAssetType, ApplyAssetChange);
+            ObjectChangeEvents.changesPublished -= HandleAssetObjectChanges;
+            ObjectChangeEvents.changesPublished += HandleAssetObjectChanges;
             _assetChanges.SetSuspended(EditorApplication.isPlayingOrWillChangePlaymode);
             _assetChanges.SliceCompleted += CompleteAssetRefreshSlice;
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
@@ -1575,6 +1589,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _isSearchCachePopulated = false;
             _selectedObject = null;
             _selectedObjects.Clear();
+            _selectedLabelUsage.Clear();
 #if ODIN_INSPECTOR
             _odinPropertyTree = null;
 #endif
@@ -1833,9 +1848,17 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void Cleanup()
         {
+            ObjectChangeEvents.changesPublished -= HandleAssetObjectChanges;
             _assetChanges?.Dispose();
             _assetChanges = null;
             _assetRefreshNeedsViews = false;
+            _selectedLabelUsage.Clear();
+            _removedAssetOrders.Clear();
+            _assetRowsChanged = false;
+            _assetLabelsChanged = false;
+            _assetSearchChanged = false;
+            _assetSelectionChanged = false;
+            _assetSelectionReplacement = null;
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
             if (!AssetGuidTypeIndex.Shared.IsComplete || AssetGuidTypeIndex.Shared.IsSuspended)
@@ -1874,7 +1897,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _scriptableObjectTypes.Clear();
             _namespaceOrder.Clear();
             _namespaceController.Clear();
-            _allManagedObjectsCache.Clear();
+            _assetObjectCache?.Clear();
             _currentSearchResultItems.Clear();
             _currentTypePopoverItems.Clear();
             _isSearchCachePopulated = false;
@@ -1920,7 +1943,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void PopulateSearchCacheAsync()
         {
             var cacheStartTime = System.Diagnostics.Stopwatch.StartNew();
-            _allManagedObjectsCache.Clear();
+            // Keep GUIDs and captured sort keys even when deletion already destroyed a visible wrapper.
+            _assetObjectCache.ResetRetainingRows(_selectedObjects, IsTrackedAssetType);
             _pendingSearchCacheGuids.Clear();
             _isLoadingSearchCacheAsync = true;
             // The cache is being rebuilt; it is not searchable until the batches below finish.
@@ -1967,7 +1991,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             // Keep verified identities until disposal; a rebuild must not blind queued deletions.
             string settingsPath = AssetDatabase.GetAssetPath(Settings);
-            _assetChanges?.Track(settingsPath, AssetDatabase.AssetPathToGUID(settingsPath));
+            _settingsAssetGuid = AssetDatabase.AssetPathToGUID(settingsPath);
+            _assetChanges?.Track(settingsPath, _settingsAssetGuid);
             foreach (string guid in uniqueGuids)
             {
                 _pendingSearchCacheGuids.Enqueue(guid);
@@ -2020,10 +2045,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 Load batch. GUIDs in _pendingSearchCacheGuids are already unique (deduped up front),
                 so no per-batch de-duplication is needed here.
             */
-            List<ScriptableObject> loadedObjects = new();
-
             foreach (string guid in batch)
             {
+                if (_assetObjectCache.Contains(guid))
+                {
+                    continue;
+                }
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 if (string.IsNullOrWhiteSpace(path))
                 {
@@ -2040,16 +2067,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     // Short-name type queries include unrelated candidates; retain only verified identities.
                     _assetChanges?.Track(path, guid);
-                    loadedObjects.Add(obj);
+                    _assetObjectCache.Upsert(guid, obj, sorted: false);
                 }
             }
-
-            /*
-                Append this batch. The cache is sorted once when loading completes (below); it isn't
-                used for search until then, so per-item BinarySearch+Insert would just be wasted
-                O(n^2) shifting work.
-            */
-            _allManagedObjectsCache.AddRange(loadedObjects);
 
             // Continue with next batch
             if (0 < _pendingSearchCacheGuids.Count)
@@ -2061,13 +2081,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _isLoadingSearchCacheAsync = false;
                 // Sort the fully-loaded cache once (search reads it sorted by name then type).
-                _allManagedObjectsCache.Sort(
-                    static (a, b) =>
-                    {
-                        int nameComp = string.Compare(a.name, b.name, StringComparison.Ordinal);
-                        return nameComp != 0 ? nameComp : string.Compare(a.GetType().FullName, b.GetType().FullName, StringComparison.Ordinal);
-                    }
-                );
+                _assetObjectCache.Sort();
                 _isSearchCachePopulated = true;
                 RefreshActiveSearch();
             }
@@ -2108,13 +2122,151 @@ namespace WallstopStudios.DataVisualizer.Editor
             return false;
         }
 
-        private void MarkAssetRefreshNeeded(string guid, string path, Type type)
+        private void HandleAssetObjectChanges(ref ObjectChangeEventStream stream)
         {
-            _assetRefreshNeedsViews = true;
+            for (int index = 0; index < stream.length; index++)
+            {
+                if (stream.GetEventType(index) == ObjectChangeKind.ChangeAssetObjectProperties)
+                {
+                    stream.GetChangeAssetObjectPropertiesEvent(index, out ChangeAssetObjectPropertiesEventArgs change);
+                    _assetChanges?.EnqueueGuid(change.guid.ToString());
+                }
+            }
+        }
+
+        private void ApplyAssetChange(string guid, string path, Type type)
+        {
+            if (string.Equals(guid, _settingsAssetGuid, StringComparison.Ordinal) || (type != null && typeof(DataVisualizerSettings).IsAssignableFrom(type)))
+            {
+                _assetRefreshNeedsViews = true;
+                return;
+            }
+
+            bool hadPrevious = _assetObjectCache.TryGet(guid, out ScriptableObject previous);
+            ScriptableObject current = null;
+            if (type != null && IsTrackedAssetType(type))
+            {
+                if (hadPrevious && previous != null && previous.GetType() == type && string.Equals(AssetDatabase.GetAssetPath(previous), path, StringComparison.Ordinal))
+                {
+                    current = previous;
+                }
+                else
+                {
+                    current = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+                    _assetRefreshObjectLoadCount++;
+                }
+            }
+            if (!hadPrevious && current == null)
+            {
+                return;
+            }
+
+            bool selected = hadPrevious && ReferenceEquals(_selectedObject, previous);
+            Type selectedType = _namespaceController.SelectedType;
+            bool wasInList = hadPrevious && _selectedObjects.Contains(previous);
+            if (hadPrevious && (current == null || current != previous || type != selectedType))
+            {
+                _selectedObjects.Remove(previous);
+                _filteredObjects.Remove(previous);
+                _selectedObjectOrderIndex.Remove(previous);
+                bool removedLabels = _selectedLabelUsage.Remove(previous);
+                _assetLabelsChanged = removedLabels || _assetLabelsChanged;
+                if (wasInList && _isLoadingObjectsAsync && !_pendingObjectGuids.Contains(guid))
+                {
+                    _asyncLoadTotalCount--;
+                }
+                _assetRowsChanged = wasInList || _assetRowsChanged;
+            }
+
+            _assetObjectCache.Upsert(guid, current, _isSearchCachePopulated);
+            _assetSearchChanged = true;
+            _isLabelCachePopulated = false;
+            if (current != null && type == selectedType)
+            {
+                if (!_asyncDisplayOrderByGuid.ContainsKey(guid))
+                {
+                    _asyncDisplayOrderByGuid[guid] = _nextIncrementalDisplayOrder++;
+                    if (_isLoadingObjectsAsync)
+                        _asyncLoadTotalCount++;
+                }
+                InsertObjectByAsyncDisplayOrder(current, guid);
+                bool labelsChanged = _selectedLabelUsage.Update(current);
+                _assetLabelsChanged = labelsChanged || !wasInList || _assetLabelsChanged;
+                _filteredObjects.Remove(current);
+                if (LabelFilterEvaluator.Matches(_selectedLabelUsage.GetOrRead(current), CurrentTypeLabelFilterConfig))
+                {
+                    int order = _selectedObjectOrderIndex[current];
+                    int low = 0;
+                    int high = _filteredObjects.Count;
+                    while (low < high)
+                    {
+                        int middle = (low + high) >> 1;
+                        if (_selectedObjectOrderIndex[_filteredObjects[middle]] < order)
+                            low = middle + 1;
+                        else
+                            high = middle;
+                    }
+                    _filteredObjects.Insert(low, current);
+                }
+                _assetRowsChanged = true;
+            }
+
+            if (selected)
+            {
+                _assetSelectionChanged = current != previous || type != selectedType;
+                _assetSelectionReplacement = type == selectedType ? current : null;
+                if (current != null && ReferenceEquals(current, previous))
+                {
+                    _currentInspectorScriptableObject?.UpdateIfRequiredOrScript();
+                    PopulateInspectorLabelsUI();
+                }
+            }
+
+            if (hadPrevious && ((current == null && path == null) || (current != null && current.GetType() != previous.GetType())))
+            {
+                _asyncDisplayOrderByGuid.Remove(guid);
+                Type oldType = previous.GetType();
+                if (!_removedAssetOrders.TryGetValue(oldType, out HashSet<string> removed))
+                {
+                    removed = new HashSet<string>(StringComparer.Ordinal);
+                    _removedAssetOrders.Add(oldType, removed);
+                }
+                removed.Add(guid);
+            }
         }
 
         private void CompleteAssetRefreshSlice()
         {
+            if (_assetChanges != null && _assetChanges.PendingCount == 0)
+            {
+                foreach (KeyValuePair<Type, HashSet<string>> entry in _removedAssetOrders)
+                {
+                    List<string> order = GetObjectOrderForType(entry.Key);
+                    if (0 < order.RemoveAll(entry.Value.Contains))
+                        SetObjectOrderForType(entry.Key.FullName, order);
+                    if (entry.Value.Contains(GetLastSelectedObjectGuidForType(entry.Key.FullName) ?? string.Empty))
+                        SetLastSelectedObjectGuidForType(entry.Key.FullName, null);
+                }
+                _removedAssetOrders.Clear();
+            }
+            if (_assetLabelsChanged)
+            {
+                _selectedLabelUsage.CopyNamesTo(_currentUniqueLabelsForType);
+                PopulateLabelPillContainers();
+            }
+            if (_assetRowsChanged)
+                RefreshObjectListPresentation();
+            if (_assetSelectionChanged)
+            {
+                SelectObject(_assetSelectionReplacement != null ? _assetSelectionReplacement : (_selectedObjects.Count == 0 ? null : _selectedObjects[0]));
+            }
+            if (_assetSearchChanged)
+                RefreshActiveSearch();
+            _assetRowsChanged = false;
+            _assetLabelsChanged = false;
+            _assetSelectionChanged = false;
+            _assetSearchChanged = false;
+            _assetSelectionReplacement = null;
             if (_assetRefreshNeedsViews && _assetChanges != null && _assetChanges.PendingCount == 0)
             {
                 _assetRefreshNeedsViews = false;
@@ -2342,6 +2494,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (selectedType == null)
             {
                 _selectedObjects.Clear();
+                _selectedLabelUsage.Clear();
             }
             else if (!selectionTypeChanged)
             {
@@ -2355,6 +2508,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     column doesn't show the previous type's assets until that async load's view rebuild.
                 */
                 _selectedObjects.Clear();
+                _selectedLabelUsage.Clear();
                 _filteredObjects.Clear();
                 _selectedObjectOrderIndex.Clear();
             }
@@ -4286,6 +4440,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             else if (!_selectedObjects.Contains(instance))
             {
                 _selectedObjects.Add(instance);
+                _selectedLabelUsage.Update(instance);
             }
 
             UpdateAndSaveObjectOrderList(type, _selectedObjects);
@@ -4457,7 +4612,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             int index = _selectedObjects.IndexOf(objectToDelete);
             _selectedObjects.Remove(objectToDelete);
-            _selectedObjects.RemoveAll(obj => obj == null);
+            _selectedLabelUsage.Remove(objectToDelete);
+            _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects);
             _filteredObjects.Remove(objectToDelete);
             _filteredObjects.RemoveAll(obj => obj == null);
             _selectedObjectOrderIndex.Remove(objectToDelete);
@@ -4476,7 +4632,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     SetLastSelectedObjectGuidForType(deletedTypeFullName, null);
                 }
                 AssetDatabase.Refresh();
-                BuildObjectsView();
+                UpdateLabelAreaAndFilter();
                 if (targetIndex < _selectedObjects.Count)
                 {
                     SelectObject(_selectedObjects[targetIndex]);
@@ -5793,6 +5949,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void UpdateLabelAreaAndFilter()
         {
+            _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects);
             ClearLabelFilterUI();
             if (_namespaceController.SelectedType == null)
             {
@@ -5816,33 +5973,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            _currentUniqueLabelsForType.Clear();
-            /*
-                Labels are Ordinal identifiers everywhere else (LabelFilterEvaluator matching,
-                add/remove duplicate checks, suggestion exclusion), so dedup and sort Ordinal.
-                Insensitive dedup here once merged "urgent"/"Urgent" into one pill whose filter
-                click could never match both casings.
-            */
-            HashSet<string> labelSet = new(StringComparer.Ordinal);
             foreach (ScriptableObject obj in _selectedObjects)
             {
-                if (obj == null)
-                {
-                    continue;
-                }
-
-                string[] labels = AssetDatabase.GetLabels(obj);
-                foreach (string label in labels)
-                {
-                    labelSet.Add(label);
-                }
+                if (obj != null)
+                    _selectedLabelUsage.GetOrRead(obj);
             }
-
-            foreach (string label in labelSet)
-            {
-                _currentUniqueLabelsForType.Add(label);
-            }
-            _currentUniqueLabelsForType.Sort(StringComparer.Ordinal);
+            _selectedLabelUsage.CopyNamesTo(_currentUniqueLabelsForType);
 
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
             if (config == null)
@@ -5857,58 +5993,18 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void BuildObjectsView()
         {
-            _selectedObjects.RemoveAll(obj => obj == null);
+            if (0 < _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects))
+            {
+                _selectedLabelUsage.CopyNamesTo(_currentUniqueLabelsForType);
+                PopulateLabelPillContainers();
+            }
             if (_objectListView == null)
             {
                 return;
             }
 
-            Type selectedType = _namespaceController.SelectedType;
-
-            // Nothing loaded yet (or still loading): show the empty/loading overlay, hide the list.
-            if (selectedType != null && _selectedObjects.Count == 0)
-            {
-                _filteredObjects.Clear();
-                _objectListView.RefreshItems();
-                _objectListView.style.display = DisplayStyle.None;
-                _emptyObjectLabel.text =
-                    _isLoadingObjectsAsync && _asyncLoadTargetType == selectedType
-                        ? "Loading objects..."
-                        : $"No objects of type '{selectedType.Name}' found.\nUse the '+' button above to create one.";
-                _emptyObjectLabel.style.display = DisplayStyle.Flex;
-                return;
-            }
-
             ApplyLabelFilter(buildObjectsView: false);
-
-            if (_filteredObjects.Count == 0)
-            {
-                _objectListView.RefreshItems();
-                _objectListView.style.display = DisplayStyle.None;
-                _emptyObjectLabel.text =
-                    0 < _selectedObjects.Count
-                        ? $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' match the current label filter."
-                        : $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' found.";
-                _emptyObjectLabel.style.display = DisplayStyle.Flex;
-                return;
-            }
-
-            _emptyObjectLabel.style.display = DisplayStyle.None;
-            _objectListView.style.display = DisplayStyle.Flex;
-
-            /*
-                Drag-reorder is only safe (maps 1:1 to the saved order) when no label filter is hiding
-                items, i.e. the filtered list matches the full list.
-            */
-            _objectListView.reorderable = _filteredObjects.Count == _selectedObjects.Count;
-
-            _objectListView.RefreshItems();
-
-            // Re-resolve the selection by identity (indices shift as async batches load).
-            int selectedIndex = _selectedObject != null ? _filteredObjects.IndexOf(_selectedObject) : -1;
-            _suppressListSelectionCallback = true;
-            _objectListView.SetSelectionWithoutNotify(0 <= selectedIndex ? new[] { selectedIndex } : Array.Empty<int>());
-            _suppressListSelectionCallback = false;
+            RefreshObjectListPresentation();
         }
 
         internal ScriptableObject DetermineObjectToAutoSelect(Type selectedType)
@@ -5994,6 +6090,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (!priorityLoad)
             {
                 _selectedObjects.Clear();
+                _selectedLabelUsage.Clear();
                 _selectedObjectOrderIndex.Clear();
                 _filteredObjects.Clear();
             }
@@ -6057,6 +6154,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             */
             _asyncDisplayOrderByGuid.Clear();
             FillAsyncDisplayOrder(_asyncDisplayOrderByGuid, allGuids, customGuidOrder);
+            _nextIncrementalDisplayOrder = _asyncDisplayOrderByGuid.Count;
 
             // Prioritize: saved object, custom order, then remaining
             List<string> priorityGuids = new();
@@ -6309,7 +6407,8 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void SelectObject(ScriptableObject dataObject)
         {
-            if (_selectedObject == dataObject)
+            // A destroyed wrapper compares null in Unity but still needs inspector teardown.
+            if (ReferenceEquals(_selectedObject, dataObject))
             {
                 return;
             }
@@ -6446,6 +6545,69 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             PersistSettings(settings => settings.SetLastObjectForType(typeFullName, objectGuid), userState => userState.SetLastObjectForType(typeFullName, objectGuid));
+        }
+
+        private void UpdateFilterStatus()
+        {
+            if (_filterStatusLabel != null)
+            {
+                _filterStatusLabel.style.display = DisplayStyle.Flex;
+                _filterStatusLabel.text = $"{_filteredObjects.Count} shown · {_selectedObjects.Count - _filteredObjects.Count} hidden";
+            }
+            UpdateLabelsCollapsedClickableState();
+        }
+
+        private void RefreshObjectListPresentation()
+        {
+            UpdateFilterStatus();
+            if (_objectListView == null)
+            {
+                return;
+            }
+            Type selectedType = _namespaceController.SelectedType;
+
+            // Nothing loaded yet (or still loading): show the empty/loading overlay, hide the list.
+            if (selectedType != null && _selectedObjects.Count == 0)
+            {
+                _filteredObjects.Clear();
+                _objectListView.RefreshItems();
+                _objectListView.style.display = DisplayStyle.None;
+                _emptyObjectLabel.text =
+                    _isLoadingObjectsAsync && _asyncLoadTargetType == selectedType
+                        ? "Loading objects..."
+                        : $"No objects of type '{selectedType.Name}' found.\nUse the '+' button above to create one.";
+                _emptyObjectLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            if (_filteredObjects.Count == 0)
+            {
+                _objectListView.RefreshItems();
+                _objectListView.style.display = DisplayStyle.None;
+                _emptyObjectLabel.text =
+                    0 < _selectedObjects.Count
+                        ? $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' match the current label filter."
+                        : $"No objects of type '{NamespaceController.GetTypeDisplayName(selectedType)}' found.";
+                _emptyObjectLabel.style.display = DisplayStyle.Flex;
+                return;
+            }
+
+            _emptyObjectLabel.style.display = DisplayStyle.None;
+            _objectListView.style.display = DisplayStyle.Flex;
+
+            /*
+                Drag-reorder is only safe (maps 1:1 to the saved order) when no label filter is hiding
+                items, i.e. the filtered list matches the full list.
+            */
+            _objectListView.reorderable = _filteredObjects.Count == _selectedObjects.Count;
+
+            _objectListView.RefreshItems();
+
+            // Re-resolve the selection by identity (indices shift as async batches load).
+            int selectedIndex = _selectedObject != null ? _filteredObjects.IndexOf(_selectedObject) : -1;
+            _suppressListSelectionCallback = true;
+            _objectListView.SetSelectionWithoutNotify(0 <= selectedIndex ? new[] { selectedIndex } : Array.Empty<int>());
+            _suppressListSelectionCallback = false;
         }
 
         private void ShowInspectorIfCompact()
@@ -6842,21 +7004,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     foreach (ScriptableObject obj in _selectedObjects)
                     {
-                        if (obj != null && LabelFilterEvaluator.Matches(AssetDatabase.GetLabels(obj), config))
+                        if (obj != null && LabelFilterEvaluator.Matches(_selectedLabelUsage.GetOrRead(obj), config))
                         {
                             _filteredObjects.Add(obj);
                         }
                     }
                 }
 
-                int totalCount = _selectedObjects.Count;
-                int shownCount = _filteredObjects.Count;
-                if (_filterStatusLabel != null)
-                {
-                    _filterStatusLabel.style.display = DisplayStyle.Flex;
-                    int hidden = totalCount - shownCount;
-                    _filterStatusLabel.text = $"{shownCount} shown · {hidden} hidden";
-                }
+                UpdateFilterStatus();
             }
         }
 
@@ -7961,6 +8116,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             try
             {
                 AssetDatabase.SetLabels(_selectedObject, updatedLabels.ToArray());
+                _selectedLabelUsage.Update(_selectedObject);
                 EditorUtility.SetDirty(_selectedObject);
                 AssetDatabase.SaveAssets();
                 PopulateProjectUniqueLabelsCache(force: true);
@@ -8011,6 +8167,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             try
             {
                 AssetDatabase.SetLabels(_selectedObject, updatedLabels);
+                _selectedLabelUsage.Update(_selectedObject);
                 EditorUtility.SetDirty(_selectedObject);
                 AssetDatabase.SaveAssets();
                 PopulateProjectUniqueLabelsCache(force: true);
@@ -8129,6 +8286,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         _filteredObjects.Add(cloneAsset);
                     }
 
+                    _selectedLabelUsage.Update(cloneAsset);
                     UpdateAndSaveObjectOrderList(cloneAsset.GetType(), _selectedObjects);
                     BuildObjectsView();
                     SelectObject(cloneAsset);
@@ -8276,6 +8434,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (asset != null && asset.GetType() == type)
                 {
                     _assetChanges?.Track(path, guid);
+                    if (!_assetObjectCache.Contains(guid))
+                    {
+                        _assetObjectCache.Upsert(guid, asset, _isSearchCachePopulated);
+                    }
                     loadedObjects.Add((guid, asset));
                 }
             }
@@ -8346,6 +8508,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _selectedObjects.Insert(low, obj);
+            _selectedLabelUsage.Update(obj);
         }
 
         private void ContinueLoadingObjects(Type type, int loadGeneration)
@@ -9147,6 +9310,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void ApplyAsyncDisplayOrder(IReadOnlyList<string> orderedGuids)
         {
+            _nextIncrementalDisplayOrder = orderedGuids.Count;
             _asyncDisplayOrderByGuid.Clear();
             for (int index = 0; index < orderedGuids.Count; index++)
             {
@@ -9206,8 +9370,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (_isLoadingObjectsAsync && _asyncLoadTargetType == type)
             {
                 orderedGuids = AssetGuidOrder.MergeLoadedOrder(GetAsyncDisplayOrder(), orderedGuids);
-                ApplyAsyncDisplayOrder(orderedGuids);
             }
+            if (type == _namespaceController.SelectedType)
+                ApplyAsyncDisplayOrder(orderedGuids);
 
             SetObjectOrderForType(type.FullName, orderedGuids);
         }

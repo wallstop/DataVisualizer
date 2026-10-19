@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- Fix unnecessary refreshes after unrelated asset moves or deletions (#308).
+- Fix unnecessary refreshes after unrelated asset moves or deletions. Update changed asset rows, labels and inspector state while preserving selection (#308).
 
 ### Changed
 

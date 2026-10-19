@@ -1135,7 +1135,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 pendingSearch.Pause();
             }
-            cache.Clear();
+            AssetObjectCache indexedCache = typeof(DataVisualizerWindow).GetField("_assetObjectCache", ReflectedInstanceMembers)?.GetValue(window) as AssetObjectCache;
+            if (indexedCache == null)
+                throw new InvalidOperationException("The capture needs the GUID-keyed search cache.");
+            indexedCache.Clear();
             for (int index = 0; index < FixtureTitles.Length; index++)
             {
                 PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>($"{fixtureFolder}/{FixtureTitles[index]}.asset");
@@ -1144,8 +1147,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     throw new InvalidOperationException($"The fixture asset '{FixtureTitles[index]}' did not load; the search shot " + "would capture an empty index.");
                 }
 
-                cache.Add(asset);
+                string path = AssetDatabase.GetAssetPath(asset);
+                indexedCache.Upsert(AssetDatabase.AssetPathToGUID(path), asset, sorted: false);
             }
+            indexedCache.Sort();
 
             populatedField.SetValue(window, true);
             TextField searchField = ReadWindowElement(window, SearchFieldFieldName) as TextField;
