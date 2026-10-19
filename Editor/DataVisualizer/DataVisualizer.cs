@@ -3508,8 +3508,14 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return false;
             }
 
+            if (evt.keyCode == KeyCode.D && (evt.ctrlKey || evt.commandKey))
+            {
+                CloneObject(_selectedObject);
+                return true;
+            }
+
             VisualElement row = _objectListView?.Q<VisualElement>($"object-item-row-{_selectedObject.GetObjectIdString()}");
-            Button anchor = row?.Q<Button>("object-actions-button");
+            VisualElement anchor = row?.Q<Button>("object-actions-button") ?? (VisualElement)_objectListView ?? _objectColumnElement;
             if (anchor == null)
             {
                 return false;
@@ -3517,17 +3523,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             if (evt.keyCode == KeyCode.F2)
             {
-                OpenRenamePopover(row.Q<Label>("object-item-label"), anchor, _selectedObject);
+                OpenRenamePopover(row?.Q<Label>("object-item-label"), anchor, _selectedObject);
                 return true;
             }
-            if (evt.keyCode == KeyCode.Delete)
+            bool deleteRequested = evt.keyCode == KeyCode.Delete || (Application.platform == RuntimePlatform.OSXEditor && evt.keyCode == KeyCode.Backspace);
+            if (deleteRequested)
             {
                 OpenConfirmDeletePopover(anchor, _selectedObject);
-                return true;
-            }
-            if (evt.keyCode == KeyCode.D && (evt.ctrlKey || evt.commandKey))
-            {
-                CloneObject(_selectedObject);
                 return true;
             }
             return false;
@@ -4396,7 +4398,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             GenericMenu menu = new();
-            menu.AddItem(new GUIContent("Search Types", "Find ScriptableObject types by name"), false, () => TogglePopover(_typeAddPopover, _addTypeButton));
+            menu.AddItem(new GUIContent("Search Types", "Find ScriptableObject types by name"), false, () => OpenPopover(_typeAddPopover, _addTypeButton));
             menu.AddItem(new GUIContent("Scan Asset Folder", "Add types found in existing assets"), false, () => AddTypesFromFolder(false));
             menu.AddItem(new GUIContent("Scan Scripts Folder", "Add types found in scripts"), false, () => AddTypesFromFolder(true));
             menu.DropDown(_addTypeButton.worldBound);
