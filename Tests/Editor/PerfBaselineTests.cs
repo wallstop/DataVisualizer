@@ -296,9 +296,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(selected));
             cleanup.Defer(PerfBaseline.Cancel);
             PerfBaseline.RunBaseline(output, new[] { 2 });
-            for (int tick = 0; tick < 600 && !PerfBaseline.Status().StartsWith("InteractionSamples:", StringComparison.Ordinal); tick++)
+            for (
+                int tick = 0;
+                tick < 600
+                    && (
+                        !PerfBaseline.Status().StartsWith("InteractionSamples:", StringComparison.Ordinal)
+                        || System.IO.Directory.GetFiles(output, "window-state-*.json").Length == 0
+                    );
+                tick++
+            )
                 yield return null;
             StringAssert.StartsWith("InteractionSamples:", PerfBaseline.Status());
+            Assert.AreEqual(1, System.IO.Directory.GetFiles(output, "window-state-*.json").Length, "The benchmark must write only to its owned state file.");
             EditorPrefs.SetString(preference, "benchmark mutation");
             Selection.objects = new UnityEngine.Object[] { selected };
             PerfBaseline.Cancel();

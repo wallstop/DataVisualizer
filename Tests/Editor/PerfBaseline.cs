@@ -470,6 +470,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             SetWindowField(window, "_userState", state.WindowState.UserState);
             SetWindowField(window, "_settings", state.WindowState.Settings);
             window.ShowPopup();
+            // Show may enable the window again; restore its owned path before deferred initialization.
+            SetWindowField(window, "_userStateFilePath", state.WindowState.FilePath);
             window.position = new Rect(40f, 40f, 1180f, 780f);
             state.PhaseClock.Restart();
             window.CreateGUI();
