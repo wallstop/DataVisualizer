@@ -260,6 +260,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return escaped.ToString();
         }
 
+        internal static string FixtureId(int index)
+        {
+            return "perf-fixture-" + index.ToString("D6", CultureInfo.InvariantCulture);
+        }
+
         internal static string FixtureName(int index)
         {
             string title = FixtureTitles[index % FixtureTitles.Length];
@@ -429,6 +434,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             state.Staging.Refresh();
             state.Current.CreationMilliseconds = state.Staging.CreationMilliseconds;
+            state.Current.BatchImportMilliseconds = state.Staging.BatchImportMilliseconds;
+            state.Current.InitializationMilliseconds = state.Staging.InitializationMilliseconds;
+            state.Current.LongestBatchImportMilliseconds = state.Staging.LongestBatchImportMilliseconds;
             state.Current.ImportMilliseconds = state.Staging.RefreshMilliseconds;
             state.Current.StagingMilliseconds = state.Staging.TotalMilliseconds;
             state.Current.LongestCreateMilliseconds = state.Staging.LongestCreateMilliseconds;
@@ -826,6 +834,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append("  \"scenarios\": [\n");
             AppendScenario(json, "fixture-create-calls", results, static result => SingleSample(result.CreationMilliseconds, result.FixtureComplete));
             json.Append(",\n");
+            AppendScenario(json, "fixture-initialization", results, static result => SingleSample(result.InitializationMilliseconds, result.FixtureComplete));
+            json.Append(",\n");
+            AppendScenario(json, "fixture-import-batches", results, static result => SingleSample(result.BatchImportMilliseconds, result.FixtureComplete));
+            json.Append(",\n");
+            AppendScenario(json, "fixture-longest-import-batch", results, static result => SingleSample(result.LongestBatchImportMilliseconds, result.FixtureComplete));
+            json.Append(",\n");
             AppendScenario(json, "fixture-staging-total", results, static result => SingleSample(result.StagingMilliseconds, result.FixtureComplete));
             json.Append(",\n");
             AppendScenario(json, "fixture-longest-create-call", results, static result => SingleSample(result.LongestCreateMilliseconds, result.FixtureComplete));
@@ -863,6 +877,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append("  \"fixturesRequested\": ").Append(state.Current?.Size ?? 0).Append(",\n");
             json.Append("  \"stagingElapsedMs\": ").Append(FormatNumber(state.Staging?.TotalMilliseconds ?? 0)).Append(",\n");
             json.Append("  \"creationCallMs\": ").Append(FormatNumber(state.Staging?.CreationMilliseconds ?? 0)).Append(",\n");
+            json.Append("  \"batchImportMs\": ").Append(FormatNumber(state.Staging?.BatchImportMilliseconds ?? 0)).Append(",\n");
+            json.Append("  \"fixtureInitializationMs\": ").Append(FormatNumber(state.Staging?.InitializationMilliseconds ?? 0)).Append(",\n");
+            json.Append("  \"longestBatchImportMs\": ").Append(FormatNumber(state.Staging?.LongestBatchImportMilliseconds ?? 0)).Append(",\n");
             json.Append("  \"longestCreateCallMs\": ").Append(FormatNumber(state.Staging?.LongestCreateMilliseconds ?? 0)).Append(",\n");
             json.Append("  \"partialResults\": ");
             if (state.Results.Count == 0)
@@ -1007,6 +1024,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal bool FixtureComplete;
             internal bool ColdComplete;
             internal double CreationMilliseconds;
+            internal double BatchImportMilliseconds;
+            internal double InitializationMilliseconds;
+            internal double LongestBatchImportMilliseconds;
             internal double StagingMilliseconds;
             internal double LongestCreateMilliseconds;
             internal double LongestSliceMilliseconds;
