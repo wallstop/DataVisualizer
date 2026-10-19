@@ -45,7 +45,21 @@ class StartupTests(unittest.TestCase):
     def test_intercepted_existing_bridge_is_not_reused(self) -> None:
         with patch.object(host, 'read_health', return_value={'bridge': 'dataviz-unity-mcp', 'instanceId': 'existing'}), \
                 patch.object(host, 'verify_docker_host_route', side_effect=host.DockerHostRouteError('intercepted')):
-            self.assertFalse(host.existing_bridge(9020, '0.0.0.0'))
+            self.assertFalse(host.existing_bridge(9020, '0.0.0.0', ''))
+
+    def test_existing_bridge_requires_known_project_ownership(self) -> None:
+        for project in (None, 42, 'relative/project', '/missing/project'):
+            with self.subTest(project=project), \
+                    patch.object(host, 'read_health', return_value={'bridge': 'dataviz-unity-mcp', 'projectPath': project}), \
+                    patch.object(host, 'verify_docker_host_route'):
+                with self.assertRaisesRegex(ValueError, 'project mismatch') as raised:
+                    host.existing_bridge(9020, '127.0.0.1', '')
+                self.assertIn(f"running {project if isinstance(project, str) else '<unknown>'!r}", str(raised.exception))
+
+    def test_unpinned_bridge_can_be_reused_by_unpinned_startup(self) -> None:
+        with patch.object(host, 'read_health', return_value={'bridge': 'dataviz-unity-mcp', 'projectPath': ''}), \
+                patch.object(host, 'verify_docker_host_route'):
+            self.assertTrue(host.existing_bridge(9020, '127.0.0.1', ''))
 
     def test_failed_local_check_never_publishes_and_closes_the_candidate(self) -> None:
         server = Mock()

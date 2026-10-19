@@ -346,15 +346,34 @@ def port_free(port: int, host: str) -> bool:
     return True
 
 
-def existing_bridge(port: int, host: str) -> bool:
+def same_project(requested: str, actual: object) -> bool:
+    if not isinstance(actual, str):
+        return False
+    if not requested or not actual:
+        return requested == actual
+    if not os.path.isabs(actual):
+        return False
+    try:
+        return os.path.samefile(requested, actual)
+    except (OSError, ValueError):
+        return False
+
+
+def existing_bridge(port: int, host: str, project: str) -> bool:
     try:
         health = read_health(port, '127.0.0.1')
         if health.get('bridge') != 'dataviz-unity-mcp' and not re.search(r'(?:^|[/\\])unity(?:\.exe)? mcp(?: |$)', str(health.get('cli', ''))):
             return False
         verify_docker_host_route(port, host, health.get('instanceId', ''))
-        return True
     except (OSError, ValueError):
         return False
+    actual = health.get('projectPath')
+    if not same_project(project, actual):
+        running = (actual or '<unpinned>') if isinstance(actual, str) else '<unknown>'
+        raise ValueError(f"Bridge project mismatch on port {port}: requested {project or '<unpinned>'!r}, "
+                         f"running {running!r}. "
+                         'The existing bridge is unchanged. Use a different --port or stop that bridge before restarting.')
+    return True
 
 
 def persist_port(workspace: Path, port: int) -> bool:
@@ -382,7 +401,7 @@ def persist_port(workspace: Path, port: int) -> bool:
 
 
 def serve(workspace: Path, settings: BridgeSettings, preferred: int, host: str, done: threading.Event) -> int:
-    if existing_bridge(preferred, host):
+    if existing_bridge(preferred, host, settings['projectPath']):
         log(f'[unity-mcp] A healthy unity-mcp bridge is already running on port {preferred}; nothing to do.')
         return 0
     for port in range(preferred, min(preferred + 100, 65535) + 1):
