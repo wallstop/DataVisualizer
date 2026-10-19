@@ -120,6 +120,29 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldCoalesceKnownGuidEventsWithoutResolvingDuringEnqueue()
+        {
+            int resolved = 0;
+            using AssetChangeRefreshService service = new(
+                type => true,
+                (guid, path, type) => { },
+                (path, known) =>
+                {
+                    resolved++;
+                    return (known, path, typeof(PlayModeDataObject));
+                }
+            );
+            service.Track("Assets/Known.asset", "known");
+            Assert.That(!service.EnqueueGuid(null));
+            Assert.That(!service.EnqueueGuid("unknown"));
+            Assert.That(service.EnqueueGuid("known"));
+            Assert.That(!service.EnqueueGuid("known"));
+            Assert.AreEqual(0, resolved);
+            service.ProcessSlice();
+            Assert.AreEqual(1, resolved);
+        }
+
+        [Test]
         public void ShouldSuspendYieldAndDisposeWithoutPublishingStaleWork()
         {
             int published = 0;

@@ -101,6 +101,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return added;
         }
 
+        public bool EnqueueGuid(string guid)
+        {
+            return !_disposed && !string.IsNullOrEmpty(guid) && _pathByGuid.TryGetValue(guid, out string path) && 0 < Enqueue(new[] { path });
+        }
+
         public int ProcessSlice(double budgetMilliseconds = 4)
         {
             if (_disposed || _suspended || _pending.Count == 0)
