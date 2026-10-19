@@ -8,16 +8,20 @@ other limitations stated separately. These samples do not establish a performanc
 The driver lives at `Tests/Editor/PerfBaseline.cs`. It stages deterministic `PlayModeDataObject` fixture datasets and measures with monotonic `Stopwatch` timers inside the editor.
 Transport latency is not added to each duration.
 
-- **Fixture import** is the wall time of the single `AssetDatabase.Refresh` after fixture creation. The timer excludes the preceding `AssetDatabase.CreateAsset` loop, so this
-  number does not measure the total cost of creating or importing the dataset.
+- **Fixture creation calls** sums `AssetDatabase.CreateAsset` durations. **Fixture import** retains the final `AssetDatabase.Refresh` measurement. **Fixture staging total**
+  includes folder creation, fixture construction, creation calls, editor time between staging ticks, and final refresh. The longest creation call and staging tick expose
+  indivisible Unity calls that exceed the 4 ms cooperative budget. Each tick creates at most ten assets; Unity calls themselves cannot be interrupted.
 - **Window open to index ready** runs from `CreateGUI` until the production search cache reports populated. _Cold_ means the first open after staging in an already-running editor;
-  it does not mean a fresh editor or an empty filesystem cache. _Warm_ numbers come from repeated open-close cycles of the same dataset, after two discarded warm-ups.
+  it does not mean a fresh editor or an empty filesystem cache. _Warm_ numbers come from repeated open-close cycles of the same dataset, after five discarded warm-ups (the
+  historical run below used two).
 - **Search first results** changes the query in the production search field and waits for a result row, including any search deferral. The visible list is capped at 25 rows, so
   match counts saturate at that cap.
 - **Selection** measures the production `SelectObject` call for a mid-list fixture asset.
 
-The run writes a schema-1 JSON report with the environment, raw samples, and repetition counts. A 45-minute watchdog is checked on editor ticks and fails the run closed. It cannot
-interrupt synchronous fixture staging; teardown runs when control returns to the driver and removes its fixtures and windows.
+The run writes a schema-1 JSON report with the environment, raw samples, and repetition counts. A 45-minute watchdog is checked on editor ticks. Each dataset owns a unique
+`Assets/PerfBaselineFixtures-<run-id>` folder; cleanup verifies its GUID and ownership marker before deleting it and preserves pre-existing assets, including the old fixed fixture
+folder. `PerfBaseline.Status()` reports the current phase and fixture count. `PerfBaseline.Cancel()` writes an error report with the phase, created/requested counts, elapsed
+staging time, and completed samples, then cleans up. Assembly reload also cancels the run. Incomplete single-sample scenarios contain empty arrays instead of zero-duration results.
 
 ## Recorded environment
 
@@ -68,9 +72,12 @@ sessions, not a controlled before/after comparison. In particular, the 561 ms fi
 
 ## Current gaps
 
-- Total fixture creation/import time and a controlled 10,000-asset import-burst measurement remain unmeasured. The final refresh alone excludes preceding work.
+- The historical report predates staging instrumentation. New runs measure total staging and creation calls separately, but a controlled 10,000-asset import-burst comparison
+  remains unmeasured.
 - Play Mode entry overhead and compile timings are separate roadmap areas (T03, T08) and are not measured here yet.
 - Cold scenarios are single samples; the full acceptance wants 30+ repetitions per warm scenario and cross-host spread (T01, T12).
 
 Reproduce: run `WallstopStudios.DataVisualizer.Tests.Editor.PerfBaseline.RunFromCommandLine` in an interactive editor (directly or through the Unity MCP bridge), then read
-`Temp/PerfBaseline/perf-baseline.json`. The output directory can be redirected with `-perfBaselineOutputDir` or the `DATAVISUALIZER_PERF_BASELINE_DIR` environment variable.
+`Temp/PerfBaseline/perf-baseline.json`. The output directory can be redirected with `-perfBaselineOutputDir` or the `DATAVISUALIZER_PERF_BASELINE_DIR` environment variable. For a
+bounded host run, call `PerfBaseline.RunBaseline("Temp/PerfBaseline", new[] { 100 })`; sizes from 2 to 100,000 are accepted, but the default remains 100/1k/10k. New runs use five
+discarded warm opens and 30 warm-open, search, and selection samples. This does not expand the historical report's sample count or establish large-fixture support.

@@ -1,10 +1,12 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
+    using System.Collections;
     using System.Collections.Generic;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
+    using UnityEngine.TestTools;
     using PlayModeDataObject = WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject;
 
     /*
@@ -93,53 +95,114 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void ShouldExcludeOnlyBenchmarkFixturesFromReportedBackgroundCount()
+        public void ShouldCountPreExistingBenchmarkNamedAssetsAsBackground()
         {
-            const string fixtureRoot = "Assets/PerfBaselineFixtures";
-            string suffix = Guid.NewGuid().ToString("N");
-            string sibling = fixtureRoot + "_" + suffix;
-            string nested = fixtureRoot + "/" + suffix;
+            string root = "Assets/PerfBaselineFixtures_" + Guid.NewGuid().ToString("N");
             using TestCleanupScope cleanup = new();
-            if (!AssetDatabase.IsValidFolder(fixtureRoot))
-            {
-                cleanup.Defer(() => AssetDatabase.DeleteAsset(fixtureRoot));
-                AssetDatabase.CreateFolder("Assets", "PerfBaselineFixtures");
-            }
-
-            cleanup.Defer(() => AssetDatabase.DeleteAsset(sibling));
-            AssetDatabase.CreateFolder("Assets", "PerfBaselineFixtures_" + suffix);
-            cleanup.Defer(() => AssetDatabase.DeleteAsset(nested));
-            AssetDatabase.CreateFolder(fixtureRoot, suffix);
-
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(root));
+            AssetDatabase.CreateFolder("Assets", System.IO.Path.GetFileName(root));
             int before = PerfBaseline.CountScriptableObjectAssets();
-            Assert.That(before, Is.GreaterThanOrEqualTo(0));
             PlayModeDataObject background = ScriptableObject.CreateInstance<PlayModeDataObject>();
-            cleanup.Defer(() =>
-            {
-                if (background != null && !AssetDatabase.Contains(background))
-                {
-                    UnityEngine.Object.DestroyImmediate(background);
-                }
-            });
-            AssetDatabase.CreateAsset(background, sibling + "/Background.asset");
-            int expected = before + 1;
-            Assert.AreEqual(expected, PerfBaseline.CountScriptableObjectAssets(), "A similarly named sibling belongs to the background workload.");
+            AssetDatabase.CreateAsset(background, root + "/Background.asset");
+            Assert.AreEqual(before + 1, PerfBaseline.CountScriptableObjectAssets());
+        }
 
-            for (int index = 0; index < 3; index++)
+        [Test]
+        public void ShouldYieldAtTheItemLimitAndRefreshOnlyCompleteFixtures()
+        {
+            using PerfFixtureStaging staging = new(3);
+            staging.Advance(maximumItems: 1);
+            Assert.AreEqual(1, staging.CreatedCount);
+            Assert.That(staging.IsComplete, Is.False);
+            Assert.Throws<InvalidOperationException>(() => staging.Refresh());
+            staging.Advance(maximumItems: 1);
+            staging.Advance(maximumItems: 1);
+            Assert.AreEqual(3, staging.CreatedCount);
+            Assert.That(staging.IsComplete, Is.False, "Completion requires the final refresh.");
+            staging.Refresh();
+            Assert.That(staging.IsComplete);
+            Assert.That(staging.TotalMilliseconds, Is.GreaterThanOrEqualTo(staging.CreationMilliseconds + staging.RefreshMilliseconds));
+            Assert.That(staging.LongestCreateMilliseconds, Is.GreaterThan(0));
+            Assert.That(staging.LongestSliceMilliseconds, Is.GreaterThanOrEqualTo(staging.LongestCreateMilliseconds));
+        }
+
+        [Test]
+        public void ShouldDisposeOnlyOwnedFixturesAndRejectFurtherStaging()
+        {
+            using PerfFixtureStaging first = new(2);
+            using PerfFixtureStaging other = new(1);
+            Assert.That(first.Folder, Is.Not.EqualTo(other.Folder));
+            first.Advance(maximumItems: 1);
+            other.Advance();
+            string otherGuid = AssetDatabase.AssetPathToGUID(other.Folder);
+            first.Dispose();
+            first.Dispose();
+            Assert.That(AssetDatabase.IsValidFolder(first.Folder), Is.False);
+            Assert.AreEqual(otherGuid, AssetDatabase.AssetPathToGUID(other.Folder));
+            Assert.Throws<ObjectDisposedException>(() => first.Advance());
+        }
+
+        [Test]
+        public void ShouldLeaveAReplacementFolderUntouchedDuringCleanup()
+        {
+            using PerfFixtureStaging staging = new(1);
+            staging.Advance();
+            Assert.That(AssetDatabase.DeleteAsset(staging.Folder));
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(staging.Folder));
+            string replacement = AssetDatabase.CreateFolder("Assets", System.IO.Path.GetFileName(staging.Folder));
+            staging.Dispose();
+            Assert.AreEqual(replacement, AssetDatabase.AssetPathToGUID(staging.Folder));
+        }
+
+        [Test]
+        public void ShouldPreserveContentsWhenTheOwnershipMarkerChanges()
+        {
+            using PerfFixtureStaging staging = new(1);
+            staging.Advance();
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(staging.Folder));
+            System.IO.File.WriteAllText(staging.Folder + "/.perf-owner", "replacement owner");
+            staging.Dispose();
+            Assert.That(AssetDatabase.IsValidFolder(staging.Folder));
+        }
+
+        [TestCase(1)]
+        [TestCase(0)]
+        [TestCase(-1)]
+        [TestCase(100001)]
+        public void ShouldRejectInvalidFixtureSizesBeforeStarting(int size)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => PerfBaseline.RunBaseline("Temp/Unused", new[] { size }));
+            Assert.AreEqual("Idle", PerfBaseline.Status());
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldCancelWithPartialProgressAndWithoutDeletingOtherAssets()
+        {
+            string output = "Temp/PerfBaselineTests-" + Guid.NewGuid().ToString("N");
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(output);
+            for (int tick = 0; tick < 300 && !PerfBaseline.Status().StartsWith("Staging: 1/", StringComparison.Ordinal); tick++)
             {
-                PlayModeDataObject fixture = ScriptableObject.CreateInstance<PlayModeDataObject>();
-                cleanup.Defer(() =>
+                if (PerfBaseline.Status().StartsWith("Staging:", StringComparison.Ordinal) && !PerfBaseline.Status().StartsWith("Staging: 0/", StringComparison.Ordinal))
                 {
-                    if (fixture != null && !AssetDatabase.Contains(fixture))
-                    {
-                        UnityEngine.Object.DestroyImmediate(fixture);
-                    }
-                });
-                AssetDatabase.CreateAsset(fixture, nested + $"/Fixture{index}.asset");
+                    break;
+                }
+
+                yield return null;
             }
 
-            Assert.AreEqual(expected, PerfBaseline.CountScriptableObjectAssets(), "Nested benchmark fixtures must not inflate the background workload.");
-            StringAssert.Contains($"\"preExistingScriptableObjectAssets\": {expected}}}", PerfBaseline.BuildEnvironmentJson());
+            StringAssert.StartsWith("Staging:", PerfBaseline.Status());
+            Assert.That(PerfBaseline.Status().StartsWith("Staging: 0/", StringComparison.Ordinal), Is.False);
+            PerfBaseline.Cancel();
+            string report = System.IO.File.ReadAllText(output + "/perf-baseline.json");
+            StringAssert.Contains("Cancelled before completion", report);
+            StringAssert.Contains("\"fixturesRequested\": 100", report);
+            StringAssert.DoesNotContain("\"samples\": [0]", report);
+            Assert.AreEqual("Idle", PerfBaseline.Status());
         }
     }
 }

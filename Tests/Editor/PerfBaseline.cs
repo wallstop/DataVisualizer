@@ -23,8 +23,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         10,000 assets), then measures, with monotonic Stopwatch timers inside the
         editor so MCP transport never pollutes a sample:
 
-        - fixture-import wall (the single AssetDatabase.Refresh that imports the
-          staged files);
+        - fixture creation calls, final refresh, total staging wall time, and
+          longest creation call / staging tick (creation yields between ticks);
         - window-open-to-index-ready, cold (the first open after staging) and
           warm (repeated opens of the same already-imported dataset), where
           "ready" is the production _isSearchCachePopulated flag the async
@@ -36,16 +36,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         The run is a tick-driven state machine: every wait yields back to
         EditorApplication.update so the window's scheduled batches advance on
         real editor ticks, exactly as they would for a user. A watchdog fails
-        the run closed — with fixtures and the update hook removed — when a
-        phase never completes, so a hung index can never hang the host editor.
+        the run closed with owned fixtures and the update hook removed when a
+        phase never completes. Individual Unity calls cannot be interrupted.
 
         Results land in one JSON report (schema 1) plus a compact console
         summary. The report records the host environment (Unity, OS, CPU,
         memory, DPI, displays, theme, package version, pre-existing managed
         assets) so a number is meaningless without its context, and it records
         the repetition counts so the first-tranche limits are explicit: cold is
-        one sample, warm is two discarded warm-ups plus five samples, and the
-        full T01 acceptance (30+ repetitions, cross-host spread, Play-entry and
+        one sample, warm is five discarded warm-ups plus thirty samples, and the
+        remaining T01 acceptance (cross-host spread, Play-entry and
         compile timings) stays open on the roadmap.
 
         The window's Instance field, Cleanup, LoadInitialContent, SelectObject,
@@ -60,16 +60,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     {
         internal const string SchemaVersion = "1";
 
-        private const string FixtureFolder = "Assets/PerfBaselineFixtures";
         private const string OutputArgument = "-perfBaselineOutputDir";
         private const string OutputEnvironmentVariable = "DATAVISUALIZER_PERF_BASELINE_DIR";
         private const string DefaultOutputDirectory = "Temp/PerfBaseline";
         private const string PackagePath = "Packages/com.wallstop-studios.data-visualizer/package.json";
 
-        private const int WarmupRepetitions = 2;
-        private const int WarmRepetitions = 5;
-        private const int SearchRepetitions = 5;
-        private const int SelectionRepetitions = 5;
+        private const int WarmupRepetitions = 5;
+        private const int WarmRepetitions = 30;
+        private const int SearchRepetitions = 30;
+        private const int SelectionRepetitions = 30;
         private const int SearchCacheTimeoutSeconds = 600;
         private const int OverallTimeoutMinutes = 45;
         private const string SearchQueryFirst = "Player";
@@ -122,7 +121,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             report file, and reads the JSON when the summary announces completion;
             every measured duration lives inside this editor process.
         */
-        internal static void RunBaseline(string outputDirectory)
+        public static void RunBaseline(string outputDirectory, int[] fixtureSizes = null)
         {
             if (_active != null)
             {
@@ -134,10 +133,40 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new ArgumentException("The output directory must not be empty.", nameof(outputDirectory));
             }
 
-            RunState state = new(outputDirectory);
+            int[] sizes = fixtureSizes == null ? (int[])FixtureSizes.Clone() : (int[])fixtureSizes.Clone();
+            if (sizes.Length == 0)
+            {
+                throw new ArgumentException("At least one fixture size is required.", nameof(fixtureSizes));
+            }
+
+            foreach (int size in sizes)
+            {
+                if (size < 2 || 100000 < size)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(fixtureSizes), "Fixture sizes must be between 2 and 100,000 so both search terms have fixtures.");
+                }
+            }
+
+            RunState state = new(outputDirectory, sizes);
             _active = state;
             EditorApplication.update += Tick;
+            AssemblyReloadEvents.beforeAssemblyReload += Cancel;
             Debug.Log($"[PerfBaseline] run started; report will be written to {outputDirectory}.");
+        }
+
+        public static string Status()
+        {
+            RunState state = _active;
+            return state == null ? "Idle" : $"{state.Phase}: {state.Staging?.CreatedCount ?? 0}/{state.Current?.Size ?? 0} fixtures";
+        }
+
+        public static void Cancel()
+        {
+            RunState state = _active;
+            if (state != null)
+            {
+                FinishWithError(state, "Cancelled before completion.", cancelled: true);
+            }
         }
 
         internal static string ResolveOutputDirectory(string[] arguments, string environmentValue)
@@ -274,7 +303,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 foreach (string guid in AssetDatabase.FindAssets("t:ScriptableObject"))
                 {
                     string path = AssetDatabase.GUIDToAssetPath(guid);
-                    if (!path.StartsWith(FixtureFolder + "/", StringComparison.Ordinal))
+                    if (_active?.Staging == null || !path.StartsWith(_active.Staging.Folder + "/", StringComparison.Ordinal))
                     {
                         count++;
                     }
@@ -320,6 +349,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 case Phase.Idle:
                     BeginNextSize(state);
                     return;
+                case Phase.Staging:
+                    StageFixtures(state);
+                    return;
+                case Phase.RefreshingFixtures:
+                    RefreshFixtures(state);
+                    return;
                 case Phase.WaitingColdReady:
                 case Phase.WaitingWarmReady:
                     WaitSearchCacheReady(state);
@@ -344,37 +379,43 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static void BeginNextSize(RunState state)
         {
             state.SizeIndex++;
-            if (state.SizeIndex >= FixtureSizes.Length)
+            if (state.Sizes.Length <= state.SizeIndex)
             {
                 Finish(state);
                 return;
             }
 
-            int size = FixtureSizes[state.SizeIndex];
+            int size = state.Sizes[state.SizeIndex];
             SizeResult result = new() { Size = size };
             state.Current = result;
             state.Results.Add(result);
 
-            DeleteFixtureFolder();
-            StageFixtures(state, size);
-            OpenWindow(state, cold: true);
+            state.Staging?.Dispose();
+            state.Staging = new PerfFixtureStaging(size);
+            state.Phase = Phase.Staging;
         }
 
-        private static void StageFixtures(RunState state, int size)
+        private static void StageFixtures(RunState state)
         {
-            AssetDatabase.CreateFolder("Assets", Path.GetFileName(FixtureFolder));
-            for (int index = 0; index < size; index++)
+            state.Staging.Advance();
+            if (state.Staging.CreatedCount == state.Current.Size)
             {
-                PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
-                asset.name = FixtureName(index);
-                AssetDatabase.CreateAsset(asset, $"{FixtureFolder}/{FixtureName(index)}.asset");
+                state.Phase = Phase.RefreshingFixtures;
             }
 
-            state.PhaseClock.Restart();
-            AssetDatabase.Refresh();
-            state.PhaseClock.Stop();
-            state.Current.ImportMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
-            state.Phase = Phase.WaitingColdReady;
+            EditorApplication.QueuePlayerLoopUpdate();
+        }
+
+        private static void RefreshFixtures(RunState state)
+        {
+            state.Staging.Refresh();
+            state.Current.CreationMilliseconds = state.Staging.CreationMilliseconds;
+            state.Current.ImportMilliseconds = state.Staging.RefreshMilliseconds;
+            state.Current.StagingMilliseconds = state.Staging.TotalMilliseconds;
+            state.Current.LongestCreateMilliseconds = state.Staging.LongestCreateMilliseconds;
+            state.Current.LongestSliceMilliseconds = state.Staging.LongestSliceMilliseconds;
+            state.Current.FixtureComplete = true;
+            OpenWindow(state, cold: true);
         }
 
         private static void OpenWindow(RunState state, bool cold)
@@ -422,6 +463,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             if (state.Phase == Phase.WaitingColdReady)
             {
                 state.Current.ColdOpenMilliseconds = readyMilliseconds;
+                state.Current.ColdComplete = true;
                 state.SearchRepetition = 0;
                 state.SelectionRepetition = 0;
                 state.Phase = Phase.InteractionSamples;
@@ -509,7 +551,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static void MeasureSelection(RunState state, int repetition)
         {
             int assetIndex = (repetition * 997 + state.Current.Size / 2) % state.Current.Size;
-            string assetPath = $"{FixtureFolder}/{FixtureName(assetIndex)}.asset";
+            string assetPath = $"{state.Staging.Folder}/{FixtureName(assetIndex)}.asset";
             PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>(assetPath);
             if (asset == null)
             {
@@ -567,9 +609,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Debug.Log($"[PerfBaseline] complete. {summary}");
         }
 
-        private static void FinishWithError(RunState state, string message)
+        private static void FinishWithError(RunState state, string message, bool cancelled = false)
         {
-            Debug.LogError($"[PerfBaseline] FAILED: {message}");
+            if (cancelled)
+            {
+                Debug.Log($"[PerfBaseline] {message}");
+            }
+            else
+            {
+                Debug.LogError($"[PerfBaseline] FAILED: {message}");
+            }
             try
             {
                 WriteReport(state.OutputDirectory, BuildErrorJson(state, message));
@@ -603,7 +652,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             try
             {
-                DeleteFixtureFolder();
+                state.Staging?.Dispose();
             }
             catch (Exception error)
             {
@@ -612,15 +661,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             _active = null;
             EditorApplication.update -= Tick;
-        }
-
-        private static void DeleteFixtureFolder()
-        {
-            if (AssetDatabase.IsValidFolder(FixtureFolder))
-            {
-                AssetDatabase.DeleteAsset(FixtureFolder);
-                AssetDatabase.Refresh();
-            }
+            AssemblyReloadEvents.beforeAssemblyReload -= Cancel;
         }
 
         private static bool IsSearchCachePopulated(DataVisualizerWindow window)
@@ -762,9 +803,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "  \"gaps\": [\"Play-entry and compile timings are not yet measured\", \"cold is a single sample per size\", \"cross-host spread is not yet collected\"],\n"
             );
             json.Append("  \"scenarios\": [\n");
-            AppendScenario(json, "fixture-import", results, static result => SingleSample(result.ImportMilliseconds));
+            AppendScenario(json, "fixture-create-calls", results, static result => SingleSample(result.CreationMilliseconds, result.FixtureComplete));
             json.Append(",\n");
-            AppendScenario(json, "window-open-to-index-ready", results, static result => SingleSample(result.ColdOpenMilliseconds));
+            AppendScenario(json, "fixture-staging-total", results, static result => SingleSample(result.StagingMilliseconds, result.FixtureComplete));
+            json.Append(",\n");
+            AppendScenario(json, "fixture-longest-create-call", results, static result => SingleSample(result.LongestCreateMilliseconds, result.FixtureComplete));
+            json.Append(",\n");
+            AppendScenario(json, "fixture-longest-staging-tick", results, static result => SingleSample(result.LongestSliceMilliseconds, result.FixtureComplete));
+            json.Append(",\n");
+            AppendScenario(json, "fixture-import", results, static result => SingleSample(result.ImportMilliseconds, result.FixtureComplete));
+            json.Append(",\n");
+            AppendScenario(json, "window-open-to-index-ready", results, static result => SingleSample(result.ColdOpenMilliseconds, result.ColdComplete));
             json.Append(",\n");
             AppendScenario(json, "window-open-to-index-ready-warm", results, static result => result.WarmOpenSamples);
             json.Append(",\n");
@@ -775,9 +824,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return json.ToString();
         }
 
-        private static List<double> SingleSample(double milliseconds)
+        private static List<double> SingleSample(double milliseconds, bool complete = true)
         {
-            return new List<double> { milliseconds };
+            return complete ? new List<double> { milliseconds } : new List<double>();
         }
 
         private static string BuildErrorJson(RunState state, string message)
@@ -788,6 +837,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append("  \"error\": \"").Append(JsonEscape(message)).Append("\",\n");
             json.Append("  \"phase\": \"").Append(state.Phase).Append("\",\n");
             json.Append("  \"environment\": ").Append(BuildEnvironmentJson()).Append(",\n");
+            json.Append("  \"fixturesCreated\": ").Append(state.Staging?.CreatedCount ?? 0).Append(",\n");
+            json.Append("  \"fixturesRequested\": ").Append(state.Current?.Size ?? 0).Append(",\n");
+            json.Append("  \"stagingElapsedMs\": ").Append(FormatNumber(state.Staging?.TotalMilliseconds ?? 0)).Append(",\n");
+            json.Append("  \"creationCallMs\": ").Append(FormatNumber(state.Staging?.CreationMilliseconds ?? 0)).Append(",\n");
+            json.Append("  \"longestCreateCallMs\": ").Append(FormatNumber(state.Staging?.LongestCreateMilliseconds ?? 0)).Append(",\n");
             json.Append("  \"partialResults\": ");
             if (state.Results.Count == 0)
             {
@@ -928,6 +982,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private sealed class SizeResult
         {
             internal int Size;
+            internal bool FixtureComplete;
+            internal bool ColdComplete;
+            internal double CreationMilliseconds;
+            internal double StagingMilliseconds;
+            internal double LongestCreateMilliseconds;
+            internal double LongestSliceMilliseconds;
             internal double ImportMilliseconds;
             internal double ColdOpenMilliseconds;
             internal readonly List<double> WarmOpenSamples = new();
@@ -939,11 +999,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private sealed class RunState
         {
             internal readonly string OutputDirectory;
+            internal readonly int[] Sizes;
             internal readonly Stopwatch Watchdog = Stopwatch.StartNew();
             internal readonly List<SizeResult> Results = new();
             internal Phase Phase = Phase.Idle;
             internal int SizeIndex = -1;
             internal SizeResult Current;
+            internal PerfFixtureStaging Staging;
             internal DataVisualizerWindow Window;
             internal object PreviousInstance;
             internal readonly Stopwatch PhaseClock = new();
@@ -952,9 +1014,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal int SelectionRepetition;
             internal string PendingQuery;
 
-            internal RunState(string outputDirectory)
+            internal RunState(string outputDirectory, int[] sizes)
             {
                 OutputDirectory = outputDirectory;
+                Sizes = sizes;
             }
         }
 
@@ -972,6 +1035,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             WaitingWarmReady = 5,
             BetweenWarmRepetitions = 6,
             Finished = 7,
+            Staging = 9,
+            RefreshingFixtures = 10,
         }
     }
 }
