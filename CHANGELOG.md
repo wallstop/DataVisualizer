@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Simplify label filtering with Match all and Match any, keyboard-selectable pills, clear controls, and a readable Advanced expression. Keep missing active labels and show neutral
+  counts (#314).
+
 - Keep the inspector readable with pane controls and single-pane navigation in narrow windows. Restore preferred pane widths when space returns (#313).
 
 - Clarify Add types and search controls. Group row commands in Actions menus and add selected-asset keyboard shortcuts (#312).

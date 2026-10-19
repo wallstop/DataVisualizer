@@ -250,11 +250,11 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _labelCollapseRow;
         private Label _labelCollapseToggle;
         private Label _labels;
-        private Label _labelAdvancedCollapseToggle;
         private HorizontalToggle _andOrToggle;
         private VisualElement _labelFilterSelectionRoot;
         private VisualElement _logicalGrouping;
         private VisualElement _availableLabelsContainer;
+        private LabelFilterEditor _labelFilterEditor;
         private VisualElement _andLabelsContainer;
         private VisualElement _orLabelsContainer;
         private Label _filterStatusLabel;
@@ -5103,7 +5103,17 @@ namespace WallstopStudios.DataVisualizer.Editor
             VisualElement labelContainerContainer = new() { name = "label-container-container" };
             labelContainerContainer.AddToClassList("label-container-container");
             objectColumn.Add(labelContainerContainer);
-            labelContainerContainer.Add(_labelFilterSelectionRoot);
+            _labelFilterEditor = new LabelFilterEditor(
+                _labelFilterSelectionRoot,
+                () =>
+                {
+                    SaveLabelFilterConfig(CurrentTypeLabelFilterConfig);
+                    PopulateLabelPillContainers();
+                    ApplyLabelFilter();
+                    ToggleLabelsCollapsed(CurrentTypeLabelFilterConfig?.isCollapsed == true);
+                }
+            );
+            labelContainerContainer.Add(_labelFilterEditor);
 
             _availableLabelsContainer = new VisualElement { name = "available-labels-container" };
             _availableLabelsContainer.AddToClassList("label-pill-container");
@@ -5129,35 +5139,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             _andLabelsContainer = new VisualElement { name = "and-labels-container" };
             _andLabelsContainer.AddToClassList("label-pill-container");
             andRow.Add(_andLabelsContainer);
-            VisualElement advancedRow = new();
-            advancedRow.AddToClassList("advanced-row");
-
-            _labelAdvancedCollapseToggle = new Label();
-            _labelAdvancedCollapseToggle.AddToClassList(StyleConstants.ClickableClass);
-            _labelAdvancedCollapseToggle.AddToClassList("collapse-toggle");
-            _labelAdvancedCollapseToggle.AddToClassList("advanced");
-            _labelAdvancedCollapseToggle.RegisterCallback<PointerDownEvent>(evt =>
-            {
-                if (evt.button != 0)
-                {
-                    return;
-                }
-
-                config = CurrentTypeLabelFilterConfig;
-                if (config == null)
-                {
-                    return;
-                }
-
-                ToggleLabelsAdvancedCollapsed(!config.isAdvancedCollapsed);
-                evt.StopPropagation();
-            });
-            advancedRow.Add(_labelAdvancedCollapseToggle);
-
-            Label advanced = new("Advanced");
-            advanced.AddToClassList("advanced-label");
-            advancedRow.Add(advanced);
-            _labelFilterSelectionRoot.Add(advancedRow);
             _labelFilterSelectionRoot.Add(andRow);
 
             _andOrToggle = new HorizontalToggle()
@@ -5167,6 +5148,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 RightText = "OR ||",
             };
             _andOrToggle.AddToClassList("label");
+            _andOrToggle.LeftLabel.focusable = true;
+            _andOrToggle.RightLabel.focusable = true;
+            _andOrToggle.LeftLabel.RegisterCallback<NavigationSubmitEvent>(evt =>
+            {
+                _andOrToggle.SelectLeft(animate: false);
+                evt.StopPropagation();
+            });
+            _andOrToggle.RightLabel.RegisterCallback<NavigationSubmitEvent>(evt =>
+            {
+                _andOrToggle.SelectRight(animate: false);
+                evt.StopPropagation();
+            });
             _andOrToggle.OnLeftSelected += () =>
             {
                 _andOrToggle.EnableInClassList("dataviz-alternate-mode", false);
@@ -5242,7 +5235,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
             _filterStatusLabel.AddToClassList("dataviz-muted");
-            _labelFilterSelectionRoot.Add(_filterStatusLabel);
+            labelContainerContainer.Add(_filterStatusLabel);
 
             SetupDropTarget(_availableLabelsContainer, LabelFilterSection.Available);
             SetupDropTarget(_andLabelsContainer, LabelFilterSection.AND);
@@ -5287,17 +5280,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             return objectColumn;
         }
 
-        private bool CanCollapseAdvancedLabelConfiguration()
-        {
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (config == null)
-            {
-                return true;
-            }
-
-            return _andOrToggle.IsLeftSelected && config.orLabels.Count == 0;
-        }
-
         private bool CanCollapseLabels()
         {
             TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
@@ -5309,59 +5291,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             return config.andLabels.Count == 0 && config.orLabels.Count == 0;
         }
 
-        private void ToggleLabelsAdvancedCollapsed(bool isCollapsed)
-        {
-            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
-            if (config != null && config.isAdvancedCollapsed != isCollapsed && (!isCollapsed || CanCollapseAdvancedLabelConfiguration()))
-            {
-                config.isAdvancedCollapsed = isCollapsed;
-                SaveLabelFilterConfig(config);
-            }
-
-            UpdateAdvancedClickableState();
-            if (_logicalGrouping != null)
-            {
-                _logicalGrouping.style.display = config?.isAdvancedCollapsed ?? true ? DisplayStyle.None : DisplayStyle.Flex;
-            }
-        }
-
-        private void UpdateAdvancedClickableState()
-        {
-            if (_labelAdvancedCollapseToggle != null)
-            {
-                _labelAdvancedCollapseToggle.EnableInClassList(StyleConstants.ClickableClass, CanCollapseAdvancedLabelConfiguration());
-                bool isCollapsed = CurrentTypeLabelFilterConfig?.isAdvancedCollapsed ?? true;
-                _labelAdvancedCollapseToggle.text = isCollapsed ? StyleConstants.ArrowCollapsed : StyleConstants.ArrowExpanded;
-
-                if (isCollapsed)
-                {
-                    _labelAdvancedCollapseToggle.tooltip = "Explore advanced boolean label logic";
-                }
-                else if (CanCollapseAdvancedLabelConfiguration())
-                {
-                    _labelAdvancedCollapseToggle.tooltip = "Hide advanced boolean logic";
-                }
-                else
-                {
-                    _labelAdvancedCollapseToggle.tooltip = "Can not un-collapse due to either OR toggle or OR labels";
-                }
-            }
-        }
-
         private void UpdateLabelsCollapsedClickableState()
         {
             if (_labelCollapseToggle != null)
             {
                 _labelCollapseToggle.EnableInClassList(StyleConstants.ClickableClass, CanCollapseLabels());
 
-                bool isCollapsed = CurrentTypeLabelFilterConfig?.isCollapsed ?? true;
+                bool isCollapsed = (CurrentTypeLabelFilterConfig?.isCollapsed ?? true) && CanCollapseLabels();
                 _labelCollapseToggle.text = isCollapsed ? StyleConstants.ArrowCollapsed : StyleConstants.ArrowExpanded;
 
                 if (isCollapsed)
                 {
                     _labelCollapseToggle.tooltip = "Explore label filtering logic";
                 }
-                else if (CanCollapseAdvancedLabelConfiguration())
+                else if (CanCollapseLabels())
                 {
                     _labelCollapseToggle.tooltip = "Hide label filtering logic";
                 }
@@ -5382,14 +5325,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             UpdateLabelsCollapsedClickableState();
+            bool collapsed = (config?.isCollapsed ?? true) && CanCollapseLabels();
             if (_labels != null)
             {
-                _labels.text = config?.isCollapsed ?? true ? $"Labels (<b><color=yellow>{_currentUniqueLabelsForType.Count}</color></b>)" : "Labels";
+                _labels.text = collapsed ? $"Labels (<b><color=yellow>{_currentUniqueLabelsForType.Count}</color></b>)" : "Labels";
             }
 
-            if (_labelFilterSelectionRoot != null)
+            if (_labelFilterEditor != null)
             {
-                _labelFilterSelectionRoot.style.display = config?.isCollapsed ?? true ? DisplayStyle.None : DisplayStyle.Flex;
+                _labelFilterEditor.style.display = collapsed ? DisplayStyle.None : DisplayStyle.Flex;
             }
         }
 
@@ -5614,7 +5558,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private static void FinalizeLabelFilter((DataVisualizer window, bool buildObjectsView) state)
         {
             state.window.UpdateLabelsCollapsedClickableState();
-            state.window.UpdateAdvancedClickableState();
             if (state.buildObjectsView)
             {
                 state.window.BuildObjectsView();
@@ -5800,9 +5743,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _filterStatusLabel.text = "";
                 }
 
-                if (_labelFilterSelectionRoot is { parent: not null })
+                _labelFilterEditor?.Bind(null, Array.Empty<string>());
+                if (_labelFilterEditor is { parent: not null })
                 {
-                    _labelFilterSelectionRoot.parent.style.display = DisplayStyle.None;
+                    _labelFilterEditor.parent.style.display = DisplayStyle.None;
                 }
 
                 if (_labelCollapseRow != null)
@@ -5848,24 +5792,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            bool configChanged = false;
-            int removedAnd = config.andLabels.RemoveAll(label => !_currentUniqueLabelsForType.Contains(label));
-            int removedOr = config.orLabels.RemoveAll(label => !_currentUniqueLabelsForType.Contains(label));
-
-            if (0 < removedAnd || 0 < removedOr)
-            {
-                configChanged = true;
-            }
-
-            if (configChanged)
-            {
-                SaveLabelFilterConfig(config);
-            }
-
             PopulateLabelPillContainers();
             ApplyLabelFilter();
             ToggleLabelsCollapsed(CurrentTypeLabelFilterConfig?.isCollapsed == true);
-            ToggleLabelsAdvancedCollapsed(CurrentTypeLabelFilterConfig?.isAdvancedCollapsed == true);
         }
 
         internal void BuildObjectsView()
@@ -6651,13 +6580,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                 PopulateSingleLabelContainer(_orLabelsContainer, config.orLabels, LabelFilterSection.OR);
             }
 
-            if (_labelFilterSelectionRoot is { parent: not null })
+            _labelFilterEditor?.Bind(config, _currentUniqueLabelsForType);
+            bool hasLabels = availableLabels.Count != 0 || config?.andLabels is { Count: > 0 } || config?.orLabels is { Count: > 0 };
+            if (_labelFilterEditor is { parent: not null })
             {
-                _labelFilterSelectionRoot.parent.style.display = availableLabels.Count != 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                _labelFilterEditor.parent.style.display = hasLabels ? DisplayStyle.Flex : DisplayStyle.None;
             }
             if (_labelCollapseRow != null)
             {
-                _labelCollapseRow.style.display = availableLabels.Count != 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                _labelCollapseRow.style.display = hasLabels ? DisplayStyle.Flex : DisplayStyle.None;
             }
         }
 
@@ -6706,6 +6637,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             pillContainer.RegisterCallback<PointerDownEvent>(evt =>
             {
+                if (evt.target is VisualElement target && (target is Button || target.GetFirstAncestorOfType<Button>() != null))
+                {
+                    return;
+                }
                 if (evt.button == 0)
                 {
                     _draggedLabelText = labelText;
@@ -6723,7 +6658,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 case LabelFilterSection.Available:
                 {
-                    pillContainer.tooltip = $"Drag '{labelText}' to an AND/OR filter section.";
+                    pillContainer.tooltip = $"Add '{labelText}' with a button, or drag it to a clause.";
+                    pillContainer.Add(new Button(() => AddLabelToFilter(labelText, LabelFilterSection.AND)) { text = "+ AND", tooltip = "Require this label" });
+                    pillContainer.Add(new Button(() => AddLabelToFilter(labelText, LabelFilterSection.OR)) { text = "+ OR", tooltip = "Accept any label in the OR clause" });
                     break;
                 }
                 case LabelFilterSection.AND:
@@ -6748,6 +6685,23 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
             return pillContainer;
+        }
+
+        private void AddLabelToFilter(string label, LabelFilterSection section)
+        {
+            TypeLabelFilterConfig config = CurrentTypeLabelFilterConfig;
+            if (config == null)
+            {
+                return;
+            }
+            List<string> labels = section == LabelFilterSection.AND ? config.andLabels : config.orLabels;
+            if (!labels.Contains(label))
+            {
+                labels.Add(label);
+                SaveLabelFilterConfig(config);
+                PopulateLabelPillContainers();
+                ApplyLabelFilter();
+            }
         }
 
         private void RemoveLabelFromFilter(string labelText, LabelFilterSection sectionItWasIn)
@@ -6841,19 +6795,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 int shownCount = _filteredObjects.Count;
                 if (_filterStatusLabel != null)
                 {
-                    if (shownCount == totalCount)
-                    {
-                        _filterStatusLabel.style.display = DisplayStyle.None;
-                    }
-                    else
-                    {
-                        _filterStatusLabel.style.display = DisplayStyle.Flex;
-                        int hidden = totalCount - shownCount;
-                        _filterStatusLabel.text =
-                            hidden < 20 && hidden != totalCount
-                                ? $"<b><color=yellow>{hidden}</color></b> objects hidden by label filter."
-                                : $"<b><color=red>{hidden}</color></b> objects hidden by label filter.";
-                    }
+                    _filterStatusLabel.style.display = DisplayStyle.Flex;
+                    int hidden = totalCount - shownCount;
+                    _filterStatusLabel.text = $"{shownCount} shown · {hidden} hidden";
                 }
             }
         }

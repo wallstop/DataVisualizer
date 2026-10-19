@@ -2,6 +2,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
 {
     public static class StyleConstants
     {
+        public const string LabelFilterControlsClass = "label-filter-controls";
+        public const string LabelFilterSummaryClass = "label-filter-summary";
+
         public const string SelectedClass = "selected";
         public const string NamespaceItemClass = "namespace-item";
         public const string NamespaceHeaderClass = "namespace-header";

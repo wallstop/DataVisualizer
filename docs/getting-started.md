@@ -64,8 +64,8 @@ Three finders narrow different things, and they do not affect each other. The [S
 - The **Search all assets** box in the window header row searches every tracked type, not only the type you selected. It matches asset names, type names, asset GUIDs, and string
   fields on the assets themselves, so you can find an asset by what is inside it.
 - The **Filter types** field above the namespace list narrows the type rows by display name, without case sensitivity. Namespace headers stay visible.
-- Drag labels from **Available** into the **AND:** or **OR:** rows to show only assets that carry them. Within **AND:** every label is required; within **OR:** any label is
-  sufficient. The switch combines those two clauses.
+- Choose **Match all labels** or **Match any label**, then click label pills to select them. Tab and Enter or Space work too. **Advanced** preserves compound AND/OR expressions;
+  **Clear** removes every label constraint.
 
 ## Keep your arrangement
 

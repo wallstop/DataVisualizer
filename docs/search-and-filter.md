@@ -54,12 +54,25 @@ A display name comes from `[CustomDataVisualization]` when your type sets `TypeN
 
 ## Label filter
 
-Labels are Unity asset labels, the same ones you see on an asset in the Project panel. The filter has three rows:
+Labels are Unity asset labels, the same ones you see on an asset in the Project panel.
 
-- **Available** lists every label used by an instance of the selected type.
-- **AND:** and **OR:** are drop targets.
+1. Choose **Match all labels** to require every selected label, or **Match any label** to accept at least one.
+2. Click a label pill to add it. A selected pill shows **×**; click it again to remove it.
+3. Choose **Clear** to remove every constraint. Tab to pills or Clear and press Enter or Space to use the keyboard.
 
-Drag a label pill from **Available** into **AND:** or **OR:** to filter, and drag it back out to remove it. Drag labels between the two rows to change which clause they belong to.
+For example, selecting `Urgent` and `Reviewed` in **Match all labels** shows only assets with both labels. Switching to **Match any label** shows assets with either label. Labels
+compare exactly: `Urgent` and `urgent` are different labels.
+
+A readable expression stays above the controls, including active labels not currently used by any loaded asset. Those labels remain selected until you remove them; loading or
+refreshing a type does not silently broaden its saved filter.
+
+### Advanced expressions
+
+Choose **Advanced** to combine two clauses. Existing compound filters open here automatically. Their saved combination, label casing, and result set stay unchanged. To replace a
+compound expression with a simple filter, choose **Clear** first; choosing a simple mode alone never discards a clause.
+
+**Available** lists labels on loaded instances. Use **+ AND** to require a label, or **+ OR** to add an alternative. Each selected label has a remove button. These buttons work
+with Tab and Enter or Space; dragging pills between **Available**, **AND:** and **OR:** remains available.
 
 ### AND and OR
 
@@ -89,16 +102,13 @@ no labels configured, both modes show every asset.
 
 Labels compare exactly, so `Urgent` and `urgent` are two different labels.
 
-### The Advanced row
-
-**Advanced** reveals the AND/OR switch and the OR row. The row refuses to collapse while you are in OR mode or while any OR label is present, so a filter you cannot see is never
-left behind hiding objects. The **Labels** header above the whole section refuses to collapse while any label is configured.
+The **Labels** header refuses to collapse while any label is configured, so an active filter stays visible. In Advanced, both clauses remain visible together with their expression.
 
 ### What filtering changes
 
 The filter narrows the list you see. It does not change what is on disk, and it does not change the order of the objects it keeps.
 
-When a filter hides rows, a line below the filter reports how many: fewer than 20 hidden is highlighted in yellow, 20 or more in red. When nothing is hidden, the line disappears.
+A neutral line reports the loaded rows shown and hidden by labels, including zero hidden. During loading these counts describe the loaded subset, not a complete project total.
 
 The filter is stored per type and follows the persistence setting described in [Organizing your data](organizing.md).
 
