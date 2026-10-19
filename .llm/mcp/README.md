@@ -180,3 +180,6 @@ The previous hand-rolled `UnityMcpBridge.cs` (10 tools) is deprecated. If it was
 Run `npm run mcp:sync`, restart the host bridge and agent sessions, then run `npm run unity:mcp:doctor` from the container. The doctor checks initialization, tool discovery, and
 the pinned editor. If `/healthz` times out, check the host URL and remove forwarded Unity bridge ports in VS Code's Ports view: reverse tunnels can intercept host traffic. Connect
 directly to the host bridge. Match health's `bridgePid` to the listener owner; health bypasses authentication and does not start Unity.
+
+The universal configurator runs in typed Python through `uv run scripts/mcp_configure.py`. The legacy Node entry remains a launcher with Python 3.9+ fallback. The sync wrapper no
+longer requires Node.
