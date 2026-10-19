@@ -59,53 +59,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
 
             window.RefreshThemeIfAffected(importedAssets, deletedAssets, movedFromAssetPaths);
 
-            HashSet<Type> relevantTypes = CollectRelevantTypes(window._scriptableObjectTypes);
-            if (
-                ContainsRelevantDeletedAssetPath(deletedAssets)
-                || ContainsRelevantAsset(relevantTypes, importedAssets)
-                || ContainsRelevantAsset(relevantTypes, movedAssets)
-                || ContainsRelevantDeletedAssetPath(movedFromAssetPaths)
-            )
-            {
-                EditorApplication.delayCall += DataVisualizer.SignalRefresh;
-            }
-        }
-
-        private static HashSet<Type> CollectRelevantTypes(Dictionary<string, List<Type>> managedTypes)
-        {
-            HashSet<Type> relevantTypes = new();
-            foreach (List<Type> types in managedTypes.Values)
-            {
-                foreach (Type type in types)
-                {
-                    relevantTypes.Add(type);
-                }
-            }
-            return relevantTypes;
-        }
-
-        private static bool ContainsRelevantDeletedAssetPath(string[] paths)
-        {
-            foreach (string path in paths)
-            {
-                if (IsDeletedAssetPathRelevant(path))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static bool ContainsRelevantAsset(HashSet<Type> relevantTypes, string[] paths)
-        {
-            foreach (string path in paths)
-            {
-                if (IsRelevantAsset(relevantTypes, path))
-                {
-                    return true;
-                }
-            }
-            return false;
+            window.QueueAssetChanges(importedAssets, deletedAssets, movedAssets, movedFromAssetPaths);
         }
     }
 #endif
