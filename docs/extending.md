@@ -186,11 +186,12 @@ Use `EditorAssetQuery` on Unity's editor main thread without opening a window. I
 ScriptableObject types: derived instances and subassets are excluded. An empty scope is rejected instead of searching everything. Results use asset GUIDs and assembly-qualified
 type identities; authored `BaseDataObject.Id` values are separate.
 
-Place this example under an `Editor` folder and replace `QuestData` with your project type:
+Place this example under an `Editor` folder. It uses [QuestData from Getting started](getting-started.md#create-your-first-asset); replace the type and namespace for your project:
 
 ```csharp
 namespace MyGame.Editor
 {
+    using MyGame.Data;
     using UnityEditor;
     using UnityEngine;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
@@ -225,6 +226,62 @@ The service copies result values and retains no asset wrappers. It loads each di
 mutation hooks. User-defined Unity loading callbacks still run. Item errors appear in `Error`; callers must inspect them even after completion. A query is a one-pass observation,
 not a transaction: restart after project changes, and do not persist page offsets across queries. Discovery scans project `.asset` main assets through the existing type index.
 Configuration, selection, asset mutations, and persistent metadata caching are outside this initial read-only API.
+
+## Read-only JSON automation
+
+Schema version 1 exposes `query` and `validate` through `EditorAutomationSession`, using the same services as the C# APIs and validation window. See the
+[request schema](automation-request.schema.json) and [response schema](automation-response.schema.json). Unknown JSON members are ignored; use the schema in client tooling.
+Configuration, mutation previews, and apply operations are not implemented and return `unsupported_operation`, including during Play Mode.
+
+Inside an editor method, generate a query request using an exact type from your project, then keep the session alive across editor updates:
+
+```csharp
+var request = new WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationRequest
+{
+    schemaVersion = 1,
+    operation = "query",
+    typeIdentities = new[] { typeof(MyGame.Data.QuestData).AssemblyQualifiedName },
+    text = "intro quest",
+    pageSize = 100,
+};
+using (var session = WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationSession.Start(UnityEngine.JsonUtility.ToJson(request)))
+{
+    session.Advance(4);
+    UnityEngine.Debug.Log(session.GetResponseJson());
+}
+```
+
+The snippet performs one slice, then cancels unfinished work on disposal. A longer-lived tool calls `Advance(4)` on each update, reads `GetResponseJson(offset, count)` pages, and
+disposes the session on owner cleanup. `Cancel()` preserves partial results. Queries keep multi-term OR matching, exact type scopes, and label-expression semantics. Pages follow
+discovery order; restart after edits and never reuse offsets across sessions. `availableCount` is a partial count until `complete` is true. `scopeCount` is -1 while query discovery
+is incomplete. Validation findings can arrive for an earlier asset when a later duplicate ID appears.
+
+For file automation, serialize the request above to a file. A validation request instead uses `operation: "validate"` and a nonempty `assetGuids` array, without query filters.
+Replace the example GUID with one from your project:
+
+```json
+{ "schemaVersion": 1, "operation": "validate", "assetGuids": ["0123456789abcdef0123456789abcdef"], "pageSize": 100 }
+```
+
+Run in a Unity project that is available to batch mode:
+
+```sh
+Unity -batchmode -projectPath /path/to/project \
+  -executeMethod WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomation.RunFromCommandLine \
+  -dxRequest /path/to/request.json -dxResponse /path/to/response.json
+```
+
+`EditorAutomation.RunFiles(requestPath, responsePath, timeoutMilliseconds)` is the equivalent in-process file entrypoint. It advances synchronously for up to 30 seconds by default.
+Use a session for responsive interactive tools. File execution returns 0 for completed work, 1 for rejected requests, or 2 for partial/cancelled work. **Completion does not mean
+zero defects**: inspect every result page's item codes. The batch entrypoint uses those exit codes and exits the editor; in-process calls do not exit it.
+
+Responses distinguish `running`, `waiting`, `cancelled`, `complete`, and `rejected`. Busy databases and Play transitions return partial work without dialogs. Unsupported schema
+versions, malformed requests, unavailable/ambiguous types, invalid GUIDs, invalid pagination, and unsupported operations return a top-level code and detail. Per-item codes are
+`ok`, `asset_unavailable`, `read_failed`, `missing_reference`, and `duplicate_authored_id`. A completed scan can contain unreadable assets; coverage limits remain in the response.
+
+Responses must be separate `.json` files outside `Assets`, `Packages`, and `ProjectSettings`; parent directories must already exist. Path protection ignores case on every platform.
+Missing input files produce a `request_read_failed` response. The command writes only its requested output and does not change settings or assets. Files contain project paths and
+authored IDs, so store them where your project permits. The dispatcher uses Unity JSON field types; full schema validation belongs in client tooling.
 
 ## Odin Inspector
 
