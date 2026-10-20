@@ -1,14 +1,37 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
+    using System.Collections;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
+    using UnityEngine.TestTools;
     using WallstopStudios.DataVisualizer.Editor.Data;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
 
     public sealed class EditorAssetQueryTests
     {
+        [UnityTest]
+        public IEnumerator ShouldAdvanceManualIndexOnlyWhenItsOwnerRequestsWork()
+        {
+            using TestCleanupScope cleanup = new();
+            string path = "Assets/ManualQueryIndex-" + Guid.NewGuid().ToString("N") + ".asset";
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(path));
+            AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), path);
+            AssetGuidTypeIndex index = new(automaticUpdates: false);
+            cleanup.Defer(index.Cancel);
+            index.AssetDatabaseBusyOverride = () => false;
+            Assert.That(index.ProcessPendingSlice(0), Is.False);
+            yield return null;
+            yield return null;
+            Assert.That(index.IsComplete, Is.False);
+            while (!index.IsComplete)
+            {
+                index.ProcessPendingSlice(10);
+            }
+            Assert.That(index.GetKnownGuids(typeof(TestDataObject)), Does.Contain(AssetDatabase.AssetPathToGUID(path)));
+        }
+
         [Test]
         public void ShouldQueryExactTypesWithSharedTextAndLabelSemanticsWithoutWindow()
         {

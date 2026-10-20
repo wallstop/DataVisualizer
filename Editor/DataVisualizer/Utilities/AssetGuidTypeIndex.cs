@@ -31,12 +31,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private readonly Queue<string> _pendingAssetPaths = new();
         private readonly Dictionary<string, (Type Type, string Guid)> _assetsByPath = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<Type, HashSet<string>> _guidsByType = new();
+        private readonly bool _automaticUpdates;
 
         private AssetGuidTypeIndexState _state;
         private bool _suspended;
 
         public AssetGuidTypeIndex()
+            : this(true) { }
+
+        public AssetGuidTypeIndex(bool automaticUpdates)
         {
+            _automaticUpdates = automaticUpdates;
             _state = AssetGuidTypeIndexState.Idle;
         }
 
@@ -365,7 +370,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool stateChanged = _state != nextState;
             _state = nextState;
 
-            bool shouldProcess = nextState == AssetGuidTypeIndexState.WaitingForPathSnapshot || nextState == AssetGuidTypeIndexState.Classifying;
+            bool shouldProcess = _automaticUpdates && (nextState == AssetGuidTypeIndexState.WaitingForPathSnapshot || nextState == AssetGuidTypeIndexState.Classifying);
             if (shouldProcess)
             {
                 EditorApplication.update += ProcessEditorUpdate;

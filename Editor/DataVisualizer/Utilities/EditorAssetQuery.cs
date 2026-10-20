@@ -19,7 +19,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public double LongestSliceMilliseconds { get; private set; }
         public int SliceOverrunCount { get; private set; }
 
-        private readonly AssetGuidTypeIndex _index = new();
+        private readonly AssetGuidTypeIndex _index = new(automaticUpdates: false);
         private readonly Type[] _types;
         private readonly string[] _terms;
         private readonly TypeLabelFilterConfig _labels;
