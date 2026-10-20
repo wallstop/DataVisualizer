@@ -9,6 +9,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using UnityEditor;
     using UnityEditor.UIElements;
     using UnityEngine;
+    using UnityEngine.Profiling;
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
     using Object = UnityEngine.Object;
@@ -131,13 +132,19 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 {
                     Assert.That(ReadAll(paths), Is.EqualTo(count));
                 }
+                long calibrationStart = GC.GetAllocatedBytesForCurrentThread();
+                byte[] calibration = new byte[1024];
+                report.allocationCounterSupported = calibrationStart < GC.GetAllocatedBytesForCurrentThread();
+                GC.KeepAlive(calibration);
                 for (int i = 0; i < 30; i++)
                 {
+                    long heap = Profiler.GetMonoUsedSizeLong();
                     long allocated = GC.GetAllocatedBytesForCurrentThread();
                     clock.Restart();
                     int actual = ReadAll(paths);
                     report.warmMilliseconds.Add(clock.Elapsed.TotalMilliseconds);
-                    report.warmAllocatedBytes.Add(GC.GetAllocatedBytesForCurrentThread() - allocated);
+                    report.warmAllocatedBytes.Add(report.allocationCounterSupported ? GC.GetAllocatedBytesForCurrentThread() - allocated : -1);
+                    report.warmManagedHeapDeltaBytes.Add(Profiler.GetMonoUsedSizeLong() - heap);
                     Assert.That(actual, Is.EqualTo(count));
                 }
                 // The result schema copies only value types and strings; it has no Unity object fields.

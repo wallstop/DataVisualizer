@@ -31,7 +31,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public double firstReadMilliseconds;
         public List<long> exampleLocalIds = new();
         public List<double> warmMilliseconds = new();
+        public bool allocationCounterSupported;
         public List<long> warmAllocatedBytes = new();
+        public List<long> warmManagedHeapDeltaBytes = new();
         public int metadataObjectReferenceFields;
         public bool cleanupComplete;
     }
