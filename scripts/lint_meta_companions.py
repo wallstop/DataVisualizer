@@ -6,8 +6,9 @@ directions of drift make the host Unity rewrite GUIDs: a file or directory
 committed without its companion makes Unity create one on the next import,
 and an orphan companion (committed without its asset, PR #274 review) makes
 Unity treat the asset as missing and delete or regenerate it. Either way the
-result is a dirty checkout and GUID drift across machines (the class
-documented as host churn in the agent instructions and #193). Dot folders
+result is a dirty checkout and GUID drift across machines (host churn in
+the agent instructions and #193). Companions must also contain exactly one
+nonzero 32-digit hexadecimal asset GUID. Dot folders
 and dot files are never imported, so they never need companions;
 ``__pycache__`` content is likewise skipped, and an orphan companion whose
 asset is ignored or still exists on disk is tolerated.
@@ -21,10 +22,11 @@ Python 3.9+ interpreter works.
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -147,13 +149,42 @@ def missing_companions(paths: Sequence[str], repo_root: Path) -> List[str]:
     return sorted(missing)
 
 
+def invalid_metadata(paths: Sequence[str], repo_root: Path) -> Dict[str, str]:
+    """Report imported companions without exactly one valid top-level asset GUID.
+
+    DefaultImporter, MonoImporter, ScriptedImporter and folder metadata all
+    share this field. Indented GUID references belong to importer data and
+    must not count as the asset identity. Dot paths and bytecode caches keep
+    the same import exemptions as the companion scan.
+    """
+    invalid: Dict[str, str] = {}
+    for path in sorted(set(paths)):
+        if not path.endswith(".meta") or not is_meta_relevant(path[:-5]):
+            continue
+        try:
+            content = (repo_root / path).read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeError) as error:
+            invalid[path] = f"cannot read UTF-8 metadata ({type(error).__name__})"
+            continue
+        fields = re.findall(r"^guid:([^\r\n]*)", content, re.MULTILINE)
+        if len(fields) != 1:
+            invalid[path] = "expected exactly one top-level GUID field"
+            continue
+        guid = fields[0].strip()
+        if re.fullmatch(r"[0-9a-fA-F]{32}", guid) is None or guid == "0" * 32:
+            invalid[path] = "expected a nonzero 32-digit hexadecimal GUID"
+    return invalid
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     options = parse_arguments(argv)
     repo_root = options.repo_root.resolve()
     tracked, untracked = repository_paths(repo_root)
-    missing = missing_companions(tracked + untracked, repo_root)
-    if not missing:
-        print("[meta-companions] ok: every imported path carries a .meta companion")
+    paths = tracked + untracked
+    missing = missing_companions(paths, repo_root)
+    invalid = invalid_metadata(paths, repo_root)
+    if not missing and not invalid:
+        print("[meta-companions] ok: every imported path carries a valid .meta companion")
         return 0
     for path in missing:
         if path.endswith(".meta"):
@@ -165,7 +196,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
               "generate one with a fresh GUID on the host (dirty tree, GUID drift). "
               "Commit the companion (copy an existing *.meta of the same kind and "
               "replace the guid) or move the file under a dot folder.")
-    print(f"::error::meta companions disagree for {len(missing)} path(s)")
+    for path, detail in invalid.items():
+        print(f"::error::{path} has invalid Unity metadata: {detail}. Restore a valid, stable asset GUID.")
+    print(f"::error::meta companions disagree for {len(set(missing) | set(invalid))} path(s)")
     return 1
 
 

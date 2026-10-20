@@ -81,17 +81,17 @@ class LintSandbox:
 def seed_baseline(sandbox: LintSandbox) -> None:
     """A fully companioned tree: every file, file meta, and folder meta present."""
     sandbox.write("Scripts/Keep.cs")
-    sandbox.write("Scripts/Keep.cs.meta", "guid: a\n")
-    sandbox.write("Scripts.meta", "guid: b\n")
+    sandbox.write("Scripts/Keep.cs.meta", "guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+    sandbox.write("Scripts.meta", "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
     sandbox.commit_all()
 
 
 def case_committed_tree_with_companions_passes() -> None:
     sandbox = LintSandbox()
     try:
-        sandbox.write("Scripts/Sub.meta", "guid: c\n")
+        sandbox.write("Scripts/Sub.meta", "guid: cccccccccccccccccccccccccccccccc\n")
         sandbox.write("Scripts/Sub/Deep.cs", "")
-        sandbox.write("Scripts/Sub/Deep.cs.meta", "guid: d\n")
+        sandbox.write("Scripts/Sub/Deep.cs.meta", "guid: dddddddddddddddddddddddddddddddd\n")
         seed_baseline(sandbox)
         sandbox.run()
         assert_exit_code(0, "a fully companioned tree must pass", sandbox.last_exit)
@@ -159,7 +159,7 @@ def case_new_folder_without_folder_companion_fails() -> None:
         # The file carries its companion but the new parent folder does not:
         # the ancestor scan must still catch the folder companion.
         sandbox.write("Scripts/NewDir/File.cs")
-        sandbox.write("Scripts/NewDir/File.cs.meta", "guid: c\n")
+        sandbox.write("Scripts/NewDir/File.cs.meta", "guid: cccccccccccccccccccccccccccccccc\n")
         sandbox.commit_all()
         sandbox.run()
         assert_true(sandbox.last_exit == 1, "a new folder without its companion must fail")
@@ -174,11 +174,11 @@ def case_pycache_and_meta_files_are_exempt() -> None:
     try:
         seed_baseline(sandbox)
         sandbox.write("Scripts/__pycache__/keep.pyc", "bytes\n")
-        sandbox.write("Scripts/__pycache__/keep.pyc.meta", "guid: c\n")
+        sandbox.write("Scripts/__pycache__/keep.pyc.meta", "guid: cccccccccccccccccccccccccccccccc\n")
         # .meta files never need companions of their own, but an unpaired one
         # is an orphan the lint must still flag; pair this one with its asset.
         sandbox.write("Scripts/Loose.cs")
-        sandbox.write("Scripts/Loose.cs.meta", "guid: d\n")
+        sandbox.write("Scripts/Loose.cs.meta", "guid: dddddddddddddddddddddddddddddddd\n")
         sandbox.commit_all()
         sandbox.run()
         assert_exit_code(0, "__pycache__ content and paired .meta files are exempt", sandbox.last_exit)
@@ -192,7 +192,7 @@ def case_orphan_companion_fails() -> None:
         seed_baseline(sandbox)
         # An orphan companion: committed with no asset beside it. Unity
         # treats the asset as missing and deletes or regenerates the meta.
-        sandbox.write("Scripts/Orphan.cs.meta", "guid: e\n")
+        sandbox.write("Scripts/Orphan.cs.meta", "guid: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n")
         sandbox.commit_all()
         sandbox.run()
         assert_true(sandbox.last_exit == 1, "an orphan companion must fail")
@@ -213,7 +213,7 @@ def case_folder_companion_for_ignored_only_folder_is_tolerated() -> None:
         # directory-only rule when the directory is absent, and the
         # tolerated folder meta would be misread as an orphan.
         sandbox.write(".gitignore", "Cache/\n")
-        sandbox.write("Scripts/Cache.meta", "guid: f\n")
+        sandbox.write("Scripts/Cache.meta", "guid: ffffffffffffffffffffffffffffffff\n")
         sandbox.commit_all()
         assert_true(not (sandbox.root / "Scripts" / "Cache").exists(), "the fixture must keep the folder absent")
         sandbox.run()
@@ -244,6 +244,61 @@ def case_missing_companions_reports_sorted_unique_paths() -> None:
         remove_temp_root(root)
 
 
+def case_invalid_metadata_fails() -> None:
+    sandbox = LintSandbox()
+    try:
+        seed_baseline(sandbox)
+        for content in (
+            "", "fileFormatVersion: 2\n", "guid: abc\n",
+            "guid: " + "g" * 32 + "\n", "guid: " + "0" * 32 + "\n",
+            "guid: " + "a" * 32 + "\nguid: " + "b" * 32 + "\n",
+            "DefaultImporter:\n  guid: " + "a" * 32 + "\n",
+        ):
+            sandbox.write("Scripts/Keep.cs.meta", content)
+            sandbox.run()
+            assert_exit_code(1, f"invalid metadata must fail: {content!r}", sandbox.last_exit)
+            assert_contains("failure identifies the companion", "Scripts/Keep.cs.meta", sandbox.output)
+            assert_contains("failure explains invalid GUID", "GUID", sandbox.output)
+    finally:
+        sandbox.destroy()
+
+
+def case_supported_metadata_formats_pass() -> None:
+    sandbox = LintSandbox()
+    try:
+        seed_baseline(sandbox)
+        for header in ("", "\ufeff"):
+            for importer in ("DefaultImporter", "MonoImporter", "ScriptedImporter"):
+                sandbox.write(
+                    "Scripts/Keep.cs.meta",
+                    header + "fileFormatVersion: 2\r\nguid: " + "aB" * 16
+                    + "\r\n" + importer + ":\r\n  externalObjects:\r\n    guid: " + "b" * 32 + "\r\n",
+                )
+                sandbox.run()
+                assert_exit_code(0, f"supported {importer} metadata must pass: {sandbox.output}", sandbox.last_exit)
+        sandbox.write("Scripts.meta", "fileFormatVersion: 2\nguid: " + "c" * 32 + "\nfolderAsset: yes\nDefaultImporter:\n")
+        sandbox.run()
+        assert_exit_code(0, "folder metadata must pass", sandbox.last_exit)
+    finally:
+        sandbox.destroy()
+
+
+def case_unreadable_metadata_fails() -> None:
+    sandbox = LintSandbox()
+    try:
+        seed_baseline(sandbox)
+        (sandbox.root / "Scripts/Keep.cs.meta").write_bytes(b"guid: \xff\n")
+        sandbox.run()
+        assert_exit_code(1, "undecodable metadata must fail without a traceback", sandbox.last_exit)
+        assert_contains("failure identifies the companion", "Scripts/Keep.cs.meta", sandbox.output)
+        assert_true("Traceback" not in sandbox.output, "invalid metadata must report an actionable error")
+        (sandbox.root / "Scripts/Keep.cs.meta").unlink()
+        sandbox.run()
+        assert_exit_code(1, "a tracked companion missing on disk must fail", sandbox.last_exit)
+    finally:
+        sandbox.destroy()
+
+
 CASES = (
     case_committed_tree_with_companions_passes,
     case_committed_file_without_companion_fails,
@@ -255,6 +310,9 @@ CASES = (
     case_orphan_companion_fails,
     case_folder_companion_for_ignored_only_folder_is_tolerated,
     case_missing_companions_reports_sorted_unique_paths,
+    case_invalid_metadata_fails,
+    case_supported_metadata_formats_pass,
+    case_unreadable_metadata_fails,
 )
 
 
