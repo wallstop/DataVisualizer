@@ -6659,6 +6659,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             _selectedObject = dataObject;
 
             SyncObjectListSelection();
+            // Reasserting the active object must update highlights without moving the user's viewport.
+            if (sameObject)
+            {
+                return;
+            }
             if (_objectListView != null && dataObject != null)
             {
                 int index = _filteredObjects.IndexOf(dataObject);
@@ -6666,11 +6671,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     _objectListView.ScrollToItem(index);
                 }
-            }
-            // A destroyed wrapper compares null in Unity but still needs inspector teardown.
-            if (sameObject)
-            {
-                return;
             }
 
             if (_selectedObject != null && Settings.selectActiveObject)

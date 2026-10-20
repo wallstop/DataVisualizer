@@ -2,6 +2,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
     using System.Collections.Generic;
+    using System.Reflection;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
@@ -84,6 +85,50 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.Throws<ArgumentException>(() => new EditorProcessorOperation(new SelectionProbeProcessor<int>(), typeof(TestDataObject), selection.CopyGuids(assets)));
             selection.Clear();
             Assert.That(selection.Count, Is.Zero);
+        }
+
+        [Test]
+        public void ShouldSyncSameActiveObjectWithoutMovingTheViewport()
+        {
+            using TestCleanupScope cleanup = new();
+            ScriptableObject[] assets = CreateAssets(cleanup);
+            DataVisualizer owner = ScriptableObject.CreateInstance<DataVisualizer>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(owner));
+            LayoutTestWindow host = ScriptableObject.CreateInstance<LayoutTestWindow>();
+            cleanup.Defer(host.Close);
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            List<ScriptableObject> filtered = (List<ScriptableObject>)typeof(DataVisualizer).GetField("_filteredObjects", flags).GetValue(owner);
+            filtered.Clear();
+            filtered.Add(assets[0]);
+            for (int i = 1; i < 100; i++)
+            {
+                filtered.Add(assets[1]);
+            }
+            ListView list = new()
+            {
+                itemsSource = filtered,
+                fixedItemHeight = 30,
+                selectionType = SelectionType.Multiple,
+                makeItem = () => new Label(),
+                bindItem = (element, index) => ((Label)element).text = index.ToString(),
+                style = { height = 200 },
+            };
+            host.rootVisualElement.Add(list);
+            host.ShowUtility();
+            typeof(DataVisualizer).GetField("_objectListView", flags).SetValue(owner, list);
+            typeof(DataVisualizer).GetField("_selectedObject", flags).SetValue(owner, assets[0]);
+            EditorAssetSelection selection = (EditorAssetSelection)typeof(DataVisualizer).GetField("processorSelection", flags).GetValue(owner);
+            selection.SetType(typeof(TestDataObject));
+            selection.SetSingle(assets[0]);
+            EditorSurfaceCapture.SettleLayout(host);
+            list.ScrollToItem(99);
+            EditorSurfaceCapture.SettleLayout(host);
+            float before = list.Q<ScrollView>().scrollOffset.y;
+            Assert.That(before, Is.GreaterThan(0));
+            typeof(DataVisualizer).GetMethod("SetActiveObject", flags).Invoke(owner, new object[] { assets[0], true });
+            EditorSurfaceCapture.SettleLayout(host);
+            Assert.That(list.selectedIndices, Is.EqualTo(new[] { 0 }), "same-object refresh must still synchronize highlights");
+            Assert.That(list.Q<ScrollView>().scrollOffset.y, Is.EqualTo(before).Within(1), "background refresh must preserve the viewport");
         }
 
         [TestCase("Dx", 1180f)]
