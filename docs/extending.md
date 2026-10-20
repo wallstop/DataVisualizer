@@ -3,7 +3,8 @@
 The runtime assembly is part of the package and carries the extension surface, so your types compile against it in both the editor and a player build. Everything on this page is
 public API. Code identifiers keep the `DataVisualizer` name — namespaces, types, and assemblies are unchanged by the rebrand, so your code needs no edits.
 
-Each code block is a separate example. Put each ScriptableObject class in a file with the same name. Except for the processor, the examples compile in editor and player assemblies.
+Each code block is a separate example. Put each ScriptableObject class in a file with the same name. Place processors, editor queries and automation examples in an Editor folder;
+runtime examples compile in editor and player assemblies.
 
 ## Display attributes
 
@@ -243,9 +244,13 @@ using (EditorProcessorOperation operation = new(processor, typeof(QuestData), as
     // Ask the user to confirm these exact targets before calling Apply.
     operation.Apply();
     // Interactive tools call Advance once per editor update instead of looping.
-    while (!operation.IsFinished)
+    for (int step = 0; step <= assetGuids.Length && !operation.IsFinished; step++)
     {
-        operation.Advance(4);
+        operation.Advance(0);
+    }
+    if (!operation.IsFinished)
+    {
+        operation.Cancel();
     }
     Debug.Log(operation.Status + " " + operation.Code + " " + operation.Detail);
 }
@@ -311,6 +316,81 @@ For example, after supplying your own exact identities and asset GUID:
 Use actual `typeof(QuestData).AssemblyQualifiedName` and `typeof(TrimDescriptions).AssemblyQualifiedName` values, including assembly version information when present. After
 reviewing the response, change the operation to `applyProcessor` and add `"confirmPaths": ["Assets/Data/Quest.asset"]` using the exact returned path. The existing
 [processor example](#processors) supplies the implementation; these placeholder identities and GUID are not executable fixtures.
+
+For a runnable preview/apply example, first add `ItemData` and `TrimDescriptions` from [Processors](#processors). Put this class in an `Editor` folder, select one or more
+`ItemData` main assets in the Project view, and choose **Tools → Preview selected item processor**. The menu rejects mixed selections and shows every path before apply. It keeps
+one JSON session for all response pages; it does not repeat apply to fetch outcomes.
+
+```csharp
+namespace MyGame.Editor
+{
+    using System;
+    using System.Collections.Generic;
+    using UnityEditor;
+    using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor.Utilities;
+
+    public static class SelectedItemProcessor
+    {
+        [MenuItem("Tools/Preview selected item processor")]
+        public static void Run()
+        {
+            List<string> guids = new();
+            foreach (UnityEngine.Object selected in Selection.objects)
+            {
+                if (!(selected is ItemData) || !AssetDatabase.IsMainAsset(selected))
+                {
+                    throw new InvalidOperationException("Select only ItemData main assets.");
+                }
+                guids.Add(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(selected)));
+            }
+            if (guids.Count == 0 || 1000 < guids.Count)
+            {
+                throw new InvalidOperationException("Select 1 to 1000 ItemData assets.");
+            }
+            EditorAutomationRequest request = new()
+            {
+                schemaVersion = 1,
+                operation = "previewProcessor",
+                typeIdentities = new[] { typeof(ItemData).AssemblyQualifiedName },
+                processorIdentity = typeof(TrimDescriptions).AssemblyQualifiedName,
+                assetGuids = guids.ToArray(),
+                pageSize = 1000,
+            };
+            using EditorAutomationSession preview = EditorAutomationSession.Start(JsonUtility.ToJson(request));
+            EditorAutomationResponse targets = JsonUtility.FromJson<EditorAutomationResponse>(preview.GetResponseJson());
+            if (!targets.complete || targets.code != "preview")
+            {
+                throw new InvalidOperationException(targets.code + ": " + targets.detail);
+            }
+            string[] paths = new string[targets.items.Length];
+            for (int i = 0; i < paths.Length; i++)
+            {
+                paths[i] = targets.items[i].path;
+            }
+            if (!EditorUtility.DisplayDialog("Run Trim descriptions?", string.Join("\n", paths), "Run", "Cancel"))
+            {
+                return;
+            }
+            request.operation = "applyProcessor";
+            request.confirmPaths = paths;
+            using EditorAutomationSession apply = EditorAutomationSession.Start(JsonUtility.ToJson(request));
+            for (int step = 0; step <= guids.Count && !apply.IsFinished && !apply.IsWaitingForEditor; step++)
+            {
+                apply.Advance(0);
+            }
+            if (!apply.IsFinished)
+            {
+                apply.Cancel("editor_busy");
+            }
+            Debug.Log(apply.GetResponseJson());
+        }
+    }
+}
+```
+
+This small-selection example advances synchronously and disposes unfinished work if the editor is busy. For interactive bulk tools, keep the same session across editor updates and
+dispose it on owner cleanup or reload. Neither variant can interrupt arbitrary `Process` code; inspect all failed outcomes before retrying.
 
 For file automation, serialize the request above to a file. Each apply file runs a new mutation; never rerun apply to fetch another page. File apply requires offset zero and a page
 large enough for every target (at most 1,000). Use an in-process session for larger batches and page that same session. A validation request instead uses `operation: "validate"`
