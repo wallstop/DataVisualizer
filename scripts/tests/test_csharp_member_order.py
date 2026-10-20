@@ -551,6 +551,62 @@ public sealed class KeepLoops
         remove_temp_root(root)
 
 
+def case_passes_foreach_record_identifiers() -> None:
+    root = new_temp_root(prefix="member-order-")
+    try:
+        for declaration in ("var record", "IDisposable record"):
+            source = """namespace Example
+{
+    using System;
+    public sealed class LoopTests
+    {
+        public void Read(IDisposable[] records)
+        {
+            foreach (DECLARATION in records)
+            {
+                Console.WriteLine(record);
+                IDisposable component = record;
+                using IDisposable serialized = component;
+                if (component != null)
+                {
+                    Console.WriteLine(serialized);
+                }
+            }
+        }
+    }
+}
+""".replace("DECLARATION", declaration)
+            write_fixture_file(root, "LoopTests.cs", source)
+            output, exit_code = invoke_member_order_lint(root)
+            assert_exit_code(0, f"{declaration} should pass: {output}", exit_code)
+            output, exit_code = invoke_member_order_lint(root, ("--fix",))
+            assert_exit_code(0, f"fix must accept {declaration}: {output}", exit_code)
+            assert_true((root / "LoopTests.cs").read_text() == source, "fix must preserve loop source")
+    finally:
+        remove_temp_root(root)
+
+
+def case_preserves_real_type_ordering() -> None:
+    root = new_temp_root(prefix="member-order-")
+    try:
+        for kind in ("record", "record class", "record struct", "class", "struct"):
+            source = f"""public {kind} Entry
+{{
+    private int hidden;
+    public int Visible;
+}}
+"""
+            write_fixture_file(root, "Entry.cs", source)
+            output, exit_code = invoke_member_order_lint(root)
+            assert_exit_code(1, f"real {kind} inversion must fail: {output}", exit_code)
+            output, exit_code = invoke_member_order_lint(root, ("--fix",))
+            assert_exit_code(0, f"real {kind} inversion must be fixable: {output}", exit_code)
+            fixed = (root / "Entry.cs").read_text()
+            assert_true(fixed.index("public int Visible") < fixed.index("private int hidden"), "fix must reorder real members")
+    finally:
+        remove_temp_root(root)
+
+
 def case_paths_scans_only_the_named_files() -> None:
     root = new_temp_root(prefix="member-order-")
     try:
@@ -621,6 +677,8 @@ def main() -> int:
         ("FixesTierOrderByExactPermutation", case_fixes_tier_order_by_exact_permutation),
         ("Fails_OnCountedArrayLoopWithUnusedIndex", case_fails_on_counted_array_loop_with_unused_index),
         ("Passes_CountedLoopsWhenTheIndexIsNeeded", case_passes_counted_loops_when_the_index_is_needed),
+        ("Passes_ForeachRecordIdentifiers", case_passes_foreach_record_identifiers),
+        ("Preserves_RealTypeOrdering", case_preserves_real_type_ordering),
         ("Paths_ScansOnlyTheNamedFiles", case_paths_scans_only_the_named_files),
     ])
 
