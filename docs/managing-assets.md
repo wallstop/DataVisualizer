@@ -74,7 +74,8 @@ it. A processor that throws reports **Outcome unknown** for every target: change
 **FILTERED** is the default. Check **SELECTED** to disable the ALL/FILTERED switch; uncheck it to return to FILTERED. **Clear selection** removes visible, hidden and deleted
 identities. Filtering retains hidden selections, and sorting or browser refresh restores row selection by GUID. An open window preserves its selection through Unity domain reload;
 switching types clears it. A closed and reopened window restores only its existing saved active item. Deleted selected GUIDs remain explicit: clear the selection and select again
-after inspecting a rejected preview. The preview freezes its targets, so later selection or filter changes cannot change a confirmed batch.
+after inspecting a rejected preview. Clone and move commands keep a multi-selection even when they change the active inspected item. The preview freezes its targets, so later
+selection or filter changes cannot change a confirmed batch.
 
 Wait for type loading to finish before opening a processor preview. The target list includes hidden selections, so inspect its paths as well as its count. Processor code can change
 other assets; preview lists the supplied batch, not a prediction of arbitrary code's effects. There is no automatic Undo or rollback. Cancellation cannot interrupt `Process`,

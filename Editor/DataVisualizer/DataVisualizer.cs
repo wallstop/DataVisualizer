@@ -4851,11 +4851,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 UpdateLabelAreaAndFilter();
                 if (targetIndex < _selectedObjects.Count)
                 {
-                    SelectObject(_selectedObjects[targetIndex]);
+                    SetActiveObject(_selectedObjects[targetIndex], preserveProcessorSelection: 0 < processorSelection.Count);
                 }
                 else if (0 < _selectedObjects.Count)
                 {
-                    SelectObject(_selectedObjects[0]);
+                    SetActiveObject(_selectedObjects[0], preserveProcessorSelection: 0 < processorSelection.Count);
                 }
                 else
                 {
@@ -7735,7 +7735,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     if (_selectedObject != dataObject)
                     {
-                        SelectObject(dataObject);
+                        SetActiveObject(dataObject, preserveProcessorSelection: 1 < processorSelection.Count);
                     }
 
                     _suppressListSelectionCallback = true;
@@ -8521,7 +8521,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _selectedLabelUsage.Update(cloneAsset);
                     UpdateAndSaveObjectOrderList(cloneAsset.GetType(), _selectedObjects);
                     BuildObjectsView();
-                    SelectObject(cloneAsset);
+                    SetActiveObject(cloneAsset, preserveProcessorSelection: 1 < processorSelection.Count);
                 }
                 else
                 {
