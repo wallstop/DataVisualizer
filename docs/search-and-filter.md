@@ -53,22 +53,15 @@ status distinguishes available matches from a complete total._
 
 ## Saved searches
 
-1. Select a type in the catalog, set its labels, and enter query text in **Search all assets**.
-2. Choose **Saved searches**, enter a unique name, and choose **Save current search**.
-3. Select a saved entry and choose **Apply** to search its exact type and label expression.
+Select a type, set its labels, and enter query text in **Search all assets**. Open **Saved searches**, enter a unique name, and choose **Save current search**. Choose an entry and
+**Apply** to search its saved exact type, text and label expression. **Rename** changes only its name; **Delete** removes only the search. Assets are unchanged.
 
-The snapshot uses the query and selected type from when you opened the saved-search window. An empty query matches all assets within that type and label expression. To capture a
-new query or type, reopen **Saved searches**. Global search itself still searches all tracked types.
+Snapshots capture the controls when you open this window; reopen it to capture new settings. An empty query matches every asset within its saved scope. For example, save an armor
+type with labels `Reviewed` and `Urgent` to revisit urgent reviewed armor. A missing type gives a recovery message and never expands scope.
 
-For example, save `Armor` with labels `Reviewed` and `Urgent` to revisit reviewed urgent armor assets. Save a second search with an empty query and **Match any label** to browse
-all assets of that type carrying either label. **Rename** changes only the saved name; **Delete** removes only the search. Neither changes assets.
-
-Results show **Indexing (partial)** until discovery finishes. **Cancel** keeps partial results; **Previous results** and **Next results** page through every available match. Choose
-a result to select and ping it in the Project window. Apply again after project changes to get fresh results. A missing or renamed type gives a recovery message and never expands
-the search to other types.
-
-Saved searches are private by default in the existing per-user state file. Enabling project-settings persistence copies them to the settings asset; switching back copies them to
-user state. Version-1 snapshots keep the exact assembly-qualified type, query text, label casing, clauses and combination. Older state without searches starts with an empty list.
+**Indexing (partial)** lasts until discovery finishes; **Cancel** retains partial results. **Previous results** and **Next results** reach every available match. Choose a result to
+select and ping it in Project; Apply again after project changes. Searches are private in user state by default. The project-persistence switch copies them in either direction,
+preserving query semantics and labels. Older state without searches starts empty.
 
 ![Named query with its exact type and label expression](images/saved-searches.png)
 

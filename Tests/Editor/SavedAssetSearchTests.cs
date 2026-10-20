@@ -142,6 +142,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             TextField query = owner.rootVisualElement.Q<TextField>("global-search-field");
             query.value = "literal";
             query.value = "Search...";
+            owner.OpenTypeSearchPopover();
             Assert.That(owner.CaptureSearch().query, Is.EqualTo("Search..."));
             var original = owner.CopySavedSearches();
             cleanup.Defer(() => owner.SaveSearches(original));

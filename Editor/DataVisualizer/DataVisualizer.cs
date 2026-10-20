@@ -1169,7 +1169,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchField.AddToClassList("global-search-field");
             _searchField.SetPlaceholderText(SearchPlaceholder, changeValueOnFocus: false);
             _searchField.tooltip = "Search all tracked assets by name, type, GUID, or text fields";
-            _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue, _showAllSearchResults));
+            _searchField.RegisterValueChangedCallback(evt =>
+            {
+                ((TextField)evt.currentTarget).userData = evt.newValue;
+                PerformSearch(evt.newValue, _showAllSearchResults);
+            });
             _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
                 static (_, context) =>
                 {
@@ -1323,7 +1327,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             return new SavedAssetSearch
             {
-                query = _lastSearchString ?? string.Empty,
+                query = _searchField?.userData as string ?? string.Empty,
                 typeIdentity = _namespaceController.SelectedType?.AssemblyQualifiedName ?? string.Empty,
                 labels = CurrentTypeLabelFilterConfig?.Clone() ?? new TypeLabelFilterConfig(),
             };
