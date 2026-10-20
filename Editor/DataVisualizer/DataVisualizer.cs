@@ -127,6 +127,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         */
         private static readonly EventCallback<PointerDownEvent> StopRowChildPointerDown = evt => evt.StopPropagation();
 
+        private static readonly ReusableDisposalScope<(DataVisualizer window, bool suppressed)> ObjectSelectionCallbackScopes = new(static state =>
+            state.window._suppressListSelectionCallback = state.suppressed
+        );
+
         public double LongestSearchIndexSliceMilliseconds { get; private set; }
         public double LongestSearchQuerySliceMilliseconds { get; private set; }
         public int SearchIndexSliceOverrunCount { get; private set; }
@@ -243,6 +247,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _confirmActionPopover;
         private VisualElement _typeAddPopover;
         private AssetToolPanel _assetToolPanel;
+        private ObjectListSelectionInput _objectSelectionInput;
         private VisualElement _activePopover;
         private VisualElement _confirmNamespaceAddPopover;
         private VisualElement _activeNestedPopover;
@@ -1376,6 +1381,12 @@ namespace WallstopStudios.DataVisualizer.Editor
             return panel;
         }
 
+        public void ClearAssetSelection()
+        {
+            processorSelection.Clear();
+            SetActiveObject(null, preserveProcessorSelection: true);
+        }
+
         public void CloseAssetTool()
         {
             if (_assetToolPanel == null)
@@ -1904,6 +1915,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void Cleanup()
         {
             CloseAssetTool();
+            _objectSelectionInput?.Dispose();
+            _objectSelectionInput = null;
             ObjectChangeEvents.changesPublished -= HandleAssetObjectChanges;
             _assetChanges?.Dispose();
             _assetChanges = null;
@@ -2329,7 +2342,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 SetActiveObject(
                     _assetSelectionReplacement != null ? _assetSelectionReplacement : (_selectedObjects.Count == 0 ? null : _selectedObjects[0]),
-                    preserveProcessorSelection: 0 < processorSelection.Count
+                    preserveProcessorSelection: processorSelection.HasSelectionIntent
                 );
             }
             if (_assetSearchChanged)
@@ -2629,7 +2642,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             */
             if (selectedObject != null && _selectedObjects.Contains(selectedObject))
             {
-                SelectObject(selectedObject);
+                SetActiveObject(selectedObject, preserveProcessorSelection: processorSelection.HasSelectionIntent);
             }
             _namespaceController.SelectType(this, selectedType);
             _needsRefresh = false;
@@ -2900,12 +2913,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             });
             _processorLogicToggle.SetEnabled(state?.logic != ProcessorLogic.Selected);
             _processorArea.Add(_processorSelectedToggle);
-            Button clearSelection = new(() =>
-            {
-                processorSelection.Clear();
-                _objectListView?.ClearSelection();
-                RefreshObjectListPresentation();
-            })
+            Button clearSelection = new(ClearAssetSelection)
             {
                 text = "Clear selection",
                 name = "clear-processor-selection",
@@ -4851,11 +4859,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 UpdateLabelAreaAndFilter();
                 if (targetIndex < _selectedObjects.Count)
                 {
-                    SetActiveObject(_selectedObjects[targetIndex], preserveProcessorSelection: 0 < processorSelection.Count);
+                    SetActiveObject(_selectedObjects[targetIndex], preserveProcessorSelection: processorSelection.HasSelectionIntent);
                 }
                 else if (0 < _selectedObjects.Count)
                 {
-                    SetActiveObject(_selectedObjects[0], preserveProcessorSelection: 0 < processorSelection.Count);
+                    SetActiveObject(_selectedObjects[0], preserveProcessorSelection: processorSelection.HasSelectionIntent);
                 }
                 else
                 {
@@ -5702,6 +5710,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             };
             _objectListView.AddToClassList("object-scrollview");
+            _objectSelectionInput?.Dispose();
+            _objectSelectionInput = new ObjectListSelectionInput(_objectListView, rootVisualElement);
             _objectListView.RegisterSelectionChangedCompat(OnObjectListSelectionChanged);
             _objectListView.itemIndexChanged += OnObjectListItemReordered;
             objectColumn.Add(_objectListView);
@@ -6102,7 +6112,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 name = "go-up-button",
                 text = "↑",
             };
-            goUpButton.RegisterCallback(StopRowChildPointerDown);
+            ProtectObjectRowAction(goUpButton);
             box.Add(goUpButton);
 
             Button goDownButton = new(() =>
@@ -6116,7 +6126,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 name = "go-down-button",
                 text = "↓",
             };
-            goDownButton.RegisterCallback(StopRowChildPointerDown);
+            ProtectObjectRowAction(goDownButton);
             box.Add(goDownButton);
 
             VisualElement contentArea = new() { name = "content" };
@@ -6140,7 +6150,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 },
             };
             actionsArea.AddToClassList(ObjectItemActionsClass);
-            actionsArea.RegisterCallback(StopRowChildPointerDown);
+            ProtectObjectRowAction(actionsArea);
             box.Add(actionsArea);
 
             Button actionsButton = null;
@@ -6156,6 +6166,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 text = "Actions",
                 tooltip = "Clone, Rename (F2), Move, or Delete this asset",
             };
+            ProtectObjectRowAction(actionsButton);
             actionsButton.AddToClassList(StyleConstants.ObjectActionsButtonClass);
             actionsButton.AddToClassList(StyleConstants.ClickableClass);
             actionsArea.Add(actionsButton);
@@ -6549,13 +6560,17 @@ namespace WallstopStudios.DataVisualizer.Editor
                     }
                 }
 
-                if (objectToSelect != null)
+                if (processorSelection.HasSelectionIntent && processorSelection.Count == 0)
                 {
-                    SelectObjectAndNavigateKeepingSelection(objectToSelect, preserveProcessorSelection: 0 < processorSelection.Count);
+                    SetActiveObject(null, preserveProcessorSelection: true);
+                }
+                else if (objectToSelect != null)
+                {
+                    SelectObjectAndNavigateKeepingSelection(objectToSelect, preserveProcessorSelection: processorSelection.HasSelectionIntent);
                 }
                 else if (0 < _selectedObjects.Count)
                 {
-                    SelectObjectAndNavigateKeepingSelection(_selectedObjects[0], preserveProcessorSelection: 0 < processorSelection.Count);
+                    SelectObjectAndNavigateKeepingSelection(_selectedObjects[0], preserveProcessorSelection: processorSelection.HasSelectionIntent);
                 }
                 else
                 {
@@ -6640,37 +6655,22 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 processorSelection.SetSingle(dataObject, _assetObjectCache);
             }
-            // A destroyed wrapper compares null in Unity but still needs inspector teardown.
-            if (ReferenceEquals(_selectedObject, dataObject))
+            bool sameObject = ReferenceEquals(_selectedObject, dataObject);
+            _selectedObject = dataObject;
+
+            SyncObjectListSelection();
+            // Reasserting the active object must update highlights without moving the user's viewport.
+            if (sameObject)
             {
                 return;
             }
-
-            _selectedObject = dataObject;
-
-            // Drive the ListView's visual selection + scroll by index (it owns the --selected style).
-            if (_objectListView != null)
+            if (_objectListView != null && dataObject != null)
             {
-                int index = dataObject != null ? _filteredObjects.IndexOf(dataObject) : -1;
-                _suppressListSelectionCallback = true;
+                int index = _filteredObjects.IndexOf(dataObject);
                 if (0 <= index)
                 {
-                    _objectListView.SetSelectionWithoutNotify(processorSelection.GetVisibleIndices(_filteredObjects, _assetObjectCache));
                     _objectListView.ScrollToItem(index);
                 }
-                else
-                {
-                    _objectListView.SetSelectionWithoutNotify(Array.Empty<int>());
-                }
-                _suppressListSelectionCallback = false;
-
-                /*
-                    Repaint rows so the custom .object-item.selected box style tracks the new selection.
-                    bindItem is the only place that class is applied and the ListView's own --selected
-                    fill is intentionally transparent, so a plain click needs an explicit refresh.
-                    RefreshItems rebinds visible rows only, so it is cheap.
-                */
-                _objectListView.RefreshItems();
             }
 
             if (_selectedObject != null && Settings.selectActiveObject)
@@ -7598,6 +7598,12 @@ namespace WallstopStudios.DataVisualizer.Editor
         private void BuildNamespaceView()
         {
             _namespaceController.Build(this, ref _namespaceListContainer);
+        }
+
+        private void ProtectObjectRowAction(VisualElement element)
+        {
+            element.RegisterCallback<PointerDownEvent, DataVisualizer>(static (_, owner) => owner._objectSelectionInput?.BlockEmptySelection(), this, TrickleDown.TrickleDown);
+            element.RegisterCallback(StopRowChildPointerDown);
         }
 
         /*
@@ -8910,6 +8916,20 @@ namespace WallstopStudios.DataVisualizer.Editor
             return types;
         }
 
+        private void SyncObjectListSelection()
+        {
+            if (_objectListView == null)
+            {
+                return;
+            }
+            using (ReusableDisposalLease<(DataVisualizer window, bool suppressed)> scope = ObjectSelectionCallbackScopes.Acquire((this, _suppressListSelectionCallback)))
+            {
+                _suppressListSelectionCallback = true;
+                _objectListView.SetSelectionWithoutNotify(processorSelection.GetVisibleIndices(_filteredObjects, _assetObjectCache));
+                _objectListView.RefreshItems();
+            }
+        }
+
         private void OnObjectListSelectionChanged(IEnumerable<object> selection)
         {
             if (_suppressListSelectionCallback)
@@ -8918,6 +8938,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             List<object> snapshot = new(selection);
+            if (snapshot.Count == 0 && !(_objectSelectionInput?.AllowsEmptySelection ?? false))
+            {
+                SyncObjectListSelection();
+                return;
+            }
             processorSelection.SetType(_namespaceController.SelectedType);
             processorSelection.ReplaceVisible(_filteredObjects, snapshot, _assetObjectCache);
             ScriptableObject active = null;

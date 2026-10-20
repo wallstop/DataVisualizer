@@ -39,7 +39,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 || !typeof(IDataProcessor).IsAssignableFrom(processorType)
                 || processorType.IsAbstract
                 || processorType.ContainsGenericParameters
-                || processorType.GetConstructor(Type.EmptyTypes) == null
+                || (!processorType.IsValueType && processorType.GetConstructor(Type.EmptyTypes) == null)
             )
             {
                 throw new ArgumentException("Specify a concrete processor with a public parameterless constructor.", nameof(processorType));
