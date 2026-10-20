@@ -1,6 +1,6 @@
 # Roadmap
 
-DxVisualizer works with ScriptableObject assets today. This page lists the data sources planned beyond them. Nothing here has a release date; the
+DxVisualizer works with ScriptableObject main assets today. This page lists proposed sources and feasibility evidence. Nothing here has a release date; the
 [issue tracker](https://github.com/Ambiguous-Interactive/DxVisualizer/issues) has the current state of each item.
 
 ## Current scope
@@ -10,13 +10,13 @@ DxVisualizer works with ScriptableObject assets today. This page lists the data 
 
 ## Planned data sources
 
-| Source               | Status  | What it would add                                                                                              |
-| -------------------- | ------- | -------------------------------------------------------------------------------------------------------------- |
-| Prefab components    | Planned | Serialized component data on prefab assets, listed and edited in the same catalog, object list, and inspector. |
-| Addressables entries | Planned | Assets listed by Addressables group and address, next to their type.                                           |
+| Source               | Status                          | What it would add                                                                                                                        |
+| -------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Prefab components    | Read-only feasibility evaluated | [Read-only component discovery and inspection proposal](prefab-feasibility.md); editing remains unsupported and needs a separate design. |
+| Addressables entries | Planned                         | Assets listed by Addressables group and address, next to their type.                                                                     |
 
-Each source would join the catalog alongside ScriptableObject types, with the same search, ordering, label filtering, and persistence rules described in the guides. The existing
-public API, saved state, and theme tokens stay compatible.
+Any adopted source needs an explicit identity, persistence and operation contract. The [subasset](subasset-feasibility.md) and [prefab](prefab-feasibility.md) experiments do not
+enable new data sources. Existing ScriptableObject behavior and saved arrangements remain the compatibility boundary.
 
 ## Suggest a source
 
