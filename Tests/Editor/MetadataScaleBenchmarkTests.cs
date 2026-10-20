@@ -45,8 +45,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return text.Append(']').ToString();
         }
 
-        private static IEnumerator MeasureSize(int size, List<string> scenarios)
+        private static IEnumerator MeasureSize(int size, List<string> scenarios, Action<string, int> reportProgress, Action checkpoint)
         {
+            reportProgress("collecting baseline", size);
             Stopwatch collection = Stopwatch.StartNew();
             long before = GC.GetTotalMemory(true);
             double longestCollection = collection.Elapsed.TotalMilliseconds;
@@ -65,6 +66,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 {
                     longestBuild = Math.Max(longestBuild, slice.Elapsed.TotalMilliseconds);
                     Assert.That(GC.GetTotalMemory(false) - before, Is.LessThan(HeapLimitBytes), "Stop before a 2 GiB heap increase");
+                    reportProgress("building documents", index + 1);
                     yield return null;
                     slice.Restart();
                 }
@@ -87,6 +89,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 {
                     longestBuild = Math.Max(longestBuild, slice.Elapsed.TotalMilliseconds);
                     Assert.That(GC.GetTotalMemory(false) - before, Is.LessThan(HeapLimitBytes));
+                    reportProgress("tracking identities", index + 1);
                     yield return null;
                     slice.Restart();
                 }
@@ -119,6 +122,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     int expectedScanned = term == "record" ? 25 : count;
                     for (int repetition = -Warmups; repetition < Samples; repetition++)
                     {
+                        reportProgress("query " + size + "/" + count + "/" + term, repetition + Warmups);
                         Stopwatch total = Stopwatch.StartNew();
                         AssetSearchQuery query = new(available, new[] { term }, 25);
                         double preparation = total.Elapsed.TotalMilliseconds;
@@ -191,6 +195,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                             + Numbers(slices)
                             + "}"
                     );
+                    checkpoint();
                 }
             }
             GC.KeepAlive(dataset);
@@ -202,10 +207,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public IEnumerator ShouldMeasureSyntheticMetadataScale()
         {
             List<string> scenarios = new();
-            string environment = PerfBaseline.BuildEnvironmentJson();
+            string environment = "{}";
             bool complete = false;
+            string phase = "starting";
+            int progress = 0;
             using TestCleanupScope cleanup = new();
-            cleanup.Defer(() =>
+            Action writeReport = () =>
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(Output));
                 File.WriteAllText(
@@ -216,17 +223,39 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         + "\"warmups\":5,\n\"samples\":30,\n\"sliceBudgetMilliseconds\":4,\n"
                         + "\"complete\":"
                         + (complete ? "true" : "false")
+                        + ",\n\"phase\":\""
+                        + PerfBaseline.JsonEscape(phase)
+                        + "\",\n\"progress\":"
+                        + progress
                         + ",\n\"environment\":"
                         + environment
                         + ",\n\"scenarios\":[\n"
                         + string.Join(",\n", scenarios)
                         + "\n]}\n"
                 );
-            });
+            };
+            cleanup.Defer(writeReport);
+            writeReport();
+            environment = PerfBaseline.BuildEnvironmentJson();
             foreach (int size in new[] { 10000, 100000, 1000000 })
             {
-                yield return MeasureSize(size, scenarios);
+                yield return MeasureSize(
+                    size,
+                    scenarios,
+                    (stage, count) =>
+                    {
+                        bool changed = !string.Equals(phase, stage, StringComparison.Ordinal);
+                        phase = stage;
+                        progress = count;
+                        if (changed)
+                        {
+                            writeReport();
+                        }
+                    },
+                    writeReport
+                );
             }
+            phase = "complete";
             complete = true;
         }
 
