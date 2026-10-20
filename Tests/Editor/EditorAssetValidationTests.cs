@@ -1,12 +1,14 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
+    using System.Collections;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
+    using UnityEngine.TestTools;
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.Editor;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
@@ -30,6 +32,45 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(asset);
             return AssetDatabase.AssetPathToGUID(path);
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldKeepRejectedSelectionMessageAndContinueThePreviousReport()
+        {
+            using TestCleanupScope cleanup = new();
+            string folder = CreateFolder(cleanup);
+            CreateAsset(folder + "/Previous.asset", "previous");
+            AssetDatabase.SaveAssets();
+            Func<bool> busy = AssetGuidDiscovery.AssetDatabaseBusyOverride;
+            cleanup.Defer(() => AssetGuidDiscovery.AssetDatabaseBusyOverride = busy);
+            UnityEngine.Object[] selection = Selection.objects;
+            cleanup.Defer(() => Selection.objects = selection);
+            AssetValidationWindow window = ScriptableObject.CreateInstance<AssetValidationWindow>();
+            cleanup.Defer(() => window.Close());
+            window.Show();
+            window.CreateGUI();
+            UnityEngine.Object asset = AssetDatabase.LoadMainAssetAtPath(folder + "/Previous.asset");
+            foreach (bool mixed in new[] { false, true })
+            {
+                Selection.objects = new[] { asset };
+                AssetGuidDiscovery.AssetDatabaseBusyOverride = () => true;
+                window.ValidateSelection();
+                Assert.That(window.rootVisualElement.Q<Label>("validation-status").text, Does.StartWith("Processing (partial): 0/1"));
+                Selection.objects = mixed ? new[] { asset, AssetDatabase.LoadMainAssetAtPath(folder) } : Array.Empty<UnityEngine.Object>();
+                window.ValidateSelection();
+                Label message = window.rootVisualElement.Q<Label>("validation-selection-message");
+                Assert.That(message.text, Does.Contain("No new validation started"));
+                AssetGuidDiscovery.AssetDatabaseBusyOverride = () => false;
+                double deadline = EditorApplication.timeSinceStartup + 3;
+                while (
+                    window.rootVisualElement.Q<Label>("validation-status").text.StartsWith("Processing", StringComparison.Ordinal) && EditorApplication.timeSinceStartup < deadline
+                )
+                {
+                    yield return null;
+                }
+                Assert.That(window.rootVisualElement.Q<Label>("validation-status").text, Does.StartWith("Complete: 1/1"));
+                Assert.That(message.text, Does.Contain("No new validation started"));
+            }
         }
 
         [TestCase(1000)]

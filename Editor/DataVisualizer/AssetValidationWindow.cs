@@ -11,6 +11,7 @@ namespace WallstopStudios.DataVisualizer.Editor
     {
         private EditorAssetValidation _validation;
         private Label _status;
+        private Label _selectionMessage;
         private ListView _list;
         private readonly List<AssetValidationFinding> _rows = new();
 
@@ -53,6 +54,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             root.Add(new Button(CancelValidation) { text = "Cancel", tooltip = "Stop between assets and retain partial findings" });
             _status = new Label("Select ScriptableObject main assets in the Project window.") { name = "validation-status" };
             root.Add(_status);
+            _selectionMessage = new Label { name = "validation-selection-message", style = { whiteSpace = WhiteSpace.Normal, display = DisplayStyle.None } };
+            root.Add(_selectionMessage);
             _list = new ListView
             {
                 itemsSource = _rows,
@@ -71,22 +74,25 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public void ValidateSelection()
         {
-            _validation?.Dispose();
             List<string> guids = new();
             foreach (UnityEngine.Object item in Selection.objects)
             {
                 if (!(item is ScriptableObject) || !AssetDatabase.IsMainAsset(item))
                 {
-                    _status.text = "Select only ScriptableObject main assets. No validation started.";
+                    _selectionMessage.text = "Select only ScriptableObject main assets. No new validation started.";
+                    _selectionMessage.style.display = DisplayStyle.Flex;
                     return;
                 }
                 guids.Add(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(item)));
             }
             if (guids.Count == 0)
             {
-                _status.text = "Select one or more ScriptableObject main assets in the Project window.";
+                _selectionMessage.text = "Select one or more ScriptableObject main assets. No new validation started.";
+                _selectionMessage.style.display = DisplayStyle.Flex;
                 return;
             }
+            _selectionMessage.style.display = DisplayStyle.None;
+            _selectionMessage.text = string.Empty;
             _validation?.Dispose();
             _validation = new EditorAssetValidation(guids);
             _rows.Clear();
