@@ -51,6 +51,20 @@ Matching terms are highlighted in the results. The highlight deepens while the p
 ![All available search matches in a virtualized list, including duplicate names with different types](images/search-all-results.webp) _Full results over 42 real fixture assets. The
 status distinguishes available matches from a complete total._
 
+## Saved searches
+
+Select a type, set its labels, and enter query text in **Search all assets**. Open **Saved searches**, enter a unique name, and choose **Save current search**. Choose an entry and
+**Apply** to search its saved exact type, text and label expression. **Rename** changes only its name; **Delete** removes only the search. Assets are unchanged.
+
+Snapshots capture the controls when you open this window; reopen it to capture new settings. An empty query matches every asset within its saved scope. For example, save an armor
+type with labels `Reviewed` and `Urgent` to revisit urgent reviewed armor. A missing type gives a recovery message and never expands scope.
+
+**Indexing (partial)** lasts until discovery finishes; **Cancel** retains partial results. **Previous results** and **Next results** reach every available match. Choose a result to
+select and ping it in Project; Apply again after project changes. Searches are private in user state by default. The project-persistence switch copies them in either direction,
+preserving query semantics and labels. Older state without searches starts empty.
+
+![Named query with its exact type and label expression](images/saved-searches.png)
+
 ## Type filter
 
 The **Filter types** field above the namespace list narrows the type rows by display name, without case sensitivity. Namespace headers are not filtered, so you keep the structure

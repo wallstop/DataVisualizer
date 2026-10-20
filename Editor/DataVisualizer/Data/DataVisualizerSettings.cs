@@ -74,6 +74,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         [ReadOnly]
         internal List<ProcessorState> processorStates = new();
 
+        [SerializeField]
+        [ReadOnly]
+        internal List<SavedAssetSearch> savedSearches = new();
+
         public void MarkDirty()
         {
 #if UNITY_EDITOR
@@ -111,6 +115,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             managedTypeNames = PersistedStateCopy.CloneStrings(userState.managedTypeNames);
             labelFilterConfigs = PersistedStateCopy.CloneTypeLabelFilterConfigs(userState.labelFilterConfigs);
             processorStates = PersistedStateCopy.CloneProcessorStates(userState.processorStates);
+            savedSearches = PersistedStateCopy.CloneSavedSearches(userState.savedSearches);
             MarkDirty();
         }
 

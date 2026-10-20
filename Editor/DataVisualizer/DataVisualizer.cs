@@ -1169,7 +1169,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchField.AddToClassList("global-search-field");
             _searchField.SetPlaceholderText(SearchPlaceholder, changeValueOnFocus: false);
             _searchField.tooltip = "Search all tracked assets by name, type, GUID, or text fields";
-            _searchField.RegisterValueChangedCallback(evt => PerformSearch(evt.newValue, _showAllSearchResults));
+            _searchField.RegisterValueChangedCallback(evt =>
+            {
+                ((TextField)evt.currentTarget).userData = evt.newValue;
+                PerformSearch(evt.newValue, _showAllSearchResults);
+            });
             _searchField.RegisterCallback<FocusInEvent, DataVisualizer>(
                 static (_, context) =>
                 {
@@ -1182,6 +1186,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
             _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
             headerRow.Add(_searchField);
+            headerRow.Add(
+                new Button(() => SavedAssetSearchWindow.Open(this, CaptureSearch()))
+                {
+                    name = "saved-searches-button",
+                    text = "Saved searches",
+                    tooltip = "Save or apply a query with its selected type and label expression",
+                }
+            );
 
             float initialOuterWidth = Mathf.Max(EditorPrefs.GetFloat(PrefsSplitterOuterKey, DefaultOuterSplitWidth), MinNamespacePaneWidth);
             float initialInnerWidth = Mathf.Max(EditorPrefs.GetFloat(PrefsSplitterInnerKey, DefaultInnerSplitWidth), MinObjectPaneWidth);
@@ -1309,6 +1321,40 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetChanges?.Enqueue(movedFrom);
             _assetChanges?.Enqueue(imported);
             _assetChanges?.Enqueue(moved);
+        }
+
+        public SavedAssetSearch CaptureSearch()
+        {
+            Type type = _namespaceController.SelectedType;
+            List<TypeLabelFilterConfig> configs = Settings.persistStateInSettingsAsset ? Settings.labelFilterConfigs : UserState.labelFilterConfigs;
+            TypeLabelFilterConfig filter = type == null ? null : configs?.Find(config => string.Equals(config?.typeFullName, type.FullName, StringComparison.Ordinal));
+            return new SavedAssetSearch
+            {
+                query = _searchField?.userData as string ?? string.Empty,
+                typeIdentity = type?.AssemblyQualifiedName ?? string.Empty,
+                labels = filter?.Clone() ?? new TypeLabelFilterConfig(),
+            };
+        }
+
+        public List<SavedAssetSearch> CopySavedSearches()
+        {
+            return PersistedStateCopy.CloneSavedSearches(Settings.persistStateInSettingsAsset ? Settings.savedSearches : UserState.savedSearches);
+        }
+
+        public void SaveSearches(List<SavedAssetSearch> searches)
+        {
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                settings.savedSearches = PersistedStateCopy.CloneSavedSearches(searches);
+                settings.MarkDirty();
+                AssetDatabase.SaveAssetIfDirty(settings);
+            }
+            else
+            {
+                UserState.savedSearches = PersistedStateCopy.CloneSavedSearches(searches);
+                MarkUserStateDirty();
+            }
         }
 
         internal void PersistSettings(Func<DataVisualizerSettings, bool> settingsApplier, Func<DataVisualizerUserState, bool> userStateApplier)
