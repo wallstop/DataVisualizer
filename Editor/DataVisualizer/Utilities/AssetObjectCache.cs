@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     using System;
     using System.Collections.Generic;
     using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor.Search;
 
     // Owns mutations of the search list; the window retains its legacy read handle.
     public sealed class AssetObjectCache
@@ -11,7 +12,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         private readonly List<ScriptableObject> _ordered;
         private readonly Dictionary<string, ScriptableObject> _byGuid = new(StringComparer.Ordinal);
-        private readonly Dictionary<ScriptableObject, (string Name, string Type)> _keys = new();
+        private readonly Dictionary<ScriptableObject, AssetSearchDocument> _keys = new();
 
         public AssetObjectCache(List<ScriptableObject> ordered)
         {
@@ -46,12 +47,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public int ResetRetainingRows(IReadOnlyList<ScriptableObject> rows, Func<Type, bool> isRelevant)
         {
             HashSet<ScriptableObject> retained = new(rows);
-            List<(string Guid, ScriptableObject Value, (string Name, string Type) Key)> entries = new();
+            List<(string Guid, ScriptableObject Value, AssetSearchDocument Key)> entries = new();
             foreach (KeyValuePair<string, ScriptableObject> entry in _byGuid)
             {
                 if (retained.Contains(entry.Value) && isRelevant(entry.Value.GetType()))
                 {
-                    entries.Add((entry.Key, entry.Value, _keys[entry.Value]));
+                    AssetSearchDocument document =
+                        entry.Value != null ? new AssetSearchDocument(entry.Key, entry.Value.name, entry.Value.GetType(), entry.Value) : _keys[entry.Value];
+                    entries.Add((entry.Key, entry.Value, document));
                 }
             }
             Clear();
@@ -91,7 +94,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             _byGuid[guid] = value;
-            _keys[value] = (value.name, value.GetType().FullName);
+            _keys[value] = new AssetSearchDocument(guid, value.name, value.GetType(), value);
             if (!sorted)
             {
                 _ordered.Add(value);
@@ -117,6 +120,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return true;
         }
 
+        public SearchResultMatchInfo Match(ScriptableObject asset, string[] terms)
+        {
+            return asset != null && _keys.TryGetValue(asset, out AssetSearchDocument document) ? document.Match(terms) : new SearchResultMatchInfo();
+        }
+
         public void Sort()
         {
             _ordered.Sort(Compare);
@@ -125,10 +133,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private int Compare(ScriptableObject first, ScriptableObject second)
         {
             // Snapshot keys keep order valid while other imported objects await reconciliation.
-            (string Name, string Type) left = _keys[first];
-            (string Name, string Type) right = _keys[second];
+            AssetSearchDocument left = _keys[first];
+            AssetSearchDocument right = _keys[second];
             int name = string.Compare(left.Name, right.Name, StringComparison.Ordinal);
-            return name != 0 ? name : string.Compare(left.Type, right.Type, StringComparison.Ordinal);
+            return name != 0 ? name : string.Compare(left.TypeFullName, right.TypeFullName, StringComparison.Ordinal);
         }
     }
 }

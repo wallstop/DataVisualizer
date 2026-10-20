@@ -68,6 +68,26 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldRefreshSearchTextOnlyWhenAssetCacheIsInvalidated()
+        {
+            using TestCleanupScope cleanup = new();
+            PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(asset));
+            asset.Description = "before";
+            List<ScriptableObject> rows = new();
+            AssetObjectCache cache = new(rows);
+            cache.Upsert("guid", asset, false);
+            asset.Description = "after";
+            Assert.That(cache.Match(asset, new[] { "before" }).isMatch);
+            Assert.That(!cache.Match(asset, new[] { "after" }).isMatch);
+            cache.Upsert("guid", asset, true);
+            Assert.That(cache.Match(asset, new[] { "after" }).isMatch);
+            Assert.That(!cache.Match(asset, new[] { "before" }).isMatch);
+            Assert.That(cache.Remove("guid"));
+            Assert.That(!cache.Match(asset, new[] { "after" }).isMatch);
+        }
+
+        [Test]
         public void ShouldRetainSharedLabelsUntilTheirLastAssetIsRemoved()
         {
             string root = "Assets/AssetLabelUsageTests-" + Guid.NewGuid().ToString("N");
