@@ -90,6 +90,40 @@ type, so the run is refused with a **Loading In Progress** dialog. Wait for the 
 
 Processors are also refused during the Play Mode pause, and the switch is disabled while the window is paused.
 
+## Validate an explicit selection
+
+![Read-only validation of two assets sharing an authored ID](images/asset-validation.png)
+
+Select ScriptableObject main assets in the Project window, then open **Tools → Wallstop Studios → Validate Selected Data Assets**. Select **Validate current Project selection**.
+The report names each asset by path and GUID, and includes the serialized property path for a missing reference. **Cancel** stops between assets and retains a clearly partial
+report. Play Mode and AssetDatabase activity pause processing. An unavailable asset produces a finding instead of silently disappearing from the scope.
+
+`missing_reference` means a Unity serialized object reference has a nonzero identity whose target is missing. An intentionally null field is valid. `duplicate_authored_id`
+identifies every asset sharing a nonempty `BaseDataObject.Id` within this selection, using ordinal, case-sensitive equality. It does not compare authored IDs with asset GUIDs,
+check assets outside the selection, or rewrite IDs. Select all intended candidates when checking uniqueness.
+
+The checks are read-only and never repair or save assets. They cover Unity serialized object references (including arrays, hidden fields, and cycle-safe managed-reference children)
+and authored IDs. Custom/Odin serialization, exposed-reference resolver contexts, missing managed-reference types, and custom-inspector rules are outside coverage; zero findings
+does not establish that those checks passed. Each asset is one cooperative work unit, so a large serialized asset can exceed the slice budget.
+
+Editor tools can use the same service without opening the report window:
+
+```csharp
+using (var validation = new WallstopStudios.DataVisualizer.Editor.Utilities.EditorAssetValidation(assetGuids))
+{
+    validation.Advance(4);
+    UnityEngine.Debug.Log($"Complete: {validation.IsComplete}; {validation.ProcessedCount}/{validation.TotalCount}");
+    foreach (var finding in validation.Findings)
+    {
+        UnityEngine.Debug.Log($"{finding.Code}: {finding.Path} {finding.PropertyPath} {finding.Detail}");
+    }
+}
+```
+
+`assetGuids` is a nonempty list of 32-character asset GUIDs. The service copies and deduplicates it, never broadens scope, and reports `asset_unavailable` or `read_failed` per
+asset. Keep the service alive and call `Advance` on successive editor updates to finish a larger scope; disposing an incomplete run cancels it. `LongestSliceMilliseconds` and
+`SliceOverrunCount` report cooperative-budget overruns. Loading an asset can run its own Unity callbacks; the service does not invoke package mutation hooks.
+
 ## Undo
 
 These operations are not on Unity's undo stack. Clone, rename, move, and delete change files directly. Inspector edits go through Unity's own serialized-object path and do support
