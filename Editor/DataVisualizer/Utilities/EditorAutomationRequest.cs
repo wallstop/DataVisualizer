@@ -11,6 +11,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public string operation;
         public string[] typeIdentities;
         public string[] assetGuids;
+        public string processorIdentity;
+        public string[] confirmPaths;
         public string text;
         public string[] andLabels;
         public string[] orLabels;

@@ -261,11 +261,11 @@ earlier update. Create and confirm a new preview after such a change. Asset cont
 changed any subset, including assets outside the scope. No automatic Undo, rollback, retry or recovery is promised. Inspect the assets and use version control to recover.
 Configuration and individual create/clone/rename/move/delete services remain outside this processor API.
 
-## Read-only JSON automation
+## JSON editor automation
 
-Schema version 1 exposes `query` and `validate` through `EditorAutomationSession`, using the same services as the C# APIs and validation workspace. See the
-[request schema](automation-request.schema.json) and [response schema](automation-response.schema.json). Unknown JSON members are ignored; use the schema in client tooling.
-Configuration, mutation previews, and apply operations are not implemented and return `unsupported_operation`, including during Play Mode.
+Schema version 1 exposes `query`, `validate`, `previewProcessor` and `applyProcessor` through `EditorAutomationSession`, using the same services as the C# APIs and validation
+workspace. See the [request schema](automation-request.schema.json) and [response schema](automation-response.schema.json). Unknown JSON members are ignored; use the schema in
+client tooling. Configuration, mutation previews, and apply operations are not implemented and return `unsupported_operation`, including during Play Mode.
 
 Inside an editor method, generate a query request using an exact type from your project, then keep the session alive across editor updates:
 
@@ -290,8 +290,31 @@ disposes the session on owner cleanup. `Cancel()` preserves partial results. Que
 discovery order; restart after edits and never reuse offsets across sessions. `availableCount` is a partial count until `complete` is true. `scopeCount` is -1 while query discovery
 is incomplete. Validation findings can arrive for an earlier asset when a later duplicate ID appears.
 
-For file automation, serialize the request above to a file. A validation request instead uses `operation: "validate"` and a nonempty `assetGuids` array, without query filters.
-Replace the example GUID with one from your project:
+Processor requests use one `typeIdentities` entry, explicit `assetGuids`, and `processorIdentity` containing the processor's assembly-qualified identity. No text or label filters
+are accepted. Use `operation: "previewProcessor"` first; it neither constructs the processor nor loads assets. Read **all** pages of targets, inspect their paths and obtain
+confirmation. For apply, resend those identities with `operation: "applyProcessor"` and `confirmPaths` containing every preview path in GUID order. Missing or changed paths reject
+the whole request. `Advance` prepares targets and invokes the same `EditorProcessorOperation` batch used by C# callers. Never automatically retry `failed` responses: inspect
+`outcome_unknown` targets and recover through version control. `processedCount` counts prepared targets, not proven individual mutations. Cancellation stops preparation only.
+
+For example, after supplying your own exact identities and asset GUID:
+
+```json
+{
+    "schemaVersion": 1,
+    "operation": "previewProcessor",
+    "typeIdentities": ["MyGame.Data.QuestData, Assembly-CSharp"],
+    "processorIdentity": "MyGame.Editor.TrimQuestDescriptions, Assembly-CSharp-Editor",
+    "assetGuids": ["0123456789abcdef0123456789abcdef"]
+}
+```
+
+Use actual `typeof(QuestData).AssemblyQualifiedName` and `typeof(TrimQuestDescriptions).AssemblyQualifiedName` values, including assembly version information when present. After
+reviewing the response, change the operation to `applyProcessor` and add `"confirmPaths": ["Assets/Data/Quest.asset"]` using the exact returned path. The existing
+[processor example](#processors) supplies the implementation; these placeholder identities and GUID are not executable fixtures.
+
+For file automation, serialize the request above to a file. Each apply file runs a new mutation; never rerun apply to fetch another page. File apply requires offset zero and a page
+large enough for every target (at most 1,000). Use an in-process session for larger batches and page that same session. A validation request instead uses `operation: "validate"`
+and a nonempty `assetGuids` array, without query filters. Replace the example GUID with one from your project:
 
 ```json
 { "schemaVersion": 1, "operation": "validate", "assetGuids": ["0123456789abcdef0123456789abcdef"], "pageSize": 100 }

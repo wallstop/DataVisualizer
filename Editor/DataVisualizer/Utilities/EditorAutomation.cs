@@ -72,7 +72,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 );
                 return 1;
             }
-            using EditorAutomationSession session = EditorAutomationSession.Start(request);
+            using EditorAutomationSession session = EditorAutomationSession.Start(request, requireSinglePage: true);
             Stopwatch clock = Stopwatch.StartNew();
             while (!session.IsFinished && !session.IsWaitingForEditor && clock.ElapsedMilliseconds < timeoutMilliseconds)
             {
@@ -85,7 +85,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             string json = session.GetResponseJson();
             File.WriteAllText(output, json);
             EditorAutomationResponse response = JsonUtility.FromJson<EditorAutomationResponse>(json);
-            return response.status == "rejected" ? 1
+            return response.status == "rejected" || response.status == "failed" ? 1
                 : response.complete ? 0
                 : 2;
         }

@@ -21,11 +21,34 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private readonly List<EditorProcessorTarget> _targets = new();
         private readonly List<ScriptableObject> _loaded = new();
         private IDataProcessor _processor;
+        private readonly Type _processorType;
         private bool _running;
 
         public EditorProcessorOperation(IDataProcessor processor, Type type, IReadOnlyList<string> assetGuids)
+            : this(type, assetGuids)
         {
             _processor = processor ?? throw new ArgumentNullException(nameof(processor));
+        }
+
+        /// <summary>Creates a preview without constructing the processor. Construction occurs only during apply.</summary>
+        public EditorProcessorOperation(Type processorType, Type type, IReadOnlyList<string> assetGuids)
+            : this(type, assetGuids)
+        {
+            if (
+                processorType == null
+                || !typeof(IDataProcessor).IsAssignableFrom(processorType)
+                || processorType.IsAbstract
+                || processorType.ContainsGenericParameters
+                || processorType.GetConstructor(Type.EmptyTypes) == null
+            )
+            {
+                throw new ArgumentException("Specify a concrete processor with a public parameterless constructor.", nameof(processorType));
+            }
+            _processorType = processorType;
+        }
+
+        private EditorProcessorOperation(Type type, IReadOnlyList<string> assetGuids)
+        {
             if (type == null || !typeof(ScriptableObject).IsAssignableFrom(type) || type.IsAbstract || type.ContainsGenericParameters)
             {
                 throw new ArgumentException("Specify one concrete exact ScriptableObject type.", nameof(type));
@@ -180,6 +203,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool invoked = false;
             try
             {
+                if (_processor == null)
+                {
+                    _processor = (IDataProcessor)Activator.CreateInstance(_processorType);
+                }
                 bool accepted = false;
                 IEnumerable<Type> accepts = _processor.Accepts;
                 if (accepts != null)
