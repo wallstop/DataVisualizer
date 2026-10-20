@@ -112,9 +112,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             request.operation = "applyProcessor";
             request.confirmPaths = new[] { cancel ? path : path + "wrong" };
             using EditorAutomationSession apply = EditorAutomationSession.Start(JsonUtility.ToJson(request));
-            apply.Cancel();
+            apply.Cancel("test_caller_cancelled");
             apply.Advance();
             Assert.That(Response(apply).status, Is.EqualTo(cancel ? "cancelled" : "rejected"));
+            if (cancel)
+            {
+                Assert.That(Response(apply).detail, Is.EqualTo("test_caller_cancelled"));
+            }
             Assert.That(AssetDatabase.LoadMainAssetAtPath(path).name, Is.EqualTo(Path.GetFileNameWithoutExtension(path)));
         }
 

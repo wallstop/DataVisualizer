@@ -43,7 +43,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string[] guids = CreateAssets(cleanup);
             string firstPath = AssetDatabase.GUIDToAssetPath(guids[0]);
             byte[] before = File.ReadAllBytes(firstPath);
-            ProbeProcessor processor = new(false);
+            ProbeProcessor<TestDataObject> processor = new(false);
             using EditorProcessorOperation operation = new(processor, typeof(TestDataObject), guids);
             operation.Advance();
             Assert.That(operation.Status, Is.EqualTo("preview"));
@@ -72,7 +72,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldCancelBeforeInvocationAndRemainDisposed(bool prepare)
         {
             using TestCleanupScope cleanup = new();
-            ProbeProcessor processor = new(false);
+            ProbeProcessor<TestDataObject> processor = new(false);
             using EditorProcessorOperation operation = new(processor, typeof(TestDataObject), CreateAssets(cleanup));
             if (prepare)
             {
@@ -94,7 +94,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             using TestCleanupScope cleanup = new();
             string[] guids = CreateAssets(cleanup);
-            ProbeProcessor processor = new(false);
+            ProbeProcessor<TestDataObject> processor = new(false);
             using EditorProcessorOperation operation = new(processor, typeof(TestDataObject), guids);
             operation.Apply();
             operation.Advance(0);
@@ -118,7 +118,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             using TestCleanupScope cleanup = new();
             string[] guids = CreateAssets(cleanup);
-            ProbeProcessor processor = new(true);
+            ProbeProcessor<TestDataObject> processor = new(true);
             using EditorProcessorOperation operation = new(processor, typeof(TestDataObject), guids);
             operation.Apply();
             Finish(operation);
@@ -134,7 +134,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             using TestCleanupScope cleanup = new();
             string[] guids = CreateAssets(cleanup);
-            ProbeProcessor processor = new(false);
+            ProbeProcessor<TestDataObject> processor = new(false);
             Assert.Throws<ArgumentException>(() => new EditorProcessorOperation(processor, typeof(TestDataObject), new[] { guids[0], guids[0].ToUpperInvariant() }));
             Assert.Throws<ArgumentException>(() => new EditorProcessorOperation(processor, typeof(TestDataObject), new[] { "bad" }));
             Assert.Throws<ArgumentException>(() => new EditorProcessorOperation(processor, typeof(ScriptableObject), guids));
@@ -142,7 +142,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(processor.Calls, Is.Zero);
         }
 
-        private sealed class ProbeProcessor : IDataProcessor
+        private sealed class ProbeProcessor<T> : IDataProcessor
         {
             public string Name => "Probe";
             public string Description => "Explicit operation regression";
@@ -151,7 +151,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 get
                 {
                     AcceptsReads++;
-                    return new[] { typeof(TestDataObject) };
+                    return new[] { typeof(T) };
                 }
             }
             public int Calls { get; private set; }

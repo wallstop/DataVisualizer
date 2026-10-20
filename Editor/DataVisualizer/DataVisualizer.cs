@@ -312,6 +312,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private string _lastSearchString;
 
         private Button _addTypeButton;
+        private Toggle _processorSelectedToggle;
+
+        [SerializeField]
+        private EditorAssetSelection processorSelection = new();
         private Label _emptyObjectLabel;
         private Button _createObjectButton;
         private Button _settingsButton;
@@ -1355,6 +1359,23 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetToolPanel.Focus();
         }
 
+        public ProcessorOperationPanel OpenProcessorPreview(IDataProcessor processor, Type type, IReadOnlyList<string> assetGuids)
+        {
+            if (IsAssetEditingSuspended || EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                throw new InvalidOperationException("Processor previews are unavailable while package editing is paused.");
+            }
+            string processorName = processor?.Name ?? throw new ArgumentNullException(nameof(processor));
+            EditorProcessorOperation operation = new(processor, type, assetGuids);
+            CloseActivePopover();
+            CloseAssetTool();
+            ProcessorOperationPanel panel = new(this, operation, processorName);
+            _assetToolPanel = panel;
+            rootVisualElement.Add(panel);
+            panel.Focus();
+            return panel;
+        }
+
         public void CloseAssetTool()
         {
             if (_assetToolPanel == null)
@@ -1473,6 +1494,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
+            _processorSelectedToggle?.SetValueWithoutNotify(state?.logic == ProcessorLogic.Selected);
+            _processorLogicToggle.SetEnabled(state?.logic != ProcessorLogic.Selected);
             bool isCollapsed = state?.isCollapsed == true;
             if (isCollapsed)
             {
@@ -2304,7 +2327,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             if (_assetSelectionChanged)
             {
-                SelectObject(_assetSelectionReplacement != null ? _assetSelectionReplacement : (_selectedObjects.Count == 0 ? null : _selectedObjects[0]));
+                SetActiveObject(
+                    _assetSelectionReplacement != null ? _assetSelectionReplacement : (_selectedObjects.Count == 0 ? null : _selectedObjects[0]),
+                    preserveProcessorSelection: 0 < processorSelection.Count
+                );
             }
             if (_assetSearchChanged)
             {
@@ -2346,6 +2372,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void SuspendForPlayMode()
         {
+            if (_assetToolPanel is ProcessorOperationPanel processorPanel)
+            {
+                processorPanel.Operation.Cancel();
+            }
             _suspendedForPlayMode = true;
             _assetChanges?.SetSuspended(true);
             AssetGuidTypeIndex.Shared.Suspend();
@@ -2808,6 +2838,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _processorLogicToggle.AddToClassList("processor");
             _processorLogicToggle.OnLeftSelected += () =>
             {
+                _processorSelectedToggle?.SetValueWithoutNotify(false);
                 _processorLogicToggle.EnableInClassList("dataviz-alternate-mode", false);
                 _processorLogicToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, false);
                 _processorLogicToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, true);
@@ -2820,6 +2851,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             };
             _processorLogicToggle.OnRightSelected += () =>
             {
+                _processorSelectedToggle?.SetValueWithoutNotify(false);
                 _processorLogicToggle.EnableInClassList("dataviz-alternate-mode", true);
                 _processorLogicToggle.LeftLabel.EnableInClassList(StyleConstants.ClickableClass, true);
                 _processorLogicToggle.RightLabel.EnableInClassList(StyleConstants.ClickableClass, false);
@@ -2846,6 +2878,41 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             _processorArea.Add(_processorLogicToggle);
+            _processorSelectedToggle = new Toggle("SELECTED")
+            {
+                name = "processor-selected-scope",
+                tooltip = "Process explicit selected GUIDs, including hidden selections; preview lists every target",
+                value = state?.logic == ProcessorLogic.Selected,
+            };
+            _processorSelectedToggle.RegisterValueChangedCallback(evt =>
+            {
+                _processorLogicToggle.SetEnabled(!evt.newValue);
+                ProcessorState current = CurrentProcessorState;
+                if (current != null)
+                {
+                    current.logic = evt.newValue ? ProcessorLogic.Selected : ProcessorLogic.Filtered;
+                    SaveProcessorState(current);
+                    if (!evt.newValue)
+                    {
+                        _processorLogicToggle.SelectRight(force: true);
+                    }
+                }
+            });
+            _processorLogicToggle.SetEnabled(state?.logic != ProcessorLogic.Selected);
+            _processorArea.Add(_processorSelectedToggle);
+            Button clearSelection = new(() =>
+            {
+                processorSelection.Clear();
+                _objectListView?.ClearSelection();
+                RefreshObjectListPresentation();
+            })
+            {
+                text = "Clear selection",
+                name = "clear-processor-selection",
+                tooltip = "Clear visible, hidden and deleted selected GUIDs",
+            };
+            clearSelection.AddToClassList(StyleConstants.PopoverButtonClass);
+            _processorArea.Add(clearSelection);
 
             ScrollView scrollView = new(ScrollViewMode.Vertical) { name = "processor-list-scrollview" };
             scrollView.AddToClassList("processor-list-scrollview");
@@ -2896,51 +2963,33 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            ScriptableObject[] toProcess;
-
-            switch (state.logic)
+            try
             {
-                case ProcessorLogic.All:
+                processorSelection.SetType(_namespaceController.SelectedType);
+                string[] guids;
+                if (state.logic == ProcessorLogic.Selected)
                 {
-                    toProcess = _selectedObjects.ToArray();
-                    break;
+                    guids = processorSelection.CopyGuids(_selectedObjects, _assetObjectCache);
                 }
-                case ProcessorLogic.Filtered:
+                else
                 {
-                    toProcess = _filteredObjects.ToArray();
-                    break;
+                    if (state.logic != ProcessorLogic.All && state.logic != ProcessorLogic.Filtered)
+                    {
+                        throw new InvalidEnumArgumentException(nameof(state.logic), (int)state.logic, typeof(ProcessorLogic));
+                    }
+                    IReadOnlyList<ScriptableObject> objects = state.logic == ProcessorLogic.All ? _selectedObjects : _filteredObjects;
+                    guids = new string[objects.Count];
+                    for (int i = 0; i < objects.Count; i++)
+                    {
+                        guids[i] = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(objects[i]));
+                    }
                 }
-                default:
-                {
-                    throw new InvalidEnumArgumentException(nameof(state.logic), (int)state.logic, typeof(ProcessorLogic));
-                }
+                OpenProcessorPreview(processor, _namespaceController.SelectedType, guids);
             }
-
-            string message =
-                $"Run processor '{processor.Name}' on <b><color={context.style.backgroundColor.value.ToHex()}>{toProcess.Length}</color></b> "
-                + $"object{(toProcess.Length != 1 ? "s" : "")} "
-                + $"of type '<b><color=yellow>{NamespaceController.GetTypeDisplayName(_namespaceController.SelectedType)}</color></b>'?";
-
-            BuildAndOpenConfirmationPopover(
-                message,
-                "Run",
-                () =>
-                {
-                    try
-                    {
-                        processor.Process(_namespaceController.SelectedType, toProcess);
-                        AssetDatabase.SaveAssets();
-                        AssetDatabase.Refresh();
-                        ScheduleRefresh();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogException(new InvalidOperationException($"Error running processor '{processor.Name}'.", ex));
-                        EditorUtility.DisplayDialog("Processor Error", $"An error occurred while running '{processor.Name}':\n{ex.Message}", "OK");
-                    }
-                },
-                context
-            );
+            catch (Exception error)
+            {
+                EditorUtility.DisplayDialog("Cannot preview processor", error.Message, "OK");
+            }
         }
 
         private void HandleSearchKeyDown(KeyDownEvent evt)
@@ -4802,11 +4851,11 @@ namespace WallstopStudios.DataVisualizer.Editor
                 UpdateLabelAreaAndFilter();
                 if (targetIndex < _selectedObjects.Count)
                 {
-                    SelectObject(_selectedObjects[targetIndex]);
+                    SetActiveObject(_selectedObjects[targetIndex], preserveProcessorSelection: 0 < processorSelection.Count);
                 }
                 else if (0 < _selectedObjects.Count)
                 {
-                    SelectObject(_selectedObjects[0]);
+                    SetActiveObject(_selectedObjects[0], preserveProcessorSelection: 0 < processorSelection.Count);
                 }
                 else
                 {
@@ -5630,7 +5679,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 name = "object-listview",
                 itemsSource = _filteredObjects,
-                selectionType = SelectionType.Single,
+                selectionType = SelectionType.Multiple,
                 virtualizationMethod = CollectionVirtualizationMethod.FixedHeight,
                 fixedItemHeight = ObjectRowFixedHeight,
                 makeItem = MakeObjectRow,
@@ -6245,6 +6294,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 UpdateLoadingIndicator(0, 0); // Hide indicator for cancelled load
             }
 
+            processorSelection.SetType(type);
             // A new generation for this fresh load so any stale scheduled callback no-ops (see field).
             if (!priorityLoad)
             {
@@ -6501,11 +6551,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (objectToSelect != null)
                 {
-                    SelectObjectAndNavigate(objectToSelect);
+                    SelectObjectAndNavigateKeepingSelection(objectToSelect, preserveProcessorSelection: 0 < processorSelection.Count);
                 }
                 else if (0 < _selectedObjects.Count)
                 {
-                    SelectObjectAndNavigate(_selectedObjects[0]);
+                    SelectObjectAndNavigateKeepingSelection(_selectedObjects[0], preserveProcessorSelection: 0 < processorSelection.Count);
                 }
                 else
                 {
@@ -6548,6 +6598,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void SelectObjectAndNavigate(ScriptableObject dataObject)
         {
+            SelectObjectAndNavigateKeepingSelection(dataObject, false);
+        }
+
+        internal void SelectObjectAndNavigateKeepingSelection(ScriptableObject dataObject, bool preserveProcessorSelection)
+        {
             if (dataObject == null)
             {
                 SelectObject(null);
@@ -6555,7 +6610,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             // SelectObject drives the ListView selection + ScrollToItem by index; no manual paging.
-            SelectObject(dataObject);
+            SetActiveObject(dataObject, preserveProcessorSelection);
             ShowInspectorIfCompact();
 
             // Re-scroll once async layout settles (the item may not have had geometry yet).
@@ -6576,6 +6631,15 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void SelectObject(ScriptableObject dataObject)
         {
+            SetActiveObject(dataObject, false);
+        }
+
+        internal void SetActiveObject(ScriptableObject dataObject, bool preserveProcessorSelection)
+        {
+            if (!preserveProcessorSelection && dataObject != null && !processorSelection.Contains(dataObject, _assetObjectCache))
+            {
+                processorSelection.SetSingle(dataObject, _assetObjectCache);
+            }
             // A destroyed wrapper compares null in Unity but still needs inspector teardown.
             if (ReferenceEquals(_selectedObject, dataObject))
             {
@@ -6591,7 +6655,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _suppressListSelectionCallback = true;
                 if (0 <= index)
                 {
-                    _objectListView.SetSelectionWithoutNotify(new[] { index });
+                    _objectListView.SetSelectionWithoutNotify(processorSelection.GetVisibleIndices(_filteredObjects, _assetObjectCache));
                     _objectListView.ScrollToItem(index);
                 }
                 else
@@ -6773,9 +6837,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _objectListView.RefreshItems();
 
             // Re-resolve the selection by identity (indices shift as async batches load).
-            int selectedIndex = _selectedObject != null ? _filteredObjects.IndexOf(_selectedObject) : -1;
             _suppressListSelectionCallback = true;
-            _objectListView.SetSelectionWithoutNotify(0 <= selectedIndex ? new[] { selectedIndex } : Array.Empty<int>());
+            _objectListView.SetSelectionWithoutNotify(processorSelection.GetVisibleIndices(_filteredObjects, _assetObjectCache));
             _suppressListSelectionCallback = false;
         }
 
@@ -7584,7 +7647,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 Custom green-border selection styling follows the selected object across ListView
                 element reuse (applied to the visible box, not the transparent outer slot).
             */
-            row.Q<VisualElement>("object-item-box")?.EnableInClassList(StyleConstants.SelectedClass, _selectedObject == dataObject);
+            row.Q<VisualElement>("object-item-box")?.EnableInClassList(StyleConstants.SelectedClass, processorSelection.Contains(dataObject, _assetObjectCache));
         }
 
         private void MoveObjectToTop(ScriptableObject dataObject)
@@ -7672,11 +7735,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     if (_selectedObject != dataObject)
                     {
-                        SelectObject(dataObject);
+                        SetActiveObject(dataObject, preserveProcessorSelection: 1 < processorSelection.Count);
                     }
 
                     _suppressListSelectionCallback = true;
-                    _objectListView.SetSelectionWithoutNotify(new[] { index });
+                    _objectListView.SetSelectionWithoutNotify(processorSelection.GetVisibleIndices(_filteredObjects, _assetObjectCache));
                     _suppressListSelectionCallback = false;
                     _objectListView.ScrollToItem(index);
                 })
@@ -8458,7 +8521,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     _selectedLabelUsage.Update(cloneAsset);
                     UpdateAndSaveObjectOrderList(cloneAsset.GetType(), _selectedObjects);
                     BuildObjectsView();
-                    SelectObject(cloneAsset);
+                    SetActiveObject(cloneAsset, preserveProcessorSelection: 1 < processorSelection.Count);
                 }
                 else
                 {
@@ -8854,22 +8917,23 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            ScriptableObject selected = null;
-            foreach (object item in selection)
+            List<object> snapshot = new(selection);
+            processorSelection.SetType(_namespaceController.SelectedType);
+            processorSelection.ReplaceVisible(_filteredObjects, snapshot, _assetObjectCache);
+            ScriptableObject active = null;
+            foreach (object item in snapshot)
             {
-                selected = item as ScriptableObject;
-                break;
+                if (item is ScriptableObject asset && asset != null)
+                {
+                    active = asset;
+                }
             }
-
-            /*
-                Ignore deselect-to-empty (e.g. a click on an action button clearing the ListView
-                selection) so the current selection stays sticky through reorder/go-up/go-down.
-            */
-            if (selected != null)
+            SetActiveObject(active, preserveProcessorSelection: true);
+            if (active != null)
             {
-                SelectObject(selected);
                 ShowInspectorIfCompact();
             }
+            _objectListView?.RefreshItems();
         }
 
         /*
@@ -8895,7 +8959,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (0 <= i)
                 {
                     _suppressListSelectionCallback = true;
-                    _objectListView.SetSelectionWithoutNotify(new[] { i });
+                    _objectListView.SetSelectionWithoutNotify(processorSelection.GetVisibleIndices(_filteredObjects, _assetObjectCache));
                     _suppressListSelectionCallback = false;
                 }
             }

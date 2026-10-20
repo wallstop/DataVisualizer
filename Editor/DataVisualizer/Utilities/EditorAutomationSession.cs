@@ -299,7 +299,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     : _processorOperation.Status == "preparing" ? (IsWaitingForEditor ? "waiting" : "running")
                     : _processorOperation.Status,
                 code = preview ? "preview" : _processorOperation.Code,
-                detail = preview ? "Preview only. Confirm every target path before apply." : _processorOperation.Detail,
+                detail = preview ? "Preview only. Confirm every target path before apply." : _stopReason ?? _processorOperation.Detail,
                 complete = complete,
                 scopeCount = _processorOperation.Targets.Count,
                 processedCount = _processorOperation.PreparedCount,

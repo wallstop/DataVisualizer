@@ -8,5 +8,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         None = 0,
         All = 1,
         Filtered = 2,
+        Selected = 3,
     }
 }
