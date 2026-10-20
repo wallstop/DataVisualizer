@@ -3020,6 +3020,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             System.Diagnostics.Stopwatch preparation = System.Diagnostics.Stopwatch.StartNew();
             _assetObjectCache.Sort();
             int indexGeneration = _searchCacheGeneration;
+            int snapshotVersion = _assetObjectCache.Version;
             string[] terms = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             AssetSearchQuery query = new(_assetObjectCache.Documents, terms, MaxSearchResults);
             LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, preparation.Elapsed.TotalMilliseconds);
@@ -3054,7 +3055,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, query.LongestSliceMilliseconds);
                 if (query.IsComplete || (!arrivalsOnly && publishedCount != query.Results.Count))
                 {
-                    RenderSearchResults(query);
+                    RenderSearchResults(query, snapshotVersion == _assetObjectCache.Version);
                     publishedCount = query.Results.Count;
                 }
                 if (query.IsComplete)
@@ -3100,7 +3101,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void RenderSearchResults(AssetSearchQuery query)
+        private void RenderSearchResults(AssetSearchQuery query, bool snapshotIsCurrent)
         {
             _searchPopover.Clear();
             _currentSearchResultItems.Clear();
@@ -3115,8 +3116,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
             string count = query.ReachedLimit ? $"First {results.Count} matches" : $"{results.Count} matches";
+            bool complete = _isSearchCachePopulated && snapshotIsCurrent;
             Label status = new(
-                !query.IsComplete ? $"{count} so far · Searching…" : (_isSearchCachePopulated ? $"{count} · Managed types" : $"{count} available · Indexing managed types…")
+                !query.IsComplete ? $"{count} so far · Searching…"
+                : complete ? $"{count} · Managed types"
+                : _isSearchCachePopulated ? $"{count} available · Updating results…"
+                : $"{count} available · Indexing managed types…"
             )
             {
                 name = "search-status",
@@ -3269,7 +3274,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             else
             {
-                Label emptyLabel = new(_isSearchCachePopulated ? "No matching objects found." : "No matches in available records yet.")
+                Label emptyLabel = new(complete ? "No matching objects found." : "No matches in available records yet.")
                 {
                     style =
                     {
