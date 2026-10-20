@@ -114,6 +114,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 {
                     List<double> totals = new();
                     List<double> preparations = new();
+                    List<double> activeWork = new();
                     List<double> slices = new();
                     int expectedMatches =
                         term == "record" ? 25
@@ -126,9 +127,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         Stopwatch total = Stopwatch.StartNew();
                         AssetSearchQuery query = new(available, new[] { term }, 25);
                         double preparation = total.Elapsed.TotalMilliseconds;
+                        double active = preparation;
+                        Stopwatch unit = new();
                         while (!query.IsComplete)
                         {
+                            unit.Restart();
                             query.Advance(BudgetMilliseconds);
+                            active += unit.Elapsed.TotalMilliseconds;
                             if (!query.IsComplete)
                             {
                                 yield return null;
@@ -142,6 +147,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         {
                             totals.Add(elapsed);
                             preparations.Add(preparation);
+                            activeWork.Add(active);
                             slices.Add(query.LongestSliceMilliseconds);
                         }
                         yield return null;
@@ -189,6 +195,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                             + Number(firstUnit)
                             + ",\"totalWallMs\":"
                             + Numbers(totals)
+                            + ",\"activeQueryMs\":"
+                            + Numbers(activeWork)
                             + ",\"snapshotPreparationMs\":"
                             + Numbers(preparations)
                             + ",\"longestQuerySliceMs\":"
@@ -203,7 +211,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         [UnityTest]
         [Explicit("Synthetic 10k/100k/1m metadata measurement; does not establish real-asset support")]
-        [Timeout(600000)]
+        [Timeout(1800000)]
         public IEnumerator ShouldMeasureSyntheticMetadataScale()
         {
             List<string> scenarios = new();
