@@ -22,7 +22,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             List<PrefabComponentMetadataRecord> result = new();
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-            if (prefab == null || PrefabUtility.GetPrefabAssetType(prefab) == PrefabAssetType.Model)
+            if (prefab == null)
+            {
+                return result;
+            }
+            PrefabAssetType kind = PrefabUtility.GetPrefabAssetType(prefab);
+            if (kind != PrefabAssetType.Regular && kind != PrefabAssetType.Variant)
             {
                 return result;
             }
@@ -151,6 +156,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
                 string regular = folder + "/Regular.prefab";
                 string source = File.ReadAllText(regular);
+                Assert.That(source.Contains("m_IsTrigger: 0", StringComparison.Ordinal), Is.True);
                 for (int i = 0; i < 30; i++)
                 {
                     File.WriteAllText(regular, i % 2 == 0 ? source.Replace("m_IsTrigger: 0", "m_IsTrigger: 1") : source);
@@ -158,43 +164,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     AssetDatabase.ImportAsset(regular, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
                     report.changedPrefabImportMilliseconds.Add(clock.Elapsed.TotalMilliseconds);
                     clock.Restart();
-                    ReadMetadata(regular);
+                    int changedCount = ReadMetadata(regular).Count;
                     report.changedPrefabMilliseconds.Add(clock.Elapsed.TotalMilliseconds);
+                    Assert.That(changedCount, Is.EqualTo(3));
                 }
             }
             report.cleanupComplete = !AssetDatabase.IsValidFolder(report.fixtureRoot);
             Assert.That(report.cleanupComplete, Is.True);
+            Assert.That(report.retainedObjectReferenceFields, Is.Zero);
             Assert.That(report.contentsScenesAfter, Is.EqualTo(report.contentsScenesBefore));
             Assert.That(report.contentsGameObjectsAfter, Is.EqualTo(report.contentsGameObjectsBefore));
             File.WriteAllText(outputPath, JsonUtility.ToJson(report, true));
             return outputPath;
-        }
-
-        public static string PrepareColdProject(string projectPath)
-        {
-            if (Directory.Exists(projectPath))
-            {
-                throw new ArgumentException("Use a new, uniquely owned project path.", nameof(projectPath));
-            }
-            using TestCleanupScope cleanup = new();
-            string fixture = CreateFixtures(CreateFolder(cleanup));
-            Directory.CreateDirectory(Path.Combine(projectPath, "Assets/Probe"));
-            Directory.CreateDirectory(Path.Combine(projectPath, "Packages"));
-            Directory.CreateDirectory(Path.Combine(projectPath, "ProjectSettings"));
-            foreach (string file in Directory.GetFiles(fixture))
-            {
-                File.Copy(file, Path.Combine(projectPath, "Assets/Probe", Path.GetFileName(file)));
-            }
-            string package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(PrefabFeasibilityTests).Assembly).resolvedPath.Replace('\\', '/');
-            File.WriteAllText(
-                Path.Combine(projectPath, "Packages/manifest.json"),
-                "{\"dependencies\":{\"com.unity.modules.uielements\":\"1.0.0\",\"com.unity.modules.physics\":\"1.0.0\",\"com.unity.modules.imgui\":\"1.0.0\",\"com.unity.modules.imageconversion\":\"1.0.0\",\"com.unity.modules.animation\":\"1.0.0\",\"com.unity.modules.jsonserialize\":\"1.0.0\",\"com.unity.test-framework\":\"1.7.0\",\"com.wallstop-studios.data-visualizer\":\"file:"
-                    + package
-                    + "\"},\"testables\":[\"com.wallstop-studios.data-visualizer\"]}"
-            );
-            File.Copy("ProjectSettings/ProjectVersion.txt", Path.Combine(projectPath, "ProjectSettings/ProjectVersion.txt"));
-            File.WriteAllText(Path.Combine(projectPath, ".prefab-probe-owner"), "Owned disposable fixture project for issue #321.");
-            return projectPath;
         }
 
         public static void RunColdFromCommandLine()
@@ -299,6 +280,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     Assert.That(identities.Contains(entry.globalId), Is.True);
                 }
                 Assert.That(File.ReadAllBytes(path), Is.EqualTo(before));
+            }
+            List<PrefabComponentMetadataRecord> selected = ReadMetadata(folder + "/Nested.prefab");
+            string moved = folder + "/Moved.prefab";
+            Assert.That(AssetDatabase.MoveAsset(folder + "/Nested.prefab", moved), Is.Empty);
+            foreach (PrefabComponentMetadataRecord entry in selected)
+            {
+                Assert.That(ResolveOrNull(entry) != null);
+            }
+            Assert.That(AssetDatabase.DeleteAsset(moved), Is.True);
+            foreach (PrefabComponentMetadataRecord entry in selected)
+            {
+                Assert.That(ResolveOrNull(entry) == null);
             }
             Assert.That(ReadMetadata(folder + "/Missing.prefab").FindAll(record => record.status == "missing_script").Count, Is.EqualTo(1));
             Assert.That(PrefabUtility.GetPrefabAssetType(AssetDatabase.LoadAssetAtPath<GameObject>(folder + "/Model.obj")), Is.EqualTo(PrefabAssetType.Model));
