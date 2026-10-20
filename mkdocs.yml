@@ -94,7 +94,9 @@ nav:
   - Troubleshooting: troubleshooting.md
   - Contributing images: contributing-images.md
   - Migration: migration.md
-  - Roadmap: roadmap.md
+  - Roadmap:
+      - Overview: roadmap.md
+      - Subasset feasibility: subasset-feasibility.md
 
 validation:
   nav:
