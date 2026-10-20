@@ -150,6 +150,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return true;
         }
 
+        public string GetGuidOrNull(ScriptableObject asset)
+        {
+            return asset != null && _keys.TryGetValue(asset, out AssetSearchDocument document) ? document.Guid : null;
+        }
+
         public SearchResultMatchInfo Match(ScriptableObject asset, string[] terms)
         {
             return asset != null && _keys.TryGetValue(asset, out AssetSearchDocument document) ? document.Match(terms) : new SearchResultMatchInfo();

@@ -4,17 +4,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
     using System.Collections.Generic;
     using System.Diagnostics;
 
-    // The caller discards this cursor when its index version or query changes.
+    // A metadata snapshot keeps arriving records from moving an in-flight cursor.
     public sealed class AssetSearchQuery
     {
         public bool IsComplete { get; private set; }
-        public bool ReachedLimit => _maximumResults <= _results.Count && ScannedCount < _documents.Count;
+        public bool ReachedLimit => _maximumResults <= _results.Count && ScannedCount < _documents.Length;
         public int ScannedCount { get; private set; }
+        public int RecordCount => _documents.Length;
         public double LongestSliceMilliseconds { get; private set; }
         public int SliceOverrunCount { get; private set; }
         public IReadOnlyList<(AssetSearchDocument Document, SearchResultMatchInfo Match)> Results => _results;
 
-        private readonly IReadOnlyList<AssetSearchDocument> _documents;
+        private readonly AssetSearchDocument[] _documents;
         private readonly string[] _terms;
         private readonly string[] _normalizedTerms;
         private readonly int _maximumResults;
@@ -22,7 +23,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
 
         public AssetSearchQuery(IReadOnlyList<AssetSearchDocument> documents, string[] terms, int maximumResults)
         {
-            _documents = documents ?? throw new ArgumentNullException(nameof(documents));
+            if (documents == null)
+            {
+                throw new ArgumentNullException(nameof(documents));
+            }
+            _documents = new AssetSearchDocument[documents.Count];
+            for (int index = 0; index < documents.Count; index++)
+            {
+                _documents[index] = documents[index];
+            }
             _terms = terms == null ? Array.Empty<string>() : (string[])terms.Clone();
             _normalizedTerms = new string[_terms.Length];
             for (int index = 0; index < _terms.Length; index++)
@@ -43,7 +52,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                 return;
             }
             Stopwatch clock = Stopwatch.StartNew();
-            while (ScannedCount < _documents.Count)
+            while (ScannedCount < _documents.Length)
             {
                 AssetSearchDocument document = _documents[ScannedCount++];
                 SearchResultMatchInfo match = MatchOrNull(document);
@@ -56,7 +65,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                     break;
                 }
             }
-            IsComplete = _documents.Count <= ScannedCount || _maximumResults <= _results.Count;
+            IsComplete = _documents.Length <= ScannedCount || _maximumResults <= _results.Count;
             double elapsed = clock.Elapsed.TotalMilliseconds;
             LongestSliceMilliseconds = Math.Max(LongestSliceMilliseconds, elapsed);
             if (budgetMilliseconds < elapsed)

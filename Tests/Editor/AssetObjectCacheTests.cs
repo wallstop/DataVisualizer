@@ -78,6 +78,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AssetObjectCache cache = new(rows);
             cache.Upsert("guid", asset, false);
             int version = cache.Version;
+            Assert.AreEqual("guid", cache.GetGuidOrNull(asset));
+            Assert.That(cache.GetGuidOrNull(null) == null);
             Assert.AreEqual(1, cache.Documents.Count);
             asset.Description = "after";
             Assert.That(cache.Match(asset, new[] { "before" }).isMatch);
@@ -90,6 +92,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(!cache.Match(asset, new[] { "before" }).isMatch);
             Assert.That(cache.Remove("guid"));
             Assert.That(cache.Documents, Is.Empty);
+            Assert.That(cache.GetGuidOrNull(asset) == null);
             Assert.That(!cache.Match(asset, new[] { "after" }).isMatch);
         }
 

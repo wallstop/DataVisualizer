@@ -75,6 +75,27 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldFinishItsSnapshotWhenTheLiveIndexChangesBetweenSlices()
+        {
+            List<AssetSearchDocument> documents = new();
+            for (int index = 0; index < 100; index++)
+            {
+                documents.Add(new AssetSearchDocument(index.ToString(), index == 99 ? "late" : "ordinary", typeof(AssetSearchQueryTests), null));
+            }
+            AssetSearchQuery query = new(documents, new[] { "late" }, 25);
+            for (int index = 0; index < 100; index++)
+            {
+                query.Advance(0);
+                documents.Insert(0, new AssetSearchDocument("new-" + index, "ordinary", typeof(AssetSearchQueryTests), null));
+            }
+            Assert.That(query.IsComplete);
+            Assert.AreEqual(100, query.RecordCount);
+            Assert.AreEqual(100, query.ScannedCount);
+            Assert.AreEqual(1, query.Results.Count);
+            Assert.AreEqual("99", query.Results[0].Document.Guid);
+        }
+
+        [Test]
         public void ShouldHandleEmptyInputAndRejectInvalidBudgetsOrLimits()
         {
             AssetSearchQuery query = new(Array.Empty<AssetSearchDocument>(), null, 25);
