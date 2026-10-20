@@ -118,3 +118,7 @@ A [single 10,000-real-asset probe](performance-refresh-10k-2026-10-19.json) at
 for rename. Labels, Undo/Redo, move and deletion during an explicit search rebuild passed without restarting row loading. The longest affected-asset refresh slice was 19.649 ms.
 The probe staged fixtures with an explicit 32 ms creation budget and ten-item cap: total staging was 290,550.591 ms, including 194,405.672 ms in batch import flushes; the longest
 staging tick was 308.276 ms. These are one-sample integration observations, not p95, a controlled speed comparison, or evidence for real 100k/ordinary-SO/many-type support.
+
+## Larger synthetic metadata sets
+
+See [million-record feasibility](million-record-feasibility.md) for the opt-in synthetic experiment, real-asset resource estimates, and support limits.

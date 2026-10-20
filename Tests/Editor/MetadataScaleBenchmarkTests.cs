@@ -228,7 +228,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     "{\n\"schema\":1,\n\"fixtureKind\":\"synthetic ASCII metadata, no Unity objects or assets\",\n"
                         + "\"productionSurfaces\":[\"AssetSearchDocument\",\"AssetSearchQuery\",\"AssetChangeRefreshService\"],\n"
                         + "\"sharedMetadataIndexMeasured\":false,\n\"realAssets\":0,\n\"diskCacheBytes\":-1,\n"
-                        + "\"warmups\":5,\n\"samples\":30,\n\"sliceBudgetMilliseconds\":4,\n"
+                        + "\"warmups\":"
+                        + Warmups
+                        + ",\n\"samples\":"
+                        + Samples
+                        + ",\n\"sliceBudgetMilliseconds\":"
+                        + Number(BudgetMilliseconds)
+                        + ",\n"
                         + "\"complete\":"
                         + (complete ? "true" : "false")
                         + ",\n\"phase\":\""
@@ -265,6 +271,42 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
             phase = "complete";
             complete = true;
+        }
+
+        [Test]
+        public void ShouldWriteIncompleteReportWhenDisposedBeforeCreatingRecords()
+        {
+            using TestCleanupScope cleanup = new();
+            byte[] previous = File.Exists(Output) ? File.ReadAllBytes(Output) : null;
+            cleanup.Defer(() =>
+            {
+                if (previous == null)
+                {
+                    File.Delete(Output);
+                }
+                else
+                {
+                    File.WriteAllBytes(Output, previous);
+                }
+            });
+            IEnumerator measurement = ShouldMeasureSyntheticMetadataScale();
+            cleanup.Defer(() => ((IDisposable)measurement).Dispose());
+            Assert.That(measurement.MoveNext());
+            ((IDisposable)measurement).Dispose();
+            ReportStatus report = UnityEngine.JsonUtility.FromJson<ReportStatus>(File.ReadAllText(Output));
+            Assert.That(!report.complete);
+            Assert.That(report.phase, Is.EqualTo("starting"));
+            Assert.That(report.warmups, Is.EqualTo(Warmups));
+            Assert.That(report.samples, Is.EqualTo(Samples));
+        }
+
+        [Serializable]
+        private sealed class ReportStatus
+        {
+            public bool complete = true;
+            public string phase = string.Empty;
+            public int warmups = -1;
+            public int samples = -1;
         }
 
         private sealed class Dataset : IDisposable

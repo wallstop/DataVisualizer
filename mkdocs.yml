@@ -98,6 +98,7 @@ nav:
       - Overview: roadmap.md
       - Subasset feasibility: subasset-feasibility.md
       - Prefab feasibility: prefab-feasibility.md
+      - Million-record feasibility: million-record-feasibility.md
 
 validation:
   nav:
