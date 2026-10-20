@@ -28,6 +28,20 @@ metadata:
   ScriptableObjects that may use Odin, branch on `#if ODIN_INSPECTOR` and prefer
   `SerializedScriptableObject`-compatible flows.
 
+## Integrated Asset Tools
+
+- Add package workflows inside the existing DxVisualizer window. Use `AssetToolPanel`
+  for saved-search and validation workspaces rather than opening a second unstyled
+  `EditorWindow`. Inherit the root's active theme and use `StyleConstants` classes
+  with USS token colors. Group related actions and show disabled states.
+- Keep browser state while a workspace is open; provide Back and Escape exits.
+  Dispose its work when switching tools, rebuilding the tree, detaching, or closing
+  the owner. Hosted tests must check that tool navigation adds no native window.
+- Search snapshots capture notified user text, not placeholder text or a popover's
+  transient query cache. Exercise popover closure before capture in a regression.
+- Capture and inspect the real hosted UI with representative content at normal and
+  compact sizes. Refresh affected documentation screenshots before handoff.
+
 ## Minimal Skeleton
 
 See the full template:

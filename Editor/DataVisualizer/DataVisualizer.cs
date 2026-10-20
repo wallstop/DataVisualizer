@@ -242,6 +242,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private VisualElement _confirmDeletePopover;
         private VisualElement _confirmActionPopover;
         private VisualElement _typeAddPopover;
+        private AssetToolPanel _assetToolPanel;
         private VisualElement _activePopover;
         private VisualElement _confirmNamespaceAddPopover;
         private VisualElement _activeNestedPopover;
@@ -1110,6 +1111,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public void CreateGUI()
         {
+            CloseAssetTool();
             VisualElement root = rootVisualElement;
             root.Clear();
             root.AddToClassList("dataviz-root");
@@ -1186,14 +1188,23 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
             _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
             headerRow.Add(_searchField);
-            headerRow.Add(
-                new Button(() => SavedAssetSearchWindow.Open(this, CaptureSearch()))
-                {
-                    name = "saved-searches-button",
-                    text = "Saved searches",
-                    tooltip = "Save or apply a query with its selected type and label expression",
-                }
-            );
+            Button savedSearches = new(() => OpenSavedSearches())
+            {
+                name = "saved-searches-button",
+                text = "Saved searches",
+                tooltip = "Save or apply a query with its selected type and label expression",
+            };
+            savedSearches.AddToClassList(StyleConstants.PopoverButtonClass);
+            headerRow.Add(savedSearches);
+
+            Button validation = new(OpenAssetValidation)
+            {
+                name = "asset-validation-button",
+                text = "Validate",
+                tooltip = "Check selected Project assets without changing them",
+            };
+            validation.AddToClassList(StyleConstants.PopoverButtonClass);
+            headerRow.Add(validation);
 
             float initialOuterWidth = Mathf.Max(EditorPrefs.GetFloat(PrefsSplitterOuterKey, DefaultOuterSplitWidth), MinNamespacePaneWidth);
             float initialInnerWidth = Mathf.Max(EditorPrefs.GetFloat(PrefsSplitterInnerKey, DefaultInnerSplitWidth), MinObjectPaneWidth);
@@ -1321,6 +1332,38 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetChanges?.Enqueue(movedFrom);
             _assetChanges?.Enqueue(imported);
             _assetChanges?.Enqueue(moved);
+        }
+
+        public SavedAssetSearchPanel OpenSavedSearches()
+        {
+            SavedAssetSearch draft = CaptureSearch();
+            CloseActivePopover();
+            CloseAssetTool();
+            SavedAssetSearchPanel panel = new(this, draft);
+            _assetToolPanel = panel;
+            rootVisualElement.Add(panel);
+            panel.Focus();
+            return panel;
+        }
+
+        public void OpenAssetValidation()
+        {
+            CloseActivePopover();
+            CloseAssetTool();
+            _assetToolPanel = new AssetValidationPanel(this);
+            rootVisualElement.Add(_assetToolPanel);
+            _assetToolPanel.Focus();
+        }
+
+        public void CloseAssetTool()
+        {
+            if (_assetToolPanel == null)
+            {
+                return;
+            }
+            _assetToolPanel.Dispose();
+            _assetToolPanel.RemoveFromHierarchy();
+            _assetToolPanel = null;
         }
 
         public SavedAssetSearch CaptureSearch()
@@ -1837,6 +1880,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void Cleanup()
         {
+            CloseAssetTool();
             ObjectChangeEvents.changesPublished -= HandleAssetObjectChanges;
             _assetChanges?.Dispose();
             _assetChanges = null;
@@ -3782,6 +3826,16 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleGlobalKeyDown(KeyDownEvent evt)
         {
+            if (_assetToolPanel != null)
+            {
+                if (evt.keyCode == KeyCode.Escape)
+                {
+                    CloseAssetTool();
+                    evt.StopPropagation();
+                }
+                return;
+            }
+
             if (_activePopover == _inspectorLabelSuggestionsPopover)
             {
                 HandleNewLabelInputKeyDown(evt);
