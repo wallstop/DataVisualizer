@@ -1,0 +1,68 @@
+{
+  "revision": "1cbb22be0b0ab11ab2874a2646b07f65836e328b",
+  "mode": "Fresh editor process; OS filesystem cache and Library remain warm after the first process",
+  "environment": {
+    "unity": "6000.5.2f1",
+    "os": "Windows 11  (10.0.26200)",
+    "cpu": "Snapdragon(R) X Elite - X1E80100 - Qualcomm(R) Oryon(TM) CPU",
+    "graphics": "Null Device",
+    "dpi": 96.0,
+    "pixelsPerPoint": 1.0,
+    "osArchitecture": "arm64",
+    "processArchitecture": "x64"
+  },
+  "fixtures": "Four real prefab files plus an excluded model; regular/variant/two nested instances/missing script. Independent disposable project, no user assets.",
+  "setupFailures": [
+    "Missing built-in UIElements module: compile exit 1, no sample.",
+    "Unavailable inputlegacy package: resolution exit 1, no sample."
+  ],
+  "samples": [
+    {
+      "sample": 1,
+      "pid": 24964,
+      "measuredUtc": "2026-10-20T04:39:37.9297319Z",
+      "discoveryMilliseconds": 13.303500000000001,
+      "recordCount": 17,
+      "missingScriptCount": 1,
+      "exitCode": 0
+    },
+    {
+      "sample": 2,
+      "pid": 28124,
+      "measuredUtc": "2026-10-20T04:40:15.8942482Z",
+      "discoveryMilliseconds": 14.2072,
+      "recordCount": 17,
+      "missingScriptCount": 1,
+      "exitCode": 0
+    },
+    {
+      "sample": 3,
+      "pid": 14696,
+      "measuredUtc": "2026-10-20T04:40:33.1403850Z",
+      "discoveryMilliseconds": 15.1982,
+      "recordCount": 17,
+      "missingScriptCount": 1,
+      "exitCode": 0
+    },
+    {
+      "sample": 4,
+      "pid": 49404,
+      "measuredUtc": "2026-10-20T04:40:49.9354167Z",
+      "discoveryMilliseconds": 12.987200000000001,
+      "recordCount": 17,
+      "missingScriptCount": 1,
+      "exitCode": 0
+    },
+    {
+      "sample": 5,
+      "pid": 11844,
+      "measuredUtc": "2026-10-20T04:41:08.9793103Z",
+      "discoveryMilliseconds": 12.2598,
+      "recordCount": 17,
+      "missingScriptCount": 1,
+      "exitCode": 0
+    }
+  ],
+  "limitations": "Discovery only, after startup/import. This is fresh-process memory state, not cold OS/disk caches, startup latency, rendering or a large-project guarantee.",
+  "ownedProjectRemoved": true
+}

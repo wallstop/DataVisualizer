@@ -97,6 +97,7 @@ nav:
   - Roadmap:
       - Overview: roadmap.md
       - Subasset feasibility: subasset-feasibility.md
+      - Prefab feasibility: prefab-feasibility.md
 
 validation:
   nav:
