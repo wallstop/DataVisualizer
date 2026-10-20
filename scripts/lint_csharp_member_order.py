@@ -87,14 +87,14 @@ SCAN_ROOTS = (
 # reordering makes the next upstream diff unreadable.
 EXCLUDED_PREFIXES = ("Runtime/Utils/SevenZip",)
 
-TYPE_KEYWORDS = ("class", "struct", "interface", "record", "enum")
-TYPE_DECLARATION = re.compile(rf"\b({'|'.join(TYPE_KEYWORDS)})\s+(@?[A-Za-z_]\w*)")
+TYPE_DECLARATION = re.compile(r"\b(class|struct|interface|record(?:\s+(?:class|struct))?|enum)\s+(@?[A-Za-z_]\w*)")
 
 # `class` and `struct` also introduce a generic constraint, and `where T : class where U : new()`
 # puts an identifier-shaped token right where a type name would be. Every word that can legally
 # follow one of the five keywords WITHOUT being a declared name is refused here.
 NOT_A_TYPE_NAME = {
     "where",
+    "in",  # foreach (var record in records) uses record as a contextual identifier.
     "new",
     "class",
     "struct",
@@ -756,9 +756,8 @@ def type_bodies(masked: str) -> List[TypeBody]:
     found -- the scan continues inside it.
     """
     bodies: List[TypeBody] = []
-    declaration = re.compile(r"\b(class|struct|interface|record|enum)\s+(@?[A-Za-z_]\w*)")
     position = 0
-    while (match := declaration.search(masked, position)) is not None:
+    while (match := TYPE_DECLARATION.search(masked, position)) is not None:
         position = match.end()
         if match.group(2) in NOT_A_TYPE_NAME:
             continue
