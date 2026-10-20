@@ -44,7 +44,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 }
                 _types[i] = type;
             }
-            _terms = string.IsNullOrWhiteSpace(text) ? Array.Empty<string>() : text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            _terms = string.IsNullOrWhiteSpace(text) ? Array.Empty<string>() : text.Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             _labels = labels?.Clone();
         }
 

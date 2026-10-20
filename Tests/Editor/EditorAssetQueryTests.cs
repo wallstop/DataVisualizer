@@ -62,6 +62,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(page[0].Labels, Is.EquivalentTo(new[] { "included" }));
             Assert.That(query.GetPage(10, 10), Is.Empty);
             Assert.That(EditorUtility.IsDirty(asset), Is.False);
+            using EditorAssetQuery literal = new(new[] { typeof(EditorOnlyCreationData) }, "absent\t" + guid);
+            for (int i = 0; i < 10000 && !literal.IsComplete; i++)
+            {
+                literal.Advance(10);
+            }
+            Assert.That(literal.IsComplete, Is.True);
+            Assert.That(literal.ResultCount, Is.Zero);
         }
 
         [Test]
