@@ -37,7 +37,9 @@ Matching terms are highlighted in the results. The highlight deepens while the p
 
 ### Limits and behavior
 
-- The popover lists at most 25 results. The list stops there; there is no "show more".
+- Quick search lists at most 25 results. Choose **Show all results** to browse every available match in a virtualized list. Results continue arriving during a long scan.
+- **Back to quick results** preserves your query. Up and Down select rows in either view; Enter opens the selected asset. Escape closes the view and keeps your text.
+- The full view reports matches found so far while scanning, available matches during indexing, and a total only after both finish.
 - Results are ordered by asset name, then by full type name, both ordinal. Equal names and types use the asset GUID as a stable tie-breaker.
 - Searching covers every tracked type, so a hit can be in a type you have not selected yet. Selecting a result switches to that object's type when needed and selects it there.
 - Search shows matches from available records while the remaining assets are indexed. **Indexing managed types…** means the result set is incomplete; matching new records appear
