@@ -227,6 +227,40 @@ mutation hooks. User-defined Unity loading callbacks still run. Item errors appe
 not a transaction: restart after project changes, and do not persist page offsets across queries. Discovery scans project `.asset` main assets through the existing type index.
 Configuration, selection, asset mutations, and persistent metadata caching are outside this initial read-only API.
 
+## Explicit processor preview and apply
+
+`EditorProcessorOperation` runs on the editor main thread. Construct it with an `IDataProcessor` instance, one exact concrete ScriptableObject type and a nonempty list of asset
+GUIDs. Preview lists exact paths, rejects duplicates, subassets, wrong types and non-writable paths outside `Assets`. It does not load assets, call processor methods, dirty or save
+assets. It previews targets, not changes that arbitrary processor code might make.
+
+```csharp
+using (EditorProcessorOperation operation = new(processor, typeof(QuestData), assetGuids))
+{
+    foreach (EditorProcessorTarget target in operation.Targets)
+    {
+        Debug.Log(target.Guid + " " + target.Path);
+    }
+    // Ask the user to confirm these exact targets before calling Apply.
+    operation.Apply();
+    // Interactive tools call Advance once per editor update instead of looping.
+    while (!operation.IsFinished)
+    {
+        operation.Advance(4);
+    }
+    Debug.Log(operation.Status + " " + operation.Code + " " + operation.Detail);
+}
+```
+
+The snippet belongs inside an editor method, with the Utilities namespace imported; supply your processor and explicit GUID array. Keep the operation alive across confirmation and
+editor updates. `PreparedCount` reports loading progress. Dispose or cancel before invocation to stop without calling `Process`. Play transitions reject mutation; Unity
+AssetDatabase activity pauses preparation. A moved, deleted, wrong-type or non-writable target invalidates the entire preview before invocation, including targets loaded on an
+earlier update. Create and confirm a new preview after such a change. Asset content edits are not transactional snapshots and loading can invoke user Unity callbacks.
+
+`Process` receives the entire batch once, preserving existing processor semantics. Its execution, saving and refresh cannot yield or be cancelled. Successful return reports
+`applied`; this means the batch returned and saving succeeded, not that each asset changed. Exceptions report `outcome_unknown` for every target because arbitrary code may have
+changed any subset, including assets outside the scope. No automatic Undo, rollback, retry or recovery is promised. Inspect the assets and use version control to recover.
+Configuration and individual create/clone/rename/move/delete services remain outside this processor API.
+
 ## Read-only JSON automation
 
 Schema version 1 exposes `query` and `validate` through `EditorAutomationSession`, using the same services as the C# APIs and validation workspace. See the
