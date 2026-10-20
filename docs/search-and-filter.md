@@ -47,6 +47,9 @@ Matching terms are highlighted in the results. The highlight deepens while the p
 - Queries run in short steps. **Searching available records…** shows a scan in progress. With no matches, the message distinguishes an incomplete index from a complete search.
 - Up and Down move the highlight and wrap around. Enter or Return opens the highlighted result. Escape closes the popover and keeps your text.
 
+![All available search matches in a virtualized list, including duplicate names with different types](images/search-all-results.webp) _Full results over 42 real fixture assets. The
+status distinguishes available matches from a complete total._
+
 ## Type filter
 
 The **Filter types** field above the namespace list narrows the type rows by display name, without case sensitivity. Namespace headers are not filtered, so you keep the structure
