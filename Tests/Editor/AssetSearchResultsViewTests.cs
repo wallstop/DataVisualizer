@@ -102,6 +102,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldRestoreSelectedGuidWhenItArrivesDuringContinuation()
+        {
+            AssetSearchResultsView view = new(_ => { }, () => { }, () => { });
+            view.SetResults(MakeHits(40), "40 matches");
+            view.ResultsList.selectedIndex = 30;
+            var next = MakeHits(20);
+            view.SetResults(next, "20 matches so far");
+            Assert.AreEqual(-1, view.ResultsList.selectedIndex);
+            next.AddRange(MakeHits(40).GetRange(20, 20));
+            view.SetResults(next, "40 matches");
+            Assert.AreEqual(30, view.ResultsList.selectedIndex);
+        }
+
+        [Test]
         public void ShouldPreserveGuidSelectionWhenResultsAreReplaced()
         {
             AssetSearchResultsView view = new(_ => { }, () => { }, () => { });

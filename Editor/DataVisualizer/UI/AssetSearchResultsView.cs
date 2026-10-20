@@ -18,6 +18,7 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
         private readonly Action _close;
         private readonly Label _status;
         private IReadOnlyList<(AssetSearchDocument Document, SearchResultMatchInfo Match)> _source;
+        private string _preferredSelectionGuid;
 
         public AssetSearchResultsView(Action<AssetSearchDocument> navigate, Action back, Action close)
         {
@@ -84,7 +85,11 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
         {
             bool reset = !ReferenceEquals(_source, hits) || hits.Count < _hits.Count;
             int previousCount = _hits.Count;
-            string selectedGuid = 0 <= ResultsList.selectedIndex && ResultsList.selectedIndex < _hits.Count ? _hits[ResultsList.selectedIndex].Document.Guid : null;
+            int previousSelection = ResultsList.selectedIndex;
+            if (0 <= ResultsList.selectedIndex && ResultsList.selectedIndex < _hits.Count)
+            {
+                _preferredSelectionGuid = _hits[ResultsList.selectedIndex].Document.Guid;
+            }
             if (reset)
             {
                 _hits.Clear();
@@ -99,18 +104,22 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
             if (changed)
             {
                 ResultsList.RefreshItems();
-                if (reset && selectedGuid != null)
+                if (_preferredSelectionGuid != null)
                 {
                     int selectedIndex = -1;
                     for (int index = 0; index < _hits.Count; index++)
                     {
-                        if (string.Equals(_hits[index].Document.Guid, selectedGuid, StringComparison.Ordinal))
+                        if (string.Equals(_hits[index].Document.Guid, _preferredSelectionGuid, StringComparison.Ordinal))
                         {
                             selectedIndex = index;
                             break;
                         }
                     }
                     ResultsList.selectedIndex = selectedIndex;
+                    if (0 <= selectedIndex && (reset || selectedIndex != previousSelection))
+                    {
+                        ResultsList.ScrollToItem(selectedIndex);
+                    }
                 }
             }
             return changed;
@@ -175,18 +184,19 @@ namespace WallstopStudios.DataVisualizer.Editor.UI
                 },
             };
             Label title = MakeLabel("search-result-name");
+            title.AddToClassList("search-result-name-label");
             title.style.flexGrow = 1;
             title.style.minWidth = 0;
             title.style.flexShrink = 1;
             Label type = MakeLabel("search-result-type");
-            type.style.fontSize = 11;
+            type.AddToClassList("search-result-type-label");
             type.style.maxWidth = 160;
             type.style.marginLeft = 8;
             primary.Add(title);
             primary.Add(type);
             row.Add(primary);
             Label context = MakeLabel("search-result-context");
-            context.style.fontSize = 11;
+            context.AddToClassList("search-result-context-label");
             row.Add(context);
             row.RegisterCallback<PointerDownEvent>(evt =>
             {

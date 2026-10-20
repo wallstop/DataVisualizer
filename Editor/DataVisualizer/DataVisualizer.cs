@@ -3003,12 +3003,19 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _searchHighlightGuid = null;
             }
+            bool reuseView = refresh && showAll && _showAllSearchResults && _allSearchResultsView != null;
             _showAllSearchResults = showAll;
-            _allSearchResultsView = null;
+            if (!reuseView)
+            {
+                _allSearchResultsView = null;
+                if (!arrivalsOnly)
+                {
+                    _searchPopover.Clear();
+                }
+            }
             _lastSearchString = searchText;
             if (!arrivalsOnly)
             {
-                _searchPopover.Clear();
                 _currentSearchResultItems.Clear();
                 _searchHighlightIndex = -1;
             }
@@ -3034,16 +3041,22 @@ namespace WallstopStudios.DataVisualizer.Editor
             string[] terms = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             AssetSearchQuery query = new(_assetObjectCache.Documents, terms, showAll ? int.MaxValue : MaxSearchResults);
             LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, preparation.Elapsed.TotalMilliseconds);
-            Label status = _searchPopover.Q<Label>("search-status");
-            if (status == null)
+            if (reuseView || arrivalsOnly)
             {
-                status = new Label { name = "search-status", style = { whiteSpace = WhiteSpace.Normal } };
-                _searchPopover.Add(status);
+                _searchPopover.Q<Label>("search-status").text = "Searching available records…";
+                if (showAll && !arrivalsOnly)
+                {
+                    RenderAllSearchResults(query);
+                }
             }
-            status.text = "Searching available records…";
-            if (showAll && !arrivalsOnly)
+            else
             {
-                RenderAllSearchResults(query);
+                Label status = new("Searching available records…") { name = "search-status", style = { whiteSpace = WhiteSpace.Normal } };
+                _searchPopover.Add(status);
+                if (showAll)
+                {
+                    RenderAllSearchResults(query);
+                }
             }
             int publishedCount = 0;
             bool refreshPending = false;
