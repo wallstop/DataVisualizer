@@ -56,6 +56,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldPreserveAnExplicitEmptySelectionAcrossSerializationAndSameTypeReload()
+        {
+            EditorAssetSelection selection = new();
+            selection.SetType(typeof(TestDataObject));
+            Assert.That(selection.HasSelectionIntent, Is.False);
+            selection.Clear();
+            EditorAssetSelection restored = JsonUtility.FromJson<EditorAssetSelection>(JsonUtility.ToJson(selection));
+            restored.SetType(typeof(TestDataObject));
+            Assert.That(restored.Count, Is.Zero);
+            Assert.That(restored.HasSelectionIntent, Is.True);
+            restored.SetType(typeof(EditorOnlyCreationData));
+            Assert.That(restored.HasSelectionIntent, Is.False);
+        }
+
+        [Test]
         public void ShouldKeepDeletedIdentitiesAndRejectInsteadOfBroadeningScope()
         {
             using TestCleanupScope cleanup = new();

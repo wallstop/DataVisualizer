@@ -10,12 +10,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     public sealed class EditorAssetSelection
     {
         public int Count => assetGuids.Count;
+        public bool HasSelectionIntent => hasSelectionIntent || 0 < assetGuids.Count;
 
         [SerializeField]
         private string typeIdentity;
 
         [SerializeField]
         private List<string> assetGuids = new();
+
+        [SerializeField]
+        private bool hasSelectionIntent;
 
         [NonSerialized]
         private HashSet<string> _lookup;
@@ -32,11 +36,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 typeIdentity = identity;
                 Clear();
+                hasSelectionIntent = false;
             }
         }
 
         public void Clear()
         {
+            hasSelectionIntent = true;
             assetGuids.Clear();
             _lookup?.Clear();
         }
@@ -61,6 +67,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public void ReplaceVisible(IReadOnlyList<ScriptableObject> visible, IEnumerable<object> selected, AssetObjectCache cache = null)
         {
+            hasSelectionIntent = true;
             EnsureLookup();
             for (int i = 0; i < visible.Count; i++)
             {
