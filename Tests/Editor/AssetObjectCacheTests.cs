@@ -77,14 +77,60 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             List<ScriptableObject> rows = new();
             AssetObjectCache cache = new(rows);
             cache.Upsert("guid", asset, false);
+            int version = cache.Version;
+            Assert.AreEqual(1, cache.Documents.Count);
             asset.Description = "after";
             Assert.That(cache.Match(asset, new[] { "before" }).isMatch);
             Assert.That(!cache.Match(asset, new[] { "after" }).isMatch);
             cache.Upsert("guid", asset, true);
+            Assert.That(version < cache.Version);
+            Assert.AreEqual(1, cache.Documents.Count);
+            Assert.That(cache.Documents[0].Match(new[] { "after" }).isMatch);
             Assert.That(cache.Match(asset, new[] { "after" }).isMatch);
             Assert.That(!cache.Match(asset, new[] { "before" }).isMatch);
             Assert.That(cache.Remove("guid"));
+            Assert.That(cache.Documents, Is.Empty);
             Assert.That(!cache.Match(asset, new[] { "after" }).isMatch);
+        }
+
+        [Test]
+        public void ShouldOrderDuplicateNamesByGuidAndKeepDocumentsAligned()
+        {
+            using TestCleanupScope cleanup = new();
+            PlayModeDataObject first = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(first));
+            PlayModeDataObject second = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(second));
+            first.name = second.name = "Same";
+            List<ScriptableObject> rows = new();
+            AssetObjectCache cache = new(rows);
+            cache.Upsert("b", second, false);
+            cache.Upsert("a", first, false);
+            cache.Sort();
+            CollectionAssert.AreEqual(new ScriptableObject[] { first, second }, rows);
+            Assert.AreEqual("a", cache.Documents[0].Guid);
+            Assert.AreEqual("b", cache.Documents[1].Guid);
+            cache.Remove("a");
+            Assert.AreEqual(1, cache.Documents.Count);
+            Assert.AreEqual("b", cache.Documents[0].Guid);
+            CollectionAssert.AreEqual(new[] { second }, rows);
+        }
+
+        [Test]
+        public void ShouldReplaceTypeMetadataWhenAGuidChangesType()
+        {
+            using TestCleanupScope cleanup = new();
+            PlayModeDataObject original = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(original));
+            EditorOnlyCreationData replacement = ScriptableObject.CreateInstance<EditorOnlyCreationData>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(replacement));
+            AssetObjectCache cache = new(new List<ScriptableObject>());
+            cache.Upsert("guid", original, false);
+            cache.Upsert("guid", replacement, true);
+            Assert.AreEqual(1, cache.Documents.Count);
+            Assert.AreEqual(typeof(EditorOnlyCreationData).FullName, cache.Documents[0].TypeFullName);
+            Assert.That(cache.Documents[0].Match(new[] { nameof(EditorOnlyCreationData) }).isMatch);
+            Assert.That(!cache.Documents[0].Match(new[] { nameof(PlayModeDataObject) }).isMatch);
         }
 
         [Test]

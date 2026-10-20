@@ -67,6 +67,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(!new AssetSearchDocument(null, null, typeof(SearchNode), null).Match(new[] { "absent" }).isMatch);
         }
 
+        [Test]
+        public void ShouldRejectCombinedTextBoundaryAndGuidSubstringFalsePositives()
+        {
+            AssetSearchDocument document = new("exact-guid", "Object", typeof(SearchNode), new SearchNode { Text = "field value" });
+            Assert.That(document.MatchOrNull(new[] { "exact" }) == null);
+            Assert.That(document.MatchOrNull(new[] { "Object\0SearchNode" }) == null);
+            Assert.That(document.MatchOrNull(new[] { "value" }) != null);
+        }
+
         private sealed class SearchNode
         {
             public string ThrowingProperty => throw new InvalidOperationException("Search must not invoke properties.");

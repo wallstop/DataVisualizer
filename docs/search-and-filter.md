@@ -38,11 +38,11 @@ Matching terms are highlighted in the results. The highlight deepens while the p
 ### Limits and behavior
 
 - The popover lists at most 25 results. The list stops there; there is no "show more".
-- Results are ordered by asset name, then by full type name, both ordinal.
+- Results are ordered by asset name, then by full type name, both ordinal. Equal names and types use the asset GUID as a stable tie-breaker.
 - Searching covers every tracked type, so a hit can be in a type you have not selected yet. Selecting a result switches to that object's type when needed and selects it there.
-- The first search after the window opens can show **Building search index…**. The index loads in the background; when it finishes, the current query is re-run and the results
-  appear. The popover stays open instead of dismissing your query.
-- A query with no matches shows **No matching objects found.**
+- Search shows matches from available records while the remaining assets are indexed. **Indexing managed types…** means the result set is incomplete; matching new records appear
+  while the popover remains open. Dismissing it keeps it closed.
+- Queries run in short steps. **Searching available records…** shows a scan in progress. With no matches, the message distinguishes an incomplete index from a complete search.
 - Up and Down move the highlight and wrap around. Enter or Return opens the highlighted result. Escape closes the popover and keeps your text.
 
 ## Type filter

@@ -127,6 +127,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         */
         private static readonly EventCallback<PointerDownEvent> StopRowChildPointerDown = evt => evt.StopPropagation();
 
+        public double LongestSearchIndexSliceMilliseconds { get; private set; }
+        public double LongestSearchQuerySliceMilliseconds { get; private set; }
+        public int SearchIndexSliceOverrunCount { get; private set; }
+
         internal DataVisualizerUserState UserState
         {
             get
@@ -322,6 +326,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private float _pendingInnerWidth;
         private IVisualElementScheduledItem _splitterWidthSaveTask;
 
+        private int _searchQueryGeneration;
         private int _searchHighlightIndex = -1;
         private int _typePopoverHighlightIndex = -1;
         private string _lastTypeAddSearchTerm;
@@ -1881,7 +1886,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetObjectCache.ResetRetainingRows(_selectedObjects, IsTrackedAssetType);
             _pendingSearchCacheGuids.Clear();
             _isLoadingSearchCacheAsync = true;
-            // The cache is being rebuilt; it is not searchable until the batches below finish.
+            // Available documents remain searchable while the remaining GUIDs are indexed.
             _isSearchCachePopulated = false;
             // Managed-type set for this run, computed once and reused across all batches.
             _searchCacheManagedTypes = CollectManagedTypes();
@@ -1972,15 +1977,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            int batchSize = Mathf.Min(AsyncLoadBatchSize, _pendingSearchCacheGuids.Count);
-            List<string> batch = DequeueBatch(_pendingSearchCacheGuids, batchSize);
-
-            /*
-                Load batch. GUIDs in _pendingSearchCacheGuids are already unique (deduped up front),
-                so no per-batch de-duplication is needed here.
-            */
-            foreach (string guid in batch)
+            System.Diagnostics.Stopwatch sliceClock = System.Diagnostics.Stopwatch.StartNew();
+            int processed = 0;
+            while (0 < _pendingSearchCacheGuids.Count && processed < AsyncLoadBatchSize && (processed == 0 || sliceClock.Elapsed.TotalMilliseconds < 4))
             {
+                string guid = _pendingSearchCacheGuids.Dequeue();
+                processed++;
                 if (_assetObjectCache.Contains(guid))
                 {
                     continue;
@@ -2005,11 +2007,19 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
+            double elapsed = sliceClock.Elapsed.TotalMilliseconds;
+            LongestSearchIndexSliceMilliseconds = Math.Max(LongestSearchIndexSliceMilliseconds, elapsed);
+            if (4 < elapsed)
+            {
+                SearchIndexSliceOverrunCount++;
+            }
+
             // Continue with next batch
             if (0 < _pendingSearchCacheGuids.Count)
             {
                 _searchCacheLoadTask = rootVisualElement.schedule.Execute(() => ContinuePopulatingSearchCache(generation));
                 _searchCacheLoadTask.ExecuteLater(10);
+                RefreshActiveSearch();
             }
             else
             {
@@ -2022,8 +2032,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         }
 
         /*
-            Re-runs the active search once the search cache finishes loading, so results that were
-            unavailable while it loaded in the background appear. Only acts while the search popover is
+            Re-runs the active search as searchable records arrive or change. Only acts while the search popover is
             open, so it never reopens a popover the user has dismissed.
         */
         private void RefreshActiveSearch()
@@ -2845,7 +2854,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleSearchKeyDown(KeyDownEvent evt)
         {
-            if (_activePopover != _searchPopover || _searchPopover.style.display == DisplayStyle.None || _currentSearchResultItems.Count == 0)
+            if (_activePopover != _searchPopover || _searchPopover.style.display == DisplayStyle.None)
+            {
+                return;
+            }
+            if (_currentSearchResultItems.Count == 0 && evt.keyCode != KeyCode.Escape)
             {
                 return;
             }
@@ -2977,76 +2990,90 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 return;
             }
-
             _lastSearchString = searchText;
             _searchPopover.Clear();
             PopoverPlacement.ReleaseViewportLimits(_searchPopover);
             _currentSearchResultItems.Clear();
             _searchHighlightIndex = -1;
-
+            int generation = ++_searchQueryGeneration;
             if (string.IsNullOrWhiteSpace(searchText))
             {
                 CloseActivePopover();
                 return;
             }
-
-            if (!_isSearchCachePopulated)
+            if (!_isSearchCachePopulated && !_isLoadingSearchCacheAsync)
             {
-                /*
-                    If the cache isn't populated and isn't already (re)building — e.g. after the window
-                    was hidden and shown again, which clears the cache without rebuilding it (population
-                    otherwise only runs once in CreateGUI) — kick it off now so this query resolves.
-                */
-                if (!_isLoadingSearchCacheAsync)
-                {
-                    PopulateSearchCacheAsync();
-                }
-
-                /*
-                    Keep the popover open with a status line instead of dismissing the user's query.
-                    RefreshActiveSearch re-runs this search automatically once the cache is ready.
-                */
-                Label buildingLabel = new("Building search index…")
-                {
-                    style =
-                    {
-                        unityTextAlign = TextAnchor.MiddleCenter,
-                        paddingTop = 8,
-                        paddingBottom = 8,
-                    },
-                };
-                _searchPopover.Add(buildingLabel);
+                PopulateSearchCacheAsync();
+            }
+            if (generation != _searchQueryGeneration)
+            {
+                return;
+            }
+            System.Diagnostics.Stopwatch preparation = System.Diagnostics.Stopwatch.StartNew();
+            _assetObjectCache.Sort();
+            LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, preparation.Elapsed.TotalMilliseconds);
+            int version = _assetObjectCache.Version;
+            string[] terms = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            AssetSearchQuery query = new(_assetObjectCache.Documents, terms, MaxSearchResults);
+            Label status = new("Searching available records…") { name = "search-status", style = { whiteSpace = WhiteSpace.Normal } };
+            _searchPopover.Add(status);
+            int publishedCount = 0;
+            if (_activePopover != _searchPopover)
+            {
                 OpenPopover(_searchPopover, _searchField, shouldFocus: false);
-                return;
             }
+            Advance();
 
-            string[] searchTerms = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (searchTerms.Length == 0)
+            void Advance()
             {
-                CloseActivePopover();
-                return;
+                if (generation != _searchQueryGeneration || _activePopover != _searchPopover || !string.Equals(searchText, _lastSearchString, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+                if (version != _assetObjectCache.Version)
+                {
+                    RefreshActiveSearch();
+                    return;
+                }
+                query.Advance();
+                LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, query.LongestSliceMilliseconds);
+                if (query.IsComplete || publishedCount != query.Results.Count)
+                {
+                    RenderSearchResults(query);
+                    publishedCount = query.Results.Count;
+                }
+                if (query.IsComplete)
+                {
+                    return;
+                }
+                Label currentStatus = _searchPopover.Q<Label>("search-status");
+                currentStatus.text = $"{query.Results.Count} matches so far · Searching {query.ScannedCount} / {_assetObjectCache.Count} available records…";
+                rootVisualElement.schedule.Execute(Advance).ExecuteLater(1);
             }
+        }
 
-            List<(ScriptableObject refernce, SearchResultMatchInfo match)> results = new();
-            foreach (ScriptableObject obj in _allManagedObjectsCache)
+        private void RenderSearchResults(AssetSearchQuery query)
+        {
+            _searchPopover.Clear();
+            _currentSearchResultItems.Clear();
+            List<(ScriptableObject reference, SearchResultMatchInfo match)> results = new();
+            for (int hitIndex = 0; hitIndex < query.Results.Count; hitIndex++)
             {
-                if (obj == null)
+                var hit = query.Results[hitIndex];
+                if (_assetObjectCache.TryGet(hit.Document.Guid, out ScriptableObject asset) && asset != null)
                 {
-                    continue;
-                }
-
-                SearchResultMatchInfo matchInfo = CheckMatch(obj, searchTerms);
-                if (!matchInfo.isMatch)
-                {
-                    continue;
-                }
-
-                results.Add((obj, matchInfo));
-                if (MaxSearchResults <= results.Count)
-                {
-                    break;
+                    results.Add((asset, hit.Match));
                 }
             }
+            string count = query.ReachedLimit ? $"First {results.Count} matches" : $"{results.Count} matches";
+            Label status = new(
+                !query.IsComplete ? $"{count} so far · Searching…" : (_isSearchCachePopulated ? $"{count} · Managed types" : $"{count} available · Indexing managed types…")
+            )
+            {
+                name = "search-status",
+                style = { whiteSpace = WhiteSpace.Normal },
+            };
+            _searchPopover.Add(status);
             ScrollView scrollView = _searchPopover.Q<ScrollView>("search-scroll") ?? new ScrollView { name = "search-scroll", style = { flexGrow = 1 } };
             VisualElement listContainer = scrollView.Q<VisualElement>("search-list-content") ?? new VisualElement { name = "search-list-content" };
             listContainer.Clear();
@@ -3189,7 +3216,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             else
             {
-                Label emptyLabel = new("No matching objects found.")
+                Label emptyLabel = new(_isSearchCachePopulated ? "No matching objects found." : "No matches in available records yet.")
                 {
                     style =
                     {
@@ -3204,11 +3231,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 listContainer.Add(emptyLabel);
                 _searchPopover.style.maxHeight = StyleKeyword.None;
             }
-        }
-
-        private SearchResultMatchInfo CheckMatch(ScriptableObject obj, string[] lowerSearchTerms)
-        {
-            return _assetObjectCache.Match(obj, lowerSearchTerms);
         }
 
         private void NavigateToObject(ScriptableObject targetObject)
