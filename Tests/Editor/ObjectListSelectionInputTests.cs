@@ -14,6 +14,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Event mouse = new()
             {
                 type = EventType.MouseDown,
+                clickCount = 1,
                 button = 0,
                 modifiers = modifiers,
             };
