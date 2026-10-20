@@ -237,10 +237,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public void ShouldResolveDistinctPrefabComponentIdentitiesAndKeepReadOnlyInspectionUnchanged()
         {
             using TestCleanupScope cleanup = new();
-            Scene original = SceneManager.GetActiveScene();
+            Scene previous = SceneManager.GetActiveScene();
+            string folder = CreateFolder(cleanup);
+            string scenePath = folder + "/Clean.unity";
+            File.WriteAllText(scenePath, "%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n");
+            AssetDatabase.ImportAsset(scenePath, ImportAssetOptions.ForceSynchronousImport);
+            Scene original = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+            cleanup.Defer(() =>
+            {
+                SceneManager.SetActiveScene(previous);
+                EditorSceneManager.CloseScene(original, true);
+            });
+            SceneManager.SetActiveScene(original);
+            Assert.That(original.isDirty, Is.False);
             bool dirty = original.isDirty;
             int roots = original.rootCount;
-            string folder = CreateFixtures(CreateFolder(cleanup));
+            CreateFixtures(folder);
             Assert.That(original.isDirty, Is.EqualTo(dirty));
             Assert.That(original.rootCount, Is.EqualTo(roots));
             EditorSurfaceCaptureHostWindow host = ScriptableObject.CreateInstance<EditorSurfaceCaptureHostWindow>();
