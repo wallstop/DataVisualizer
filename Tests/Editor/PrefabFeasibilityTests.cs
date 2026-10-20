@@ -170,6 +170,33 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return outputPath;
         }
 
+        public static string PrepareColdProject(string projectPath)
+        {
+            if (Directory.Exists(projectPath))
+            {
+                throw new ArgumentException("Use a new, uniquely owned project path.", nameof(projectPath));
+            }
+            using TestCleanupScope cleanup = new();
+            string fixture = CreateFixtures(CreateFolder(cleanup));
+            Directory.CreateDirectory(Path.Combine(projectPath, "Assets/Probe"));
+            Directory.CreateDirectory(Path.Combine(projectPath, "Packages"));
+            Directory.CreateDirectory(Path.Combine(projectPath, "ProjectSettings"));
+            foreach (string file in Directory.GetFiles(fixture))
+            {
+                File.Copy(file, Path.Combine(projectPath, "Assets/Probe", Path.GetFileName(file)));
+            }
+            string package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(PrefabFeasibilityTests).Assembly).resolvedPath.Replace('\\', '/');
+            File.WriteAllText(
+                Path.Combine(projectPath, "Packages/manifest.json"),
+                "{\"dependencies\":{\"com.unity.test-framework\":\"1.7.0\",\"com.wallstop-studios.data-visualizer\":\"file:"
+                    + package
+                    + "\"},\"testables\":[\"com.wallstop-studios.data-visualizer\"]}"
+            );
+            File.Copy("ProjectSettings/ProjectVersion.txt", Path.Combine(projectPath, "ProjectSettings/ProjectVersion.txt"));
+            File.WriteAllText(Path.Combine(projectPath, ".prefab-probe-owner"), "Owned disposable fixture project for issue #321.");
+            return projectPath;
+        }
+
         public static void RunColdFromCommandLine()
         {
             string[] args = Environment.GetCommandLineArgs();
