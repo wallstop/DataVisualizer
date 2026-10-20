@@ -20,7 +20,7 @@
     ],
     "search": [
       1141,
-      281
+      303
     ],
     "settings": [
       340,
@@ -41,10 +41,23 @@
     "staleAfter": "Changes to window controls, pane allocation, theme tokens, or fixture content require review and recapture.",
     "overrides": {
       "search": {
-        "revision": "86b90393ffe0665ad7b8cc677a835c1fef40da83",
+        "revision": "c1cc417232ef34e4cf2c3f89362644867cca4445",
         "capturedAt": "2026-10-20",
-        "reviewScope": "Search crop only: eight owned results, captured match count and managed-type scope, readable highlights and current label controls. Other shots retain their recorded provenance."
+        "reviewScope": "Quick search: eight owned results and the Show all results action. Existing platform, theme and DPI context applies."
       }
+    }
+  },
+  "additionalCaptures": {
+    "searchAllResults": {
+      "path": "search-all-results.png",
+      "dimensions": [
+        425,
+        401
+      ],
+      "revision": "c1cc417232ef34e4cf2c3f89362644867cca4445",
+      "capturedAt": "2026-10-20",
+      "fixture": "42 owned real main assets across two exact types, with duplicate names and an incomplete-index status.",
+      "reviewScope": "Virtualized results, stable GUID identities, readable name/type pairs and Back; Windows dark skin, pixelsPerPoint 1. Narrow 360x480 layout also checked."
     }
   }
 }

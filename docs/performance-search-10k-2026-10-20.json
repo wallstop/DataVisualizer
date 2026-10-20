@@ -14,7 +14,19 @@
     "os": "Windows 11  (10.0.26200)",
     "theme": "Dx",
     "editorSkin": "dark",
-    "windowFocused": true
+    "windowFocused": true,
+    "cpu": "Snapdragon(R) X Elite - X1E80100 - Qualcomm(R) Oryon(TM) CPU",
+    "processorCount": 12,
+    "systemMemoryMB": 65011,
+    "gpu": "Qualcomm(R) Adreno(TM) X1-85 GPU",
+    "screenDpi": 96,
+    "pixelsPerPoint": 1,
+    "displayCount": 1,
+    "fileSystem": "NTFS",
+    "driveType": "Fixed",
+    "storageMedium": "not collected; timed fixture is transient in-memory data",
+    "processAndOsArchitecture": "X64/X64",
+    "detailsCollectedAt": "2026-10-20T01:09:00Z"
   },
   "sampling": {
     "warmups": 5,

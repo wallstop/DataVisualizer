@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Add Show all results to reach matches beyond the first 25, with virtualized rows, keyboard navigation, and a return to quick search (#311).
+
 ### Fixed
 
 - Fix unnecessary refreshes after unrelated asset moves or deletions. Update changed asset rows, labels and inspector state while preserving selection (#308).
