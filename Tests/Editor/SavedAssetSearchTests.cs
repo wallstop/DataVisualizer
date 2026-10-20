@@ -12,6 +12,35 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class SavedAssetSearchTests
     {
+        public static string CaptureDocumentation(string outputPath)
+        {
+            using TestCleanupScope cleanup = new();
+            DataVisualizer owner = ScriptableObject.CreateInstance<DataVisualizer>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(owner));
+            var original = owner.CopySavedSearches();
+            cleanup.Defer(() => owner.SaveSearches(original));
+            owner.SaveSearches(new());
+            SavedAssetSearchWindow window = SavedAssetSearchWindow.Open(
+                owner,
+                new SavedAssetSearch
+                {
+                    query = "Armor",
+                    typeIdentity = typeof(AssetValidationTestData).AssemblyQualifiedName,
+                    labels = new TypeLabelFilterConfig
+                    {
+                        andLabels = new() { "Reviewed", "Urgent" },
+                    },
+                }
+            );
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            window.position = new Rect(100, 100, 660, 520);
+            window.rootVisualElement.Q<TextField>("saved-search-name").value = "Reviewed urgent armor";
+            window.SaveCurrent();
+            window.rootVisualElement.Q<DropdownField>("saved-search-list").index = 0;
+            EditorSurfaceCapture.SettleLayout(window);
+            return EditorSurfaceCapture.Capture(window, outputPath).OutputPath;
+        }
+
         [Test]
         public void ShouldMigrateSnapshotsBothWaysWithoutSharingMutableLabels()
         {

@@ -20,6 +20,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private Label _scope;
         private Label _status;
         private Label _message;
+        private Label _resultScope;
         private ListView _results;
         private readonly List<EditorAssetRecord> _rows = new();
         private int _selected = -1;
@@ -43,14 +44,13 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private static string DescribeLabels(TypeLabelFilterConfig labels)
         {
-            return labels == null
-                ? "All labels"
-                : "AND: "
-                    + string.Join(", ", labels.andLabels ?? new List<string>())
-                    + " · "
-                    + labels.combinationType
-                    + " · OR: "
-                    + string.Join(", ", labels.orLabels ?? new List<string>());
+            string all = labels?.andLabels is { Count: > 0 } ? "All of [" + string.Join(", ", labels.andLabels) + "]" : null;
+            string any = labels?.orLabels is { Count: > 0 } ? "Any of [" + string.Join(", ", labels.orLabels) + "]" : null;
+            if (all != null && any != null)
+            {
+                return "(" + all + ") " + (labels.combinationType == LabelCombinationType.Or ? "OR" : "AND") + " (" + any + ")";
+            }
+            return all ?? any ?? "All assets (no label filter)";
         }
 
         public void CreateGUI()
@@ -82,6 +82,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             rootVisualElement.Add(_status);
             _message = new Label { name = "saved-search-message", style = { whiteSpace = WhiteSpace.Normal } };
             rootVisualElement.Add(_message);
+            _resultScope = new Label { name = "saved-results-scope", style = { whiteSpace = WhiteSpace.Normal } };
+            rootVisualElement.Add(_resultScope);
             _results = new ListView
             {
                 itemsSource = _rows,
@@ -116,7 +118,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             rootVisualElement.Add(new Button(() => ChangePage(-1000)) { text = "Previous results" });
             rootVisualElement.Add(new Button(() => ChangePage(1000)) { text = "Next results" });
             RefreshChoices();
-            _scope.text = "Current snapshot: " + _draft.query + "\n" + _draft.typeIdentity + "\n" + DescribeLabels(_draft.labels);
+            _scope.text = "Current snapshot: " + _draft.query + "\n" + _draft.typeIdentity?.Split(',')[0] + "\n" + DescribeLabels(_draft.labels);
         }
 
         public void SaveCurrent()
@@ -172,6 +174,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 EditorAssetQuery next = _saved[_selected].StartQuery();
                 _query?.Dispose();
                 _message.text = string.Empty;
+                _resultScope.text = "Results for: " + _saved[_selected].name;
                 _query = next;
                 _offset = 0;
                 _rows.Clear();
@@ -193,7 +196,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             SavedAssetSearch entry = _saved[index];
             _name.value = entry.name;
-            _scope.text = entry.query + "\n" + entry.typeIdentity + "\n" + DescribeLabels(entry.labels);
+            _scope.text = entry.query + "\n" + entry.typeIdentity?.Split(',')[0] + "\n" + DescribeLabels(entry.labels);
         }
 
         private bool ValidateName(bool renaming)
@@ -228,6 +231,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
             _owner.SaveSearches(_saved);
+            _message.text = string.Empty;
             RefreshChoices();
             _status.text = "Saved in the current DxVisualizer persistence mode.";
         }

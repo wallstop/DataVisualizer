@@ -70,6 +70,8 @@ the search to other types.
 Saved searches are private by default in the existing per-user state file. Enabling project-settings persistence copies them to the settings asset; switching back copies them to
 user state. Version-1 snapshots keep the exact assembly-qualified type, query text, label casing, clauses and combination. Older state without searches starts with an empty list.
 
+![Named query with its exact type and label expression](images/saved-searches.png)
+
 ## Type filter
 
 The **Filter types** field above the namespace list narrows the type rows by display name, without case sensitivity. Namespace headers are not filtered, so you keep the structure
