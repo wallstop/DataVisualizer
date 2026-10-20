@@ -139,6 +139,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string target = CreateAsset(folder + "/Target.asset", "target");
             AssetValidationTestData asset = AssetDatabase.LoadAssetAtPath<AssetValidationTestData>(folder + "/Missing.asset");
             asset.reference = AssetDatabase.LoadMainAssetAtPath(AssetDatabase.GUIDToAssetPath(target));
+            asset.exposedReference = new ExposedReference<UnityEngine.Object> { defaultValue = asset.reference };
             EditorUtility.SetDirty(asset);
             AssetDatabase.SaveAssets();
             AssetDatabase.DeleteAsset(folder + "/Target.asset");

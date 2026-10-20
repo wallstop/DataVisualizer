@@ -5,6 +5,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     public sealed class AssetValidationTestData : BaseDataObject
     {
         public Object reference;
+        public ExposedReference<Object> exposedReference;
 
         [SerializeReference]
         public AssetValidationTestNode node;

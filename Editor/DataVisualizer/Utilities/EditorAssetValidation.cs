@@ -118,7 +118,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     bool enterChildren = true;
                     while (property.Next(enterChildren))
                     {
-                        enterChildren = property.propertyType != SerializedPropertyType.String;
+                        enterChildren = property.propertyType != SerializedPropertyType.String && property.propertyType != SerializedPropertyType.ExposedReference;
                         if (property.propertyType == SerializedPropertyType.ManagedReference)
                         {
                             enterChildren = visited.Add(property.managedReferenceId);
