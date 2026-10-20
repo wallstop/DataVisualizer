@@ -52,6 +52,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldAcceptValueTypeProcessorsLikeTheBrowser()
+        {
+            using TestCleanupScope cleanup = new();
+            string path = "Assets/ProcessorStruct-" + Guid.NewGuid().ToString("N") + ".asset";
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(path));
+            AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<TestDataObject>(), path);
+            EditorAutomationRequest request = Request(AssetDatabase.AssetPathToGUID(path));
+            request.processorIdentity = typeof(StructProbeProcessor<TestDataObject>).AssemblyQualifiedName;
+            request.operation = "applyProcessor";
+            request.confirmPaths = new[] { path };
+            using EditorAutomationSession session = EditorAutomationSession.Start(JsonUtility.ToJson(request));
+            session.Advance();
+            Assert.That(Response(session).items[0].code, Is.EqualTo("applied"));
+        }
+
+        [Test]
         public void ShouldPreviewWithoutConstructionAndMatchDirectBatchOutcomes()
         {
             using TestCleanupScope cleanup = new();
@@ -140,6 +156,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     }
                 }
             }
+        }
+
+        public struct StructProbeProcessor<T> : IDataProcessor
+        {
+            public string Name => "Struct probe";
+            public string Description => "Value-type processor compatibility";
+            public IEnumerable<Type> Accepts => new[] { typeof(T) };
+
+            public void Process(Type type, IEnumerable<ScriptableObject> objects) { }
         }
 
         public sealed class ThrowingConstructorProcessor<T> : IDataProcessor
