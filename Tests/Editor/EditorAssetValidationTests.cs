@@ -1,6 +1,7 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.Linq;
     using NUnit.Framework;
@@ -29,6 +30,37 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(asset);
             return AssetDatabase.AssetPathToGUID(path);
+        }
+
+        [TestCase(1000)]
+        [TestCase(10000)]
+        public void ShouldYieldThroughLargeExplicitScopesAndCancelBetweenAssets(int count)
+        {
+            using TestCleanupScope cleanup = new();
+            Func<bool> previous = AssetGuidDiscovery.AssetDatabaseBusyOverride;
+            cleanup.Defer(() => AssetGuidDiscovery.AssetDatabaseBusyOverride = previous);
+            AssetGuidDiscovery.AssetDatabaseBusyOverride = () => false;
+            List<string> guids = new();
+            for (int i = 1; i <= count; i++)
+            {
+                guids.Add(i.ToString("x32"));
+            }
+            using EditorAssetValidation validation = new(guids);
+            validation.Advance(0);
+            Assert.That(validation.ProcessedCount, Is.EqualTo(1));
+            Assert.That(validation.IsComplete, Is.False);
+            for (int i = 1; i < count; i++)
+            {
+                validation.Advance(0);
+            }
+            Assert.That(validation.IsComplete, Is.True);
+            Assert.That(validation.Findings.Count, Is.EqualTo(count));
+            using EditorAssetValidation cancelled = new(guids);
+            cancelled.Advance(0);
+            cancelled.Dispose();
+            cancelled.Advance(1000);
+            Assert.That(cancelled.ProcessedCount, Is.EqualTo(1));
+            Assert.That(cancelled.IsCancelled, Is.True);
         }
 
         [Test]
