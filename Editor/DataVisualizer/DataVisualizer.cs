@@ -1325,11 +1325,14 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public SavedAssetSearch CaptureSearch()
         {
+            Type type = _namespaceController.SelectedType;
+            List<TypeLabelFilterConfig> configs = Settings.persistStateInSettingsAsset ? Settings.labelFilterConfigs : UserState.labelFilterConfigs;
+            TypeLabelFilterConfig filter = type == null ? null : configs?.Find(config => string.Equals(config?.typeFullName, type.FullName, StringComparison.Ordinal));
             return new SavedAssetSearch
             {
                 query = _searchField?.userData as string ?? string.Empty,
-                typeIdentity = _namespaceController.SelectedType?.AssemblyQualifiedName ?? string.Empty,
-                labels = CurrentTypeLabelFilterConfig?.Clone() ?? new TypeLabelFilterConfig(),
+                typeIdentity = type?.AssemblyQualifiedName ?? string.Empty,
+                labels = filter?.Clone() ?? new TypeLabelFilterConfig(),
             };
         }
 
@@ -1340,18 +1343,18 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public void SaveSearches(List<SavedAssetSearch> searches)
         {
-            PersistSettings(
-                settings =>
-                {
-                    settings.savedSearches = PersistedStateCopy.CloneSavedSearches(searches);
-                    return true;
-                },
-                userState =>
-                {
-                    userState.savedSearches = PersistedStateCopy.CloneSavedSearches(searches);
-                    return true;
-                }
-            );
+            DataVisualizerSettings settings = Settings;
+            if (settings.persistStateInSettingsAsset)
+            {
+                settings.savedSearches = PersistedStateCopy.CloneSavedSearches(searches);
+                settings.MarkDirty();
+                AssetDatabase.SaveAssetIfDirty(settings);
+            }
+            else
+            {
+                UserState.savedSearches = PersistedStateCopy.CloneSavedSearches(searches);
+                MarkUserStateDirty();
+            }
         }
 
         internal void PersistSettings(Func<DataVisualizerSettings, bool> settingsApplier, Func<DataVisualizerUserState, bool> userStateApplier)
