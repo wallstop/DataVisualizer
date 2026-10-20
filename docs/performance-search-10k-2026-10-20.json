@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "revision": "86b90393ffe0665ad7b8cc677a835c1fef40da83",
+  "recordedAt": "2026-10-20",
+  "scenario": "Warm no-match global search in a hosted production window",
+  "fixture": {
+    "kind": "synthetic transient ScriptableObjects",
+    "recordCount": 10000,
+    "realAssets": false,
+    "description": "Named PlayModeDataObject instances with a searchable description; no .asset files or import work."
+  },
+  "environment": {
+    "unity": "6000.5.2f1",
+    "os": "Windows 11  (10.0.26200)",
+    "theme": "Dx",
+    "editorSkin": "dark"
+  },
+  "sampling": {
+    "warmups": 5,
+    "samples": 30,
+    "noMatchQueryMilliseconds": [
+      50.0431,
+      49.3781,
+      59.8102,
+      59.5862,
+      46.8002,
+      42.1156,
+      49.3672,
+      59.298,
+      57.5111,
+      50.6408,
+      45.9778,
+      45.1078,
+      50.6926,
+      50.4194,
+      49.4695,
+      50.833,
+      54.7468,
+      62.4774,
+      62.7701,
+      48.6333,
+      50.8268,
+      49.2047,
+      42.3255,
+      52.9203,
+      48.5064,
+      49.3825,
+      59.3266,
+      48.6481,
+      59.1294,
+      46.8563
+    ]
+  },
+  "summary": {
+    "medianMilliseconds": 50.23125,
+    "p95NearestRankMilliseconds": 62.4774,
+    "longestObservedQueryOrPreparationSliceMilliseconds": 33.166
+  },
+  "verifiedBehaviors": [
+    "Available matches during incomplete indexing",
+    "New records update an open query",
+    "Dismissal and Escape do not reopen the popover",
+    "Rapid typing discards older queries",
+    "Edits invalidate pending query results"
+  ],
+  "limitations": [
+    "Synthetic transient objects do not prove real-asset or cold-index latency.",
+    "Single Windows editor session; no other platform or DPI evidence.",
+    "Initial sorting exceeded the 4ms cooperative budget; preparation overruns remain explicit.",
+    "Global live-object retention and disk caching remain #309."
+  ]
+}
