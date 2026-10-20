@@ -180,6 +180,52 @@ from `Process` are caught, logged, and surfaced in a dialog; one failing process
 
 The window saves assets and refreshes after a processor runs, so call `EditorUtility.SetDirty` on anything you change.
 
+## Read-only editor queries
+
+Use `EditorAssetQuery` on Unity's editor main thread without opening a window. It uses the same text matcher (multi-term OR) and label evaluator as the window. Scope contains exact
+ScriptableObject types: derived instances and subassets are excluded. An empty scope is rejected instead of searching everything. Results use asset GUIDs and assembly-qualified
+type identities; authored `BaseDataObject.Id` values are separate.
+
+Place this example under an `Editor` folder and replace `QuestData` with your project type:
+
+```csharp
+namespace MyGame.Editor
+{
+    using UnityEditor;
+    using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor.Utilities;
+
+    public static class QuestQueries
+    {
+        [MenuItem("Tools/List Quest Assets")]
+        public static void ListQuests()
+        {
+            using (EditorAssetQuery query = new(new[] { typeof(QuestData) }, "quest"))
+            {
+                while (!query.IsComplete && !query.IsWaitingForEditor)
+                {
+                    query.Advance();
+                }
+                foreach (EditorAssetRecord record in query.GetPage(0, 100))
+                {
+                    Debug.Log(record.Guid + " " + record.Path + " " + record.Error);
+                }
+                Debug.Log("Complete: " + query.IsComplete);
+            }
+        }
+    }
+}
+```
+
+For interactive tools, keep the query alive and call `Advance(4)` once per editor update, then read pages (up to 1,000 items). Dispose it on cancellation, reload, or owner cleanup.
+`IsComplete` means discovery and extraction finished; currently available pages and counts can be incomplete. Play transitions and AssetDatabase activity defer advancement.
+`LongestSliceMilliseconds` and `SliceOverrunCount` include indivisible Unity discovery/loading calls; the budget is cooperative, not a hard latency guarantee.
+
+The service copies result values and retains no asset wrappers. It loads each discovered candidate once for labels and matching, without saving, dirtying, or invoking package
+mutation hooks. User-defined Unity loading callbacks still run. Item errors appear in `Error`; callers must inspect them even after completion. A query is a one-pass observation,
+not a transaction: restart after project changes, and do not persist page offsets across queries. Discovery scans project `.asset` main assets through the existing type index.
+Configuration, selection, asset mutations, and persistent metadata caching are outside this initial read-only API.
+
 ## Odin Inspector
 
 When the Odin Inspector is installed, the window renders assets through Odin instead of the standard inspector in two cases: the type carries `[CustomDataVisualization]` with
