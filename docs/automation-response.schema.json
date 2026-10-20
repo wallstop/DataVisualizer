@@ -1,19 +1,46 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "DxVisualizer read-only response v1",
+  "title": "DxVisualizer editor response v1",
   "type": "object",
   "required": ["schemaVersion", "status", "complete", "processedCount", "scopeCount", "availableCount", "offset", "items", "coverage"],
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "status": { "enum": ["rejected", "running", "waiting", "cancelled", "complete"] },
-    "code": { "type": ["string", "null"] },
-    "detail": { "type": ["string", "null"] },
-    "complete": { "type": "boolean", "description": "Work finished, not proof that every asset is valid or readable." },
-    "processedCount": { "type": "integer", "minimum": 0 },
-    "scopeCount": { "type": "integer", "minimum": -1, "description": "-1 while query discovery is incomplete." },
-    "availableCount": { "type": "integer", "minimum": 0, "description": "Currently available query records or validation findings." },
-    "offset": { "type": "integer", "minimum": 0 },
-    "coverage": { "type": "string" },
+    "schemaVersion": {
+      "const": 1
+    },
+    "status": {
+      "enum": ["rejected", "running", "waiting", "cancelled", "complete", "failed"]
+    },
+    "code": {
+      "type": ["string", "null"]
+    },
+    "detail": {
+      "type": ["string", "null"]
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "Work finished, not proof that every asset is valid or readable."
+    },
+    "processedCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "scopeCount": {
+      "type": "integer",
+      "minimum": -1,
+      "description": "-1 while query discovery is incomplete."
+    },
+    "availableCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Available query records, validation findings, or exact processor target outcomes."
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "coverage": {
+      "type": "string"
+    },
     "items": {
       "type": "array",
       "maxItems": 1000,
@@ -21,14 +48,33 @@
         "type": "object",
         "required": ["guid", "path", "code"],
         "properties": {
-          "guid": { "type": ["string", "null"] },
-          "path": { "type": ["string", "null"] },
-          "name": { "type": ["string", "null"] },
-          "typeIdentity": { "type": ["string", "null"] },
-          "labels": { "type": ["array", "null"], "items": { "type": "string" } },
-          "code": { "type": ["string", "null"] },
-          "propertyPath": { "type": ["string", "null"] },
-          "detail": { "type": ["string", "null"] }
+          "guid": {
+            "type": ["string", "null"]
+          },
+          "path": {
+            "type": ["string", "null"]
+          },
+          "name": {
+            "type": ["string", "null"]
+          },
+          "typeIdentity": {
+            "type": ["string", "null"]
+          },
+          "labels": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string"
+            }
+          },
+          "code": {
+            "type": ["string", "null"]
+          },
+          "propertyPath": {
+            "type": ["string", "null"]
+          },
+          "detail": {
+            "type": ["string", "null"]
+          }
         }
       }
     }

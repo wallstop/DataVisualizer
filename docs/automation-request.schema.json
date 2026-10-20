@@ -1,27 +1,70 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "DxVisualizer read-only request v1",
-  "description": "Unknown members are ignored. The dispatcher enforces operation-specific scope rules. Mutation and configuration are unsupported.",
+  "title": "DxVisualizer editor request v1",
+  "description": "Unknown members are ignored. The dispatcher enforces explicit scopes. Configuration is unsupported.",
   "type": "object",
   "required": ["schemaVersion", "operation"],
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "operation": { "enum": ["query", "validate"] },
+    "schemaVersion": {
+      "const": 1
+    },
+    "operation": {
+      "enum": ["query", "validate", "previewProcessor", "applyProcessor"]
+    },
     "typeIdentities": {
       "type": ["array", "null"],
-      "items": { "type": "string" },
-      "description": "Query only: nonempty assembly-qualified exact ScriptableObject type identities."
+      "items": {
+        "type": "string"
+      },
+      "description": "Query scopes, or exactly one type for processor operations. Assembly-qualified identities only."
     },
     "assetGuids": {
       "type": ["array", "null"],
-      "items": { "type": "string", "pattern": "^[0-9a-fA-F]{32}$" },
-      "description": "Validate only: explicit nonempty main-asset scope."
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{32}$"
+      },
+      "description": "Validate and processor operations: explicit nonempty main-asset scope."
     },
-    "text": { "type": ["string", "null"] },
-    "andLabels": { "type": ["array", "null"], "items": { "type": "string" } },
-    "orLabels": { "type": ["array", "null"], "items": { "type": "string" } },
-    "labelCombination": { "enum": ["and", "or", null, ""] },
-    "offset": { "type": "integer", "minimum": 0, "default": 0 },
-    "pageSize": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 100 }
+    "text": {
+      "type": ["string", "null"]
+    },
+    "andLabels": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "orLabels": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "labelCombination": {
+      "enum": ["and", "or", null, ""]
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "pageSize": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "default": 100
+    },
+    "processorIdentity": {
+      "type": ["string", "null"],
+      "description": "Processor operations only: concrete assembly-qualified IDataProcessor identity with a public parameterless constructor. Preview never constructs it."
+    },
+    "confirmPaths": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      },
+      "description": "applyProcessor only: every preview path, in the same order as assetGuids. Changed paths reject the request."
+    }
   }
 }
