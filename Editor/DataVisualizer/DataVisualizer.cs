@@ -2859,6 +2859,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 return;
             }
+            if (
+                (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
+                && evt.target is VisualElement keyTarget
+                && (keyTarget is Button || keyTarget.GetFirstAncestorOfType<Button>() != null)
+            )
+            {
+                return;
+            }
             if (_showAllSearchResults && _allSearchResultsView != null && _allSearchResultsView.HandleNavigation(evt.keyCode))
             {
                 evt.PreventDefaultCompat();
@@ -3132,7 +3140,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             if (_showAllSearchResults)
             {
-                RenderAllSearchResults(query);
+                RenderAllSearchResults(query, snapshotIsCurrent);
                 return;
             }
             _searchPopover.Clear();
@@ -3339,7 +3347,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             UpdateSearchResultHighlight();
         }
 
-        private void RenderAllSearchResults(AssetSearchQuery query)
+        private void RenderAllSearchResults(AssetSearchQuery query, bool snapshotIsCurrent = true)
         {
             if (_allSearchResultsView == null)
             {
@@ -3349,6 +3357,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         if (_assetObjectCache.TryGet(document.Guid, out ScriptableObject asset) && asset != null)
                         {
+                            // Keep the query so search can reuse it after navigation.
                             NavigateToObject(asset);
                         }
                     },
@@ -3363,8 +3372,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             string status =
                 !query.IsComplete ? $"{query.Results.Count} matches so far · Searching managed types…"
-                : _isSearchCachePopulated ? $"{query.Results.Count} matches · Managed types"
-                : $"{query.Results.Count} available matches · Indexing managed types…";
+                : !_isSearchCachePopulated ? $"{query.Results.Count} available matches · Indexing managed types…"
+                : snapshotIsCurrent ? $"{query.Results.Count} matches · Managed types"
+                : $"{query.Results.Count} available matches · Updating results…";
             _allSearchResultsView.SetResults(query.Results, status);
         }
 
