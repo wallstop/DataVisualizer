@@ -1323,7 +1323,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             return new SavedAssetSearch
             {
-                query = _searchField?.value ?? string.Empty,
+                query = _lastSearchString ?? string.Empty,
                 typeIdentity = _namespaceController.SelectedType?.AssemblyQualifiedName ?? string.Empty,
                 labels = CurrentTypeLabelFilterConfig?.Clone() ?? new TypeLabelFilterConfig(),
             };

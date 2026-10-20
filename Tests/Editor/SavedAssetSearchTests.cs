@@ -135,7 +135,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             using TestCleanupScope cleanup = new();
             DataVisualizer owner = ScriptableObject.CreateInstance<DataVisualizer>();
-            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(owner));
+            cleanup.Defer(owner.Close);
+            owner.Show();
+            owner.CreateGUI();
+            Assert.That(owner.CaptureSearch().query, Is.Empty);
+            TextField query = owner.rootVisualElement.Q<TextField>("global-search-field");
+            query.value = "literal";
+            query.value = "Search...";
+            Assert.That(owner.CaptureSearch().query, Is.EqualTo("Search..."));
             var original = owner.CopySavedSearches();
             cleanup.Defer(() => owner.SaveSearches(original));
             owner.SaveSearches(new());
@@ -148,7 +155,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             name.value = "One";
             window.SaveCurrent();
             Assert.That(owner.CopySavedSearches().Count, Is.EqualTo(1));
-            window.rootVisualElement.Q<DropdownField>("saved-search-list").index = 0;
             window.SaveCurrent();
             Assert.That(owner.CopySavedSearches().Count, Is.EqualTo(1));
             name.value = "Two";
