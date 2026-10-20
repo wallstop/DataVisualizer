@@ -242,7 +242,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             window.rootVisualElement.Q<AssetValidationPanel>().ValidateSelection();
             EditorSurfaceCapture.SettleLayout(window);
             EditorSurfaceCapture.Capture(window, Path.Combine(outputDirectory, "asset-validation.png"));
-            return "Captured saved searches and validation at " + width + " x " + height;
+            List<string> processorGuids = new();
+            foreach (UnityEngine.Object asset in assets)
+            {
+                processorGuids.Add(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(asset)));
+            }
+            window.OpenProcessorPreview(new EditorAssetSelectionTests.SelectionProbeProcessor<AssetValidationTestData>(), typeof(AssetValidationTestData), processorGuids);
+            EditorSurfaceCapture.SettleLayout(window);
+            EditorSurfaceCapture.Capture(window, Path.Combine(outputDirectory, "processor-preview.png"));
+            return "Captured saved searches, validation and processor preview at " + width + " x " + height;
         }
 
         /*

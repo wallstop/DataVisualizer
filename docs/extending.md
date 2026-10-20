@@ -171,12 +171,12 @@ public sealed class TrimDescriptions : IDataProcessor
 - `Description` is the button tooltip.
 - `Accepts` limits the processor to the types you list, and the processor is only offered for a selected type that appears in that list. Return `null` or an empty list and the
   processor is never offered.
-- `Process` receives the type and the objects, which is the **ALL** or **FILTERED** set chosen in the window. See [Processors](managing-assets.md#processors) for scope, the
-  confirmation, and the load-in-progress refusal.
+- `Process` receives the type and the objects, which is the **ALL**, **FILTERED** or **SELECTED** set chosen in the window. See [Processors](managing-assets.md#processors) for
+  scope, the confirmation, and the load-in-progress refusal.
 - `WillEffect(Type, IEnumerable<ScriptableObject>)` is a default interface method that returns the number of objects. Override it when a processor will skip some.
 
 The window instantiates each processor with its public parameterless constructor. A processor that is abstract, generic, or lacks that constructor is skipped and logged. Exceptions
-from `Process` are caught, logged, and surfaced in a dialog; one failing processor does not stop the others.
+from `Process` are caught and shown as uncertain target outcomes in the preview workspace; inspect partial changes before retrying.
 
 The window saves assets and refreshes after a processor runs, so call `EditorUtility.SetDirty` on anything you change.
 
@@ -303,12 +303,12 @@ For example, after supplying your own exact identities and asset GUID:
     "schemaVersion": 1,
     "operation": "previewProcessor",
     "typeIdentities": ["MyGame.Data.QuestData, Assembly-CSharp"],
-    "processorIdentity": "MyGame.Editor.TrimQuestDescriptions, Assembly-CSharp-Editor",
+    "processorIdentity": "MyGame.Editor.TrimDescriptions, Assembly-CSharp-Editor",
     "assetGuids": ["0123456789abcdef0123456789abcdef"]
 }
 ```
 
-Use actual `typeof(QuestData).AssemblyQualifiedName` and `typeof(TrimQuestDescriptions).AssemblyQualifiedName` values, including assembly version information when present. After
+Use actual `typeof(QuestData).AssemblyQualifiedName` and `typeof(TrimDescriptions).AssemblyQualifiedName` values, including assembly version information when present. After
 reviewing the response, change the operation to `applyProcessor` and add `"confirmPaths": ["Assets/Data/Quest.asset"]` using the exact returned path. The existing
 [processor example](#processors) supplies the implementation; these placeholder identities and GUID are not executable fixtures.
 

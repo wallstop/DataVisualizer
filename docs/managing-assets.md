@@ -58,18 +58,27 @@ The asset keeps its file name.
 The **Processors** area sits below the Objects header. It lists every `IDataProcessor` implementation in your project whose `Accepts` list covers the selected type, sorted by name.
 A processor with no `Accepts` list is never offered. The collapsed header shows how many processors are listed; the area is hidden entirely when none apply.
 
-Clicking a processor opens a confirmation that names the processor and the number of objects it will receive. Confirming runs `Process`, saves assets, refreshes the AssetDatabase,
-and schedules a window refresh. A processor that throws is caught: the exception is logged and an **Error running processor '…'** dialog reports the message. Other processors are
-unaffected.
+Clicking a processor opens an integrated preview with the exact target count and paths. Review every target before choosing **Run confirmed targets**. Preparation can be cancelled;
+`Process` then runs once on the complete batch, saves assets, and refreshes the browser. A moved, deleted or unavailable target rejects the batch instead of narrowing or broadening
+it. A processor that throws reports **Outcome unknown** for every target: changes may be partial or unsaved, and automatic retry or rollback is unsafe.
 
-### ALL and FILTERED
+![Exact processor target preview](images/processor-preview.png)
 
-The **ALL** / **FILTERED** switch above the processor list sets the scope.
+### ALL, FILTERED and SELECTED
 
 - **ALL** passes every loaded instance of the selected type.
 - **FILTERED** passes only the instances the [label filter](search-and-filter.md#label-filter) currently shows. With no label filter, that is the same set as **ALL**.
+- **SELECTED** passes explicit selected GUIDs. Ctrl/Cmd-click adds or removes rows; Shift-click selects a range. A plain click selects one row. The inspector shows one active item,
+  and clearing visible selection clears its inspector. Row actions keep their existing individual targets.
 
-**FILTERED** is the default.
+**FILTERED** is the default. Check **SELECTED** to disable the ALL/FILTERED switch; uncheck it to return to FILTERED. **Clear selection** removes visible, hidden and deleted
+identities. Filtering retains hidden selections, and sorting or browser refresh restores row selection by GUID. An open window preserves its selection through Unity domain reload;
+switching types clears it. A closed and reopened window restores only its existing saved active item. Deleted selected GUIDs remain explicit: clear the selection and select again
+after inspecting a rejected preview. The preview freezes its targets, so later selection or filter changes cannot change a confirmed batch.
+
+Wait for type loading to finish before opening a processor preview. The target list includes hidden selections, so inspect its paths as well as its count. Processor code can change
+other assets; preview lists the supplied batch, not a prediction of arbitrary code's effects. There is no automatic Undo or rollback. Cancellation cannot interrupt `Process`,
+saving or refresh. Closing the workspace, closing the window or entering Play Mode cancels preparation. Recover unwanted changes from a saved copy or version control.
 
 ### Run a repeatable edit safely
 
@@ -77,7 +86,7 @@ The **ALL** / **FILTERED** switch above the processor list sets the scope.
 2. Add the complete [ItemData and TrimDescriptions examples](extending.md#processors), placing the processor in an **Editor** folder. Wait for compilation.
 3. Add `ItemData` through **Add types**, create two instances, and enter descriptions with surrounding spaces.
 4. Give one asset the `Reviewed` label in its inspector. Choose **Match all labels** and select `Reviewed` to narrow the list to that asset.
-5. Wait for loading to finish, choose **FILTERED**, then select **Trim descriptions**. Check the named type and count in the confirmation before proceeding.
+5. Wait for loading to finish, choose **FILTERED**, then select **Trim descriptions**. Review every target path in the preview, then choose **Run confirmed targets**.
 6. Reopen both assets. The filtered asset's description is trimmed; the other is unchanged. Choose **Clear** to restore the full view.
 
 Use **ALL** only when every instance of the selected type is intended. Processor Undo depends on its implementation; this example does not register Undo. Recover unwanted changes
