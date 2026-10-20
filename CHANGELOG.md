@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Add named saved searches for query text, exact type scopes and label expressions, with cancellable results and user or project persistence (#318).
+
 - Add versioned, read-only JSON queries and validation with paged responses, cancellation, and a Unity file entrypoint (#316).
 
 - Add read-only validation of selected assets for missing Unity references and duplicate authored IDs, with cancellable progress and per-asset findings (#319).

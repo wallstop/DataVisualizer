@@ -24,6 +24,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
         public List<string> managedTypeNames = new();
         public List<TypeLabelFilterConfig> labelFilterConfigs = new();
         public List<ProcessorState> processorStates = new();
+        public List<SavedAssetSearch> savedSearches = new();
 
         public static DataVisualizerUserState FromJson(string json)
         {
@@ -72,6 +73,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
             managedTypeNames = PersistedStateCopy.CloneStrings(settings.managedTypeNames);
             labelFilterConfigs = PersistedStateCopy.CloneTypeLabelFilterConfigs(settings.labelFilterConfigs);
             processorStates = PersistedStateCopy.CloneProcessorStates(settings.processorStates);
+            savedSearches = PersistedStateCopy.CloneSavedSearches(settings.savedSearches);
         }
 
         public List<string> GetOrCreateObjectOrderList(string typeFullName)

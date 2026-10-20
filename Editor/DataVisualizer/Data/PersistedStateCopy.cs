@@ -4,6 +4,22 @@ namespace WallstopStudios.DataVisualizer.Editor.Data
 
     internal static class PersistedStateCopy
     {
+        internal static List<SavedAssetSearch> CloneSavedSearches(List<SavedAssetSearch> source)
+        {
+            List<SavedAssetSearch> clones = new();
+            if (source != null)
+            {
+                foreach (SavedAssetSearch entry in source)
+                {
+                    if (entry != null)
+                    {
+                        clones.Add(entry.Clone());
+                    }
+                }
+            }
+            return clones;
+        }
+
         internal static List<string> CloneStrings(List<string> source)
         {
             return source == null ? new List<string>() : new List<string>(source);

@@ -51,6 +51,25 @@ Matching terms are highlighted in the results. The highlight deepens while the p
 ![All available search matches in a virtualized list, including duplicate names with different types](images/search-all-results.webp) _Full results over 42 real fixture assets. The
 status distinguishes available matches from a complete total._
 
+## Saved searches
+
+1. Select a type in the catalog, set its labels, and enter query text in **Search all assets**.
+2. Choose **Saved searches**, enter a unique name, and choose **Save current search**.
+3. Select a saved entry and choose **Apply** to search its exact type and label expression.
+
+The snapshot uses the query and selected type from when you opened the saved-search window. An empty query matches all assets within that type and label expression. To capture a
+new query or type, reopen **Saved searches**. Global search itself still searches all tracked types.
+
+For example, save `Armor` with labels `Reviewed` and `Urgent` to revisit reviewed urgent armor assets. Save a second search with an empty query and **Match any label** to browse
+all assets of that type carrying either label. **Rename** changes only the saved name; **Delete** removes only the search. Neither changes assets.
+
+Results show **Indexing (partial)** until discovery finishes. **Cancel** keeps partial results; **Previous results** and **Next results** page through every available match. Choose
+a result to select and ping it in the Project window. Apply again after project changes to get fresh results. A missing or renamed type gives a recovery message and never expands
+the search to other types.
+
+Saved searches are private by default in the existing per-user state file. Enabling project-settings persistence copies them to the settings asset; switching back copies them to
+user state. Version-1 snapshots keep the exact assembly-qualified type, query text, label casing, clauses and combination. Older state without searches starts with an empty list.
+
 ## Type filter
 
 The **Filter types** field above the namespace list narrows the type rows by display name, without case sensitivity. Namespace headers are not filtered, so you keep the structure

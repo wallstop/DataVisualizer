@@ -1182,6 +1182,14 @@ namespace WallstopStudios.DataVisualizer.Editor
             );
             _searchField.RegisterCallback<KeyDownEvent>(HandleSearchKeyDown);
             headerRow.Add(_searchField);
+            headerRow.Add(
+                new Button(() => SavedAssetSearchWindow.Open(this, CaptureSearch()))
+                {
+                    name = "saved-searches-button",
+                    text = "Saved searches",
+                    tooltip = "Save or apply a query with its selected type and label expression",
+                }
+            );
 
             float initialOuterWidth = Mathf.Max(EditorPrefs.GetFloat(PrefsSplitterOuterKey, DefaultOuterSplitWidth), MinNamespacePaneWidth);
             float initialInnerWidth = Mathf.Max(EditorPrefs.GetFloat(PrefsSplitterInnerKey, DefaultInnerSplitWidth), MinObjectPaneWidth);
@@ -1309,6 +1317,37 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetChanges?.Enqueue(movedFrom);
             _assetChanges?.Enqueue(imported);
             _assetChanges?.Enqueue(moved);
+        }
+
+        public SavedAssetSearch CaptureSearch()
+        {
+            return new SavedAssetSearch
+            {
+                query = _searchField?.value ?? string.Empty,
+                typeIdentity = _namespaceController.SelectedType?.AssemblyQualifiedName ?? string.Empty,
+                labels = CurrentTypeLabelFilterConfig?.Clone() ?? new TypeLabelFilterConfig(),
+            };
+        }
+
+        public List<SavedAssetSearch> CopySavedSearches()
+        {
+            return PersistedStateCopy.CloneSavedSearches(Settings.persistStateInSettingsAsset ? Settings.savedSearches : UserState.savedSearches);
+        }
+
+        public void SaveSearches(List<SavedAssetSearch> searches)
+        {
+            PersistSettings(
+                settings =>
+                {
+                    settings.savedSearches = PersistedStateCopy.CloneSavedSearches(searches);
+                    return true;
+                },
+                userState =>
+                {
+                    userState.savedSearches = PersistedStateCopy.CloneSavedSearches(searches);
+                    return true;
+                }
+            );
         }
 
         internal void PersistSettings(Func<DataVisualizerSettings, bool> settingsApplier, Func<DataVisualizerUserState, bool> userStateApplier)
