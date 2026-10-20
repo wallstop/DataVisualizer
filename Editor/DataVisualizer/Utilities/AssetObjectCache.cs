@@ -9,15 +9,30 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     public sealed class AssetObjectCache
     {
         public int Count => _byGuid.Count;
+        public int Version { get; private set; }
+        public IReadOnlyList<AssetSearchDocument> Documents => _documents;
 
         private readonly List<ScriptableObject> _ordered;
+        private readonly List<AssetSearchDocument> _documents = new();
         private readonly Dictionary<string, ScriptableObject> _byGuid = new(StringComparer.Ordinal);
         private readonly Dictionary<ScriptableObject, AssetSearchDocument> _keys = new();
+        private bool _isSorted = true;
 
         public AssetObjectCache(List<ScriptableObject> ordered)
         {
             _ordered = ordered ?? throw new ArgumentNullException(nameof(ordered));
             _ordered.Clear();
+        }
+
+        private static int CompareDocuments(AssetSearchDocument left, AssetSearchDocument right)
+        {
+            int name = string.Compare(left.Name, right.Name, StringComparison.Ordinal);
+            if (name != 0)
+            {
+                return name;
+            }
+            int type = string.Compare(left.TypeFullName, right.TypeFullName, StringComparison.Ordinal);
+            return type != 0 ? type : string.Compare(left.Guid, right.Guid, StringComparison.Ordinal);
         }
 
         public bool Contains(string guid)
@@ -39,9 +54,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public void Clear()
         {
+            Version++;
             _ordered.Clear();
+            _documents.Clear();
             _byGuid.Clear();
             _keys.Clear();
+            _isSorted = true;
         }
 
         public int ResetRetainingRows(IReadOnlyList<ScriptableObject> rows, Func<Type, bool> isRelevant)
@@ -63,7 +81,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 _byGuid.Add(entry.Guid, entry.Value);
                 _ordered.Add(entry.Value);
                 _keys.Add(entry.Value, entry.Key);
+                _documents.Add(entry.Key);
             }
+            _isSorted = entries.Count < 2;
             return entries.Count;
         }
 
@@ -75,7 +95,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             // A destroyed Unity wrapper still occupies managed collections.
+            Version++;
             _ordered.Remove(previous);
+            _documents.Remove(_keys[previous]);
             _keys.Remove(previous);
             _byGuid.Remove(guid);
             return true;
@@ -93,11 +115,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 return removed;
             }
 
+            if (sorted)
+            {
+                Sort();
+            }
+            Version++;
             _byGuid[guid] = value;
             _keys[value] = new AssetSearchDocument(guid, value.name, value.GetType(), value);
             if (!sorted)
             {
                 _ordered.Add(value);
+                _documents.Add(_keys[value]);
+                _isSorted = _documents.Count < 2;
                 return true;
             }
 
@@ -117,7 +146,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             _ordered.Insert(low, value);
+            _documents.Insert(low, _keys[value]);
             return true;
+        }
+
+        public string GetGuidOrNull(ScriptableObject asset)
+        {
+            return asset != null && _keys.TryGetValue(asset, out AssetSearchDocument document) ? document.Guid : null;
         }
 
         public SearchResultMatchInfo Match(ScriptableObject asset, string[] terms)
@@ -127,7 +162,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public void Sort()
         {
-            _ordered.Sort(Compare);
+            if (_isSorted)
+            {
+                return;
+            }
+            Version++;
+            _documents.Sort(CompareDocuments);
+            _ordered.Clear();
+            foreach (AssetSearchDocument document in _documents)
+            {
+                _ordered.Add(_byGuid[document.Guid]);
+            }
+            _isSorted = true;
         }
 
         private int Compare(ScriptableObject first, ScriptableObject second)
@@ -135,8 +181,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             // Snapshot keys keep order valid while other imported objects await reconciliation.
             AssetSearchDocument left = _keys[first];
             AssetSearchDocument right = _keys[second];
-            int name = string.Compare(left.Name, right.Name, StringComparison.Ordinal);
-            return name != 0 ? name : string.Compare(left.TypeFullName, right.TypeFullName, StringComparison.Ordinal);
+            return CompareDocuments(left, right);
         }
     }
 }

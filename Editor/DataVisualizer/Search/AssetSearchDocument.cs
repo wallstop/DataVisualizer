@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
     using System;
     using System.Collections.Generic;
     using System.Reflection;
+    using System.Text;
     using UnityEngine;
 
     // Contains copied text only; querying a document never reads a Unity object.
@@ -12,6 +13,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         public string Name { get; }
         public string TypeName { get; }
         public string TypeFullName { get; }
+        public string NormalizedAsciiText { get; }
 
         private readonly List<(string Name, string Value)> _fields = new();
 
@@ -22,11 +24,39 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             TypeName = type.Name;
             TypeFullName = type.FullName;
             CaptureFields(fieldSource, 0, new HashSet<object>());
+            StringBuilder text = new(Name);
+            text.Append('\0').Append(TypeName).Append('\0').Append(Guid);
+            foreach (var field in _fields)
+            {
+                text.Append('\0').Append(field.Value);
+            }
+            NormalizedAsciiText = NormalizeAsciiOrNull(text.ToString());
+        }
+
+        public static string NormalizeAsciiOrNull(string text)
+        {
+            if (text == null)
+            {
+                return null;
+            }
+            foreach (char character in text)
+            {
+                if (127 < character)
+                {
+                    return null;
+                }
+            }
+            return text.ToLowerInvariant();
         }
 
         public SearchResultMatchInfo Match(string[] terms)
         {
-            SearchResultMatchInfo result = new();
+            return MatchOrNull(terms) ?? new SearchResultMatchInfo();
+        }
+
+        public SearchResultMatchInfo MatchOrNull(string[] terms)
+        {
+            SearchResultMatchInfo result = null;
             if (terms == null)
             {
                 return result;
@@ -41,16 +71,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                 bool primaryMatch = false;
                 if (Name.Contains(term, StringComparison.OrdinalIgnoreCase))
                 {
+                    result ??= new SearchResultMatchInfo();
                     result.AddMatchedField(new MatchDetail(term) { fieldName = MatchSource.ObjectName, matchedValue = Name });
                     primaryMatch = true;
                 }
                 if (TypeName.Contains(term, StringComparison.OrdinalIgnoreCase))
                 {
+                    result ??= new SearchResultMatchInfo();
                     result.AddMatchedField(new MatchDetail(term) { fieldName = MatchSource.TypeName, matchedValue = TypeName });
                     primaryMatch = true;
                 }
                 if (!string.IsNullOrWhiteSpace(Guid) && string.Equals(Guid, term, StringComparison.OrdinalIgnoreCase))
                 {
+                    result ??= new SearchResultMatchInfo();
                     result.AddMatchedField(new MatchDetail(term) { fieldName = MatchSource.Guid, matchedValue = Guid });
                     primaryMatch = true;
                 }
@@ -63,6 +96,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                 {
                     if (field.Value.Contains(term, StringComparison.OrdinalIgnoreCase))
                     {
+                        result ??= new SearchResultMatchInfo();
                         result.AddMatchedField(new MatchDetail(term) { fieldName = field.Name, matchedValue = field.Value });
                         result.isMatch = true;
                         break;

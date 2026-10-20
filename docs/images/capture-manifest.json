@@ -20,7 +20,7 @@
     ],
     "search": [
       1141,
-      262
+      281
     ],
     "settings": [
       340,
@@ -38,6 +38,13 @@
     "screenDpi": 96,
     "displayCount": 1,
     "reviewScope": "Six production shots plus both creation-animation frames: readable current controls, label pills and counts, addable type matches, stable authored fixture IDs, populated inspector fields, captions, and dimensions. Windows dark skin only; other platform/DPI evidence remains #270.",
-    "staleAfter": "Changes to window controls, pane allocation, theme tokens, or fixture content require review and recapture."
+    "staleAfter": "Changes to window controls, pane allocation, theme tokens, or fixture content require review and recapture.",
+    "overrides": {
+      "search": {
+        "revision": "86b90393ffe0665ad7b8cc677a835c1fef40da83",
+        "capturedAt": "2026-10-20",
+        "reviewScope": "Search crop only: eight owned results, captured match count and managed-type scope, readable highlights and current label controls. Other shots retain their recorded provenance."
+      }
+    }
   }
 }
