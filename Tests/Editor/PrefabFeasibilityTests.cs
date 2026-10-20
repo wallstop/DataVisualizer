@@ -188,7 +188,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(PrefabFeasibilityTests).Assembly).resolvedPath.Replace('\\', '/');
             File.WriteAllText(
                 Path.Combine(projectPath, "Packages/manifest.json"),
-                "{\"dependencies\":{\"com.unity.test-framework\":\"1.7.0\",\"com.wallstop-studios.data-visualizer\":\"file:"
+                "{\"dependencies\":{\"com.unity.modules.uielements\":\"1.0.0\",\"com.unity.modules.physics\":\"1.0.0\",\"com.unity.modules.imgui\":\"1.0.0\",\"com.unity.modules.imageconversion\":\"1.0.0\",\"com.unity.modules.animation\":\"1.0.0\",\"com.unity.modules.jsonserialize\":\"1.0.0\",\"com.unity.test-framework\":\"1.7.0\",\"com.wallstop-studios.data-visualizer\":\"file:"
                     + package
                     + "\"},\"testables\":[\"com.wallstop-studios.data-visualizer\"]}"
             );
