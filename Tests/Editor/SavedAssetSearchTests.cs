@@ -155,6 +155,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             window.RenameSelected();
             Assert.That(owner.CopySavedSearches()[0].name, Is.EqualTo("Two"));
             Assert.That(owner.CopySavedSearches()[0].query, Is.EqualTo("needle"));
+            name.value = "Three";
+            window.SaveCurrent();
+            Assert.That(window.rootVisualElement.Q<DropdownField>("saved-search-list").index, Is.EqualTo(1));
+            Assert.That(name.value, Is.EqualTo("Three"));
+            window.DeleteSelected();
+            Assert.That(owner.CopySavedSearches().Count, Is.EqualTo(1));
+            Assert.That(owner.CopySavedSearches()[0].name, Is.EqualTo("Two"));
+            window.rootVisualElement.Q<DropdownField>("saved-search-list").index = 0;
             window.DeleteSelected();
             Assert.That(owner.CopySavedSearches(), Is.Empty);
         }

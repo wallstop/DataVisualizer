@@ -139,6 +139,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             SavedAssetSearch entry = _draft.Clone();
             entry.name = _name.value.Trim();
             _saved.Add(entry);
+            _selected = _saved.Count - 1;
             Persist();
         }
 
