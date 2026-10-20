@@ -41,7 +41,7 @@
     "staleAfter": "Changes to window controls, pane allocation, theme tokens, or fixture content require review and recapture.",
     "overrides": {
       "search": {
-        "revision": "9a20d77ebb933c026f8ccba651adceac46e0f0f1",
+        "revision": "c1cc417232ef34e4cf2c3f89362644867cca4445",
         "capturedAt": "2026-10-20",
         "reviewScope": "Quick search: eight owned results and the Show all results action. Existing platform, theme and DPI context applies."
       }
@@ -54,7 +54,7 @@
         425,
         401
       ],
-      "revision": "9a20d77ebb933c026f8ccba651adceac46e0f0f1",
+      "revision": "c1cc417232ef34e4cf2c3f89362644867cca4445",
       "capturedAt": "2026-10-20",
       "fixture": "42 owned real main assets across two exact types, with duplicate names and an incomplete-index status.",
       "reviewScope": "Virtualized results, stable GUID identities, readable name/type pairs and Back; Windows dark skin, pixelsPerPoint 1. Narrow 360x480 layout also checked."
