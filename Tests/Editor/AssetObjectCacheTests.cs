@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System;
     using System.Collections.Generic;
     using NUnit.Framework;
+    using Unity.Profiling;
     using UnityEditor;
     using UnityEngine;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
@@ -101,6 +102,84 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             usage.Clear();
             usage.CopyNamesTo(names);
             Assert.AreEqual(0, names.Count);
+        }
+
+        [Test]
+        public void ShouldRemoveDestroyedRowsInOrderWithoutAllocating()
+        {
+            using TestCleanupScope cleanup = new();
+            PlayModeDataObject first = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(first));
+            PlayModeDataObject last = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(last));
+            PlayModeDataObject destroyed = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            UnityEngine.Object.DestroyImmediate(destroyed);
+            List<ScriptableObject> rows = new(8);
+            AssetLabelUsage usage = new();
+            rows.Add(destroyed);
+            usage.RemoveDestroyedRows(rows);
+            using (ProfilerRecorder calibration = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc", 8, ProfilerRecorderOptions.CollectOnlyOnCurrentThread))
+            {
+                byte[] control = new byte[1024];
+                calibration.Stop();
+                Assert.That(calibration.Count, Is.Positive, "The allocation recorder must detect a positive control.");
+                GC.KeepAlive(control);
+            }
+            int removed = 0;
+            using ProfilerRecorder allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc", 1024, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+            for (int iteration = 0; iteration < 100; iteration++)
+            {
+                rows.Add(null);
+                rows.Add(first);
+                rows.Add(destroyed);
+                rows.Add(last);
+                rows.Add(null);
+                removed += usage.RemoveDestroyedRows(rows);
+                rows.Clear();
+            }
+            allocations.Stop();
+            Assert.That(allocations.Valid);
+            Assert.AreEqual(300, removed);
+            Assert.AreEqual(0, allocations.Count);
+            rows.Add(null);
+            rows.Add(first);
+            rows.Add(destroyed);
+            rows.Add(last);
+            Assert.AreEqual(2, usage.RemoveDestroyedRows(rows));
+            CollectionAssert.AreEqual(new ScriptableObject[] { first, last }, rows);
+            Assert.AreEqual(0, usage.RemoveDestroyedRows(rows));
+        }
+
+        [Test]
+        public void ShouldReportRemovalAndKeepSharedLabelUntilLastOwnerLeaves()
+        {
+            string root = "Assets/AssetLabelRemovalTests-" + Guid.NewGuid().ToString("N");
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(root));
+            AssetDatabase.CreateFolder("Assets", System.IO.Path.GetFileName(root));
+            PlayModeDataObject first = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            PlayModeDataObject second = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            AssetDatabase.CreateAsset(first, root + "/First.asset");
+            AssetDatabase.CreateAsset(second, root + "/Second.asset");
+            AssetDatabase.SetLabels(first, new[] { "shared", "Shared" });
+            AssetDatabase.SetLabels(second, new[] { "shared" });
+            AssetLabelUsage usage = new();
+            Assert.That(usage.Update(first));
+            Assert.That(!usage.Update(first));
+            Assert.That(usage.Update(second));
+            List<string> names = new() { "stale" };
+            usage.CopyNamesTo(names);
+            CollectionAssert.AreEqual(new[] { "Shared", "shared" }, names);
+            Assert.That(!usage.Remove(null));
+            Assert.That(usage.Remove(first));
+            Assert.That(!usage.Remove(first));
+            usage.CopyNamesTo(names);
+            CollectionAssert.AreEqual(new[] { "shared" }, names);
+            Assert.That(AssetDatabase.DeleteAsset(root + "/Second.asset"));
+            Assert.That(usage.Remove(second));
+            Assert.That(!usage.Remove(second));
+            usage.CopyNamesTo(names);
+            Assert.That(names, Is.Empty);
         }
     }
 }

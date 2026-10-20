@@ -629,7 +629,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             FieldInfo field = typeof(DataVisualizerWindow).GetField(name, Members);
             if (field == null)
+            {
                 throw new InvalidOperationException("The baseline cannot isolate window state: " + name);
+            }
             field.SetValue(window, value);
         }
 
@@ -641,7 +643,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             state.WindowState = null;
             // A destroyed wrapper still owns restoration; a run that never opened a window does not.
             if (ReferenceEquals(window, null) && isolatedState == null)
+            {
                 return;
+            }
             using TestCleanupScope cleanup = new();
             cleanup.Defer(() =>
             {
@@ -652,7 +656,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             cleanup.Defer(() => isolatedState?.Dispose());
             cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
             if (window != null)
+            {
                 InvokeCleanup(window);
+            }
         }
 
         private static void Finish(RunState state)
@@ -715,11 +721,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             if (state.Preferences != null)
+            {
                 using (TestCleanupScope restoration = new())
                 {
                     restoration.Defer(state.Preferences.Restore);
                     restoration.Defer(() => Selection.objects = state.PreviousSelection);
                 }
+            }
             _active = null;
             EditorApplication.update -= Tick;
             AssemblyReloadEvents.beforeAssemblyReload -= Cancel;

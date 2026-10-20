@@ -90,9 +90,9 @@ lands there as annotated, stdlib-first Python; `uvx pyright` validates types loc
     ships via GitHub, not npm). Static analyzer binaries, Unity metadata/labels, notices, and `-analyzer` response-file arguments must not exist in this package repository; install
     development-only analyzers in the host Unity project instead. Install or verify the pinned analyzer sets with
     `scripts/install_host_errorprone_analyzers.py --host-project <path>` (`--analyzer-set SonarAnalyzer|All` selects sets; add `--verify-only` for an offline integrity check).
-19. Write explicit ordered comparisons with `<` or `<=`, reversing operands instead of using `>` or `>=`. Relational patterns retain the operator required by C# syntax. Keep `!=`
-    when expressing genuine inequality or null checks; do not wrap `==` in a negation merely to avoid it. Before reversing user-defined operators, verify the swapped operands and
-    paired operator preserve behavior.
+19. Always brace control-flow bodies, including single statements. Write explicit ordered comparisons with `<` or `<=`, reversing operands instead of using `>` or `>=`. Relational
+    patterns retain the operator required by C# syntax. Keep `!=` when expressing genuine inequality or null checks; do not wrap `==` in a negation merely to avoid it. Before
+    reversing user-defined operators, verify the swapped operands and paired operator preserve behavior.
 20. Prefer one declared class, struct, interface, or enum per `.cs` file. Unity object types must use a matching filename so Unity can associate the script reliably. Keep any
     deliberately nonconforming regression fixture isolated and document why it must model an external project's unsupported layout.
 21. Use `foreach` for arrays and concrete collections with value-type enumerators when the loop does not need an index. For variables typed as `IReadOnlyList<T>` or `IList<T>`, use

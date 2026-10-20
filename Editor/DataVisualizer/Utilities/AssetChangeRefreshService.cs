@@ -120,7 +120,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 string path = _pending.Dequeue();
                 _pendingPaths.Remove(path);
-                _guidByPath.TryGetValue(path, out string knownGuid);
+                string knownGuid = _guidByPath.TryGetValue(path, out string trackedGuid) ? trackedGuid : null;
                 (string guid, string currentPath, Type type) = _resolve(path, knownGuid);
                 bool relevant = type != null && _isRelevant(type);
                 if (knownGuid != null && (!relevant || !string.Equals(guid, knownGuid, StringComparison.Ordinal)))

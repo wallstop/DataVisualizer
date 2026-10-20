@@ -1137,7 +1137,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
             AssetObjectCache indexedCache = typeof(DataVisualizerWindow).GetField("_assetObjectCache", ReflectedInstanceMembers)?.GetValue(window) as AssetObjectCache;
             if (indexedCache == null)
+            {
                 throw new InvalidOperationException("The capture needs the GUID-keyed search cache.");
+            }
             indexedCache.Clear();
             for (int index = 0; index < FixtureTitles.Length; index++)
             {

@@ -13,20 +13,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         private static bool AreEqual(string[] first, string[] second)
         {
-            if (first.Length != second.Length)
-            {
-                return false;
-            }
-
-            for (int index = 0; index < first.Length; index++)
-            {
-                if (!string.Equals(first[index], second[index], StringComparison.Ordinal))
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return first.AsSpan().SequenceEqual(second);
         }
 
         public void Clear()
@@ -38,10 +25,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public void CopyNamesTo(List<string> destination)
         {
             destination.Clear();
-            foreach (string label in _counts.Keys)
-            {
-                destination.Add(label);
-            }
+            destination.AddRange(_counts.Keys);
             destination.Sort(StringComparer.Ordinal);
         }
 
@@ -67,16 +51,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 return false;
             }
-            if (!_labels.TryGetValue(asset, out string[] labels))
+            if (!_labels.Remove(asset, out string[] labels))
             {
                 return false;
             }
 
-            _labels.Remove(asset);
             foreach (string label in labels)
             {
                 int count = _counts[label] - 1;
-                if (count == 0)
+                if (count <= 0)
                 {
                     _counts.Remove(label);
                 }
@@ -91,7 +74,31 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public int RemoveDestroyedRows(List<ScriptableObject> rows)
         {
-            return rows.RemoveAll(RemoveIfDestroyed);
+            int originalCount = rows.Count;
+            int writeIndex = 0;
+            for (int readIndex = 0; readIndex < originalCount; readIndex++)
+            {
+                ScriptableObject asset = rows[readIndex];
+                if (asset == null)
+                {
+                    Remove(asset);
+                }
+                else
+                {
+                    if (writeIndex != readIndex)
+                    {
+                        rows[writeIndex] = asset;
+                    }
+                    writeIndex++;
+                }
+            }
+
+            int removedCount = originalCount - writeIndex;
+            if (0 < removedCount)
+            {
+                rows.RemoveRange(writeIndex, removedCount);
+            }
+            return removedCount;
         }
 
         public bool Update(ScriptableObject asset)
@@ -111,18 +118,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _labels[asset] = current;
             foreach (string label in current)
             {
-                _counts.TryGetValue(label, out int count);
-                _counts[label] = count + 1;
+                _counts[label] = _counts.TryGetValue(label, out int count) ? count + 1 : 1;
             }
 
-            return true;
-        }
-
-        private bool RemoveIfDestroyed(ScriptableObject asset)
-        {
-            if (asset != null)
-                return false;
-            Remove(asset);
             return true;
         }
     }

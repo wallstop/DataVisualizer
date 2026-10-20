@@ -49,7 +49,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static void EndImportBatch(PerfFixtureStaging staging)
         {
             if (!staging._importBatchActive)
+            {
                 return;
+            }
             staging._importBatchActive = false;
             Stopwatch flush = Stopwatch.StartNew();
             try
@@ -133,7 +135,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             if (CreatedCount == TargetCount)
+            {
                 return;
+            }
             int firstCreated = CreatedCount;
             int items = 0;
             using (TestCleanupScope cleanup = new())
@@ -150,7 +154,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         cleanup.Defer(() =>
                         {
                             if (asset != null && !AssetDatabase.Contains(asset))
+                            {
                                 UnityEngine.Object.DestroyImmediate(asset);
+                            }
                         });
                         asset.name = PerfBaseline.FixtureName(CreatedCount);
                         asset.BeforeCreate();
@@ -166,17 +172,23 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     }
                 }
                 if (_importFailure != null)
+                {
                     throw new InvalidOperationException("The fixture import batch failed.", _importFailure);
+                }
                 Stopwatch initialization = Stopwatch.StartNew();
                 for (int index = firstCreated; index < CreatedCount; index++)
                 {
                     string path = $"{Folder}/{PerfBaseline.FixtureName(index)}.asset";
                     PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>(path);
                     if (asset == null)
+                    {
                         throw new InvalidOperationException("Fixture import did not persist the expected type: " + path);
+                    }
                     asset.AfterCreate();
                     if (!string.Equals(asset.Id, PerfBaseline.FixtureId(index), StringComparison.Ordinal))
+                    {
                         throw new InvalidOperationException("Fixture import changed its authored identity: " + path);
+                    }
                 }
                 InitializationMilliseconds += initialization.Elapsed.TotalMilliseconds;
             }

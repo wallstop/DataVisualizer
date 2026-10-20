@@ -2187,7 +2187,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     _asyncDisplayOrderByGuid[guid] = _nextIncrementalDisplayOrder++;
                     if (_isLoadingObjectsAsync)
+                    {
                         _asyncLoadTotalCount++;
+                    }
                 }
                 InsertObjectByAsyncDisplayOrder(current, guid);
                 bool labelsChanged = _selectedLabelUsage.Update(current);
@@ -2202,9 +2204,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         int middle = (low + high) >> 1;
                         if (_selectedObjectOrderIndex[_filteredObjects[middle]] < order)
+                        {
                             low = middle + 1;
+                        }
                         else
+                        {
                             high = middle;
+                        }
                     }
                     _filteredObjects.Insert(low, current);
                 }
@@ -2243,9 +2249,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     List<string> order = GetObjectOrderForType(entry.Key);
                     if (0 < order.RemoveAll(entry.Value.Contains))
+                    {
                         SetObjectOrderForType(entry.Key.FullName, order);
+                    }
                     if (entry.Value.Contains(GetLastSelectedObjectGuidForType(entry.Key.FullName) ?? string.Empty))
+                    {
                         SetLastSelectedObjectGuidForType(entry.Key.FullName, null);
+                    }
                 }
                 _removedAssetOrders.Clear();
             }
@@ -2255,13 +2265,17 @@ namespace WallstopStudios.DataVisualizer.Editor
                 PopulateLabelPillContainers();
             }
             if (_assetRowsChanged)
+            {
                 RefreshObjectListPresentation();
+            }
             if (_assetSelectionChanged)
             {
                 SelectObject(_assetSelectionReplacement != null ? _assetSelectionReplacement : (_selectedObjects.Count == 0 ? null : _selectedObjects[0]));
             }
             if (_assetSearchChanged)
+            {
                 RefreshActiveSearch();
+            }
             _assetRowsChanged = false;
             _assetLabelsChanged = false;
             _assetSelectionChanged = false;
@@ -5976,7 +5990,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             foreach (ScriptableObject obj in _selectedObjects)
             {
                 if (obj != null)
+                {
                     _selectedLabelUsage.GetOrRead(obj);
+                }
             }
             _selectedLabelUsage.CopyNamesTo(_currentUniqueLabelsForType);
 
@@ -9372,7 +9388,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 orderedGuids = AssetGuidOrder.MergeLoadedOrder(GetAsyncDisplayOrder(), orderedGuids);
             }
             if (type == _namespaceController.SelectedType)
+            {
                 ApplyAsyncDisplayOrder(orderedGuids);
+            }
 
             SetObjectOrderForType(type.FullName, orderedGuids);
         }
