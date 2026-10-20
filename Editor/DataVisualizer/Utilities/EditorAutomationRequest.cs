@@ -5,6 +5,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     [Serializable]
     public sealed class EditorAutomationRequest
     {
+        public const int DefaultPageSize = 100;
+
         public int schemaVersion;
         public string operation;
         public string[] typeIdentities;
@@ -14,6 +16,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public string[] orLabels;
         public string labelCombination;
         public int offset;
-        public int pageSize = 100;
+        public int pageSize = DefaultPageSize;
     }
 }

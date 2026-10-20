@@ -36,7 +36,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
             string input = Path.GetFullPath(requestPath);
             string output = Path.GetFullPath(responsePath);
-            StringComparison comparison = Application.platform == RuntimePlatform.WindowsEditor ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            const StringComparison comparison = StringComparison.OrdinalIgnoreCase;
             if (string.Equals(input, output, comparison) || !string.Equals(Path.GetExtension(output), ".json", StringComparison.OrdinalIgnoreCase))
             {
                 throw new ArgumentException("Response must be a separate .json file.");

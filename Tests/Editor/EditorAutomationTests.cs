@@ -15,6 +15,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase("{\"schemaVersion\":2}", "unsupported_version")]
         [TestCase("{\"schemaVersion\":1,\"operation\":\"apply\"}", "unsupported_operation")]
         [TestCase("{\"schemaVersion\":1,\"operation\":\"query\",\"pageSize\":1001}", "invalid_page")]
+        [TestCase("{\"schemaVersion\":1,\"operation\":\"query\",\"pageSize\":0}", "invalid_page")]
         [TestCase("{\"schemaVersion\":1,\"operation\":\"query\",\"typeIdentities\":[\"ScriptableObject\"],\"pageSize\":10}", "invalid_scope")]
         [TestCase("{\"schemaVersion\":1,\"operation\":\"validate\",\"assetGuids\":[\"invalid\"],\"pageSize\":10}", "invalid_scope")]
         public void ShouldRejectUnsupportedRequestsWithoutStartingWork(string json, string code)
@@ -135,7 +136,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             var completed = JsonUtility.FromJson<EditorAutomationResponse>(File.ReadAllText(output));
             Assert.That(completed.complete, Is.True);
             Assert.That(completed.items[0].code, Is.EqualTo("asset_unavailable"));
-            Assert.Throws<ArgumentException>(() => EditorAutomation.RunFiles(input, Path.Combine(Application.dataPath, "response.json")));
+            string project = Directory.GetParent(Application.dataPath).FullName;
+            foreach (string folder in new[] { "Assets", "assets", "aSsEtS", "Packages", "pAcKaGeS", "ProjectSettings", "pRoJeCtSeTtInGs" })
+            {
+                Assert.Throws<ArgumentException>(() => EditorAutomation.RunFiles(input, Path.Combine(project, folder, "response.json")));
+            }
             Assert.Throws<ArgumentException>(() => EditorAutomation.RunFiles(input, input));
             File.Delete(input);
             Assert.That(EditorAutomation.RunFiles(input, output), Is.EqualTo(1));

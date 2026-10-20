@@ -11,7 +11,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public bool IsFinished => _errorCode != null || _cancelled || (_query?.IsComplete ?? _validation.IsComplete);
         public bool IsWaitingForEditor => UnityEditor.EditorApplication.isPlayingOrWillChangePlaymode || AssetGuidDiscovery.IsAssetDatabaseBusy();
         public int DefaultOffset { get; private set; }
-        public int DefaultPageSize { get; private set; } = 100;
+        public int DefaultPageSize { get; private set; } = EditorAutomationRequest.DefaultPageSize;
 
         private EditorAssetQuery _query;
         private EditorAssetValidation _validation;
@@ -32,11 +32,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 {
                     throw new ArgumentException("Request JSON is empty.");
                 }
-                request = JsonUtility.FromJson<EditorAutomationRequest>(json);
-                if (request == null)
-                {
-                    throw new ArgumentException("Expected a JSON request object.");
-                }
+                request = new EditorAutomationRequest();
+                JsonUtility.FromJsonOverwrite(json, request);
             }
             catch (ArgumentException error)
             {

@@ -279,9 +279,9 @@ Responses distinguish `running`, `waiting`, `cancelled`, `complete`, and `reject
 versions, malformed requests, unavailable/ambiguous types, invalid GUIDs, invalid pagination, and unsupported operations return a top-level code and detail. Per-item codes are
 `ok`, `asset_unavailable`, `read_failed`, `missing_reference`, and `duplicate_authored_id`. A completed scan can contain unreadable assets; coverage limits remain in the response.
 
-Responses must be separate `.json` files outside `Assets`, `Packages`, and `ProjectSettings`; parent directories must already exist. Missing input files produce a
-`request_read_failed` response. The command writes only its requested output and does not change settings or assets. Files contain project paths and authored IDs, so store them
-where your project permits. The dispatcher uses Unity JSON field types; full schema validation belongs in client tooling.
+Responses must be separate `.json` files outside `Assets`, `Packages`, and `ProjectSettings`; parent directories must already exist. Path protection ignores case on every platform.
+Missing input files produce a `request_read_failed` response. The command writes only its requested output and does not change settings or assets. Files contain project paths and
+authored IDs, so store them where your project permits. The dispatcher uses Unity JSON field types; full schema validation belongs in client tooling.
 
 ## Odin Inspector
 
