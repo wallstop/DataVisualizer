@@ -137,7 +137,68 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void ShouldCreateRenameDeleteAndRejectDuplicateNamesInTheWindow()
+        public void ShouldHostToolsInTheBrowserAndRestoreItsControlsOnClose()
+        {
+            using TestCleanupScope cleanup = new();
+            DataVisualizer owner = ScriptableObject.CreateInstance<DataVisualizer>();
+            cleanup.Defer(owner.Close);
+            owner.Show();
+            owner.CreateGUI();
+            var original = owner.CopySavedSearches();
+            cleanup.Defer(() => owner.SaveSearches(original));
+            owner.SaveSearches(
+                new()
+                {
+                    new SavedAssetSearch { name = "Waiting", typeIdentity = typeof(TestDataObject).AssemblyQualifiedName },
+                }
+            );
+            Func<bool> busy = AssetGuidDiscovery.AssetDatabaseBusyOverride;
+            cleanup.Defer(() => AssetGuidDiscovery.AssetDatabaseBusyOverride = busy);
+            int windowCount = Resources.FindObjectsOfTypeAll<EditorWindow>().Length;
+            TextField search = owner.rootVisualElement.Q<TextField>("global-search-field");
+            search.value = "Retained query";
+            SavedAssetSearchPanel first = owner.OpenSavedSearches();
+            Assert.That(first.panel, Is.SameAs(owner.rootVisualElement.panel));
+            Assert.That(first.ClassListContains("asset-tool-panel"), Is.True);
+            Assert.That(first.Q<Label>("saved-search-scope").text, Does.Contain("Retained query"));
+            Assert.That(Resources.FindObjectsOfTypeAll<EditorWindow>().Length, Is.EqualTo(windowCount));
+            first.Q<DropdownField>("saved-search-list").index = 0;
+            AssetGuidDiscovery.AssetDatabaseBusyOverride = () => true;
+            first.ApplySelected();
+            Label oldStatus = first.Q<Label>("saved-search-status");
+            Assert.That(oldStatus.text, Does.StartWith("Waiting for editor"));
+            string waiting = oldStatus.text;
+            owner.OpenAssetValidation();
+            AssetGuidDiscovery.AssetDatabaseBusyOverride = () => false;
+            first.AdvanceQuery();
+            Assert.That(oldStatus.text, Is.EqualTo(waiting));
+            first.Dispose();
+            Assert.That(first.parent == null);
+            Assert.That(owner.rootVisualElement.Query<AssetToolPanel>().ToList().Count, Is.EqualTo(1));
+            Assert.That(owner.rootVisualElement.Q<AssetValidationPanel>().panel, Is.SameAs(owner.rootVisualElement.panel));
+            using (KeyDownEvent escape = KeyDownEvent.GetPooled('\0', KeyCode.Escape, EventModifiers.None))
+            {
+                escape.target = owner.rootVisualElement.Q<AssetValidationPanel>();
+                owner.rootVisualElement.Q<AssetValidationPanel>().SendEvent(escape);
+            }
+            Assert.That(owner.rootVisualElement.Q<AssetToolPanel>() == null);
+            owner.CloseAssetTool();
+            Assert.That(search.value, Is.EqualTo("Retained query"));
+            owner.OpenSavedSearches();
+            Button back = owner.rootVisualElement.Q<Button>("asset-tool-back");
+            using (NavigationSubmitEvent submit = NavigationSubmitEvent.GetPooled())
+            {
+                submit.target = back;
+                back.SendEvent(submit);
+            }
+            Assert.That(owner.rootVisualElement.Q<AssetToolPanel>() == null);
+            owner.OpenSavedSearches();
+            owner.CreateGUI();
+            Assert.That(owner.rootVisualElement.Q<AssetToolPanel>() == null);
+        }
+
+        [Test]
+        public void ShouldCreateRenameDeleteAndRejectDuplicateNamesInTheWorkspace()
         {
             using TestCleanupScope cleanup = new();
             DataVisualizer owner = ScriptableObject.CreateInstance<DataVisualizer>();
@@ -153,30 +214,28 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             var original = owner.CopySavedSearches();
             cleanup.Defer(() => owner.SaveSearches(original));
             owner.SaveSearches(new());
-            SavedAssetSearchWindow window = SavedAssetSearchWindow.Open(
-                owner,
-                new SavedAssetSearch { query = "needle", typeIdentity = typeof(TestDataObject).AssemblyQualifiedName }
-            );
-            cleanup.Defer(window.Close);
-            TextField name = window.rootVisualElement.Q<TextField>("saved-search-name");
+            SavedAssetSearchPanel workspace = new(owner, new SavedAssetSearch { query = "needle", typeIdentity = typeof(TestDataObject).AssemblyQualifiedName });
+            cleanup.Defer(workspace.Dispose);
+            owner.rootVisualElement.Add(workspace);
+            TextField name = workspace.Q<TextField>("saved-search-name");
             name.value = "One";
-            window.SaveCurrent();
+            workspace.SaveCurrent();
             Assert.That(owner.CopySavedSearches().Count, Is.EqualTo(1));
-            window.SaveCurrent();
+            workspace.SaveCurrent();
             Assert.That(owner.CopySavedSearches().Count, Is.EqualTo(1));
             name.value = "Two";
-            window.RenameSelected();
+            workspace.RenameSelected();
             Assert.That(owner.CopySavedSearches()[0].name, Is.EqualTo("Two"));
             Assert.That(owner.CopySavedSearches()[0].query, Is.EqualTo("needle"));
             name.value = "Three";
-            window.SaveCurrent();
-            Assert.That(window.rootVisualElement.Q<DropdownField>("saved-search-list").index, Is.EqualTo(1));
+            workspace.SaveCurrent();
+            Assert.That(workspace.Q<DropdownField>("saved-search-list").index, Is.EqualTo(1));
             Assert.That(name.value, Is.EqualTo("Three"));
-            window.DeleteSelected();
+            workspace.DeleteSelected();
             Assert.That(owner.CopySavedSearches().Count, Is.EqualTo(1));
             Assert.That(owner.CopySavedSearches()[0].name, Is.EqualTo("Two"));
-            window.rootVisualElement.Q<DropdownField>("saved-search-list").index = 0;
-            window.DeleteSelected();
+            workspace.Q<DropdownField>("saved-search-list").index = 0;
+            workspace.DeleteSelected();
             Assert.That(owner.CopySavedSearches(), Is.Empty);
         }
     }

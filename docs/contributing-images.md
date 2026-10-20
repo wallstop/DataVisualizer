@@ -74,3 +74,9 @@ pre-existing folders and replaced folders untouched. Do not use an existing proj
 When the package checkout is edited inside a container while Unity runs on the host, the host picks up container-side edits through the mounted folder and recompiles on focus. Do
 not edit files while a test suite or capture run is in progress on the host: the host watcher racing a mid-run edit can fail the run with unrelated errors. Let the host finish,
 recompile, and report up to date before the next edit, then re-run.
+
+### Saved searches and validation
+
+`DocsImageCapture.CaptureAssetTools(outputDirectory, width, height)` captures both themed workspaces inside a real DxVisualizer window. It creates two owned assets, waits for the
+saved query to finish, captures duplicate-ID findings, and restores saved searches and selection. Use 960 × 680 for published images and 640 × 600 to inspect compact layout. Copy
+`saved-searches.png` and `asset-validation.png` from the output directory into `docs/images/`, keeping their existing metadata GUIDs.

@@ -94,9 +94,10 @@ Processors are also refused during the Play Mode pause, and the switch is disabl
 
 ![Read-only validation of two assets sharing an authored ID](images/asset-validation.png)
 
-Select ScriptableObject main assets in the Project window, then open **Tools → Wallstop Studios → Validate Selected Data Assets**. Select **Validate current Project selection**.
-The report names each asset by path and GUID, and includes the serialized property path for a missing reference. **Cancel** stops between assets and retains a clearly partial
-report. Play Mode and AssetDatabase activity pause processing. An unavailable asset produces a finding instead of silently disappearing from the scope.
+Select ScriptableObject main assets in the Project window, then choose **Validate** in the DxVisualizer header. The themed validation workspace opens inside the tool. Select
+**Validate Project selection**. **Back to assets** or Escape returns to your browser. The **Tools → Wallstop Studios → Validate Selected Data Assets** menu opens the same
+workspace. The report names each asset by path and GUID, and includes the serialized property path for a missing reference. **Cancel** stops between assets and retains a clearly
+partial report. Play Mode and AssetDatabase activity pause processing. An unavailable asset produces a finding instead of silently disappearing from the scope.
 
 `missing_reference` means a Unity serialized object reference has a nonzero identity whose target is missing. An intentionally null field is valid. `duplicate_authored_id`
 identifies every asset sharing a nonempty `BaseDataObject.Id` within this selection, using ordinal, case-sensitive equality. It does not compare authored IDs with asset GUIDs,

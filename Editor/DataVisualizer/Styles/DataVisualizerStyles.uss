@@ -1632,3 +1632,84 @@
     max-width: 100%;
     flex-shrink: 1;
 }
+
+/* Asset tools share the browser's active theme and native window. */
+.asset-tool-panel {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    padding: 16px;
+    background-color: var(--dataviz-background);
+    color: var(--dataviz-text);
+}
+.asset-tool-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.asset-tool-title {
+    flex-grow: 1;
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: var(--dataviz-accent);
+}
+.asset-tool-summary {
+    white-space: normal;
+    color: var(--dataviz-muted);
+    margin-bottom: 12px;
+}
+.asset-tool-form {
+    max-height: 260px;
+    flex-shrink: 1;
+    margin-bottom: 8px;
+}
+.asset-tool-results {
+    flex-grow: 1;
+    min-height: 60px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    background-color: var(--dataviz-pane);
+    border-width: 1px;
+    border-color: var(--dataviz-border);
+    border-radius: var(--dataviz-control-radius);
+}
+.asset-tool-result {
+    white-space: normal;
+    -unity-text-align: middle-left;
+    padding: 6px;
+    background-color: var(--dataviz-row);
+    border-width: 0;
+    border-bottom-width: 1px;
+    border-color: var(--dataviz-border);
+}
+.asset-tool-message {
+    white-space: normal;
+    color: var(--dataviz-warning);
+}
+
+#header-row {
+    flex-wrap: wrap;
+}
+.asset-tool-panel > Label {
+    white-space: normal;
+}
+
+.asset-tool-scope {
+    padding: 10px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    background-color: var(--dataviz-pane);
+    border-left-width: 2px;
+    border-left-color: var(--dataviz-accent);
+}
+.asset-tool-result > Label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+}

@@ -175,6 +175,76 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static readonly BindingFlags ReflectedStaticMembers = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
 
+        public static string CaptureAssetTools(string outputDirectory, float width, float height)
+        {
+            ValidateOutputDirectory(outputDirectory);
+            using TestCleanupScope fixtures = new();
+            using TestCleanupScope cleanup = new();
+            WindowPreferenceSnapshot preferences = WindowPreferenceSnapshot.Capture();
+            cleanup.Defer(preferences.Restore);
+            FieldInfo instanceField = typeof(DataVisualizerWindow).GetField("Instance", ReflectedStaticMembers);
+            object previousInstance = instanceField.GetValue(null);
+            cleanup.Defer(() => instanceField.SetValue(null, previousInstance));
+            DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            PersistedSelectionSnapshot selectionState = PersistedSelectionSnapshot.Capture(window);
+            cleanup.Defer(() => selectionState.Restore(window));
+            List<SavedAssetSearch> searches = window.CopySavedSearches();
+            cleanup.Defer(() => window.SaveSearches(searches));
+            UnityEngine.Object[] selection = Selection.objects;
+            cleanup.Defer(() => Selection.objects = selection);
+            string folder = CreateFixtureFolder(fixtures);
+            List<UnityEngine.Object> assets = new();
+            foreach (string assetName in new[] { "Iron armor", "Steel armor" })
+            {
+                AssetValidationTestData asset = ScriptableObject.CreateInstance<AssetValidationTestData>();
+                AssetDatabase.CreateAsset(asset, folder + "/" + assetName + ".asset");
+                using SerializedObject serialized = new(asset);
+                serialized.FindProperty("_assetGuid").stringValue = "armor-duplicate";
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                AssetDatabase.SetLabels(asset, new[] { "Reviewed", "Urgent" });
+                AssetDatabase.SaveAssetIfDirty(asset);
+                assets.Add(asset);
+            }
+            window.SaveSearches(
+                new()
+                {
+                    new SavedAssetSearch
+                    {
+                        name = "Reviewed urgent armor",
+                        query = "armor",
+                        typeIdentity = typeof(AssetValidationTestData).AssemblyQualifiedName,
+                        labels = new TypeLabelFilterConfig
+                        {
+                            andLabels = new() { "Reviewed", "Urgent" },
+                        },
+                    },
+                }
+            );
+            EditorSurfaceCapture.ShowPopup(window);
+            window.position = new Rect(40, 40, width, height);
+            window.CreateGUI();
+            SavedAssetSearchPanel saved = window.OpenSavedSearches();
+            saved.Q<DropdownField>("saved-search-list").index = 0;
+            saved.ApplySelected();
+            for (int pass = 0; pass < 1000 && !saved.Q<Label>("saved-search-status").text.StartsWith("Complete", StringComparison.Ordinal); pass++)
+            {
+                saved.AdvanceQuery();
+            }
+            if (!saved.Q<Label>("saved-search-status").text.StartsWith("Complete", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Documentation capture requires a complete saved search.");
+            }
+            EditorSurfaceCapture.SettleLayout(window);
+            EditorSurfaceCapture.Capture(window, Path.Combine(outputDirectory, "saved-searches.png"));
+            window.OpenAssetValidation();
+            Selection.objects = assets.ToArray();
+            window.rootVisualElement.Q<AssetValidationPanel>().ValidateSelection();
+            EditorSurfaceCapture.SettleLayout(window);
+            EditorSurfaceCapture.Capture(window, Path.Combine(outputDirectory, "asset-validation.png"));
+            return "Captured saved searches and validation at " + width + " x " + height;
+        }
+
         /*
             Batch-mode entry point for
             `unity -batchmode -quit -executeMethod

@@ -229,7 +229,7 @@ Configuration, selection, asset mutations, and persistent metadata caching are o
 
 ## Read-only JSON automation
 
-Schema version 1 exposes `query` and `validate` through `EditorAutomationSession`, using the same services as the C# APIs and validation window. See the
+Schema version 1 exposes `query` and `validate` through `EditorAutomationSession`, using the same services as the C# APIs and validation workspace. See the
 [request schema](automation-request.schema.json) and [response schema](automation-response.schema.json). Unknown JSON members are ignored; use the schema in client tooling.
 Configuration, mutation previews, and apply operations are not implemented and return `unsupported_operation`, including during Play Mode.
 

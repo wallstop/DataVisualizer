@@ -2,6 +2,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Styles
 {
     public static class StyleConstants
     {
+        public const string AssetToolScopeClass = "asset-tool-scope";
+        public const string AssetToolPanelClass = "asset-tool-panel";
+        public const string AssetToolTitleClass = "asset-tool-title";
+        public const string AssetToolSummaryClass = "asset-tool-summary";
+        public const string AssetToolActionsClass = "asset-tool-actions";
+        public const string AssetToolFormClass = "asset-tool-form";
+        public const string AssetToolResultsClass = "asset-tool-results";
+        public const string AssetToolResultClass = "asset-tool-result";
+        public const string AssetToolMessageClass = "asset-tool-message";
+
         public const string LabelFilterControlsClass = "label-filter-controls";
         public const string LabelFilterSummaryClass = "label-filter-summary";
 

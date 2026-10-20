@@ -45,19 +45,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             cleanup.Defer(() => AssetGuidDiscovery.AssetDatabaseBusyOverride = busy);
             UnityEngine.Object[] selection = Selection.objects;
             cleanup.Defer(() => Selection.objects = selection);
-            AssetValidationWindow window = ScriptableObject.CreateInstance<AssetValidationWindow>();
+            DataVisualizer window = ScriptableObject.CreateInstance<DataVisualizer>();
             cleanup.Defer(() => window.Close());
             window.Show();
             window.CreateGUI();
+            window.OpenAssetValidation();
+            AssetValidationPanel workspace = window.rootVisualElement.Q<AssetValidationPanel>();
             UnityEngine.Object asset = AssetDatabase.LoadMainAssetAtPath(folder + "/Previous.asset");
             foreach (bool mixed in new[] { false, true })
             {
                 Selection.objects = new[] { asset };
                 AssetGuidDiscovery.AssetDatabaseBusyOverride = () => true;
-                window.ValidateSelection();
+                workspace.ValidateSelection();
                 Assert.That(window.rootVisualElement.Q<Label>("validation-status").text, Does.StartWith("Processing (partial): 0/1"));
                 Selection.objects = mixed ? new[] { asset, AssetDatabase.LoadMainAssetAtPath(folder) } : Array.Empty<UnityEngine.Object>();
-                window.ValidateSelection();
+                workspace.ValidateSelection();
                 Label message = window.rootVisualElement.Q<Label>("validation-selection-message");
                 Assert.That(message.text, Does.Contain("No new validation started"));
                 AssetGuidDiscovery.AssetDatabaseBusyOverride = () => false;
@@ -189,12 +191,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(validation.Findings, Is.Empty);
             UnityEngine.Object[] selection = Selection.objects;
             cleanup.Defer(() => Selection.objects = selection);
-            AssetValidationWindow window = ScriptableObject.CreateInstance<AssetValidationWindow>();
+            DataVisualizer window = ScriptableObject.CreateInstance<DataVisualizer>();
             cleanup.Defer(() => window.Close());
             window.Show();
             window.CreateGUI();
+            window.OpenAssetValidation();
+            AssetValidationPanel workspace = window.rootVisualElement.Q<AssetValidationPanel>();
             Selection.objects = new UnityEngine.Object[] { asset };
-            window.ValidateSelection();
+            workspace.ValidateSelection();
             Assert.That(window.rootVisualElement.Q<Label>("validation-status").text, Is.EqualTo("Complete: 1/1 assets, 0 findings."));
         }
     }
