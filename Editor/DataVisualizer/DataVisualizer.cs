@@ -8,7 +8,6 @@ namespace WallstopStudios.DataVisualizer.Editor
     using System.Collections.Generic;
     using System.ComponentModel;
     using System.IO;
-    using System.Reflection;
     using System.Text;
     using System.Text.RegularExpressions;
     using Data;
@@ -1033,71 +1032,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     return nestedButton;
                 }
-            }
-
-            return null;
-        }
-
-        private static MatchDetail SearchStringProperties(object obj, string searchTerm, int currentDepth, int maxDepth, HashSet<object> visited)
-        {
-            if (obj == null || maxDepth < currentDepth)
-            {
-                return null;
-            }
-
-            Type objType = obj.GetType();
-
-            if (
-                objType.IsPrimitive
-                || objType == typeof(Vector2)
-                || objType == typeof(Vector3)
-                || objType == typeof(Vector4)
-                || objType == typeof(Quaternion)
-                || objType == typeof(Color)
-                || objType == typeof(Rect)
-                || objType == typeof(Bounds)
-            )
-            {
-                return null;
-            }
-
-            if (!objType.IsValueType && !visited.Add(obj))
-            {
-                return null;
-            }
-
-            try
-            {
-                FieldInfo[] fields = objType.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
-                foreach (FieldInfo field in fields)
-                {
-                    object fieldValue = field.GetValue(obj);
-                    if (fieldValue == null)
-                    {
-                        continue;
-                    }
-
-                    if (field.FieldType == typeof(string))
-                    {
-                        string stringValue = fieldValue as string;
-                        if (!string.IsNullOrWhiteSpace(stringValue) && stringValue.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-                        {
-                            return new MatchDetail(searchTerm) { fieldName = field.Name, matchedValue = stringValue };
-                        }
-                    }
-                    else if ((field.FieldType.IsClass || field.FieldType is { IsValueType: true, IsPrimitive: false }) && !typeof(Object).IsAssignableFrom(field.FieldType))
-                    {
-                        MatchDetail nestedMatch = SearchStringProperties(fieldValue, searchTerm, currentDepth + 1, maxDepth, visited);
-                        if (nestedMatch != null)
-                        {
-                            return nestedMatch;
-                        }
-                    }
-                }
-            }
-            catch (Exception exception)
-            {
-                Debug.LogException(exception);
             }
 
             return null;
@@ -3274,59 +3208,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private SearchResultMatchInfo CheckMatch(ScriptableObject obj, string[] lowerSearchTerms)
         {
-            SearchResultMatchInfo resultInfo = new();
-            if (obj == null || lowerSearchTerms == null || lowerSearchTerms.Length == 0)
-            {
-                return resultInfo;
-            }
-
-            string objectName = obj.name;
-            string typeName = obj.GetType().Name;
-            string assetPath = AssetDatabase.GetAssetPath(obj);
-            string guid = string.IsNullOrWhiteSpace(assetPath) ? string.Empty : AssetDatabase.AssetPathToGUID(assetPath);
-
-            foreach (string term in lowerSearchTerms)
-            {
-                bool termMatchedThisLoop = false;
-                List<MatchDetail> detailsForThisTerm = new();
-
-                if (objectName.Contains(term, StringComparison.OrdinalIgnoreCase))
-                {
-                    detailsForThisTerm.Add(new MatchDetail(term) { fieldName = MatchSource.ObjectName, matchedValue = objectName });
-                    termMatchedThisLoop = true;
-                }
-
-                if (typeName.Contains(term, StringComparison.OrdinalIgnoreCase))
-                {
-                    detailsForThisTerm.Add(new MatchDetail(term) { fieldName = MatchSource.TypeName, matchedValue = typeName });
-                    termMatchedThisLoop = true;
-                }
-
-                if (!string.IsNullOrWhiteSpace(guid) && string.Equals(guid, term, StringComparison.OrdinalIgnoreCase))
-                {
-                    detailsForThisTerm.Add(new MatchDetail(term) { fieldName = MatchSource.Guid, matchedValue = guid });
-                    termMatchedThisLoop = true;
-                }
-
-                if (!termMatchedThisLoop)
-                {
-                    MatchDetail reflectedMatch = SearchStringProperties(obj, term, 0, 2, new HashSet<object>());
-                    if (reflectedMatch != null)
-                    {
-                        reflectedMatch.AddMatchedTerm(term);
-                        detailsForThisTerm.Add(reflectedMatch);
-                        termMatchedThisLoop = true;
-                    }
-                }
-
-                if (termMatchedThisLoop)
-                {
-                    resultInfo.isMatch = true;
-                    resultInfo.AddMatchedFields(detailsForThisTerm);
-                }
-            }
-
-            return resultInfo;
+            return _assetObjectCache.Match(obj, lowerSearchTerms);
         }
 
         private void NavigateToObject(ScriptableObject targetObject)
