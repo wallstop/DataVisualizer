@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Add read-only validation of selected assets for missing Unity references and duplicate authored IDs, with cancellable progress and per-asset findings (#319).
 
-- Add read-only editor queries with exact type scopes, GUID pages, shared text and label matching, progress, and cancellation (#315).
+- Add editor queries with exact type scopes and GUID pages. Preview explicit processor targets, cancel preparation, and inspect batch outcomes (#315).
 
 - Add Show all results to reach matches beyond the first 25, with virtualized rows, keyboard navigation, and a return to quick search (#311).
 
