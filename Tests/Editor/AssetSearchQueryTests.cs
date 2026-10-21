@@ -7,6 +7,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class AssetSearchQueryTests
     {
+        [Test]
+        public void ShouldPreserveThePublicThreeArgumentConstructorSignature()
+        {
+            // Public metadata is the binary contract; optional arguments cannot preserve it.
+            var constructor = typeof(AssetSearchQuery).GetConstructor(new[] { typeof(IReadOnlyList<AssetSearchDocument>), typeof(string[]), typeof(int) });
+            Assert.That(constructor != null);
+            AssetSearchQuery query = (AssetSearchQuery)constructor.Invoke(new object[] { Array.Empty<AssetSearchDocument>(), Array.Empty<string>(), 25 });
+            query.Advance();
+            Assert.That(query.IsComplete);
+        }
+
         [TestCase(0)]
         [TestCase(1)]
         [TestCase(2)]
