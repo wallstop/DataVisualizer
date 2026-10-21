@@ -6,6 +6,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     public sealed class EditorAutomationItem
     {
         public string guid;
+        public string sourceGuid;
+        public string destinationPath;
         public string path;
         public string name;
         public string typeIdentity;

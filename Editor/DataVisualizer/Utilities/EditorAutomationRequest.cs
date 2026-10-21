@@ -12,6 +12,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public string[] typeIdentities;
         public string[] assetGuids;
         public string processorIdentity;
+        public string assetOperation;
+        public string[] destinationPaths;
         public string settingsGuid;
         public string dataFolderPath;
         public string selectionMode;
