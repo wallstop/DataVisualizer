@@ -172,6 +172,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         */
         internal bool IsAssetEditingSuspended => _suspendedForPlayMode;
 
+        private bool IsAssetOperationEditingBlocked => IsAssetEditingSuspended || EditorApplication.isPlayingOrWillChangePlaymode || AssetGuidDiscovery.IsAssetDatabaseBusy();
+
         private bool IsConfigurationEditingPaused => IsAssetEditingSuspended || EditorApplication.isPlayingOrWillChangePlaymode;
 
         private TypeLabelFilterConfig CurrentTypeLabelFilterConfig => LoadOrCreateLabelFilterConfig(_namespaceController.SelectedType);
@@ -4644,9 +4646,40 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        private EditorAssetOperationTarget ExecuteSingleAssetOperation(EditorAssetOperationKind kind, Type type, string sourceGuid, string destination)
+        {
+            try
+            {
+                using EditorAssetOperation operation = new(
+                    kind,
+                    type,
+                    kind == EditorAssetOperationKind.Create ? null : new[] { sourceGuid },
+                    kind == EditorAssetOperationKind.Delete ? null : new[] { destination }
+                );
+                operation.Apply();
+                operation.Advance(0);
+                EditorAssetOperationTarget result = operation.Targets[0];
+                if (result.Code == "not_applied")
+                {
+                    return new EditorAssetOperationTarget(
+                        result.Guid,
+                        result.Path,
+                        result.DestinationPath,
+                        code: operation.IsFinished ? operation.Code : "editor_busy",
+                        detail: operation.Detail
+                    );
+                }
+                return result;
+            }
+            catch (Exception error)
+            {
+                return new EditorAssetOperationTarget(sourceGuid, string.Empty, destination, code: "invalid_scope", detail: error.Message);
+            }
+        }
+
         private void HandleCreateConfirmed(Type type, TextField nameField, Label errorLabel)
         {
-            if (IsAssetEditingSuspended)
+            if (IsAssetOperationEditingBlocked)
             {
                 return;
             }
@@ -4684,19 +4717,15 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            ScriptableObject instance = ScriptableObject.CreateInstance(type);
-            if (instance is ICreatable creatable)
+            EditorAssetOperationTarget result = ExecuteSingleAssetOperation(EditorAssetOperationKind.Create, type, null, uniquePath);
+            if (result.Code != "applied")
             {
-                creatable.BeforeCreate();
+                errorLabel.text = result.Detail ?? result.Code;
+                errorLabel.style.display = DisplayStyle.Flex;
+                ScheduleRefresh();
+                return;
             }
-            else
-            {
-                creatable = null;
-            }
-            AssetDatabase.CreateAsset(instance, uniquePath);
-            AssetDatabase.SaveAssets();
-            creatable?.AfterCreate();
-
+            ScriptableObject instance = AssetDatabase.LoadAssetAtPath<ScriptableObject>(uniquePath);
             CloseActivePopover();
             AddObjectToActiveTypeAndPersist(type, instance, uniquePath);
         }
@@ -4756,7 +4785,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleRenameConfirmed(Label titleLabel, TextField nameField, Label errorLabel)
         {
-            if (IsAssetEditingSuspended)
+            if (IsAssetOperationEditingBlocked)
             {
                 return;
             }
@@ -4798,21 +4827,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            ScriptableObject original = AssetDatabase.LoadAssetAtPath<ScriptableObject>(originalPath);
-            if (original is IRenamable renamable)
-            {
-                renamable.BeforeRename(newName);
-            }
-            else
-            {
-                renamable = null;
-            }
-
-            string error = AssetDatabase.RenameAsset(originalPath, newName);
+            string guid = AssetDatabase.AssetPathToGUID(originalPath);
+            EditorAssetOperationTarget result = ExecuteSingleAssetOperation(EditorAssetOperationKind.Rename, AssetDatabase.GetMainAssetTypeAtPath(originalPath), guid, newPath);
+            string error = result.Code == "applied" ? null : result.Detail ?? result.Code;
             if (string.IsNullOrWhiteSpace(error))
             {
-                AssetDatabase.SaveAssets();
-                renamable?.AfterRename(newName);
+                ScriptableObject original = AssetDatabase.LoadAssetAtPath<ScriptableObject>(newPath);
                 CloseActivePopover();
                 if (_selectedObject == original && _assetNameTextField != null)
                 {
@@ -4834,6 +4854,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             else
             {
                 Debug.LogError($"Asset rename failed: {error}");
+                ScheduleRefresh();
                 errorLabel.text = $"Failed: {error}";
                 errorLabel.style.display = DisplayStyle.Flex;
             }
@@ -4896,7 +4917,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void HandleDeleteConfirmed()
         {
-            if (IsAssetEditingSuspended)
+            if (IsAssetOperationEditingBlocked)
             {
                 return;
             }
@@ -4929,7 +4950,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             string deletedTypeFullName = deletedType.FullName;
             string deletedGuid = AssetDatabase.AssetPathToGUID(path);
 
-            bool deleted = AssetDatabase.DeleteAsset(path);
+            EditorAssetOperationTarget result = ExecuteSingleAssetOperation(EditorAssetOperationKind.Delete, deletedType, deletedGuid, null);
+            bool deleted = result.Code == "applied";
             if (deleted)
             {
                 _asyncDisplayOrderByGuid.Remove(deletedGuid);
@@ -7837,7 +7859,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void MoveObjectToFolder(ScriptableObject dataObject)
         {
-            if (IsAssetEditingSuspended || dataObject == null)
+            if (IsAssetOperationEditingBlocked || dataObject == null)
             {
                 return;
             }
@@ -7869,8 +7891,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            string errorMessage = AssetDatabase.MoveAsset(assetPath, targetPath);
-            AssetDatabase.SaveAssets();
+            EditorAssetOperationTarget result = ExecuteSingleAssetOperation(
+                EditorAssetOperationKind.Move,
+                dataObject.GetType(),
+                AssetDatabase.AssetPathToGUID(assetPath),
+                targetPath
+            );
+            string errorMessage = result.Code == "applied" ? null : result.Detail ?? result.Code;
             if (!string.IsNullOrWhiteSpace(errorMessage))
             {
                 Debug.LogError($"Error moving asset {dataObject.name} from '{assetPath}' to '{targetPath}': {errorMessage}");
@@ -8503,7 +8530,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void CloneObject(ScriptableObject originalObject)
         {
-            if (IsAssetEditingSuspended || originalObject == null)
+            if (IsAssetOperationEditingBlocked || originalObject == null)
             {
                 return;
             }
@@ -8512,13 +8539,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (string.IsNullOrWhiteSpace(originalPath))
             {
                 EditorUtility.DisplayDialog("Error", "Cannot clone object: Original asset path not found.", "OK");
-                return;
-            }
-
-            ScriptableObject cloneInstance = Instantiate(originalObject);
-            if (cloneInstance == null)
-            {
-                EditorUtility.DisplayDialog("Error", "Failed to instantiate a clone of the object.", "OK");
                 return;
             }
 
@@ -8561,21 +8581,21 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             try
             {
-                if (cloneInstance is IDuplicable duplicable)
+                EditorAssetOperationTarget result = ExecuteSingleAssetOperation(
+                    EditorAssetOperationKind.Clone,
+                    originalObject.GetType(),
+                    AssetDatabase.AssetPathToGUID(originalPath),
+                    uniquePath
+                );
+                if (result.Code != "applied")
                 {
-                    duplicable.BeforeClone(originalObject);
+                    EditorUtility.DisplayDialog("Error Cloning Asset", result.Detail ?? result.Code, "OK");
+                    ScheduleRefresh();
+                    return;
                 }
-                AssetDatabase.CreateAsset(cloneInstance, uniquePath);
-                AssetDatabase.SaveAssets();
-
                 ScriptableObject cloneAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(uniquePath);
                 if (cloneAsset != null)
                 {
-                    if (cloneAsset is IDuplicable cloneDataObject)
-                    {
-                        cloneDataObject.AfterClone(originalObject);
-                    }
-
                     if (_isLoadingObjectsAsync && _asyncLoadTargetType == cloneAsset.GetType())
                     {
                         string cloneGuid = AssetDatabase.AssetPathToGUID(uniquePath);
