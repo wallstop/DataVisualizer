@@ -189,3 +189,24 @@ fixture roots or temporary state files. Unity 2021.3 and other platforms were no
 The driver now charges a transition tick to the dataset that owned it at entry and resets update-gap observation between sizes. Final fixture teardown completes before report
 publication on the next tick; report writing and host-preference restoration remain outside the sampled driver ticks. The archived report above predates this diagnostic repair; its
 paint, row, inspector, indexing and retention observations remain valid, but corrected longest-driver-tick values require a repeat run.
+
+## Bounded refresh attempt on 2026-10-21
+
+[The cancellation report](performance-refresh-attempt-2026-10-21.json) records an incomplete real-asset integration run from
+[63e4ff0](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/63e4ff04bd49b74e701a02c5037b40223a3230bb), on the same Windows/Unity host described above. It staged and
+loaded all 10,000 `PlayModeDataObject` assets with the existing fixture helper, a 32 ms creation budget and a twenty-item cap. It reached its cooperative 15-minute limit in a
+label-write loop. Unity calls cannot be preempted; the task was observed terminal by 07:43:20 UTC. Its status clock continues after completion, so that observation does not give an
+exact terminal duration.
+
+Before that cancellation site, the probe had passed selected missing-script recovery, tracked rename, label include/exclude, Undo/Redo and move assertions, with zero new refresh
+object loads for the cached rename and 9,999 unrelated row identities preserved. This follows from the executed assertions preceding the recorded stop site; the final all-checks
+summary was not emitted. Main-thread status requests also timed out after five seconds. Those observation gaps do not identify a continuous package-owned stall.
+
+The 100/1k/10k label-burst matrix, callback timing, final operation counts and the large lifecycle tail **did not complete**. The probe did not record the active burst size, so do
+not infer which sizes passed. A separate completed 12-asset smoke covered actual label writes, unavailable deletion, closed-window reopen, stale callbacks, custom order and
+selection, and simulated Play notifications. It processed 13 events for 12 changed labels with zero new object loads. These are integration observations, not p95 measurements.
+
+Cleanup was verified independently: no owned fixture roots remained, the editor had one native host and seven windows, and the AssetDatabase was idle. Two earlier 100k attempts
+were stopped during staging at 7,175 and 10,536 assets to strengthen the probe and repair review findings; neither measured 100k. The report retains the original terminal error,
+source identities, resource limits and unverified cells. Keep [#306](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/306) and
+[#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308) open for the remaining measurement work.

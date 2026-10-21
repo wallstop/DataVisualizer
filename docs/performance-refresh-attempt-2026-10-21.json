@@ -1,0 +1,124 @@
+{
+  "schema": "1",
+  "reportKind": "bounded-refresh-attempt",
+  "status": "cancelled",
+  "runComplete": false,
+  "generatedAtUtc": "2026-10-21T07:47:21.992496+00:00",
+  "sourceRevision": "63e4ff04bd49b74e701a02c5037b40223a3230bb",
+  "probeSourceSha256": "c2bb2ffdc915b3eb0ff2177e7a75bf4cd0492b02a16c38cda9f3b4c9d1e90e3b",
+  "environment": {
+    "unityVersion": "6000.5.2f1",
+    "platform": "WindowsEditor",
+    "operatingSystem": "Windows 11  (10.0.26200)",
+    "processorType": "Snapdragon(R) X Elite - X1E80100 - Qualcomm(R) Oryon(TM) CPU",
+    "processorCount": 12,
+    "systemMemoryMegabytes": 65011,
+    "graphicsDevice": "Qualcomm(R) Adreno(TM) X1-85 GPU",
+    "dpi": 96,
+    "editorPixelsPerPoint": 1,
+    "darkTheme": true,
+    "displayCount": 1,
+    "packageVersion": "0.1.1",
+    "preExistingScriptableObjectAssets": 225
+  },
+  "dataset": {
+    "kind": "real Unity assets",
+    "fixtureType": "WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject",
+    "requested": 10000,
+    "created": 10000,
+    "fixtureComplete": true,
+    "interactionMatrixComplete": false
+  },
+  "staging": {
+    "creationBudgetMilliseconds": 32,
+    "maximumItemsPerBatch": 20
+  },
+  "stop": {
+    "kind": "cooperative time limit",
+    "limitMinutes": 15,
+    "phase": "Interactions: label-write loop",
+    "completedBurstSizes": null,
+    "burstProgressRecorded": false,
+    "terminalObservedAtUtc": "2026-10-21T07:43:20Z",
+    "elapsedAtTerminalObservationSeconds": 985.248,
+    "note": "The status stopwatch continues after task completion. This elapsed observation is an upper bound, not a measured terminal duration. Unity calls are indivisible."
+  },
+  "checksReachedBeforeStop": [
+    "All 10000 rows loaded",
+    "Selected missing-script recovery",
+    "Rename with zero new refresh object loads",
+    "Label include/exclude reconciliation",
+    "Undo and Redo",
+    "Tracked move",
+    "9999 unrelated row identities preserved",
+    "Routine checks preserved row/search generations before an explicit rebuild"
+  ],
+  "checkEvidence": "The recorded cancellation site follows these assertions in the identified probe source. The final all-checks summary was not produced.",
+  "notCompletedOrUnverified": [
+    "End-to-end 100/1000/10000 burst matrix",
+    "Which burst was active at cancellation",
+    "Callback timing and final operation counts",
+    "10k unavailable-asset deletion and closed/Play-paused lifecycle tail",
+    "Complete 100k measurements",
+    "Fresh-process, Unity 2021.3 and other platform evidence"
+  ],
+  "smallSmoke": {
+    "realAssets": 12,
+    "complete": true,
+    "actualLabelChanges": 12,
+    "processedEvents": 13,
+    "newRefreshObjectLoads": 0,
+    "checks": [
+      "Selected missing-script recovery",
+      "Unavailable asset deletion clears saved identity",
+      "Closed-window rename/reopen",
+      "Stale callback rejection",
+      "Simulated Play transition reconciliation",
+      "Custom order and selection"
+    ],
+    "sourceRevision": "20ac02f173b838f1ee3ca2e6bebb4df3d6777510",
+    "probeSourceSha256": "5854008f130c2b30994cfcbea91b8b11ed55f4ecf4c4ea35196ead6039d86dae"
+  },
+  "cleanup": {
+    "ownedRoot": "Assets/PerfBaselineFixtures-0c0411cce0aa41b594a5962b6fc48f83",
+    "ownedRootAbsent": true,
+    "allOwnedFixtureRootsAbsent": true,
+    "nativeHostsAfter": 1,
+    "editorWindowsAfter": 7,
+    "assetDatabaseBusyAfter": false,
+    "cleanupError": ""
+  },
+  "earlier100kAttempts": [
+    {
+      "created": 7175,
+      "requested": 100000,
+      "phase": "Staging",
+      "reason": "Stopped to add real label-write bursts",
+      "measured": false,
+      "rootRemoved": true
+    },
+    {
+      "created": 10536,
+      "requested": 100000,
+      "phase": "Staging",
+      "reason": "Stopped for required publication-cleanup review repair",
+      "measured": false,
+      "rootRemoved": true
+    }
+  ],
+  "rawTerminalReport": "Cancelled created=10000/10000; root=Assets/PerfBaselineFixtures-0c0411cce0aa41b594a5962b6fc48f83; cleanupError=; error=System.OperationCanceledException: 15-minute stop limit reached\n  at Session258RefreshProbe.CheckResources () [0x000ab] in C:\\Code\\DataVisualizer\\Packages\\com.wallstop-studios.data-visualizer\\.artifacts\\session258-refresh-probe.cs:61 \n  at Session258RefreshProbe.Main (System.Int32 count) [0x01ab4] in C:\\Code\\DataVisualizer\\Packages\\com.wallstop-studios.data-visualizer\\.artifacts\\session258-refresh-probe.cs:273 \n  at Session258RefreshProbe.RunAndReport (System.Int32 count) [0x00029] in C:\\Code\\DataVisualizer\\Packages\\com.wallstop-studios.data-visualizer\\.artifacts\\session258-refresh-probe.cs:78 ",
+  "limitations": [
+    "Single warm integration attempt, not latency distributions",
+    "The large operation matrix did not complete",
+    "Memory stop guard sums overlapping Unity-allocated and managed counters; it is not RSS",
+    "Status RPC timeouts do not attribute a continuous main-thread stall",
+    "No 100k support or performance guarantee"
+  ],
+  "resourceLimits": {
+    "timeMinutes": 15,
+    "minimumStartingFreeDiskBytes": 21474836480,
+    "minimumFreeDiskBytes": 10737418240,
+    "conservativeTrackedMemoryStopBytes": 17179869184,
+    "peakConservativeTrackedBytes": 1940265466
+  }
+}
