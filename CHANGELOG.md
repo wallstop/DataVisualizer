@@ -32,18 +32,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- Keep partial-index searches responsive while available records are put in display order (#310).
-
-- Keep large import bursts responsive while queued asset paths are filtered and combined (#308).
-
 - Fix script-folder scans adding unsupported types. Add only eligible ScriptableObject types without creating instances (#376).
 
-- Fix browser type scans blocking project imports. Keep unchanged rows stable, ignore unrelated edits, preserve missing-script selection, clear deleted references, and pause or
-  stop refreshes with their owner (#308).
+- Fix browser refreshes stalling asset imports. Keep unchanged rows stable, ignore unrelated edits, preserve missing-script selection, clear deleted references, and pause or stop
+  refreshes with their owner (#308).
 
 ### Changed
 
-- Search available asset text while indexing continues. Keep queries responsive and refresh open results as records arrive or change (#310).
+- Search available asset text while indexing continues. Keep queries responsive, preserve result order, and refresh open searches as records arrive or change (#310).
 
 - Simplify label filtering with Match all and Match any, keyboard-selectable pills, clear controls, and a readable Advanced expression. Keep missing active labels and show neutral
   counts (#314).

@@ -327,6 +327,12 @@ notifications. Its 24-path callback replay took 0.450 ms and made zero new refre
 captured input after the callback and eventual coalesced reconciliation, because raw pending counts deliberately include duplicates. Full 100k, actual Play/type-catalog and
 platform evidence remain open in [#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308).
 
+A [bounded real 10k follow-up](performance-refresh-intake-attempt-2026-10-21.json) completed all fixtures and the 100/1k label-change replays. Their callbacks took 0.362/0.443 ms,
+with zero new refresh object loads; reconciliation took 558.204/2778.359 ms. These are single warm-session observations, not percentiles or controlled speedups. The 20-minute
+cooperative stop occurred after all 10k write calls returned, as final reconciliation started. Its callback timer, final reconciliation and lifecycle tail were not recorded; no
+complete 10k result is claimed. Native import flushes remain separate in the raw terminal report. Independent cleanup confirmed no owned roots/browser windows, seven editor
+windows, one native host, no shared pending paths and an idle AssetDatabase.
+
 ## Partial search preparation
 
 Partial-index queries capture immutable document references and order that snapshot in cooperative merge steps. Each budget check covers at most 64 merge steps; a zero budget
