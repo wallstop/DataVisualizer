@@ -32,7 +32,7 @@
     "availableCount": {
       "type": "integer",
       "minimum": 0,
-      "description": "Available query records, validation findings, or exact processor target outcomes."
+      "description": "Available query records, validation findings, processor outcomes, or one configuration result."
     },
     "offset": {
       "type": "integer",
@@ -74,6 +74,14 @@
           },
           "detail": {
             "type": ["string", "null"]
+          },
+          "dataFolderPath": {
+            "type": ["string", "null"],
+            "description": "Proposed configuration in preview; actual preferences after read/apply."
+          },
+          "selectionMode": {
+            "enum": ["keep", "select", null],
+            "description": "Configuration preference only; null when the outcome is unknown."
           }
         }
       }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DxVisualizer editor request v1",
-  "description": "Unknown members are ignored. The dispatcher enforces explicit scopes. Configuration is unsupported.",
+  "description": "Unknown members are ignored. The dispatcher enforces explicit scopes and confirmed mutation paths.",
   "type": "object",
   "required": ["schemaVersion", "operation"],
   "properties": {
@@ -9,7 +9,7 @@
       "const": 1
     },
     "operation": {
-      "enum": ["query", "validate", "previewProcessor", "applyProcessor"]
+      "enum": ["query", "validate", "previewProcessor", "applyProcessor", "readConfiguration", "previewConfiguration", "applyConfiguration"]
     },
     "typeIdentities": {
       "type": ["array", "null"],
@@ -64,7 +64,82 @@
       "items": {
         "type": "string"
       },
-      "description": "applyProcessor only: every preview path, in the same order as assetGuids. Changed paths reject the request."
+      "description": "Apply only: every processor target path in GUID order, or the single settings path from configuration preview."
+    },
+    "settingsGuid": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-fA-F]{32}$",
+      "description": "Configuration only: exact DataVisualizerSettings main-asset GUID under Assets."
+    },
+    "dataFolderPath": {
+      "type": ["string", "null"],
+      "description": "Configuration preview/apply: canonical existing Assets folder."
+    },
+    "selectionMode": {
+      "enum": ["keep", "select", null, ""],
+      "description": "Configuration preview/apply: keep preserves Unity selection; select selects inspected assets."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": ["readConfiguration", "previewConfiguration", "applyConfiguration"]
+          }
+        }
+      },
+      "then": {
+        "required": ["settingsGuid"],
+        "properties": {
+          "settingsGuid": {
+            "type": "string"
+          },
+          "offset": {
+            "const": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": ["previewConfiguration", "applyConfiguration"]
+          }
+        }
+      },
+      "then": {
+        "required": ["dataFolderPath", "selectionMode"],
+        "properties": {
+          "dataFolderPath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "selectionMode": {
+            "enum": ["keep", "select"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "applyConfiguration"
+          }
+        }
+      },
+      "then": {
+        "required": ["confirmPaths"],
+        "properties": {
+          "confirmPaths": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1
+          }
+        }
+      }
+    }
+  ]
 }
