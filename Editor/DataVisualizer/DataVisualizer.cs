@@ -337,6 +337,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         private IVisualElementScheduledItem _splitterWidthSaveTask;
 
         private Action<bool> _requestSearchRefresh;
+        private Func<double, bool> _advanceSearchQuery;
+        private IVisualElementScheduledItem _searchQueryTask;
         private string _searchHighlightGuid;
         private bool _showAllSearchResults;
         private AssetSearchResultsView _allSearchResultsView;
@@ -1116,6 +1118,42 @@ namespace WallstopStudios.DataVisualizer.Editor
         private static void WriteWindowSize(string preferenceKey, Vector2 size)
         {
             EditorPrefs.SetString(preferenceKey, MonitorUtility.SerializeSize(size));
+        }
+
+        /// <summary>Advances only the active query and returns whether it has finished.</summary>
+        public bool AdvanceSearchQuery(double budgetMilliseconds = 4)
+        {
+            if (double.IsNaN(budgetMilliseconds) || budgetMilliseconds < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(budgetMilliseconds));
+            }
+            _searchQueryTask?.Pause();
+            _searchQueryTask = null;
+            Func<double, bool> advance = _advanceSearchQuery;
+            if (advance == null)
+            {
+                return true;
+            }
+            bool complete = advance(budgetMilliseconds);
+            if (_advanceSearchQuery == advance)
+            {
+                if (complete)
+                {
+                    _advanceSearchQuery = null;
+                }
+                else
+                {
+                    _searchQueryTask = rootVisualElement.schedule.Execute(() =>
+                    {
+                        if (_advanceSearchQuery == advance)
+                        {
+                            AdvanceSearchQuery();
+                        }
+                    });
+                    _searchQueryTask.ExecuteLater(1);
+                }
+            }
+            return _advanceSearchQuery == null;
         }
 
         public void CreateGUI()
@@ -1914,6 +1952,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void Cleanup()
         {
+            _searchQueryTask?.Pause();
+            _searchQueryTask = null;
+            _advanceSearchQuery = null;
             CloseAssetTool();
             _objectSelectionInput?.Dispose();
             _objectSelectionInput = null;
@@ -3154,6 +3195,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
             _requestSearchRefresh = null;
+            _searchQueryTask?.Pause();
+            _searchQueryTask = null;
+            _advanceSearchQuery = null;
             if (!refresh)
             {
                 _searchHighlightGuid = null;
@@ -3220,20 +3264,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 OpenPopover(_searchPopover, _searchField, shouldFocus: false);
             }
-            Advance();
+            _advanceSearchQuery = Advance;
+            AdvanceSearchQuery();
 
-            void Advance()
+            bool Advance(double budgetMilliseconds)
             {
                 if (generation != _searchQueryGeneration || _activePopover != _searchPopover || !string.Equals(searchText, _lastSearchString, StringComparison.OrdinalIgnoreCase))
                 {
-                    return;
+                    return true;
                 }
                 if (indexGeneration != _searchCacheGeneration)
                 {
                     RequestRefresh(discardInFlight: true);
-                    return;
+                    return true;
                 }
-                query.Advance();
+                query.Advance(budgetMilliseconds);
                 LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, query.LongestSliceMilliseconds);
                 if (query.IsComplete || (!arrivalsOnly && publishedCount != query.Results.Count))
                 {
@@ -3254,7 +3299,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                             })
                             .ExecuteLater(1);
                     }
-                    return;
+                    return true;
                 }
                 Label currentStatus = _searchPopover.Q<Label>("search-status");
                 currentStatus.text = arrivalsOnly
@@ -3264,7 +3309,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     currentStatus.text += " · Indexing…";
                 }
-                rootVisualElement.schedule.Execute(Advance).ExecuteLater(1);
+                return false;
             }
             void RequestRefresh(bool discardInFlight)
             {
@@ -3852,6 +3897,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _allSearchResultsView = null;
                 _lastSearchString = null;
                 _requestSearchRefresh = null;
+                _searchQueryTask?.Pause();
+                _searchQueryTask = null;
+                _advanceSearchQuery = null;
                 _searchHighlightGuid = null;
             }
             else if (_activePopover == _typeAddPopover)

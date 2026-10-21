@@ -403,6 +403,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return owned.Count;
         }
 
+        internal static int CompleteSearchQuery(Func<double, bool> advance, double timeoutMilliseconds = 5000)
+        {
+            System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+            int slices = 0;
+            while (clock.Elapsed.TotalMilliseconds < timeoutMilliseconds)
+            {
+                slices++;
+                if (advance(0))
+                {
+                    return slices;
+                }
+            }
+            throw new TimeoutException($"The owned documentation search did not finish within {timeoutMilliseconds} ms ({slices} slices).");
+        }
+
         internal static void StageSearchInput(List<ScriptableObject> cache, TextField field, string query)
         {
             cache.Sort(
@@ -1175,6 +1190,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         */
         private static void VerifySearchFixtures(DataVisualizerWindow window, int stagedGeneration, string fixtureFolder)
         {
+            int generation = (int)typeof(DataVisualizerWindow).GetField("_searchCacheGeneration", ReflectedInstanceMembers).GetValue(window);
+            if (generation != stagedGeneration)
+            {
+                throw new InvalidOperationException($"The owned search generation changed: {stagedGeneration}->{generation}.");
+            }
             if (
                 typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, ReflectedInstanceMembers)?.GetValue(window) is not List<VisualElement> results
                 || results.Count != FixtureTitles.Length
@@ -1186,11 +1206,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     $"The search capture must contain exactly the owned fixture results: count={count}; generation={stagedGeneration}->{currentGeneration}."
                 );
             }
+            HashSet<string> expected = new(StringComparer.Ordinal);
+            foreach (string title in FixtureTitles)
+            {
+                expected.Add(AssetDatabase.AssetPathToGUID($"{fixtureFolder}/{title}.asset"));
+            }
             foreach (VisualElement row in results)
             {
-                if (row.userData is not ScriptableObject asset || asset == null || !AssetDatabase.GetAssetPath(asset).StartsWith(fixtureFolder + "/", StringComparison.Ordinal))
+                if (row.userData is not ScriptableObject asset || asset == null || !expected.Remove(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(asset))))
                 {
-                    throw new InvalidOperationException("The search capture contains an asset outside its owned fixture root.");
+                    throw new InvalidOperationException("The search capture contains a duplicate or unexpected fixture identity.");
                 }
             }
         }
@@ -1239,7 +1264,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new InvalidOperationException("The DataVisualizer window exposes no search text field; the capture " + "driver cannot stage the search results.");
             }
 
+            int generation = (int)typeof(DataVisualizerWindow).GetField("_searchCacheGeneration", ReflectedInstanceMembers).GetValue(window);
             StageSearchInput(cache, searchField, SearchQuery);
+            CompleteSearchQuery(window.AdvanceSearchQuery);
+            VerifySearchFixtures(window, generation, fixtureFolder);
             if (typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, ReflectedInstanceMembers)?.GetValue(window) is not List<VisualElement> results || results.Count == 0)
             {
                 throw new InvalidOperationException($"The staged query '{SearchQuery}' matched no fixture asset; the search shot " + "would document an empty popover.");
