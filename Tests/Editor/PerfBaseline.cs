@@ -384,6 +384,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 return;
             }
 
+            SizeResult owner = state.Current;
             double now = state.Watchdog.Elapsed.TotalMilliseconds;
             if (state.Current != null && 0 < state.LastTickMilliseconds)
             {
@@ -399,9 +400,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 FinishWithError(state, $"phase {state.Phase} threw: {error.GetType().Name}: {error.Message}");
             }
-            if (state.Current != null)
+            SizeResult measured = owner ?? state.Current;
+            if (measured != null)
             {
-                state.Current.LongestDriverTickMilliseconds = Math.Max(state.Current.LongestDriverTickMilliseconds, tick.Elapsed.TotalMilliseconds);
+                measured.LongestDriverTickMilliseconds = Math.Max(measured.LongestDriverTickMilliseconds, tick.Elapsed.TotalMilliseconds);
             }
         }
 
@@ -438,7 +440,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     OpenWindow(state, cold: false);
                     return;
                 case Phase.Finished:
-                    return; // Finished has nothing to advance
+                    Finish(state);
+                    return;
             }
         }
 
@@ -447,13 +450,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             state.SizeIndex++;
             if (state.Sizes.Length <= state.SizeIndex)
             {
-                Finish(state);
+                state.Staging?.Dispose();
+                state.Staging = null;
+                // Publish on the next tick, after this dataset's teardown time is recorded.
+                state.Phase = Phase.Finished;
                 return;
             }
 
             int size = state.Sizes[state.SizeIndex];
             SizeResult result = new() { Size = size, FixtureTypes = state.FixtureTypes };
             state.Current = result;
+            state.LastTickMilliseconds = 0;
             state.Results.Add(result);
 
             state.Staging?.Dispose();

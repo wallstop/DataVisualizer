@@ -185,3 +185,7 @@ does not satisfy #309's bounded-retention outcome. Total staging was 2,895.9 / 2
 ms; observed editor-update gaps reached 461.9 / 655.8 ms. Those gaps include scheduling and editor work outside the package. Instrumentation cost is material and is not subtracted
 from the readiness times. These are observational results, not a controlled speedup claim or a 10k/100k support guarantee. The run restored seven editor windows and left no owned
 fixture roots or temporary state files. Unity 2021.3 and other platforms were not executed.
+
+The driver now charges a transition tick to the dataset that owned it at entry and resets update-gap observation between sizes. Final fixture teardown completes before report
+publication on the next tick; report writing and host-preference restoration remain outside the sampled driver ticks. The archived report above predates this diagnostic repair; its
+paint, row, inspector, indexing and retention observations remain valid, but corrected longest-driver-tick values require a repeat run.
