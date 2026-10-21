@@ -11,6 +11,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         WaitingForPathSnapshot = 2,
         Classifying = 3,
         Complete = 4,
+        ReconcilingChanges = 5,
     }
 #endif
 }

@@ -86,7 +86,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void ShouldKeepPostprocessorPathSynchronousWhileAssetDatabaseIsBusy()
+        public void ShouldKeepExplicitSynchronousRefreshAvailableWhileAssetDatabaseIsBusy()
         {
             string folder = CreateFixtureFolder();
             try
@@ -101,9 +101,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     Assert.IsFalse(index.ProcessPendingSlice(double.PositiveInfinity));
 
                     /*
-                        The AssetPostprocessor runs inside the refresh and indexes the paths Unity
-                        just imported, so its reconciliation must stay synchronous: only the
-                        background pump defers while the database is busy.
+                        The explicit synchronous API remains available to callers that require immediate
+                        results. Production import callbacks use the deferred queue instead.
                     */
                     Assert.IsTrue(index.ApplyAssetChanges(new[] { folder + "/ImportedWhileBusy.asset" }, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
                     CollectionAssert.Contains(index.GetKnownGuids(typeof(TestDataObject)), importedGuid);
