@@ -4725,7 +4725,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 ScheduleRefresh();
                 return;
             }
-            ScriptableObject instance = AssetDatabase.LoadAssetAtPath<ScriptableObject>(uniquePath);
+            ScriptableObject instance = AssetDatabase.LoadMainAssetAtPath(uniquePath) as ScriptableObject;
             CloseActivePopover();
             AddObjectToActiveTypeAndPersist(type, instance, uniquePath);
         }
@@ -4832,7 +4832,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             string error = result.Code == "applied" ? null : result.Detail ?? result.Code;
             if (string.IsNullOrWhiteSpace(error))
             {
-                ScriptableObject original = AssetDatabase.LoadAssetAtPath<ScriptableObject>(newPath);
+                ScriptableObject original = AssetDatabase.LoadMainAssetAtPath(newPath) as ScriptableObject;
                 CloseActivePopover();
                 if (_selectedObject == original && _assetNameTextField != null)
                 {
@@ -8593,7 +8593,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     ScheduleRefresh();
                     return;
                 }
-                ScriptableObject cloneAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(uniquePath);
+                ScriptableObject cloneAsset = AssetDatabase.LoadMainAssetAtPath(uniquePath) as ScriptableObject;
                 if (cloneAsset != null)
                 {
                     if (_isLoadingObjectsAsync && _asyncLoadTargetType == cloneAsset.GetType())

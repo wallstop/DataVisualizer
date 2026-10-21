@@ -110,6 +110,75 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
         }
 
+        [TestCase(EditorAssetOperationKind.Clone)]
+        [TestCase(EditorAssetOperationKind.Rename)]
+        [TestCase(EditorAssetOperationKind.Move)]
+        public void ShouldOperateOnMainAssetWhenTheFileAlsoContainsSubassets(EditorAssetOperationKind kind)
+        {
+            using TestCleanupScope cleanup = new();
+            string folder = CreateFolder(cleanup);
+            string guid = CreateSource(folder);
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            OperationLifecycleData main = AssetDatabase.LoadMainAssetAtPath(path) as OperationLifecycleData;
+            main.payload = "main";
+            OperationLifecycleData sub = ScriptableObject.CreateInstance<OperationLifecycleData>();
+            sub.payload = "subasset";
+            sub.marker = "subasset";
+            AssetDatabase.AddObjectToAsset(sub, path);
+            AssetDatabase.SetMainObject(main, path);
+            EditorUtility.SetDirty(main);
+            EditorUtility.SetDirty(sub);
+            AssetDatabase.SaveAssetIfDirty(main);
+            using EditorAssetOperation operation = new(kind, typeof(OperationLifecycleData), new[] { guid }, new[] { folder + "/Result.asset" });
+            operation.Apply();
+            operation.Advance(0);
+            Assert.That(operation.Status, Is.EqualTo("complete"));
+            OperationLifecycleData result = AssetDatabase.LoadMainAssetAtPath(folder + "/Result.asset") as OperationLifecycleData;
+            Assert.That(result != null);
+            Assert.That(result.payload, Is.EqualTo("main"));
+            Assert.That(sub.marker, Is.EqualTo("subasset"));
+            if (kind == EditorAssetOperationKind.Rename)
+            {
+                Assert.That(result.marker, Is.EqualTo("Result"));
+            }
+        }
+
+        [Test]
+        public void ShouldPreserveExtensionSpellingDuringRename()
+        {
+            using TestCleanupScope cleanup = new();
+            string folder = CreateFolder(cleanup);
+            string path = folder + "/Source.ASSET";
+            OperationLifecycleData source = ScriptableObject.CreateInstance<OperationLifecycleData>();
+            AssetDatabase.CreateAsset(source, path);
+            string guid = AssetDatabase.AssetPathToGUID(path);
+            Assert.Throws<ArgumentException>(() =>
+                new EditorAssetOperation(EditorAssetOperationKind.Rename, typeof(OperationLifecycleData), new[] { guid }, new[] { folder + "/Result.asset" })
+            );
+            using EditorAssetOperation operation = new(EditorAssetOperationKind.Rename, typeof(OperationLifecycleData), new[] { guid }, new[] { folder + "/Result.ASSET" });
+            operation.Apply();
+            operation.Advance(0);
+            Assert.That(operation.Status, Is.EqualTo("complete"));
+            Assert.That(AssetDatabase.GUIDToAssetPath(guid), Is.EqualTo(folder + "/Result.ASSET"));
+        }
+
+        [Test]
+        public void ShouldRejectAnUnimportedDestinationEvenWhenTheProcessDirectoryChanges()
+        {
+            using TestCleanupScope cleanup = new();
+            string folder = CreateFolder(cleanup);
+            string path = folder + "/Unimported.asset";
+            string fullPath = Path.Combine(Path.GetDirectoryName(Application.dataPath), path);
+            byte[] bytes = File.ReadAllBytes(AssetDatabase.GUIDToAssetPath(CreateSource(folder)));
+            File.WriteAllBytes(fullPath, bytes);
+            Assert.That(AssetDatabase.AssetPathToGUID(path), Is.Empty);
+            string previous = Environment.CurrentDirectory;
+            cleanup.Defer(() => Environment.CurrentDirectory = previous);
+            Environment.CurrentDirectory = Path.GetTempPath();
+            Assert.Throws<ArgumentException>(() => new EditorAssetOperation(EditorAssetOperationKind.Create, typeof(OperationLifecycleData), null, new[] { path }));
+            Assert.That(File.ReadAllBytes(fullPath), Is.EqualTo(bytes));
+        }
+
         [Test]
         public void ShouldYieldBetweenTargetsAndCancelWithoutReplayingCompletedWork()
         {

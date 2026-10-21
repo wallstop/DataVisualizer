@@ -14,6 +14,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public static int HookCount;
         public static bool ThrowAfterCreate;
         public string marker;
+        public string payload;
 
         public override void BeforeCreate()
         {
