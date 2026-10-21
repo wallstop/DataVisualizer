@@ -10,6 +10,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     public sealed class EditorAssetSelection
     {
         public int Count => assetGuids.Count;
+        public string TypeIdentity => typeIdentity;
         public bool HasSelectionIntent => hasSelectionIntent || 0 < assetGuids.Count;
 
         [SerializeField]
@@ -27,6 +28,62 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private static string GuidOrEmpty(ScriptableObject asset, AssetObjectCache cache)
         {
             return asset == null ? string.Empty : cache?.GetGuidOrNull(asset) ?? AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(asset));
+        }
+
+        /// <summary>Replaces explicit intent without resolving assets. Returns false when type, ordered GUIDs and intent are unchanged.</summary>
+        public bool ReplaceGuids(Type type, IReadOnlyList<string> guids)
+        {
+            if (type == null || !typeof(ScriptableObject).IsAssignableFrom(type) || type.IsAbstract || type.ContainsGenericParameters)
+            {
+                throw new ArgumentException("Specify a concrete exact ScriptableObject type.", nameof(type));
+            }
+            if (guids == null)
+            {
+                throw new ArgumentNullException(nameof(guids));
+            }
+            List<string> ordered = new(guids.Count);
+            HashSet<string> lookup = new(StringComparer.Ordinal);
+            for (int i = 0; i < guids.Count; i++)
+            {
+                string guid = guids[i];
+                if (guid == null || guid.Length != 32 || !Guid.TryParseExact(guid, "N", out _))
+                {
+                    throw new ArgumentException("Selection GUIDs must be 32 hex digits.", nameof(guids));
+                }
+                string canonical = guid.ToLowerInvariant();
+                if (lookup.Add(canonical))
+                {
+                    ordered.Add(canonical);
+                }
+            }
+            string identity = type.AssemblyQualifiedName;
+            bool changed = !hasSelectionIntent || !string.Equals(typeIdentity, identity, StringComparison.Ordinal) || assetGuids.Count != ordered.Count;
+            if (!changed)
+            {
+                for (int i = 0; i < ordered.Count; i++)
+                {
+                    if (!string.Equals(assetGuids[i], ordered[i], StringComparison.Ordinal))
+                    {
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+            if (!changed)
+            {
+                return false;
+            }
+            typeIdentity = identity;
+            assetGuids = ordered;
+            hasSelectionIntent = true;
+            _lookup = lookup;
+            return true;
+        }
+
+        /// <summary>Copies all explicit GUIDs, including hidden or deleted targets, without resolving assets.</summary>
+        public string[] CopyGuids()
+        {
+            return assetGuids.ToArray();
         }
 
         public void SetType(Type type)
