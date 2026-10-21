@@ -11,6 +11,49 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     internal sealed class AssetObjectCacheTests
     {
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldRefreshFieldSnapshotsWithoutMovingExistingRows(bool sorted)
+        {
+            using TestCleanupScope cleanup = new();
+            List<ScriptableObject> rows = new();
+            AssetObjectCache cache = new(rows);
+            foreach (string name in new[] { "B", "A", "C" })
+            {
+                PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
+                cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(asset));
+                asset.name = name;
+                asset.Description = "before";
+                cache.Upsert(name, asset, false);
+            }
+            if (sorted)
+            {
+                cache.Sort();
+            }
+            ScriptableObject[] original = rows.ToArray();
+            PlayModeDataObject changed = (PlayModeDataObject)rows[0];
+            var before = cache.Documents[0];
+            int version = cache.Version;
+            changed.Description = "after";
+            Assert.That(cache.Upsert(changed.name, changed, sorted));
+            CollectionAssert.AreEqual(original, rows);
+            Assert.That(version < cache.Version);
+            Assert.That(before.Match(new[] { "before" }).isMatch);
+            Assert.That(cache.Documents[0].Match(new[] { "after" }).isMatch);
+            Assert.That(!cache.Documents[0].Match(new[] { "before" }).isMatch);
+            Assert.That(cache.Remove(changed.name));
+            cache.Upsert(changed.name, changed, sorted);
+            Assert.That(cache.Match(changed, new[] { "after" }).isMatch);
+            for (int index = 0; index < rows.Count; index++)
+            {
+                Assert.AreEqual(rows[index].name, cache.Documents[index].Guid);
+            }
+            cache.Clear();
+            cache.Upsert(changed.name, changed, sorted);
+            Assert.AreEqual(1, cache.Count);
+            Assert.AreEqual(changed.name, cache.Documents[0].Guid);
+        }
+
         [Test]
         public void ShouldPreserveSortWhenSeveralUnityObjectsRenameBeforeReconciliation()
         {

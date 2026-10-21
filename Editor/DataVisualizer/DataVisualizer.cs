@@ -2289,7 +2289,9 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             bool selected = hadPrevious && ReferenceEquals(_selectedObject, previous);
             Type selectedType = _namespaceController.SelectedType;
-            bool wasInList = hadPrevious && _selectedObjects.Contains(previous);
+            bool wasInList = hadPrevious && _selectedObjectOrderIndex.ContainsKey(previous);
+            bool sameLoadedRow = wasInList && ReferenceEquals(current, previous) && type == selectedType;
+            bool matchedBefore = sameLoadedRow && LabelFilterEvaluator.Matches(_selectedLabelUsage.GetOrRead(previous), CurrentTypeLabelFilterConfig);
             if (hadPrevious && (current == null || current != previous || type != selectedType))
             {
                 _selectedObjects.Remove(previous);
@@ -2320,8 +2322,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 InsertObjectByAsyncDisplayOrder(current, guid);
                 bool labelsChanged = _selectedLabelUsage.Update(current);
                 _assetLabelsChanged = labelsChanged || !wasInList || _assetLabelsChanged;
-                _filteredObjects.Remove(current);
-                if (LabelFilterEvaluator.Matches(_selectedLabelUsage.GetOrRead(current), CurrentTypeLabelFilterConfig))
+                bool matchesNow = LabelFilterEvaluator.Matches(_selectedLabelUsage.GetOrRead(current), CurrentTypeLabelFilterConfig);
+                if (sameLoadedRow && matchedBefore && !matchesNow)
+                {
+                    _filteredObjects.Remove(current);
+                }
+                if (matchesNow && (!sameLoadedRow || !matchedBefore))
                 {
                     int order = _selectedObjectOrderIndex[current];
                     int low = 0;
