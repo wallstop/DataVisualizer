@@ -378,38 +378,37 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 return;
             }
 
-            if (state.Phase == Phase.Finished)
-            {
-                Finish(state);
-                return;
-            }
-
-            if (state.Watchdog.Elapsed > TimeSpan.FromMinutes(state.TimeoutMinutes))
-            {
-                FinishWithError(state, $"the run exceeded the {state.TimeoutMinutes}-minute watchdog in phase {state.Phase}.");
-                return;
-            }
-
-            SizeResult owner = state.Current;
-            double now = state.Watchdog.Elapsed.TotalMilliseconds;
-            if (state.Current != null && 0 < state.LastTickMilliseconds)
-            {
-                state.Current.LongestObservedEditorUpdateGapMilliseconds = Math.Max(state.Current.LongestObservedEditorUpdateGapMilliseconds, now - state.LastTickMilliseconds);
-            }
-            state.LastTickMilliseconds = now;
-            Stopwatch tick = Stopwatch.StartNew();
             try
             {
+                if (state.Phase == Phase.Finished)
+                {
+                    Finish(state);
+                    return;
+                }
+                if (state.Watchdog.Elapsed > TimeSpan.FromMinutes(state.TimeoutMinutes))
+                {
+                    FinishWithError(state, $"the run exceeded the {state.TimeoutMinutes}-minute watchdog in phase {state.Phase}.");
+                    return;
+                }
+
+                SizeResult owner = state.Current;
+                double now = state.Watchdog.Elapsed.TotalMilliseconds;
+                if (state.Current != null && 0 < state.LastTickMilliseconds)
+                {
+                    state.Current.LongestObservedEditorUpdateGapMilliseconds = Math.Max(state.Current.LongestObservedEditorUpdateGapMilliseconds, now - state.LastTickMilliseconds);
+                }
+                state.LastTickMilliseconds = now;
+                Stopwatch tick = Stopwatch.StartNew();
                 Advance(state);
+                SizeResult measured = owner ?? state.Current;
+                if (measured != null)
+                {
+                    measured.LongestDriverTickMilliseconds = Math.Max(measured.LongestDriverTickMilliseconds, tick.Elapsed.TotalMilliseconds);
+                }
             }
             catch (Exception error)
             {
                 FinishWithError(state, $"phase {state.Phase} threw: {error.GetType().Name}: {error.Message}");
-            }
-            SizeResult measured = owner ?? state.Current;
-            if (measured != null)
-            {
-                measured.LongestDriverTickMilliseconds = Math.Max(measured.LongestDriverTickMilliseconds, tick.Elapsed.TotalMilliseconds);
             }
         }
 

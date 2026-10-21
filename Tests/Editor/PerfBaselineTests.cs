@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System;
     using System.Collections;
     using System.Collections.Generic;
+    using System.Text.RegularExpressions;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
@@ -40,6 +41,33 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             yield return new TestCaseData("new\nline", "new\\nline").SetName("ShouldEscapeNewlines");
             yield return new TestCaseData("tab\there", "tab\\there").SetName("ShouldEscapeTabs");
             yield return new TestCaseData("control\u0001char", "control\\u0001char").SetName("ShouldEscapeControlCharacters");
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldRestoreOwnerWhenFinalReportCannotBeWritten()
+        {
+            string output = "Temp/PerfPublicationFailure-" + Guid.NewGuid().ToString("N");
+            int hosts = EditorSurfaceCapture.CountNativeWindowHosts();
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(output, new[] { 2 }, timeoutMinutes: 5);
+            for (int tick = 0; tick < 600 && !PerfBaseline.Status().StartsWith("InteractionSamples:", StringComparison.Ordinal); tick++)
+            {
+                yield return null;
+            }
+            Assert.That(PerfBaseline.Status(), Does.StartWith("InteractionSamples:"));
+            System.IO.Directory.CreateDirectory(output + "/perf-baseline.json");
+            LogAssert.Expect(LogType.Error, new Regex(@"\[PerfBaseline\] FAILED: phase Finished threw: .*"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[PerfBaseline\] the error report could not be written: .*"));
+            for (int tick = 0; tick < 3000 && PerfBaseline.Status() != "Idle"; tick++)
+            {
+                yield return null;
+            }
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+            Assert.That(EditorSurfaceCapture.CountNativeWindowHosts(), Is.EqualTo(hosts));
+            Assert.That(System.IO.Directory.GetFiles(output, "window-state-*.json"), Is.Empty);
+            yield return null;
         }
 
         [TestCase(double.NaN, 10)]
