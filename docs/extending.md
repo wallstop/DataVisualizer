@@ -270,8 +270,8 @@ Configuration and individual create/clone/rename/move/delete services remain out
 
 `EditorAssetOperation` supports Create, Clone, Rename, Move and Delete for exact ScriptableObject main assets under `Assets`. It does not open a window. Supply explicit source
 GUIDs and one full destination path per target; Create accepts destination paths without source GUIDs, while Delete accepts source GUIDs without destinations. Parent folders must
-already exist. Batches contain 1–1000 targets. Preview validates metadata synchronously without loading assets or invoking lifecycle hooks. `ConfirmationPaths` lists every affected
-path.
+already exist. Rename preserves the source folder and extension spelling; use Move for a different full path. Batches contain 1–1000 targets. Preview validates metadata
+synchronously without loading assets or invoking lifecycle hooks. `ConfirmationPaths` lists every affected path.
 
 ```csharp
 using (var operation = new WallstopStudios.DataVisualizer.Editor.Utilities.EditorAssetOperation(

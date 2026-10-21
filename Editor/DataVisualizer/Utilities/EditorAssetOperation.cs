@@ -96,10 +96,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     ValidateDestination(destination);
                     if (
                         !destinations.Add(destination)
-                        || (kind == EditorAssetOperationKind.Rename && !string.Equals(DirectoryOf(path), DirectoryOf(destination), StringComparison.Ordinal))
+                        || (
+                            kind == EditorAssetOperationKind.Rename
+                            && (
+                                !string.Equals(DirectoryOf(path), DirectoryOf(destination), StringComparison.Ordinal)
+                                || !string.Equals(Path.GetExtension(path), Path.GetExtension(destination), StringComparison.Ordinal)
+                            )
+                        )
                     )
                     {
-                        throw new ArgumentException("Destinations must be unique; rename must keep the source folder.");
+                        throw new ArgumentException("Destinations must be unique; rename must keep the source folder and extension spelling.");
                     }
                 }
                 _targets.Add(new EditorAssetOperationTarget(guid, path, destination));
@@ -122,13 +128,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return slash < 0 ? string.Empty : path.Substring(0, slash);
         }
 
+        private static string PhysicalPath(string assetPath)
+        {
+            return Path.Combine(Path.GetDirectoryName(Application.dataPath), assetPath);
+        }
+
         private static void ValidateDestination(string path)
         {
             if (
                 string.IsNullOrEmpty(path)
                 || !path.StartsWith("Assets/", StringComparison.Ordinal)
                 || path.Contains('\\')
-                || !path.EndsWith(".asset", StringComparison.Ordinal)
+                || !path.EndsWith(".asset", StringComparison.OrdinalIgnoreCase)
                 || path.IndexOfAny(new[] { '<', '>', ':', '"', '|', '?', '*' }) != -1
             )
             {
@@ -146,7 +157,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 }
             }
             EditorConfigurationService.ValidateDataFolder(DirectoryOf(path));
-            if (!string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(path)) || File.Exists(path) || Directory.Exists(path))
+            if (!string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(path)) || File.Exists(PhysicalPath(path)) || Directory.Exists(PhysicalPath(path)))
             {
                 throw new ArgumentException("The destination already exists: " + path);
             }
@@ -301,13 +312,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 {
                     throw new InvalidOperationException("Unity did not confirm deletion.");
                 }
-                if (File.Exists(target.Path))
+                if (File.Exists(PhysicalPath(target.Path)))
                 {
                     throw new InvalidOperationException("The deleted path still exists after callbacks.");
                 }
                 return target.Guid;
             }
-            ScriptableObject source = _kind == EditorAssetOperationKind.Create ? null : AssetDatabase.LoadAssetAtPath<ScriptableObject>(target.Path);
+            ScriptableObject source = _kind == EditorAssetOperationKind.Create ? null : AssetDatabase.LoadMainAssetAtPath(target.Path) as ScriptableObject;
             if (_kind != EditorAssetOperationKind.Create && (source == null || source.GetType() != _type))
             {
                 throw new InvalidOperationException("The exact source could not be loaded.");
