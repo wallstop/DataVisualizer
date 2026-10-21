@@ -80,8 +80,16 @@
             "description": "Proposed configuration in preview; actual preferences after read/apply."
           },
           "selectionMode": {
-            "enum": ["keep", "select", null],
-            "description": "Configuration preference only; null when the outcome is unknown."
+            "enum": ["keep", "select", null, ""],
+            "description": "Configuration preference only; empty or null when no configuration value is available."
+          },
+          "sourceGuid": {
+            "type": ["string", "null"],
+            "description": "Original asset GUID; empty for create previews."
+          },
+          "destinationPath": {
+            "type": ["string", "null"],
+            "description": "Planned exact asset destination; empty for delete. path remains the original source path."
           }
         }
       }

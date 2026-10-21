@@ -12,6 +12,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _errorCode != null
             || _configurationResponse != null
             || _cancelled
+            || (_assetOperation != null && (_assetOperation.Status == "preview" || _assetOperation.IsFinished))
             || (
                 _processorOperation != null ? _processorOperation.Status == "preview" || _processorOperation.IsFinished : (_query?.IsComplete ?? (_validation?.IsComplete ?? false))
             );
@@ -20,6 +21,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public int DefaultPageSize { get; private set; } = EditorAutomationRequest.DefaultPageSize;
 
         private EditorAutomationResponse _configurationResponse;
+        private EditorAssetOperation _assetOperation;
         private EditorAssetQuery _query;
         private EditorProcessorOperation _processorOperation;
         private EditorAssetValidation _validation;
@@ -54,8 +56,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 return session;
             }
             bool configuration = request.operation == "readConfiguration" || request.operation == "previewConfiguration" || request.operation == "applyConfiguration";
+            bool assets = request.operation == "previewAssets" || request.operation == "applyAssets";
             if (
                 !configuration
+                && !assets
                 && request.operation != "query"
                 && request.operation != "validate"
                 && request.operation != "previewProcessor"
@@ -64,7 +68,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 session.Reject(
                     "unsupported_operation",
-                    "Supported operations: query, validate, previewProcessor, applyProcessor, readConfiguration, previewConfiguration, applyConfiguration."
+                    "Supported operations: query, validate, previewProcessor, applyProcessor, readConfiguration, previewConfiguration, applyConfiguration, previewAssets, applyAssets."
                 );
                 return session;
             }
@@ -77,6 +81,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             session.DefaultPageSize = request.pageSize;
             try
             {
+                if (assets)
+                {
+                    session.StartAssets(request, requireSinglePage);
+                    return session;
+                }
+                if (!string.IsNullOrEmpty(request.assetOperation) || (request.destinationPaths?.Length ?? 0) != 0)
+                {
+                    throw new ArgumentException("Asset-operation fields are accepted only by previewAssets/applyAssets.");
+                }
                 if (configuration)
                 {
                     session.StartConfiguration(request);
@@ -164,7 +177,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 return;
             }
-            if (_processorOperation != null)
+            if (_assetOperation != null)
+            {
+                _assetOperation.Advance(budgetMilliseconds);
+            }
+            else if (_processorOperation != null)
             {
                 _processorOperation.Advance(budgetMilliseconds);
             }
@@ -188,6 +205,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             if (offset < 0 || count < 1 || 1000 < count)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
+            }
+            if (_assetOperation != null && _errorCode == null)
+            {
+                return GetAssetResponse(offset, count);
             }
             if (_configurationResponse != null)
             {
@@ -287,6 +308,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _query?.Dispose();
             _validation?.Dispose();
             _processorOperation?.Dispose();
+            _assetOperation?.Dispose();
         }
 
         public void Dispose()
@@ -295,6 +317,98 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _query?.Dispose();
             _validation?.Dispose();
             _processorOperation?.Dispose();
+            _assetOperation?.Dispose();
+        }
+
+        private void StartAssets(EditorAutomationRequest request, bool requireSinglePage)
+        {
+            if (
+                request.typeIdentities == null
+                || request.typeIdentities.Length != 1
+                || !string.IsNullOrEmpty(request.processorIdentity)
+                || !string.IsNullOrEmpty(request.settingsGuid)
+                || !string.IsNullOrEmpty(request.dataFolderPath)
+                || !string.IsNullOrEmpty(request.selectionMode)
+                || !string.IsNullOrEmpty(request.text)
+                || (request.andLabels?.Length ?? 0) != 0
+                || (request.orLabels?.Length ?? 0) != 0
+                || !string.IsNullOrEmpty(request.labelCombination)
+            )
+            {
+                throw new ArgumentException("Asset operations require one exact type without query, processor or configuration fields.");
+            }
+            EditorAssetOperationKind kind = request.assetOperation switch
+            {
+                "create" => EditorAssetOperationKind.Create,
+                "clone" => EditorAssetOperationKind.Clone,
+                "rename" => EditorAssetOperationKind.Rename,
+                "move" => EditorAssetOperationKind.Move,
+                "delete" => EditorAssetOperationKind.Delete,
+                _ => throw new ArgumentException("assetOperation must be create, clone, rename, move or delete."),
+            };
+            _assetOperation = new EditorAssetOperation(kind, ResolveExactType(request.typeIdentities[0]), request.assetGuids, request.destinationPaths);
+            if (request.operation == "previewAssets")
+            {
+                if ((request.confirmPaths?.Length ?? 0) != 0)
+                {
+                    throw new ArgumentException("Preview does not accept confirmation paths.");
+                }
+                return;
+            }
+            if (requireSinglePage && (request.offset != 0 || request.pageSize < _assetOperation.Targets.Count))
+            {
+                Reject("invalid_page", "File apply must return every asset outcome in one page. Use offset 0 and a sufficient pageSize.");
+                return;
+            }
+            if (request.confirmPaths == null || request.confirmPaths.Length != _assetOperation.ConfirmationPaths.Count)
+            {
+                throw new ArgumentException("Confirm every nonempty source and destination path from preview, in target order.");
+            }
+            for (int i = 0; i < request.confirmPaths.Length; i++)
+            {
+                if (!string.Equals(request.confirmPaths[i], _assetOperation.ConfirmationPaths[i], StringComparison.Ordinal))
+                {
+                    throw new ArgumentException("Confirmation paths changed. Preview again.");
+                }
+            }
+            _assetOperation.Apply();
+        }
+
+        private string GetAssetResponse(int offset, int count)
+        {
+            bool preview = _assetOperation.Status == "preview";
+            EditorAutomationResponse response = new()
+            {
+                status =
+                    preview ? "complete"
+                    : _assetOperation.Status == "running" && IsWaitingForEditor ? "waiting"
+                    : _assetOperation.Status,
+                code = preview ? "preview" : _assetOperation.Code,
+                detail = _stopReason ?? _assetOperation.Detail,
+                complete = preview || _assetOperation.Status == "complete",
+                scopeCount = _assetOperation.Targets.Count,
+                processedCount = _assetOperation.ProcessedCount,
+                availableCount = _assetOperation.Targets.Count,
+                offset = offset,
+                coverage =
+                    "Exact ScriptableObject main-asset files. Safe units are indivisible; arbitrary callback changes cannot be rolled back. Delete removes the whole file, including subassets.",
+                items = new EditorAutomationItem[Math.Min(count, Math.Max(0, _assetOperation.Targets.Count - offset))],
+            };
+            for (int i = 0; i < response.items.Length; i++)
+            {
+                EditorAssetOperationTarget target = _assetOperation.Targets[offset + i];
+                response.items[i] = new EditorAutomationItem
+                {
+                    guid = target.ResultGuid ?? target.Guid,
+                    sourceGuid = target.Guid,
+                    path = target.Path,
+                    destinationPath = target.DestinationPath,
+                    typeIdentity = _assetOperation.TypeIdentity,
+                    code = target.Code,
+                    detail = target.Detail,
+                };
+            }
+            return JsonUtility.ToJson(response, true);
         }
 
         private void StartConfiguration(EditorAutomationRequest request)

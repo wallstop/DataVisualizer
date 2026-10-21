@@ -4650,6 +4650,15 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             try
             {
+                if (kind != EditorAssetOperationKind.Delete && !string.IsNullOrEmpty(destination))
+                {
+                    string directory = Path.GetDirectoryName(destination)?.SanitizePath();
+                    string canonical = AssetsFolderUtility.GetCanonicalAssetsFolderOrNull(directory);
+                    if (canonical != null)
+                    {
+                        destination = canonical + "/" + Path.GetFileName(destination);
+                    }
+                }
                 using EditorAssetOperation operation = new(
                     kind,
                     type,

@@ -280,7 +280,10 @@ using (var operation = new WallstopStudios.DataVisualizer.Editor.Utilities.Edito
     new[] { sourceAssetGuid },
     new[] { "Assets/Quest copy.asset" }))
 {
-    foreach (string path in operation.ConfirmationPaths) UnityEngine.Debug.Log(path);
+    foreach (string path in operation.ConfirmationPaths)
+    {
+        UnityEngine.Debug.Log(path);
+    }
     // Call Apply only after reviewing the exact preview paths.
     operation.Apply();
     operation.Advance(4);
@@ -319,9 +322,9 @@ asset operations remain outside this service. Read preferences again after exter
 
 ## JSON editor automation
 
-Schema version 1 exposes `query`, `validate`, processor preview/apply, and configuration read/preview/apply through `EditorAutomationSession`, using the same services as the C#
-APIs and browser. See the [request schema](automation-request.schema.json) and [response schema](automation-response.schema.json). Unknown JSON members are ignored; use the schema
-in client tooling. Other individual asset-operation requests return `unsupported_operation`.
+Schema version 1 exposes `query`, `validate`, processor and individual asset preview/apply, and configuration read/preview/apply through `EditorAutomationSession`, using the same
+services as the C# APIs and browser. See the [request schema](automation-request.schema.json) and [response schema](automation-response.schema.json). Unknown JSON members are
+ignored; use the schema in client tooling. Other individual asset-operation requests return `unsupported_operation`.
 
 Configuration uses `readConfiguration`, `previewConfiguration` and `applyConfiguration`. Supply an explicit `settingsGuid` for a `DataVisualizerSettings` main asset under `Assets`.
 Preview and apply also require `dataFolderPath` and `selectionMode`: `keep` leaves Unity's active selection alone when inspecting assets; `select` selects inspected assets. Preview
@@ -387,6 +390,41 @@ The snippet performs one slice, then cancels unfinished work on disposal. A long
 disposes the session on owner cleanup. `Cancel()` preserves partial results. Queries keep multi-term OR matching, exact type scopes, and label-expression semantics. Pages follow
 discovery order; restart after edits and never reuse offsets across sessions. `availableCount` is a partial count until `complete` is true. `scopeCount` is -1 while query discovery
 is incomplete. Validation findings can arrive for an earlier asset when a later duplicate ID appears.
+
+Individual asset operations use `previewAssets` / `applyAssets` with `assetOperation` set to `create`, `clone`, `rename`, `move` or `delete`. Supply one exact `typeIdentities`
+entry. Create takes `destinationPaths` without source GUIDs; Delete takes `assetGuids` without destinations; other operations require one destination per GUID. Parent folders must
+already exist. Delete removes the whole main-asset file, including subassets. Rename preserves the source folder and extension spelling; use Move for a different full path.
+
+Preview returns each original `path` and planned `destinationPath`. For apply, confirm **every nonempty source followed by destination**, in target order, through `confirmPaths`.
+For example, to clone one asset after reading and reviewing its preview:
+
+```csharp
+var request = new WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationRequest
+{
+    schemaVersion = 1, operation = "previewAssets", assetOperation = "clone",
+    typeIdentities = new[] { typeof(MyGame.Data.QuestData).AssemblyQualifiedName },
+    assetGuids = new[] { sourceAssetGuid }, destinationPaths = new[] { "Assets/Quest copy.asset" }, pageSize = 1000,
+};
+using (var preview = WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationSession.Start(UnityEngine.JsonUtility.ToJson(request)))
+{
+    var response = UnityEngine.JsonUtility.FromJson<WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationResponse>(preview.GetResponseJson());
+    if (response.code != "preview") { UnityEngine.Debug.LogError(response.detail); return; }
+    UnityEngine.Debug.Log(response.items[0].path + " -> " + response.items[0].destinationPath);
+    // After reviewing both paths, confirm this exact single target.
+    request.operation = "applyAssets";
+    request.confirmPaths = new[] { response.items[0].path, response.items[0].destinationPath };
+    using (var apply = WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationSession.Start(UnityEngine.JsonUtility.ToJson(request)))
+    {
+        apply.Advance(0);
+        UnityEngine.Debug.Log(apply.GetResponseJson());
+    }
+}
+```
+
+Apply starts no mutation until `Advance`. Keep the same session for subsequent slices/pages, and cancel between safe asset units. File apply requires all outcomes in one response
+page and never repeats mutations to fetch pages. `processedCount` counts attempted units; inspect every item's `code`. Applied create/clone items return their new `guid`;
+`sourceGuid` and `path` retain the source identity/path. `outcome_unknown` means hooks or file writes may have changed memory/disk: inspect before retrying. Partial failures are
+not success totals.
 
 Processor requests use one `typeIdentities` entry, explicit `assetGuids`, and `processorIdentity` containing the processor's assembly-qualified identity. No text or label filters
 are accepted. Use `operation: "previewProcessor"` first; it neither constructs the processor nor loads assets. Read **all** pages of targets, inspect their paths and obtain
