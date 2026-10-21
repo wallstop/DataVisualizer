@@ -297,6 +297,50 @@ after loading/creation or lifecycle hooks report `outcome_unknown`. Inspect memo
 continue. Create/clone/rename retain Before/After hooks and save their changes. Only affected assets are saved. Browser arrangements are an adapter concern; this service changes
 asset files.
 
+## Select targets by GUID
+
+`EditorAssetSelection` is the browser's selection service. Headless callers can use `ReplaceGuids(exactType, guids)` and `CopyGuids()` without loading objects or opening a window.
+`TypeIdentity` is the assembly-qualified exact type. Import validates the entire input before changing state, normalizes 32-hex-digit GUIDs to lowercase, and removes duplicates in
+first-occurrence order. It returns `false` when type, ordered GUIDs and explicit intent are unchanged. Input collections and exported arrays do not expose its internal storage.
+
+An empty import means an explicit empty selection; it never means all assets. Missing, hidden and deleted GUIDs remain explicit until replaced or cleared. Import does not resolve
+GUIDs or check their actual asset types; operation preview performs that validation and rejects stale or wrong-type targets. Selection changes only this session's intent and may
+run during Play Mode; operation apply still rejects Play Mode. The browser's loaded-row `CopyGuids(canonicalOrder, cache)` overload preserves its canonical row order. Visible UI
+edits preserve hidden GUIDs, and browsing another type resets intent. JSON operations already receive the exported scope through `assetGuids`.
+
+For example, put this helper in an `Editor` folder and call `GuidSelectionPreview.Run(typeof(YourData), yourAssetGuids)` from an editor command. Supply GUIDs for exact main assets:
+
+```csharp
+namespace MyGame.Editor
+{
+    using System;
+    using System.Collections.Generic;
+    using UnityEngine;
+    using WallstopStudios.DataVisualizer.Editor.Utilities;
+
+    public static class GuidSelectionPreview
+    {
+        public static void Run(Type exactType, IReadOnlyList<string> guids)
+        {
+            var selection = new EditorAssetSelection();
+            selection.ReplaceGuids(exactType, guids);
+            Debug.Log(selection.TypeIdentity);
+            using (var preview = new EditorAssetOperation(EditorAssetOperationKind.Delete, exactType, selection.CopyGuids()))
+            {
+                for (int i = 0; i < preview.Targets.Count; i++)
+                {
+                    EditorAssetOperationTarget target = preview.Targets[i];
+                    Debug.Log(target.Guid + " " + target.Path);
+                }
+            }
+        }
+    }
+}
+```
+
+This helper only previews; a caller must review every target before applying. Keep the same operation instance for apply so later selection edits cannot change its frozen scope.
+Selection can round-trip through `JsonUtility` using its existing serialized fields; it has no subscriptions or resources to dispose.
+
 ## Discover available types
 
 `EditorTypeCatalog` snapshots the browser's eligible loaded ScriptableObject types on the editor main thread. It does not open a window, construct objects, load assets, or change

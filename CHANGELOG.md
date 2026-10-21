@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Add atomic GUID selection import and copied export for headless editor tools, sharing browser selection intent and exact type identities (#315).
+
 - Add paged C# and JSON discovery of browser-eligible types with exact identities, without opening a window or loading assets (#315, #316).
 
 - Add shared C# and JSON previews and cooperative create, clone, rename, move and delete operations (#315, #316).
