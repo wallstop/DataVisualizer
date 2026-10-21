@@ -291,9 +291,51 @@ asset operations remain outside this service. Read preferences again after exter
 
 ## JSON editor automation
 
-Schema version 1 exposes `query`, `validate`, `previewProcessor` and `applyProcessor` through `EditorAutomationSession`, using the same services as the C# APIs and validation
-workspace. See the [request schema](automation-request.schema.json) and [response schema](automation-response.schema.json). Unknown JSON members are ignored; use the schema in
-client tooling. Configuration, mutation previews, and apply operations are not implemented and return `unsupported_operation`, including during Play Mode.
+Schema version 1 exposes `query`, `validate`, processor preview/apply, and configuration read/preview/apply through `EditorAutomationSession`, using the same services as the C#
+APIs and browser. See the [request schema](automation-request.schema.json) and [response schema](automation-response.schema.json). Unknown JSON members are ignored; use the schema
+in client tooling. Other individual asset-operation requests return `unsupported_operation`.
+
+Configuration uses `readConfiguration`, `previewConfiguration` and `applyConfiguration`. Supply an explicit `settingsGuid` for a `DataVisualizerSettings` main asset under `Assets`.
+Preview and apply also require `dataFolderPath` and `selectionMode`: `keep` leaves Unity's active selection alone when inspecting assets; `select` selects inspected assets. Preview
+returns the proposed preferences without changing or saving settings. Read returns current preferences. Apply requires `confirmPaths` containing the exact settings path from
+preview.
+
+For example, inside an editor method, replace the settings path if your project uses another asset:
+
+```csharp
+var request = new WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationRequest
+{
+    schemaVersion = 1,
+    operation = "previewConfiguration",
+    settingsGuid = UnityEditor.AssetDatabase.AssetPathToGUID("Assets/Editor/DataVisualizerSettings.asset"),
+    dataFolderPath = "Assets",
+    selectionMode = "select",
+};
+using (var preview = WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationSession.Start(UnityEngine.JsonUtility.ToJson(request)))
+{
+    var response = UnityEngine.JsonUtility.FromJson<WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationResponse>(preview.GetResponseJson());
+    if (response.code != "preview")
+    {
+        UnityEngine.Debug.LogError(response.detail);
+        return;
+    }
+    UnityEngine.Debug.Log(response.items[0].path); // Review this settings target before applying.
+    // After reviewing the target, submit the same preferences with:
+    request.operation = "applyConfiguration";
+    request.confirmPaths = new[] { response.items[0].path };
+    using (var apply = WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationSession.Start(UnityEngine.JsonUtility.ToJson(request)))
+    {
+        UnityEngine.Debug.Log(apply.GetResponseJson());
+    }
+}
+```
+
+Configuration is one synchronous unit executed by `Start`, including apply. It completes before the session returns; `Cancel` cannot interrupt it or undo a completed write. Use
+`previewConfiguration` first and start apply only after reviewing its settings target. `applied` and `unchanged` distinguish writes from idempotent requests. Settings changes do
+not alter the editor's current selection immediately. Apply rejects Play Mode/transitions, busy editor state, read-only settings and invalid folders without dialogs. Requests
+require offset zero; later response paging does not repeat the operation. `configuration_failed` with `outcome_unknown` means a write failed after mutation may have started: read
+current preferences and inspect disk before retrying. This contract covers only the two preferences documented above; persistence migration, theme and individual asset operations
+remain outside it. File execution validates its output path before starting configuration.
 
 Inside an editor method, generate a query request using an exact type from your project, then keep the session alive across editor updates:
 

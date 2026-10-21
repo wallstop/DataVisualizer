@@ -34,7 +34,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
             if (AssetGuidDiscovery.IsAssetDatabaseBusy())
             {
-                throw new InvalidOperationException("editor_busy: Wait for compilation and asset updates before resolving settings.");
+                throw new EditorConfigurationException("editor_busy", "Wait for compilation and asset updates before resolving settings.");
             }
             string path = AssetDatabase.GUIDToAssetPath(guid);
             if (string.IsNullOrEmpty(path) || !path.StartsWith("Assets/", StringComparison.Ordinal) || AssetDatabase.GetMainAssetTypeAtPath(path) != typeof(DataVisualizerSettings))
@@ -88,16 +88,16 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             DataVisualizerSettings settings = Settings;
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                throw new InvalidOperationException("play_mode: Configuration cannot change during Play Mode or its transition.");
+                throw new EditorConfigurationException("play_mode", "Configuration cannot change during Play Mode or its transition.");
             }
             if (AssetGuidDiscovery.IsAssetDatabaseBusy())
             {
-                throw new InvalidOperationException("editor_busy: Wait for compilation and asset updates before applying configuration.");
+                throw new EditorConfigurationException("editor_busy", "Wait for compilation and asset updates before applying configuration.");
             }
             string settingsPath = AssetDatabase.GetAssetPath(settings);
             if (!string.IsNullOrEmpty(settingsPath) && (!settingsPath.StartsWith("Assets/", StringComparison.Ordinal) || !AssetDatabase.IsOpenForEdit(settings)))
             {
-                throw new InvalidOperationException("read_only: The settings asset must be writable under Assets.");
+                throw new EditorConfigurationException("read_only", "The settings asset must be writable under Assets.");
             }
             bool folderChanged = !string.Equals(settings.DataFolderPath, path, StringComparison.Ordinal);
             bool selectionChanged = settings.selectActiveObject != selectActiveObject;

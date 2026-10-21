@@ -10,6 +10,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     {
         public bool IsFinished =>
             _errorCode != null
+            || _configurationResponse != null
             || _cancelled
             || (
                 _processorOperation != null ? _processorOperation.Status == "preview" || _processorOperation.IsFinished : (_query?.IsComplete ?? (_validation?.IsComplete ?? false))
@@ -18,6 +19,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public int DefaultOffset { get; private set; }
         public int DefaultPageSize { get; private set; } = EditorAutomationRequest.DefaultPageSize;
 
+        private EditorAutomationResponse _configurationResponse;
         private EditorAssetQuery _query;
         private EditorProcessorOperation _processorOperation;
         private EditorAssetValidation _validation;
@@ -51,9 +53,19 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 session.Reject("unsupported_version", "Only schemaVersion 1 is supported.");
                 return session;
             }
-            if (request.operation != "query" && request.operation != "validate" && request.operation != "previewProcessor" && request.operation != "applyProcessor")
+            bool configuration = request.operation == "readConfiguration" || request.operation == "previewConfiguration" || request.operation == "applyConfiguration";
+            if (
+                !configuration
+                && request.operation != "query"
+                && request.operation != "validate"
+                && request.operation != "previewProcessor"
+                && request.operation != "applyProcessor"
+            )
             {
-                session.Reject("unsupported_operation", "Supported operations: query, validate, previewProcessor, applyProcessor. Configuration is not implemented.");
+                session.Reject(
+                    "unsupported_operation",
+                    "Supported operations: query, validate, previewProcessor, applyProcessor, readConfiguration, previewConfiguration, applyConfiguration."
+                );
                 return session;
             }
             if (request.offset < 0 || request.pageSize < 1 || 1000 < request.pageSize)
@@ -65,6 +77,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             session.DefaultPageSize = request.pageSize;
             try
             {
+                if (configuration)
+                {
+                    session.StartConfiguration(request);
+                    return session;
+                }
+                if (!string.IsNullOrEmpty(request.settingsGuid) || !string.IsNullOrEmpty(request.dataFolderPath) || !string.IsNullOrEmpty(request.selectionMode))
+                {
+                    throw new ArgumentException("Configuration fields are only accepted by configuration operations.");
+                }
                 if (request.operation == "previewProcessor" || request.operation == "applyProcessor")
                 {
                     if (requireSinglePage && request.operation == "applyProcessor" && (request.offset != 0 || request.pageSize < (request.assetGuids?.Length ?? 0)))
@@ -116,6 +137,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                     session._query = new EditorAssetQuery(types, request.text, labels);
                 }
             }
+            catch (EditorConfigurationException error)
+            {
+                session.Reject(error.Code, error.Message);
+            }
             catch (Exception error)
             {
                 session.Reject("invalid_scope", error.Message);
@@ -163,6 +188,26 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             if (offset < 0 || count < 1 || 1000 < count)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
+            }
+            if (_configurationResponse != null)
+            {
+                EditorAutomationResponse source = _configurationResponse;
+                return JsonUtility.ToJson(
+                    new EditorAutomationResponse
+                    {
+                        status = source.status,
+                        code = source.code,
+                        detail = source.detail,
+                        complete = source.complete,
+                        processedCount = source.processedCount,
+                        scopeCount = source.scopeCount,
+                        availableCount = source.availableCount,
+                        offset = offset,
+                        coverage = source.coverage,
+                        items = offset == 0 ? source.items : Array.Empty<EditorAutomationItem>(),
+                    },
+                    true
+                );
             }
             if (_processorOperation != null && _errorCode == null)
             {
@@ -250,6 +295,122 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _query?.Dispose();
             _validation?.Dispose();
             _processorOperation?.Dispose();
+        }
+
+        private void StartConfiguration(EditorAutomationRequest request)
+        {
+            if (
+                (request.typeIdentities?.Length ?? 0) != 0
+                || (request.assetGuids?.Length ?? 0) != 0
+                || !string.IsNullOrEmpty(request.processorIdentity)
+                || !string.IsNullOrEmpty(request.text)
+                || (request.andLabels?.Length ?? 0) != 0
+                || (request.orLabels?.Length ?? 0) != 0
+                || !string.IsNullOrEmpty(request.labelCombination)
+            )
+            {
+                throw new ArgumentException("Configuration accepts an explicit settingsGuid without asset scopes or query filters.");
+            }
+            if (request.offset != 0)
+            {
+                Reject("invalid_page", "Configuration requests require offset 0; their single result fits every supported page size.");
+                return;
+            }
+            bool apply = request.operation == "applyConfiguration";
+            bool read = request.operation == "readConfiguration";
+            if (apply && UnityEditor.EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                Reject("play_mode", "Configuration cannot change during Play Mode or its transition.");
+                return;
+            }
+            if (AssetGuidDiscovery.IsAssetDatabaseBusy())
+            {
+                Reject("editor_busy", "Wait for compilation and asset updates before reading or applying configuration.");
+                return;
+            }
+            EditorConfigurationService service = EditorConfigurationService.FromGuid(request.settingsGuid);
+            if (read)
+            {
+                if (!string.IsNullOrEmpty(request.dataFolderPath) || !string.IsNullOrEmpty(request.selectionMode) || (request.confirmPaths?.Length ?? 0) != 0)
+                {
+                    throw new ArgumentException("readConfiguration accepts only settingsGuid.");
+                }
+            }
+            else
+            {
+                EditorConfigurationService.ValidateDataFolder(request.dataFolderPath);
+                if (request.selectionMode != "keep" && request.selectionMode != "select")
+                {
+                    throw new ArgumentException("selectionMode must explicitly be keep or select.");
+                }
+                if (apply)
+                {
+                    if (request.confirmPaths == null || request.confirmPaths.Length != 1 || !string.Equals(request.confirmPaths[0], service.SettingsPath, StringComparison.Ordinal))
+                    {
+                        throw new ArgumentException("Confirm the exact settings path from preview before applying configuration.");
+                    }
+                }
+                else if ((request.confirmPaths?.Length ?? 0) != 0)
+                {
+                    throw new ArgumentException("Preview does not accept confirmation paths.");
+                }
+            }
+            string settingsGuid = service.SettingsGuid;
+            string settingsPath = service.SettingsPath;
+            string folder = read ? service.DataFolderPath : request.dataFolderPath;
+            string selection = read ? (service.SelectActiveObject ? "select" : "keep") : request.selectionMode;
+            string code = read ? "ok" : "preview";
+            string detail = null;
+            bool failed = false;
+            if (apply)
+            {
+                try
+                {
+                    code = service.Apply(request.dataFolderPath, request.selectionMode == "select") ? "applied" : "unchanged";
+                    folder = service.DataFolderPath;
+                    selection = service.SelectActiveObject ? "select" : "keep";
+                }
+                catch (EditorConfigurationException error)
+                {
+                    Reject(error.Code, error.Message);
+                    return;
+                }
+                catch (Exception error)
+                {
+                    code = "configuration_failed";
+                    detail = "Apply may have changed settings in memory. Read the settings and inspect disk before retrying. " + error.Message;
+                    failed = true;
+                }
+            }
+            _configurationResponse = new EditorAutomationResponse
+            {
+                status = failed ? "failed" : "complete",
+                code = code,
+                detail = detail,
+                complete = !failed,
+                processedCount = apply && !failed ? 1 : 0,
+                scopeCount = 1,
+                availableCount = 1,
+                coverage = "Explicit settings asset; data folder and active object selection only. Configuration is one synchronous unit.",
+                items = new[]
+                {
+                    new EditorAutomationItem
+                    {
+                        guid = settingsGuid,
+                        path = settingsPath,
+                        code = failed ? "outcome_unknown" : code,
+                        detail = detail,
+                        dataFolderPath =
+                            failed ? null
+                            : read || apply ? service.DataFolderPath
+                            : request.dataFolderPath,
+                        selectionMode =
+                            failed ? null
+                            : read || apply ? (service.SelectActiveObject ? "select" : "keep")
+                            : request.selectionMode,
+                    },
+                },
+            };
         }
 
         private void StartProcessor(EditorAutomationRequest request)

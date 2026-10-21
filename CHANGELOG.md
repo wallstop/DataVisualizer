@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Add a shared C# configuration service for data folders and active asset selection (#315).
+- Add shared C# and JSON configuration for data folders and active asset selection, with read-only preview and idempotent apply (#315, #316).
 
 - Add SELECTED processor scope with GUID selections, exact target previews, cancellable preparation and explicit batch failure outcomes (#317).
 

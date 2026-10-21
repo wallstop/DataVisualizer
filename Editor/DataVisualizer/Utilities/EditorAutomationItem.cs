@@ -13,5 +13,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public string code;
         public string propertyPath;
         public string detail;
+        public string dataFolderPath;
+        public string selectionMode;
     }
 }
