@@ -233,3 +233,24 @@ label filters, Undo/Redo, move, closed-window reopen, stale-owner rejection, cus
 generation separately. The longest observed refresh slice before the lifecycle tail was 16.8 ms. Cleanup independently confirmed no owned fixtures or state file, one container
 window, seven editor windows, and an idle AssetDatabase. This completes this 1k scenario; 10k bursts, 100k measurements, actual Play transitions and the complete
 [#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308) matrix remain open.
+
+## Completed batched 10k refresh on 2026-10-21
+
+[The batched 10k report](performance-refresh-batched-10k-2026-10-21.json) records all three real label-change sizes, with the same dataset closed first and open second. Each set
+brackets `SetLabels` calls with `StartAssetEditing`/`StopAssetEditing`, then explicitly replays duplicate callback paths. This is a different workload from sequential writes above;
+each cell is one warm-process observation. The complete run, including 357.0 seconds of staging and the lifecycle tail, took 729.2 seconds.
+
+| Changed assets | Closed write/flush wall | Open write/flush wall | Open import flush | Explicit duplicate callback | Reconciliation wall | New refresh loads |
+| -------------- | ----------------------- | --------------------- | ----------------- | --------------------------- | ------------------- | ----------------- |
+| 100            | 691.9 ms                | 713.5 ms              | 533.9 ms          | 9.3 ms                      | 515.9 ms            | 0                 |
+| 1,000          | 4,587.5 ms              | 4,197.6 ms            | 2,880.3 ms        | 94.0 ms                     | 6,114.4 ms          | 0                 |
+| 10,000         | 43,914.7 ms             | 41,599.9 ms           | 26,226.7 ms       | 806.9 ms                    | 220,977.2 ms        | 0                 |
+
+The 10k queue drained across editor updates; its maximum observed processed delta was six paths between update observations. Those callbacks include empty updates and are not
+rendered frames. The longest refresh slice before the lifecycle tail reached 94.1 ms, so a 4 ms service budget is not a hard whole-slice bound. The import flush includes Unity and
+project hooks; explicit replay timing isolates neither actual importer delivery nor pure Unity cost. These results expose slow large-burst reconciliation, not a performance
+guarantee. Counts, observer method, controls and raw terminal text remain in the report.
+
+Missing selected-script recovery, unavailable deletion during an intentional rebuild, label filtering, Undo/Redo, move, reopen, stale-owner rejection, custom order/selection and
+simulated Play reconciliation passed. Routine operations preserved row/search generations and 9,999 unrelated identities. Independent cleanup found no owned roots or state file,
+one container window, seven editor windows and an idle editor. Actual Play entry, type-catalog cases, 100k measurements and the complete #308 matrix remain open.
