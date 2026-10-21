@@ -95,6 +95,30 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(EditorUtility.IsDirty(settings), Is.False);
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldResolveFolderPickerSpellingBeforeApplyingStrictConfiguration(bool varyCase)
+        {
+            using TestCleanupScope cleanup = new();
+            string leaf = "PickerCase-" + Guid.NewGuid().ToString("N");
+            string folder = "Assets/" + leaf;
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(folder));
+            AssetDatabase.CreateFolder("Assets", leaf);
+            string selected = varyCase ? "Assets/" + leaf.ToLowerInvariant() : folder;
+            string canonical = AssetsFolderUtility.GetCanonicalAssetsFolderOrNull(selected);
+            if (string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(selected)))
+            {
+                Assert.That(canonical == null, "A case-sensitive database must reject a path it cannot resolve.");
+                return;
+            }
+            Assert.That(canonical, Is.EqualTo(folder));
+            EditorConfigurationService.ValidateDataFolder(canonical);
+            if (varyCase)
+            {
+                Assert.Throws<ArgumentException>(() => EditorConfigurationService.ValidateDataFolder(selected), "The headless contract stays strict.");
+            }
+        }
+
         [Test]
         public void ShouldValidateAnExistingFolderWithoutChangingSettingsOrDirtyState()
         {

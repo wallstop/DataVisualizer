@@ -9,6 +9,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.Editor;
     using WallstopStudios.DataVisualizer.Editor.Styles;
+    using WallstopStudios.DataVisualizer.Editor.UI;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
 
@@ -330,6 +331,41 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     "the same manual type load after resume must load the fixture even when other assets exist"
                 );
             }
+        }
+
+        [Test]
+        public void ShouldRestoreSettingsToggleAndGateRebuiltControlsWhilePaused()
+        {
+            object previousInstance = ReadSharedInstance();
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
+            cleanup.Defer(() => RestoreSharedInstance(previousInstance));
+            DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
+            cleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            EditorSurfaceCapture.ShowPopup(window);
+            window.CreateGUI();
+            ActionButtonToggle toggle = window.rootVisualElement.Q<ActionButtonToggle>("settings-selection-toggle");
+            Button folder = window.rootVisualElement.Q<Button>("settings-data-folder-button");
+            bool stored = toggle.value;
+            Assert.That(toggle.enabledSelf, Is.True);
+            Assert.That(folder.enabledSelf, Is.True);
+            SuspendForPlayMode(window);
+            Assert.That(toggle.enabledSelf, Is.False);
+            Assert.That(folder.enabledSelf, Is.False);
+            // Deliver a stale change even though normal disabled controls suppress events.
+            toggle.SetEnabled(true);
+            Assert.DoesNotThrow(() => toggle.value = !stored);
+            Assert.That(toggle.value, Is.EqualTo(stored));
+            Assert.DoesNotThrow(() => InvokePrivate(window, "SelectDataFolderForPopover", new Label()));
+            InvokePrivate(window, "BuildSettingsPopoverContent");
+            toggle = window.rootVisualElement.Q<ActionButtonToggle>("settings-selection-toggle");
+            folder = window.rootVisualElement.Q<Button>("settings-data-folder-button");
+            Assert.That(toggle.enabledSelf, Is.False);
+            Assert.That(folder.enabledSelf, Is.False);
+            Assert.That(toggle.value, Is.EqualTo(stored));
+            ResumeFromPlayMode(window);
+            Assert.That(toggle.enabledSelf, Is.True);
+            Assert.That(folder.enabledSelf, Is.True);
         }
 
         [Test]
