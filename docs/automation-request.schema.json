@@ -9,7 +9,7 @@
       "const": 1
     },
     "operation": {
-      "enum": ["query", "validate", "previewProcessor", "applyProcessor", "readConfiguration", "previewConfiguration", "applyConfiguration", "previewAssets", "applyAssets"]
+      "enum": ["catalog", "query", "validate", "previewProcessor", "applyProcessor", "readConfiguration", "previewConfiguration", "applyConfiguration", "previewAssets", "applyAssets"]
     },
     "typeIdentities": {
       "type": ["array", "null"],

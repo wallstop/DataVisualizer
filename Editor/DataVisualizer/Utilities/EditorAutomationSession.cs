@@ -11,6 +11,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public bool IsFinished =>
             _errorCode != null
             || _configurationResponse != null
+            || _catalog != null
             || _cancelled
             || (_assetOperation != null && (_assetOperation.Status == "preview" || _assetOperation.IsFinished))
             || (
@@ -20,6 +21,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public int DefaultOffset { get; private set; }
         public int DefaultPageSize { get; private set; } = EditorAutomationRequest.DefaultPageSize;
 
+        private EditorTypeCatalog _catalog;
         private EditorAutomationResponse _configurationResponse;
         private EditorAssetOperation _assetOperation;
         private EditorAssetQuery _query;
@@ -60,6 +62,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             if (
                 !configuration
                 && !assets
+                && request.operation != "catalog"
                 && request.operation != "query"
                 && request.operation != "validate"
                 && request.operation != "previewProcessor"
@@ -68,7 +71,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 session.Reject(
                     "unsupported_operation",
-                    "Supported operations: query, validate, previewProcessor, applyProcessor, readConfiguration, previewConfiguration, applyConfiguration, previewAssets, applyAssets."
+                    "Supported operations: catalog, query, validate, previewProcessor, applyProcessor, readConfiguration, previewConfiguration, applyConfiguration, previewAssets, applyAssets."
                 );
                 return session;
             }
@@ -98,6 +101,24 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 if (!string.IsNullOrEmpty(request.settingsGuid) || !string.IsNullOrEmpty(request.dataFolderPath) || !string.IsNullOrEmpty(request.selectionMode))
                 {
                     throw new ArgumentException("Configuration fields are only accepted by configuration operations.");
+                }
+                if (request.operation == "catalog")
+                {
+                    if (
+                        (request.typeIdentities?.Length ?? 0) != 0
+                        || (request.assetGuids?.Length ?? 0) != 0
+                        || !string.IsNullOrEmpty(request.processorIdentity)
+                        || (request.confirmPaths?.Length ?? 0) != 0
+                        || !string.IsNullOrEmpty(request.text)
+                        || (request.andLabels?.Length ?? 0) != 0
+                        || (request.orLabels?.Length ?? 0) != 0
+                        || !string.IsNullOrEmpty(request.labelCombination)
+                    )
+                    {
+                        throw new ArgumentException("Catalog accepts only schemaVersion, operation, offset and pageSize.");
+                    }
+                    session._catalog = new EditorTypeCatalog();
+                    return session;
                 }
                 if (request.operation == "previewProcessor" || request.operation == "applyProcessor")
                 {
@@ -205,6 +226,36 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             if (offset < 0 || count < 1 || 1000 < count)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
+            }
+            if (_catalog != null)
+            {
+                Type[] types = _catalog.GetPage(offset, count);
+                EditorAutomationItem[] items = new EditorAutomationItem[types.Length];
+                for (int i = 0; i < types.Length; i++)
+                {
+                    Type type = types[i];
+                    items[i] = new EditorAutomationItem
+                    {
+                        typeIdentity = type.AssemblyQualifiedName,
+                        name = type.FullName,
+                        code = "ok",
+                    };
+                }
+                return JsonUtility.ToJson(
+                    new EditorAutomationResponse
+                    {
+                        status = "complete",
+                        code = "ok",
+                        complete = true,
+                        processedCount = _catalog.Types.Count,
+                        scopeCount = _catalog.Types.Count,
+                        availableCount = _catalog.Types.Count,
+                        offset = offset,
+                        coverage = "Loaded browser-eligible ScriptableObject types only; no asset discovery or persisted managed-type order.",
+                        items = items,
+                    },
+                    true
+                );
             }
             if (_assetOperation != null && _errorCode == null)
             {

@@ -32,7 +32,7 @@
     "availableCount": {
       "type": "integer",
       "minimum": 0,
-      "description": "Available query records, validation findings, processor outcomes, or one configuration result."
+      "description": "Available catalog types, query records, validation findings, operation outcomes, or one configuration result."
     },
     "offset": {
       "type": "integer",

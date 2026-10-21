@@ -372,7 +372,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         [Obsolete("User Settings instead.")]
         private DataVisualizerSettings _settings;
 
-        private List<Type> _relevantScriptableObjectTypes;
+        private IReadOnlyList<Type> _relevantScriptableObjectTypes;
 
         private float? _lastAddTypeClicked;
         private float? _lastSettingsClicked;
@@ -5158,8 +5158,10 @@ namespace WallstopStudios.DataVisualizer.Editor
                 HashSet<Type> managedTypes = CollectManagedTypes();
                 Dictionary<string, List<Type>> addableTypesByNamespace = new();
                 HashSet<Type> discoveredTypes = new();
-                foreach (Type type in LoadRelevantScriptableObjectTypes())
+                IReadOnlyList<Type> availableTypes = LoadRelevantScriptableObjectTypes();
+                for (int i = 0; i < availableTypes.Count; i++)
                 {
+                    Type type = availableTypes[i];
                     if (managedTypes.Contains(type) || !discoveredTypes.Add(type))
                     {
                         continue;
@@ -5980,41 +5982,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private static bool IsLoadableType(Type type)
-        {
-            /*
-                Fast type validation without expensive CreateInstance calls
-                This allows namespace/type list to appear immediately
-            */
-            if (type == null)
-            {
-                /*
-                    MonoScript.GetClass() returns null for scripts without a MonoBehaviour
-                    class. Treat those as not loadable instead of throwing.
-                */
-                return false;
-            }
-
-            return type != typeof(ScriptableObject)
-                && !type.IsAbstract
-                && !type.IsGenericType
-                && !type.IsInterface
-                && !type.IsNestedPrivate
-                && !IsSubclassOf(type, typeof(Editor))
-                && !IsSubclassOf(type, typeof(EditorWindow))
-                && !IsSubclassOf(type, typeof(ScriptableSingleton<>))
-                && type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
-                && type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true;
-
-            /*
-                Note: We removed CreateInstance validation because:
-                1. It was slow (1-2 seconds for large projects)
-                2. It caused "Reset() called with object" errors for some ScriptableObjects
-                3. The real validation happens when loading actual assets anyway
-                4. Types that can't be instantiated simply won't have any assets to load
-            */
-        }
-
         private static Type ResolveScriptableObjectType(string assetPath)
         {
             ScriptableObject asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(assetPath);
@@ -6025,27 +5992,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             MonoScript script = AssetDatabase.LoadAssetAtPath<MonoScript>(assetPath);
             return script != null ? script.GetClass() : null;
-        }
-
-        private static bool IsSubclassOf(Type typeToCheck, Type baseClass)
-        {
-            if (typeToCheck == null)
-            {
-                return false;
-            }
-
-            Type currentType = typeToCheck;
-
-            while (currentType != null && currentType != typeof(object))
-            {
-                Type typeToCheckAgainst = currentType.IsGenericType ? currentType.GetGenericTypeDefinition() : currentType;
-                if (typeToCheckAgainst == baseClass)
-                {
-                    return true;
-                }
-                currentType = currentType.BaseType;
-            }
-            return false;
         }
 
         private static int CompareUsingCustomOrder(string keyA, string keyB, List<string> customOrder)
@@ -7646,7 +7592,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             foreach (string assetGuid in assetGuids)
             {
                 Type type = resolveAssetType(AssetDatabase.GUIDToAssetPath(assetGuid));
-                if (!IsLoadableType(type) || currentlyManagedTypes.Contains(type) || !seenTypes.Add(type))
+                if (!EditorTypeCatalog.IsLoadableType(type) || currentlyManagedTypes.Contains(type) || !seenTypes.Add(type))
                 {
                     continue;
                 }
@@ -8932,11 +8878,12 @@ namespace WallstopStudios.DataVisualizer.Editor
         {
             HashSet<string> managedTypeFullNames = CollectManagedTypeFullNames();
 
-            List<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
+            IReadOnlyList<Type> allObjectTypes = LoadRelevantScriptableObjectTypes();
 
             List<Type> typesToDisplay = new(allObjectTypes.Count);
-            foreach (Type type in allObjectTypes)
+            for (int i = 0; i < allObjectTypes.Count; i++)
             {
+                Type type = allObjectTypes[i];
                 if (managedTypeFullNames.Contains(type.FullName) || !NamespaceController.IsTypeRemovable(type))
                 {
                     typesToDisplay.Add(type);
@@ -9008,24 +8955,13 @@ namespace WallstopStudios.DataVisualizer.Editor
             return managedTypeFullNames;
         }
 
-        private List<Type> LoadRelevantScriptableObjectTypes()
+        private IReadOnlyList<Type> LoadRelevantScriptableObjectTypes()
         {
-            if (_relevantScriptableObjectTypes != null)
+            if (_relevantScriptableObjectTypes == null)
             {
-                return _relevantScriptableObjectTypes;
+                _relevantScriptableObjectTypes = new EditorTypeCatalog().Types;
             }
-
-            List<Type> types = new();
-            foreach (Type type in TypeCache.GetTypesDerivedFrom<ScriptableObject>())
-            {
-                if (IsLoadableType(type))
-                {
-                    types.Add(type);
-                }
-            }
-
-            _relevantScriptableObjectTypes = types;
-            return types;
+            return _relevantScriptableObjectTypes;
         }
 
         private void SyncObjectListSelection()
