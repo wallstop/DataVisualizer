@@ -277,3 +277,27 @@ repair, then passed with one; the repaired tree also passes 733 EditMode and 15 
 and deletion, closed-window reopen and simulated Play reconciliation passed in the direct 10k run, with zero refresh object load calls during bursts. Independent cleanup confirmed
 no owned fixtures/state or browser windows, one container, seven editor windows and an idle AssetDatabase. Complete 100k, actual Play, type-catalog and remaining
 [#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308) acceptance work remains open.
+
+## Deferred type classification on 2026-10-21
+
+The [deferred-type follow-up](performance-refresh-deferred-types-2026-10-21.json) at
+[51af2ac](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/51af2acb8a7b021515a7d22dc041ea799a664c6e) uses the same unchanged probe and 10k real-asset dataset shape.
+Import callbacks now queue and coalesce type-index paths; the existing index pump classifies them on later editor updates. Initial snapshots still request a full refresh, while
+incremental type/GUID changes retain prior identities for targeted reconciliation. Explicit synchronous index calls remain available.
+
+| Changed assets | Callback before | Callback after | Reconciliation before | Reconciliation after |
+| -------------- | --------------- | -------------- | --------------------- | -------------------- |
+| 100            | 8.7 ms          | 2.3 ms         | 438.3 ms              | 475.4 ms             |
+| 1,000          | 83.5 ms         | 23.4 ms        | 1,709.6 ms            | 1,963.8 ms           |
+| 10,000         | 816.4 ms        | 222.4 ms       | 14,175.7 ms           | 15,307.5 ms          |
+
+Callback times cover explicit duplicate-path replays (twice the changed-asset count). These are sequential single warm-session observations, not a controlled speedup or percentile.
+Reconciliation includes the deferred index work and a 150 ms settle confirmation. Moving classification reduces observed callback time; the largest replay remains synchronous for
+222.4 ms, and reconciliation does not become faster. The separate index and refresh budgets do not impose a hard bound on the combined editor update; the longest complete
+refresh-service slice before the lifecycle tail was 53.2 ms.
+
+The full scenario completed in 585.1 seconds, including 417.7 seconds of staging. All three bursts kept routine row/search generations and made zero new refresh object loads.
+Missing-script recovery/deletion, labels, Undo/Redo, moves, closed-window reopen, stale-owner rejection, simulated Play reconciliation and custom order/selection passed. The
+functional tree passed 741 EditMode and 15 PlayMode tests. Queue tests also verify zero type queries during enqueue and budgeted per-path classification; the unchanged replay probe
+does not count type queries itself. Independent cleanup found no owned fixture/state files or browser windows, zero pending index paths, one container, seven editor windows and an
+idle AssetDatabase. The full 100k, actual Play, type-catalog and remaining #306/#308 acceptance matrices stay open.

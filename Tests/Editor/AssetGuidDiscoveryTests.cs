@@ -98,6 +98,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             string movedAssetGuid = CreateAsset(ScriptableObject.CreateInstance<EditorOnlyCreationData>(), movedAssetPath);
             AssetDatabase.SaveAssets();
 
+            Assert.IsTrue(AssetGuidTypeIndex.Shared.ProcessPendingSlice(double.PositiveInfinity));
             Assert.IsTrue(AssetGuidTypeIndex.Shared.ApplyAssetChanges(Array.Empty<string>(), new[] { importedAssetPath }, Array.Empty<string>(), new[] { movedAssetPath }));
 
             Assert.IsTrue(AssetGuidTypeIndex.Shared.ApplyAssetChanges(new[] { importedAssetPath }, Array.Empty<string>(), new[] { movedAssetPath }, Array.Empty<string>()));
@@ -107,6 +108,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
             AssetDatabase.DeleteAsset(importedAssetPath);
             AssetDatabase.DeleteAsset(movedAssetPath);
+            Assert.IsTrue(AssetGuidTypeIndex.Shared.ProcessPendingSlice(double.PositiveInfinity));
             indexedGuids = AssetGuidTypeIndex.Shared.GetKnownGuids(typeof(EditorOnlyCreationData));
             CollectionAssert.DoesNotContain(indexedGuids, importedAssetGuid);
             CollectionAssert.DoesNotContain(indexedGuids, movedAssetGuid);
@@ -115,6 +117,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Test]
         public void ShouldIsolateIndexStateWhenUsingSeparateInstances()
         {
+            Assert.IsTrue(AssetGuidTypeIndex.Shared.ProcessPendingSlice(double.PositiveInfinity));
             AssetGuidTypeIndex isolatedIndex = new();
 
             using (TestCleanupScope cleanup = new())

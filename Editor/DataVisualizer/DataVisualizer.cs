@@ -1687,8 +1687,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetChanges.SliceCompleted += CompleteAssetRefreshSlice;
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             EditorApplication.playModeStateChanged += HandlePlayModeStateChanged;
-            AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
-            AssetGuidTypeIndex.Shared.IndexCompleted += SignalRefresh;
+            AssetGuidTypeIndex.Shared.SnapshotCompleted -= SignalRefresh;
+            AssetGuidTypeIndex.Shared.SnapshotCompleted += SignalRefresh;
+            AssetGuidTypeIndex.Shared.AssetChangesIndexed -= HandleIndexedAssetChanges;
+            AssetGuidTypeIndex.Shared.AssetChangesIndexed += HandleIndexedAssetChanges;
             _isSearchCachePopulated = false;
             _selectedObject = null;
             _selectedObjects.Clear();
@@ -1971,7 +1973,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetSelectionUnavailable = false;
             _assetSelectionReplacement = null;
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
-            AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
+            AssetGuidTypeIndex.Shared.SnapshotCompleted -= SignalRefresh;
+            AssetGuidTypeIndex.Shared.AssetChangesIndexed -= HandleIndexedAssetChanges;
             if (!AssetGuidTypeIndex.Shared.IsComplete || AssetGuidTypeIndex.Shared.IsSuspended)
             {
                 /*
@@ -2243,6 +2246,23 @@ namespace WallstopStudios.DataVisualizer.Editor
                     stream.GetChangeAssetObjectPropertiesEvent(index, out ChangeAssetObjectPropertiesEventArgs change);
                     _assetChanges?.EnqueueGuid(change.guid.ToString());
                 }
+            }
+        }
+
+        private void HandleIndexedAssetChanges(IReadOnlyList<AssetGuidTypeIndexChange> changes)
+        {
+            if (_assetChanges == null)
+            {
+                return;
+            }
+            for (int index = 0; index < changes.Count; index++)
+            {
+                AssetGuidTypeIndexChange change = changes[index];
+                if (!string.IsNullOrEmpty(change.PreviousGuid))
+                {
+                    _assetChanges.Track(change.Path, change.PreviousGuid);
+                }
+                _assetChanges.Enqueue(new[] { change.Path });
             }
         }
 
