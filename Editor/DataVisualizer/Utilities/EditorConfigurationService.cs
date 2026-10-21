@@ -136,6 +136,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
         }
 
+        private static bool IsReadOnlyFile(string path)
+        {
+            return File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReadOnly) != 0;
+        }
+
         /// <summary>Applies both preferences after validation; returns false for an unchanged request.</summary>
         public bool Apply(string dataFolderPath, bool selectActiveObject)
         {
@@ -190,10 +195,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 throw new EditorConfigurationException("editor_busy", "Wait for compilation and asset updates before applying configuration.");
             }
             string settingsPath = AssetDatabase.GetAssetPath(settings);
-            if (!string.IsNullOrEmpty(settingsPath) && (!settingsPath.StartsWith("Assets/", StringComparison.Ordinal) || !AssetDatabase.IsOpenForEdit(settings)))
-            {
-                throw new EditorConfigurationException("read_only", "The settings asset must be writable under Assets.");
-            }
             bool mode = persistStateInSettingsAsset ?? settings.persistStateInSettingsAsset;
             bool modeChanged = mode != settings.persistStateInSettingsAsset;
             bool stateRequested = modeChanged || (themeGuid != null && !mode);
@@ -208,13 +209,25 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             bool selectionChanged = settings.selectActiveObject != selectActiveObject;
             bool settingsChanged = folderChanged || selectionChanged || modeChanged || (themeChanged && mode);
             bool userChanged = !mode && (modeChanged || themeChanged);
+            if (
+                settingsChanged
+                && !string.IsNullOrEmpty(settingsPath)
+                && (
+                    !settingsPath.StartsWith("Assets/", StringComparison.Ordinal)
+                    || !AssetDatabase.IsOpenForEdit(settings)
+                    || IsReadOnlyFile(Path.Combine(Path.GetDirectoryName(Application.dataPath), settingsPath))
+                )
+            )
+            {
+                throw new EditorConfigurationException("read_only", "The settings asset must be writable under Assets.");
+            }
             if (!settingsChanged && !userChanged)
             {
                 return false;
             }
             if (userChanged)
             {
-                if (File.Exists(_userStatePath) && (File.GetAttributes(_userStatePath) & FileAttributes.ReadOnly) != 0)
+                if (IsReadOnlyFile(_userStatePath))
                 {
                     throw new EditorConfigurationException("read_only", "The user-state file must be writable.");
                 }

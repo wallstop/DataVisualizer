@@ -228,6 +228,46 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(File.ReadAllText(context.statePath), Is.EqualTo("{"));
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldRejectReadonlySettingsBeforeChangingEitherStore(bool projectMode)
+        {
+            using TestCleanupScope cleanup = new();
+            var context = CreateContext(cleanup, projectMode);
+            byte[] settingsBytes = File.ReadAllBytes(context.settingsPath);
+            byte[] userBytes = File.ReadAllBytes(context.statePath);
+            FileAttributes attributes = File.GetAttributes(context.settingsPath);
+            cleanup.Defer(() => File.SetAttributes(context.settingsPath, attributes));
+            File.SetAttributes(context.settingsPath, attributes | FileAttributes.ReadOnly);
+            EditorConfigurationService service = new(context.settings, context.state, context.statePath);
+            EditorConfigurationException preference = Assert.Throws<EditorConfigurationException>(() => service.SetSelectActiveObject(true));
+            EditorConfigurationException migration = Assert.Throws<EditorConfigurationException>(() => service.SetPersistenceMode(!projectMode));
+            Assert.That(preference.Code, Is.EqualTo("read_only"));
+            Assert.That(migration.Code, Is.EqualTo("read_only"));
+            Assert.That(service.PersistStateInSettingsAsset, Is.EqualTo(projectMode));
+            Assert.That(service.SelectActiveObject, Is.False);
+            Assert.That(File.ReadAllBytes(context.settingsPath), Is.EqualTo(settingsBytes));
+            Assert.That(File.ReadAllBytes(context.statePath), Is.EqualTo(userBytes));
+            Assert.That(EditorUtility.IsDirty(context.settings), Is.False);
+        }
+
+        [Test]
+        public void ShouldChangeUserThemeWithoutWritingReadonlySharedSettings()
+        {
+            using TestCleanupScope cleanup = new();
+            var context = CreateContext(cleanup, false);
+            byte[] before = File.ReadAllBytes(context.settingsPath);
+            FileAttributes attributes = File.GetAttributes(context.settingsPath);
+            cleanup.Defer(() => File.SetAttributes(context.settingsPath, attributes));
+            File.SetAttributes(context.settingsPath, attributes | FileAttributes.ReadOnly);
+            EditorConfigurationService service = new(context.settings, context.state, context.statePath);
+            Assert.That(service.SetThemeGuid(string.Empty), Is.True);
+            Assert.That(service.ThemeGuid, Is.Empty);
+            Assert.That(DataVisualizerUserState.FromJson(File.ReadAllText(context.statePath)).themeGuid, Is.Empty);
+            Assert.That(File.ReadAllBytes(context.settingsPath), Is.EqualTo(before));
+            Assert.That(EditorUtility.IsDirty(context.settings), Is.False);
+        }
+
         [Test]
         public void ShouldRejectReadonlyUserStateBeforeMigrationChangesSettingsOrMemory()
         {
