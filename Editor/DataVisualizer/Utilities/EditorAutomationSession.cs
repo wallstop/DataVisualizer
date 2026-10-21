@@ -579,7 +579,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 catch (Exception error)
                 {
                     code = "configuration_failed";
-                    detail = "Apply may have changed memory or either file. Inspect both stores before retrying. " + error.Message;
+                    detail =
+                        (
+                            full
+                                ? "Apply may have changed memory or either file. Inspect both stores before retrying. "
+                                : "Apply may have changed settings in memory. Read the settings and inspect disk before retrying. "
+                        ) + error.Message;
                     failed = true;
                 }
             }
