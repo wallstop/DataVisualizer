@@ -266,6 +266,29 @@ earlier update. Create and confirm a new preview after such a change. Asset cont
 changed any subset, including assets outside the scope. No automatic Undo, rollback, retry or recovery is promised. Inspect the assets and use version control to recover.
 Configuration and individual create/clone/rename/move/delete services remain outside this processor API.
 
+## Configure editor preferences from C#
+
+`EditorConfigurationService` operates on an explicit `DataVisualizerSettings` instance without opening a window. The browser uses the same service for its data-folder and active
+selection controls. For example, inside an editor method:
+
+```csharp
+var settings = UnityEditor.AssetDatabase.LoadAssetAtPath<WallstopStudios.DataVisualizer.Editor.Data.DataVisualizerSettings>(
+    "Assets/Editor/DataVisualizerSettings.asset");
+var configuration = new WallstopStudios.DataVisualizer.Editor.Utilities.EditorConfigurationService(settings);
+// Read and validate without dirtying, saving, creating folders, or opening dialogs.
+UnityEngine.Debug.Log(configuration.DataFolderPath);
+WallstopStudios.DataVisualizer.Editor.Utilities.EditorConfigurationService.ValidateDataFolder("Assets");
+bool changed = configuration.Apply("Assets", selectActiveObject: true);
+```
+
+Apply requires an existing folder with its canonical, case-exact path under `Assets`. It validates before changing either preference, rejects Play Mode/transition and busy editor
+states, and saves only the explicit writable settings asset. Repeating the same request returns `false` and does not save other pending edits. Transient settings can also be
+configured; they become dirty but have no file to save. A save exception can leave changed preferences in memory; inspect the settings and resolve the write failure before
+retrying.
+
+This contract covers `DataFolderPath` and `selectActiveObject`. It preserves saved arrangements, persistence mode, and theme selection; their migration contracts and individual
+asset operations remain outside this service. Read preferences again after external edits rather than retaining an earlier snapshot.
+
 ## JSON editor automation
 
 Schema version 1 exposes `query`, `validate`, `previewProcessor` and `applyProcessor` through `EditorAutomationSession`, using the same services as the C# APIs and validation

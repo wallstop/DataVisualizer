@@ -513,13 +513,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public static bool ApplySelectActiveObjectPreference(DataVisualizerSettings settings, bool selectActiveObject)
         {
-            if (settings == null || !settings.SetSelectActiveObject(selectActiveObject))
-            {
-                return false;
-            }
-
-            AssetDatabase.SaveAssets();
-            return true;
+            return settings != null && new EditorConfigurationService(settings).SetSelectActiveObject(selectActiveObject);
         }
 
         public static VisualElement FindAncestorNamespaceGroup(VisualElement startingElement, VisualElement namespaceListContainer)
@@ -4479,9 +4473,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            settings._dataFolderPath = relativePath;
-            settings.MarkDirty();
-            AssetDatabase.SaveAssets();
+            new EditorConfigurationService(settings).SetDataFolderPath(relativePath);
             displayField.text = settings.DataFolderPath;
         }
 

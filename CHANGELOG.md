@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Add a shared C# configuration service for data folders and active asset selection (#315).
+
 - Add SELECTED processor scope with GUID selections, exact target previews, cancellable preparation and explicit batch failure outcomes (#317).
 
 - Add named saved searches for query text, exact type scopes and label expressions, with cancellable results and user or project persistence. Use saved searches and validation
