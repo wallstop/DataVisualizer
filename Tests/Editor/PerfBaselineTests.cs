@@ -44,6 +44,37 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
+        public IEnumerator ShouldKeepLegacyReadinessSeparateFromPendingSharedIndexWork()
+        {
+            string output = "Temp/PerfPendingIndex-" + Guid.NewGuid().ToString("N");
+            var index = WallstopStudios.DataVisualizer.Editor.Utilities.AssetGuidTypeIndex.Shared;
+            Func<bool> previous = index.AssetDatabaseBusyOverride;
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(() => index.AssetDatabaseBusyOverride = previous);
+            cleanup.Defer(PerfBaseline.Cancel);
+            index.AssetDatabaseBusyOverride = () => true;
+            PerfBaseline.RunBaseline(output, new[] { 2 }, timeoutMinutes: 5);
+            for (int tick = 0; tick < 300; tick++)
+            {
+                yield return null;
+            }
+            Assert.That(!index.IsComplete);
+            PerfBaseline.Cancel();
+            string json = System.IO.File.ReadAllText(output + "/perf-baseline.json");
+            InteractionReport report = JsonUtility.FromJson<InteractionErrorReport>(json).partialResults ?? JsonUtility.FromJson<InteractionReport>(json);
+            bool observedLegacyReady = false;
+            foreach (PerfReadinessSample sample in report.readinessSamples)
+            {
+                observedLegacyReady = observedLegacyReady || 0 <= sample.legacyIndexReadyMilliseconds;
+                Assert.That(sample.complete, Is.False, "Shared classification is still blocked.");
+                Assert.That(sample.openToIndexMilliseconds, Is.EqualTo(-1));
+            }
+            Assert.That(observedLegacyReady, Is.True);
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+        }
+
+        [UnityTest]
         public IEnumerator ShouldRecordInteractionReadinessAndRestoreNativeOwners()
         {
             string output = "Temp/PerfInteractions-" + Guid.NewGuid().ToString("N");
@@ -523,6 +554,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private sealed class InteractionReport
         {
             public PerfInteractionSample[] interactionSamples = Array.Empty<PerfInteractionSample>();
+            public PerfReadinessSample[] readinessSamples = Array.Empty<PerfReadinessSample>();
         }
 
         [Serializable]

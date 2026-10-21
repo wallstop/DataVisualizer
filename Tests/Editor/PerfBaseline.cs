@@ -608,13 +608,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             if (sample.legacyIndexReadyMilliseconds < 0)
             {
                 sample.legacyIndexReadyMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
-                sample.openToIndexMilliseconds = state.OpenClock.Elapsed.TotalMilliseconds;
             }
-            if (sample.firstRootPaintMilliseconds < 0 || sample.firstUsableRowsMilliseconds < 0 || sample.inspectorReadyMilliseconds < 0)
+            if (
+                !AssetGuidTypeIndex.Shared.IsComplete
+                || 0 < AssetGuidTypeIndex.Shared.PendingPathCount
+                || (bool)typeof(DataVisualizerWindow).GetField("_needsRefresh", Members).GetValue(state.Window)
+                || (bool)typeof(DataVisualizerWindow).GetField("_isLoadingObjectsAsync", Members).GetValue(state.Window)
+                || sample.firstRootPaintMilliseconds < 0
+                || sample.firstUsableRowsMilliseconds < 0
+                || sample.inspectorReadyMilliseconds < 0
+            )
             {
                 EditorApplication.QueuePlayerLoopUpdate();
                 return;
             }
+            sample.openToIndexMilliseconds = state.OpenClock.Elapsed.TotalMilliseconds;
             sample.complete = true;
             state.PhaseClock.Stop();
             double readyMilliseconds = sample.legacyIndexReadyMilliseconds;
@@ -1247,7 +1255,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "  \"gaps\": [\"Play-entry and compile timings are not yet measured\", \"cold windows reuse the editor process; fresh-process controls are not measured\", \"cross-host spread is not yet collected\"],\n"
             );
             json.Append(
-                "  \"readinessSemantics\": \"Root paint callback and first observed laid-out rows/inspector, not GPU completion. Negative timings are unavailable. Memory values are separate peaks, not a sum. Editor update gaps include scheduling delays. Cold windows share a warm editor process.\",\n"
+                "  \"readinessSemantics\": \"Root paint callback and first observed laid-out rows/inspector, not GPU completion. Full index readiness waits for shared type classification, selected rows and queued refreshes; the legacy clock retains its first window-cache-ready observation. Negative timings are unavailable. Memory values are separate peaks, not a sum. Editor update gaps include scheduling delays. Cold windows share a warm editor process.\",\n"
             );
             json.Append("  \"readinessSamples\": [");
             bool firstReadiness = true;
