@@ -2,10 +2,47 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System.Collections.Generic;
     using NUnit.Framework;
+    using WallstopStudios.DataVisualizer.Editor.Data;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
 
     public sealed class AssetGuidOrderTests
     {
+        [Test]
+        public void ShouldRemoveDeletedIdentityWithoutNeedingALiveObjectOrItsType()
+        {
+            List<TypeObjectOrder> orders = new()
+            {
+                new TypeObjectOrder
+                {
+                    TypeFullName = "First",
+                    page = 3,
+                    ObjectGuids = new List<string> { "a", "DELETED", "b", "deleted" },
+                },
+                new TypeObjectOrder
+                {
+                    TypeFullName = "MissingScript",
+                    ObjectGuids = new List<string> { "deleted", "c" },
+                },
+                null,
+                new TypeObjectOrder { ObjectGuids = null },
+            };
+            List<LastObjectSelectionEntry> selections = new()
+            {
+                new LastObjectSelectionEntry { typeFullName = "First", objectGuid = "deleted" },
+                new LastObjectSelectionEntry { typeFullName = "Other", objectGuid = "keep" },
+                null,
+            };
+            Assert.That(AssetGuidOrder.RemovePersistedReferences(orders, selections, "deleted"), Is.EqualTo(4));
+            Assert.That(orders[0].ObjectGuids, Is.EqualTo(new[] { "a", "b" }));
+            Assert.That(orders[1].ObjectGuids, Is.EqualTo(new[] { "c" }));
+            Assert.That(orders[0].page, Is.EqualTo(3));
+            Assert.That(selections[0].objectGuid, Is.EqualTo("keep"));
+            Assert.That(selections.Count, Is.EqualTo(2));
+            Assert.That(AssetGuidOrder.RemovePersistedReferences(orders, selections, "deleted"), Is.Zero);
+            Assert.That(AssetGuidOrder.RemovePersistedReferences(orders, selections, null), Is.Zero);
+            Assert.That(AssetGuidOrder.RemovePersistedReferences(null, null, "deleted"), Is.Zero);
+        }
+
         [Test]
         public void ShouldPreserveUnloadedSlotsWhenLoadedSubsetIsReordered()
         {

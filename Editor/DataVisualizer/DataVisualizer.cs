@@ -385,6 +385,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private bool _assetLabelsChanged;
         private bool _assetSearchChanged;
         private bool _assetSelectionChanged;
+        private bool _assetSelectionUnavailable;
         private ScriptableObject _assetSelectionReplacement;
         private int _nextIncrementalDisplayOrder;
         private string _settingsAssetGuid;
@@ -1966,6 +1967,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetLabelsChanged = false;
             _assetSearchChanged = false;
             _assetSelectionChanged = false;
+            _assetSelectionUnavailable = false;
             _assetSelectionReplacement = null;
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
             AssetGuidTypeIndex.Shared.IndexCompleted -= SignalRefresh;
@@ -2267,6 +2269,21 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             if (!hadPrevious && current == null)
             {
+                if (path == null)
+                {
+                    // A missing script may have already removed the live wrapper before deletion.
+                    _asyncDisplayOrderByGuid.Remove(guid);
+                    Type activeType = _namespaceController.SelectedType;
+                    if (_selectedObject == null && activeType != null && string.Equals(GetLastSelectedObjectGuidForType(activeType.FullName), guid, StringComparison.Ordinal))
+                    {
+                        _assetSelectionChanged = true;
+                        _assetSelectionUnavailable = false;
+                    }
+                    PersistSettings(
+                        settings => 0 < AssetGuidOrder.RemovePersistedReferences(settings.objectOrders, settings.lastObjectSelections, guid),
+                        state => 0 < AssetGuidOrder.RemovePersistedReferences(state.objectOrders, state.lastObjectSelections, guid)
+                    );
+                }
                 return;
             }
 
@@ -2330,11 +2347,25 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _assetSelectionChanged = current != previous || type != selectedType;
                 _assetSelectionReplacement = type == selectedType ? current : null;
+                _assetSelectionUnavailable = current == null && path != null;
                 if (current != null && ReferenceEquals(current, previous))
                 {
                     _currentInspectorScriptableObject?.UpdateIfRequiredOrScript();
                     PopulateInspectorLabelsUI();
                 }
+            }
+
+            if (
+                !hadPrevious
+                && current != null
+                && type == selectedType
+                && _selectedObject == null
+                && string.Equals(GetLastSelectedObjectGuidForType(type.FullName), guid, StringComparison.Ordinal)
+            )
+            {
+                _assetSelectionChanged = true;
+                _assetSelectionUnavailable = false;
+                _assetSelectionReplacement = current;
             }
 
             if (hadPrevious && ((current == null && path == null) || (current != null && current.GetType() != previous.GetType())))
@@ -2380,7 +2411,9 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (_assetSelectionChanged)
             {
                 SetActiveObject(
-                    _assetSelectionReplacement != null ? _assetSelectionReplacement : (_selectedObjects.Count == 0 ? null : _selectedObjects[0]),
+                    _assetSelectionUnavailable ? null
+                        : _assetSelectionReplacement != null ? _assetSelectionReplacement
+                        : (_selectedObjects.Count == 0 ? null : _selectedObjects[0]),
                     preserveProcessorSelection: processorSelection.HasSelectionIntent
                 );
             }
@@ -2391,6 +2424,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _assetRowsChanged = false;
             _assetLabelsChanged = false;
             _assetSelectionChanged = false;
+            _assetSelectionUnavailable = false;
             _assetSearchChanged = false;
             _assetSelectionReplacement = null;
             if (_assetRefreshNeedsViews && _assetChanges != null && _assetChanges.PendingCount == 0)

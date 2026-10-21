@@ -189,3 +189,68 @@ fixture roots or temporary state files. Unity 2021.3 and other platforms were no
 The driver now charges a transition tick to the dataset that owned it at entry and resets update-gap observation between sizes. Final fixture teardown completes before report
 publication on the next tick; report writing and host-preference restoration remain outside the sampled driver ticks. The archived report above predates this diagnostic repair; its
 paint, row, inspector, indexing and retention observations remain valid, but corrected longest-driver-tick values require a repeat run.
+
+## Bounded refresh attempt on 2026-10-21
+
+[The cancellation report](performance-refresh-attempt-2026-10-21.json) records an incomplete real-asset integration run from
+[63e4ff0](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/63e4ff04bd49b74e701a02c5037b40223a3230bb), on the same Windows/Unity host described above. It staged and
+loaded all 10,000 `PlayModeDataObject` assets with the existing fixture helper, a 32 ms creation budget and a twenty-item cap. It reached its cooperative 15-minute limit in a
+label-write loop. Unity calls cannot be preempted; the task was observed terminal by 07:43:20 UTC. Its status clock continues after completion, so that observation does not give an
+exact terminal duration.
+
+Before that cancellation site, the probe had passed selected missing-script recovery, tracked rename, label include/exclude, Undo/Redo and move assertions, with zero new refresh
+object loads for the cached rename and 9,999 unrelated row identities preserved. This follows from the executed assertions preceding the recorded stop site; the final all-checks
+summary was not emitted. Main-thread status requests also timed out after five seconds. Those observation gaps do not identify a continuous package-owned stall.
+
+The 100/1k/10k label-burst matrix, callback timing, final operation counts and the large lifecycle tail **did not complete**. The probe did not record the active burst size, so do
+not infer which sizes passed. A separate completed 12-asset smoke covered actual label writes, unavailable deletion, closed-window reopen, stale callbacks, custom order and
+selection, and simulated Play notifications. It processed 13 events for 12 changed labels with zero new object loads. These are integration observations, not p95 measurements.
+
+Cleanup was verified independently: no owned fixture roots remained, the editor had one native host and seven windows, and the AssetDatabase was idle. Two earlier 100k attempts
+were stopped during staging at 7,175 and 10,536 assets to strengthen the probe and repair review findings; neither measured 100k. The report retains the original terminal error,
+source identities, resource limits and unverified cells. Keep [#306](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/306) and
+[#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308) open for the remaining measurement work.
+
+## Completed 1k refresh control on 2026-10-21
+
+A follow-up [1,000-real-asset report](performance-refresh-1k-2026-10-21.json) at
+[5b8741d](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/5b8741d618806ae12deb61bce24b4418aa225011) completed in 357.7 seconds on the same host. It records sequential
+label writes with the browser closed, then open, followed by an explicit duplicate-path callback replay. The closed control retains project import hooks; it does not isolate
+Unity-only cost. Each cell is one warm-process observation, with closed conditions first.
+
+| Changed assets | Closed label wall time | Open label wall time | Replay paths | Explicit callback | Reconciliation wall | Processed paths | New refresh loads |
+| -------------- | ---------------------- | -------------------- | ------------ | ----------------- | ------------------- | --------------- | ----------------- |
+| 100            | 14,651.1 ms            | 14,646.1 ms          | 200          | 9.0 ms            | 383.3 ms            | 173             | 0                 |
+| 1,000          | 140,489.5 ms           | 143,500.9 ms         | 2,000        | 77.7 ms           | 2,765.8 ms          | 1,468           | 0                 |
+
+The closed 1k condition spent 136,710.3 ms inside `SetLabels`; expensive fixture writes occur even with no browser window. This explains why future large runs must budget and
+report write cost separately; it does not identify the earlier cancelled run's active burst or prove a package speedup. Replay callback time covers that explicit invocation only.
+Processed counts include natural notifications and replay across editor yields, rather than unique assets. Reconciliation includes scheduling and a 150 ms confirmation delay. The
+synchronous 77.7 ms replay also leaves callback scalability open; cooperative refresh processing does not bound callback duration.
+
+The run preserved 999 unrelated row identities and routine row/search generations, recovered a missing selected script, cleared unavailable deletion from saved identity, and passed
+label filters, Undo/Redo, move, closed-window reopen, stale-owner rejection, custom order/selection and simulated Play reconciliation. A deliberate search rebuild advanced search
+generation separately. The longest observed refresh slice before the lifecycle tail was 16.8 ms. Cleanup independently confirmed no owned fixtures or state file, one container
+window, seven editor windows, and an idle AssetDatabase. This completes this 1k scenario; 10k bursts, 100k measurements, actual Play transitions and the complete
+[#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308) matrix remain open.
+
+## Completed batched 10k refresh on 2026-10-21
+
+[The batched 10k report](performance-refresh-batched-10k-2026-10-21.json) records all three real label-change sizes, with the same dataset closed first and open second. Each set
+brackets `SetLabels` calls with `StartAssetEditing`/`StopAssetEditing`, then explicitly replays duplicate callback paths. This is a different workload from sequential writes above;
+each cell is one warm-process observation. The complete run, including 357.0 seconds of staging and the lifecycle tail, took 729.2 seconds.
+
+| Changed assets | Closed write/flush wall | Open write/flush wall | Open import flush | Explicit duplicate callback | Reconciliation wall | New refresh loads |
+| -------------- | ----------------------- | --------------------- | ----------------- | --------------------------- | ------------------- | ----------------- |
+| 100            | 691.9 ms                | 713.5 ms              | 533.9 ms          | 9.3 ms                      | 515.9 ms            | 0                 |
+| 1,000          | 4,587.5 ms              | 4,197.6 ms            | 2,880.3 ms        | 94.0 ms                     | 6,114.4 ms          | 0                 |
+| 10,000         | 43,914.7 ms             | 41,599.9 ms           | 26,226.7 ms       | 806.9 ms                    | 220,977.2 ms        | 0                 |
+
+The 10k queue drained across editor updates; its maximum observed processed delta was six paths between update observations. Those callbacks include empty updates and are not
+rendered frames. The longest refresh slice before the lifecycle tail reached 94.1 ms, so a 4 ms service budget is not a hard whole-slice bound. The import flush includes Unity and
+project hooks; explicit replay timing isolates neither actual importer delivery nor pure Unity cost. These results expose slow large-burst reconciliation, not a performance
+guarantee. Counts, observer method, controls and raw terminal text remain in the report.
+
+Missing selected-script recovery, unavailable deletion during an intentional rebuild, label filtering, Undo/Redo, move, reopen, stale-owner rejection, custom order/selection and
+simulated Play reconciliation passed. Routine operations preserved row/search generations and 9,999 unrelated identities. Independent cleanup found no owned roots or state file,
+one container window, seven editor windows and an idle editor. Actual Play entry, type-catalog cases, 100k measurements and the complete #308 matrix remain open.

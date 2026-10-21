@@ -39,6 +39,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private readonly Action<string, string, Type> _publish;
         private readonly Func<string, string, (string Guid, string Path, Type Type)> _resolve;
         private bool _suspended;
+        private bool _completionPending;
         private bool _disposed;
 
         public AssetChangeRefreshService(
@@ -108,8 +109,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public int ProcessSlice(double budgetMilliseconds = 4)
         {
-            if (_disposed || _suspended || _pending.Count == 0)
+            if (_disposed || _suspended)
             {
+                return 0;
+            }
+            if (_pending.Count == 0)
+            {
+                CompleteSlice();
+                Transition();
                 return 0;
             }
 
@@ -125,34 +132,56 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 bool relevant = type != null && _isRelevant(type);
                 if (knownGuid != null && (!relevant || !string.Equals(guid, knownGuid, StringComparison.Ordinal)))
                 {
-                    _guidByPath.Remove(path);
-                    _pathByGuid.Remove(knownGuid);
+                    bool unresolved = type == null && string.Equals(guid, knownGuid, StringComparison.Ordinal) && !string.IsNullOrEmpty(currentPath);
+                    if (unresolved)
+                    {
+                        // Missing scripts retain identity for later recovery, movement or deletion.
+                        Track(currentPath, knownGuid);
+                        if (!string.Equals(currentPath, path, StringComparison.Ordinal))
+                        {
+                            Enqueue(new[] { path });
+                        }
+                    }
+                    else
+                    {
+                        _guidByPath.Remove(path);
+                        _pathByGuid.Remove(knownGuid);
+                    }
                     if (published.Add(knownGuid))
                     {
-                        _publish(knownGuid, string.Equals(guid, knownGuid, StringComparison.Ordinal) ? currentPath : null, null);
+                        _publish(knownGuid, unresolved ? currentPath : null, null);
                     }
                 }
 
-                if (relevant)
+                if (relevant && !_disposed)
                 {
-                    Track(currentPath, guid);
-                    if (!string.Equals(currentPath, path, StringComparison.Ordinal))
+                    if (_suspended)
                     {
-                        // The old path can now contain a different newly imported asset.
+                        // A replacement still needs publication after its removal callback paused work.
                         Enqueue(new[] { path });
                     }
-
-                    if (published.Add(guid))
+                    else
                     {
-                        _publish(guid, currentPath, type);
+                        Track(currentPath, guid);
+                        if (!string.Equals(currentPath, path, StringComparison.Ordinal))
+                        {
+                            // The old path can now contain a different newly imported asset.
+                            Enqueue(new[] { path });
+                        }
+
+                        if (published.Add(guid))
+                        {
+                            _publish(guid, currentPath, type);
+                        }
                     }
                 }
 
                 count++;
                 ProcessedPathCount++;
-            } while (0 < _pending.Count && clock.Elapsed.TotalMilliseconds < budgetMilliseconds);
+            } while (!_disposed && !_suspended && 0 < _pending.Count && clock.Elapsed.TotalMilliseconds < budgetMilliseconds);
 
-            SliceCompleted?.Invoke();
+            _completionPending = !_disposed;
+            CompleteSlice();
             LongestSliceMilliseconds = Math.Max(LongestSliceMilliseconds, clock.Elapsed.TotalMilliseconds);
             Transition();
             return count;
@@ -167,11 +196,21 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public void Dispose()
         {
             _disposed = true;
+            _completionPending = false;
             _pending.Clear();
             _pendingPaths.Clear();
             _guidByPath.Clear();
             _pathByGuid.Clear();
             Transition();
+        }
+
+        private void CompleteSlice()
+        {
+            if (_completionPending && !_disposed && !_suspended)
+            {
+                _completionPending = false;
+                SliceCompleted?.Invoke();
+            }
         }
 
         private void ProcessEditorUpdate()
@@ -185,7 +224,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private void Transition()
         {
             EditorApplication.update -= ProcessEditorUpdate;
-            if (!_disposed && !_suspended && 0 < _pending.Count)
+            if (!_disposed && !_suspended && (0 < _pending.Count || _completionPending))
             {
                 EditorApplication.update += ProcessEditorUpdate;
             }
