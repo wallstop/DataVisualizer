@@ -22,7 +22,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public bool IsComplete => _state == AssetGuidTypeIndexState.Complete;
 
         public bool IsSuspended => _suspended;
-        public int PendingPathCount => _pendingAssetPaths.Count;
+        public int PendingPathCount => _pendingAssetPaths.Count + _incomingPaths.Count;
+        public int PendingInputPathCount => _incomingPaths.Count;
         public int TypeQueryCount { get; private set; }
 
         /*
@@ -32,6 +33,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         */
         public Func<bool> AssetDatabaseBusyOverride { get; set; }
 
+        private readonly AssetPathChangeQueue _incomingPaths = new();
         private readonly Queue<string> _pendingAssetPaths = new();
         private readonly HashSet<string> _queuedPaths = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<AssetGuidTypeIndexChange> _indexedChanges = new();
@@ -87,6 +89,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public void Cancel()
         {
+            _incomingPaths.Clear();
             _pendingAssetPaths.Clear();
             _queuedPaths.Clear();
             _indexedChanges.Clear();
@@ -121,7 +124,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             _suspended = false;
-            if (_state == AssetGuidTypeIndexState.Complete && 0 < _pendingAssetPaths.Count)
+            if (_state == AssetGuidTypeIndexState.Complete && 0 < PendingPathCount)
             {
                 TransitionTo(AssetGuidTypeIndexState.ReconcilingChanges);
                 return;
@@ -195,11 +198,29 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             added += QueueAssetPaths(movedFromAssetPaths);
             added += QueueAssetPaths(importedAssets);
             added += QueueAssetPaths(movedAssets);
-            if (!_suspended && _state == AssetGuidTypeIndexState.Complete && 0 < _pendingAssetPaths.Count)
+            if (!_suspended && _state == AssetGuidTypeIndexState.Complete && 0 < PendingPathCount)
             {
                 TransitionTo(AssetGuidTypeIndexState.ReconcilingChanges);
             }
             return added;
+        }
+
+        // Returns captured paths, including duplicates; intake coalesces them on later updates.
+        public int EnqueueDeferredAssetChanges(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
+        {
+            if (_state == AssetGuidTypeIndexState.Idle)
+            {
+                return 0;
+            }
+            int captured = _incomingPaths.Enqueue(deleted);
+            captured += _incomingPaths.Enqueue(movedFrom);
+            captured += _incomingPaths.Enqueue(imported);
+            captured += _incomingPaths.Enqueue(moved);
+            if (!_suspended && _state == AssetGuidTypeIndexState.Complete && 0 < PendingPathCount)
+            {
+                TransitionTo(AssetGuidTypeIndexState.ReconcilingChanges);
+            }
+            return captured;
         }
 
         private bool RunStateMachine(double budgetMilliseconds)
@@ -222,7 +243,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private bool CapturePathSnapshot()
         {
             CaptureAssetPaths();
-            if (_pendingAssetPaths.Count == 0)
+            if (PendingPathCount == 0)
             {
                 TransitionTo(AssetGuidTypeIndexState.Complete);
                 return IsComplete;
@@ -236,6 +257,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         {
             AssetGuidTypeIndexState phase = _state;
             Stopwatch stopwatch = Stopwatch.StartNew();
+            while (_incomingPaths.TryDequeue(out string incoming))
+            {
+                if (IsProjectAssetPath(incoming) && _queuedPaths.Add(incoming))
+                {
+                    _pendingAssetPaths.Enqueue(incoming);
+                }
+                if (budgetMilliseconds <= stopwatch.Elapsed.TotalMilliseconds)
+                {
+                    return false;
+                }
+            }
             while (0 < _pendingAssetPaths.Count)
             {
                 string path = _pendingAssetPaths.Dequeue();
@@ -256,7 +288,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 }
             }
 
-            if (_suspended || _state != phase || 0 < _pendingAssetPaths.Count)
+            if (_suspended || _state != phase || 0 < PendingPathCount)
             {
                 return false;
             }

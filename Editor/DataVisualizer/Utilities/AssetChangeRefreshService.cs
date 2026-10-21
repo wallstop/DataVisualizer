@@ -27,12 +27,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return string.IsNullOrEmpty(replacementGuid) ? (null, null, null) : (replacementGuid, path, AssetDatabase.GetMainAssetTypeAtPath(path));
         }
 
-        public int PendingCount => _pending.Count;
+        public int PendingCount => _pending.Count + _incomingPaths.Count;
+        public int PendingInputPathCount => _incomingPaths.Count;
         public int ProcessedPathCount { get; private set; }
         public double LongestSliceMilliseconds { get; private set; }
 
         private readonly Dictionary<string, string> _guidByPath = new(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _pathByGuid = new(StringComparer.Ordinal);
+        private readonly AssetPathChangeQueue _incomingPaths = new();
         private readonly Queue<string> _pending = new();
         private readonly HashSet<string> _pendingPaths = new(StringComparer.Ordinal);
         private readonly Func<Type, bool> _isRelevant;
@@ -102,6 +104,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return added;
         }
 
+        // Capture callback arrays without scanning paths on Unity's import callback.
+        public int EnqueueDeferred(string[] paths)
+        {
+            if (_disposed)
+            {
+                return 0;
+            }
+            int captured = _incomingPaths.Enqueue(paths);
+            Transition();
+            return captured;
+        }
+
         public bool EnqueueGuid(string guid)
         {
             return !_disposed && !string.IsNullOrEmpty(guid) && _pathByGuid.TryGetValue(guid, out string path) && 0 < Enqueue(new[] { path });
@@ -113,7 +127,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 return 0;
             }
-            if (_pending.Count == 0)
+            if (PendingCount == 0)
             {
                 CompleteSlice();
                 Transition();
@@ -121,6 +135,26 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
 
             Stopwatch clock = Stopwatch.StartNew();
+            while (_incomingPaths.TryDequeue(out string incoming))
+            {
+                if (incoming?.EndsWith(".asset", StringComparison.OrdinalIgnoreCase) == true && _pendingPaths.Add(incoming))
+                {
+                    _pending.Enqueue(incoming);
+                }
+                if (budgetMilliseconds <= clock.Elapsed.TotalMilliseconds)
+                {
+                    LongestSliceMilliseconds = Math.Max(LongestSliceMilliseconds, clock.Elapsed.TotalMilliseconds);
+                    Transition();
+                    return 0;
+                }
+            }
+            if (_pending.Count == 0)
+            {
+                LongestSliceMilliseconds = Math.Max(LongestSliceMilliseconds, clock.Elapsed.TotalMilliseconds);
+                CompleteSlice();
+                Transition();
+                return 0;
+            }
             int count = 0;
             HashSet<string> published = new(StringComparer.Ordinal);
             do
@@ -197,6 +231,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         {
             _disposed = true;
             _completionPending = false;
+            _incomingPaths.Clear();
             _pending.Clear();
             _pendingPaths.Clear();
             _guidByPath.Clear();
@@ -224,7 +259,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private void Transition()
         {
             EditorApplication.update -= ProcessEditorUpdate;
-            if (!_disposed && !_suspended && (0 < _pending.Count || _completionPending))
+            if (!_disposed && !_suspended && (0 < PendingCount || _completionPending))
             {
                 EditorApplication.update += ProcessEditorUpdate;
             }

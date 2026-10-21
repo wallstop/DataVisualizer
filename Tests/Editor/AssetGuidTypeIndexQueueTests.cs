@@ -43,6 +43,39 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
+        public void ShouldBudgetCallbackIntakeBeforeClassifyingItsCopiedPaths()
+        {
+            using TestCleanupScope cleanup = new();
+            string root = CreateFolder(cleanup);
+            AssetGuidTypeIndex index = CreateIndex(cleanup);
+            string path = root + "/Deferred.asset";
+            string guid = CreateAsset(path);
+            string[] paths = { path, path, root + "/Ignored.txt" };
+            int queries = index.TypeQueryCount;
+            Assert.AreEqual(3, index.EnqueueDeferredAssetChanges(paths, null, null, null));
+            paths[0] = "Assets/Replaced.asset";
+            Assert.AreEqual(3, index.PendingInputPathCount);
+            index.Suspend();
+            Assert.That(!index.ProcessPendingSlice(0));
+            Assert.AreEqual(3, index.PendingInputPathCount);
+            index.Resume();
+            for (int remaining = 2; 0 <= remaining; remaining--)
+            {
+                Assert.That(!index.ProcessPendingSlice(0));
+                Assert.AreEqual(remaining, index.PendingInputPathCount);
+                Assert.AreEqual(queries, index.TypeQueryCount);
+            }
+            Assert.AreEqual(1, index.PendingPathCount);
+            Assert.That(index.ProcessPendingSlice(double.PositiveInfinity));
+            Assert.AreEqual(queries + 1, index.TypeQueryCount);
+            CollectionAssert.Contains(index.GetKnownGuids(typeof(TestDataObject)), guid);
+            index.EnqueueDeferredAssetChanges(new[] { path }, null, null, null);
+            index.Cancel();
+            Assert.AreEqual(0, index.PendingPathCount);
+            Assert.AreEqual(0, index.PendingInputPathCount);
+        }
+
+        [Test]
         public void ShouldCoalesceEveryCollectionWithoutClassifyingInsideEnqueue()
         {
             using TestCleanupScope cleanup = new();

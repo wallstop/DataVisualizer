@@ -32,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Keep large import bursts responsive while queued asset paths are filtered and combined (#308).
+
 - Fix script-folder scans adding unsupported types. Add only eligible ScriptableObject types without creating instances (#376).
 
 - Fix browser type scans blocking project imports. Keep unchanged rows stable, ignore unrelated edits, preserve missing-script selection, clear deleted references, and pause or

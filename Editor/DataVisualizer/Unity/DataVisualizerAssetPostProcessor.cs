@@ -44,7 +44,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Unity
 
         private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
-            AssetGuidTypeIndex.Shared.EnqueueAssetChanges(importedAssets, deletedAssets, movedAssets, movedFromAssetPaths);
+            AssetGuidTypeIndex.Shared.EnqueueDeferredAssetChanges(importedAssets, deletedAssets, movedAssets, movedFromAssetPaths);
 
             if (importedAssets.Length <= 0 && deletedAssets.Length <= 0 && movedAssets.Length <= 0 && movedFromAssetPaths.Length <= 0)
             {

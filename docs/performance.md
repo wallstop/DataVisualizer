@@ -301,3 +301,28 @@ Missing-script recovery/deletion, labels, Undo/Redo, moves, closed-window reopen
 functional tree passed 741 EditMode and 15 PlayMode tests. Queue tests also verify zero type queries during enqueue and budgeted per-path classification; the unchanged replay probe
 does not count type queries itself. Independent cleanup found no owned fixture/state files or browser windows, zero pending index paths, one container, seven editor windows and an
 idle AssetDatabase. The full 100k, actual Play, type-catalog and remaining #306/#308 acceptance matrices stay open.
+
+## Import path intake (2026-10-21)
+
+Import callbacks now copy changed-path arrays before returning. The existing index and affected-asset refresh pumps filter and coalesce those paths within their cooperative
+budgets. `PendingInputPathCount` reports raw captured paths, including duplicates; `PendingPathCount` / `PendingCount` include raw inputs and coalesced work. Counts become unique
+only after intake. Explicit `EnqueueAssetChanges` and `Enqueue` keep their synchronous filtering behavior.
+
+The [raw synthetic intake report](performance-path-intake-2026-10-21.json) compares those synchronous methods with deferred capture in the same warm Unity 6000.5.2f1 Windows
+process. Each size has five discarded warm-ups and 30 observations. Every path occurs twice. These are synthetic strings, with no asset creation, import, classification, row
+updates or theme checks in the timed regions. Calls run in fixed order; allocator and GC history are uncontrolled.
+
+| Unique synthetic paths | Synchronous index p95 (ms) | Deferred index p95 (ms) | Synchronous refresh p95 (ms) | Deferred refresh p95 (ms) |
+| ---------------------- | -------------------------- | ----------------------- | ---------------------------- | ------------------------- |
+| 100                    | 1.0204                     | 0.0069                  | 0.2243                       | 0.0102                    |
+| 1,000                  | 9.5620                     | 0.0173                  | 2.0007                       | 0.0188                    |
+| 10,000                 | 97.7068                    | 0.1832                  | 20.4257                      | 0.1173                    |
+| 100,000                | 945.9031                   | 0.8050                  | 231.9673                     | 10.3949                   |
+
+The p95 is the nearest-rank 29th sorted observation of 30. Input copies remain indivisible and allocate arrays: the 100k refresh capture still exceeds 4 ms at p95. Deferred work
+still has to process every captured path. This report proves a reduction in work performed during intake, not an end-to-end import speedup or a real 100k asset guarantee.
+
+A real 12-asset integration smoke passed labels, Undo/Redo, moves, deletion, missing-script recovery, closed-window reopen, stale-owner rejection, saved ordering and simulated Play
+notifications. Its 24-path callback replay took 0.450 ms and made zero new refresh object loads; reconciliation took 328.867 ms. These are single observations. The probe now checks
+captured input after the callback and eventual coalesced reconciliation, because raw pending counts deliberately include duplicates. Full 100k, actual Play/type-catalog and
+platform evidence remain open in [#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308).

@@ -10,6 +10,42 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     internal sealed class AssetChangeRefreshServiceTests
     {
+        [Test]
+        public void ShouldBudgetDeferredInputAndRetainCopiedBatchesUntilResumed()
+        {
+            int resolutions = 0;
+            int publications = 0;
+            using AssetChangeRefreshService service = new(
+                _ => true,
+                (_, _, _) => publications++,
+                (path, _) =>
+                {
+                    resolutions++;
+                    return ("guid", path, typeof(TestDataObject));
+                }
+            );
+            string[] paths = { "Assets/Deferred.asset", "Assets/Deferred.asset", "Assets/Ignored.txt" };
+            Assert.AreEqual(3, service.EnqueueDeferred(paths));
+            paths[0] = "Assets/ChangedByCaller.asset";
+            service.SetSuspended(true);
+            Assert.AreEqual(0, service.ProcessSlice(0));
+            Assert.AreEqual(3, service.PendingInputPathCount);
+            service.SetSuspended(false);
+            for (int remaining = 2; 0 <= remaining; remaining--)
+            {
+                Assert.AreEqual(0, service.ProcessSlice(0));
+                Assert.AreEqual(remaining, service.PendingInputPathCount);
+                Assert.AreEqual(0, resolutions);
+            }
+            Assert.AreEqual(1, service.PendingCount);
+            Assert.AreEqual(1, service.ProcessSlice(double.PositiveInfinity));
+            Assert.AreEqual(1, publications);
+            service.EnqueueDeferred(paths);
+            service.Dispose();
+            Assert.AreEqual(0, service.PendingCount);
+            Assert.AreEqual(0, service.EnqueueDeferred(paths));
+        }
+
         [TestCase(false)]
         [TestCase(true)]
         public void ShouldRetainUnresolvedGuidUntilRecoveryOrDeletion(bool delete)
