@@ -207,6 +207,12 @@ runs everything, including the Prettier Markdown check, on ubuntu and windows. C
 - Gate pull requests on both EditMode and PlayMode suites; aim for coverage on ordering, filtering, and cloning paths before tagging a release.
 - Add PlayMode coverage for `BaseDataObject` lifecycle callbacks and asset-state persistence in a sibling `Tests/Runtime` folder mirroring Unity's layout.
 
+### Documentation Audience
+
+Keep `docs/` user-facing. Retained raw reports, benchmark procedures and experiment write-ups belong in `Tests/Artifacts/`, not the public site. Transient output belongs in ignored
+`.artifacts/` or the driver's temporary directory; session records belong in ignored `progress/`. Follow
+[ship-changes](./skills/ship-changes/SKILL.md#documentation-and-test-evidence) when publishing or relocating evidence.
+
 ### Commit & Pull Requests
 
 - Write all agent-to-user copy (PR titles and bodies, commit messages, code comments, handoffs, CHANGELOG entries) in Simplified Technical English: short, plain, active sentences

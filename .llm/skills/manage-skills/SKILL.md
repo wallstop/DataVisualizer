@@ -64,7 +64,7 @@ Keep bodies lean (aim under 120 lines, hard limit 300 for every `.md` under `.ll
 ## Editing a Skill
 
 Run the size linter immediately after each edit
-(`uv run scripts/lint_file_lengths.py -Paths .llm/skills/<name>/SKILL.md`):
+(`uv run scripts/lint_file_lengths.py --paths .llm/skills/<name>/SKILL.md`):
 size issues discovered at commit time require human judgment to fix.
 
 ## Splitting an Oversize Skill

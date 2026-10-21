@@ -29,7 +29,7 @@ findings, historical measurements, and exploratory UX hypotheses. Do not infer p
 ## T01 - Local validation harness and baseline (partial)
 
 Delivered: `Tests/Editor/PerfBaseline.cs` provides a tick-driven local driver, monotonic timing, raw JSON and environment reporting. The 100/1,000/10,000 report is published in
-`docs/performance.md` (#244); background counting was corrected in #246. The original raw report remains unchanged with its limitation documented.
+`Tests/Artifacts/performance.md` (#244); background counting was corrected in #246. The original raw report remains unchanged with its limitation documented.
 
 - [ ] Extend the existing driver with explicit scenario/fixture controls and stage timings; reuse its host/MCP entrypoints rather than create another harness (#306).
 - [ ] Disposable fixture project referencing this package; deterministic datasets of 100 / 1,000 / 10,000 / 50,000 / 100,000 assets (one large type, many-type distribution,
@@ -171,7 +171,8 @@ Delivered: MkDocs Material foundation with strict build and Pages publishing wor
 
 - [x] README hero imagery from the capture pipeline (#140, #143); README stays concise and links into the site.
 - [x] Troubleshooting page (incomplete indexing, stale metadata, missing scripts, small windows, capture limits, host/container paths) (#145).
-- [x] Measured performance section with the complete 100/1,000/10,000 baseline (docs/performance.md and its raw report; #244). Background-count correction merged in #246.
+- [x] Measured performance section with the complete 100/1,000/10,000 baseline (Tests/Artifacts/performance.md and its raw report; #244). Background-count correction merged in
+      #246.
 - [x] Current six-shot captures embedded with captions and alt text; earlier overhaul closed in #114.
 - [x] Odin behavior documented separately from the default inspector contract (docs/extending.md, #134).
 - [ ] Correct newly verified filter and persisted-ID claims and compile complete examples (#307).
