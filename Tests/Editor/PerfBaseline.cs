@@ -378,6 +378,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 return;
             }
 
+            if (state.Phase == Phase.Finished)
+            {
+                Finish(state);
+                return;
+            }
+
             if (state.Watchdog.Elapsed > TimeSpan.FromMinutes(state.TimeoutMinutes))
             {
                 FinishWithError(state, $"the run exceeded the {state.TimeoutMinutes}-minute watchdog in phase {state.Phase}.");
@@ -440,7 +446,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     OpenWindow(state, cold: false);
                     return;
                 case Phase.Finished:
-                    Finish(state);
                     return;
             }
         }
@@ -451,8 +456,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             if (state.Sizes.Length <= state.SizeIndex)
             {
                 state.Staging?.Dispose();
-                state.Staging = null;
                 // Publish on the next tick, after this dataset's teardown time is recorded.
+                state.LastTickMilliseconds = 0;
                 state.Phase = Phase.Finished;
                 return;
             }
