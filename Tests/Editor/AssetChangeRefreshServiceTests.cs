@@ -10,6 +10,132 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     internal sealed class AssetChangeRefreshServiceTests
     {
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldRetainUnresolvedGuidUntilRecoveryOrDeletion(bool delete)
+        {
+            List<(string Guid, string Path, Type Type)> changes = new();
+            (string Guid, string Path, Type Type) resolved = ("known", "Assets/Original.asset", null);
+            using AssetChangeRefreshService service = new(
+                type => type == typeof(PlayModeDataObject),
+                (guid, path, type) => changes.Add((guid, path, type)),
+                (path, known) => resolved
+            );
+            service.Track("Assets/Original.asset", "known");
+            service.EnqueueGuid("known");
+            service.ProcessSlice(double.MaxValue);
+            Assert.That(changes, Is.EqualTo(new[] { resolved }));
+            resolved = ("known", "Assets/Moved.asset", null);
+            Assert.That(service.EnqueueGuid("known"), Is.True, "A missing script must keep its GUID tracked.");
+            service.ProcessSlice(double.MaxValue);
+            Assert.That(changes[1], Is.EqualTo(resolved));
+            resolved = delete ? (null, null, null) : ("known", "Assets/Moved.asset", typeof(PlayModeDataObject));
+            Assert.That(service.EnqueueGuid("known"), Is.True);
+            service.ProcessSlice(double.MaxValue);
+            Assert.That(changes[2], Is.EqualTo(delete ? ("known", (string)null, (Type)null) : resolved));
+            Assert.That(service.EnqueueGuid("known"), Is.EqualTo(!delete));
+        }
+
+        [Test]
+        public void ShouldRemoveKnownIdentityWhenItsTypeLeavesTheManagedScope()
+        {
+            List<(string Guid, string Path, Type Type)> changes = new();
+            using AssetChangeRefreshService service = new(
+                type => type == typeof(PlayModeDataObject),
+                (guid, path, type) => changes.Add((guid, path, type)),
+                (path, known) => ("known", path, typeof(OtherEditorOnlyCreationData))
+            );
+            service.Track("Assets/Original.asset", "known");
+            service.EnqueueGuid("known");
+            service.ProcessSlice(double.MaxValue);
+            Assert.That(changes, Is.EqualTo(new[] { ("known", (string)null, (Type)null) }));
+            Assert.That(service.EnqueueGuid("known"), Is.False);
+        }
+
+        [TestCase(false, 1)]
+        [TestCase(false, 2)]
+        [TestCase(true, 2)]
+        public void ShouldStopCallbacksImmediatelyWhenPublishChangesLifecycle(bool dispose, int paths)
+        {
+            int published = 0;
+            int completed = 0;
+            AssetChangeRefreshService service = null;
+            using TestCleanupScope cleanup = new();
+            service = new AssetChangeRefreshService(
+                type => true,
+                (guid, path, type) =>
+                {
+                    published++;
+                    if (published == 1)
+                    {
+                        if (dispose)
+                        {
+                            service.Dispose();
+                        }
+                        else
+                        {
+                            service.SetSuspended(true);
+                        }
+                    }
+                },
+                (path, known) => (path, path, typeof(PlayModeDataObject))
+            );
+            cleanup.Defer(service.Dispose);
+            service.SliceCompleted += () => completed++;
+            service.Enqueue(paths == 1 ? new[] { "Assets/A.asset" } : new[] { "Assets/A.asset", "Assets/B.asset" });
+            Assert.That(service.ProcessSlice(double.MaxValue), Is.EqualTo(1));
+            Assert.That(published, Is.EqualTo(1));
+            Assert.That(completed, Is.Zero);
+            if (!dispose)
+            {
+                service.SetSuspended(false);
+                service.ProcessSlice(double.MaxValue);
+                Assert.That(published, Is.EqualTo(paths));
+                Assert.That(completed, Is.EqualTo(1), "Resume must finish the slice even if no paths remain.");
+                service.ProcessSlice();
+                Assert.That(completed, Is.EqualTo(1));
+            }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldStopReplacementPublicationWhenRemovalChangesLifecycle(bool dispose)
+        {
+            List<string> published = new();
+            AssetChangeRefreshService service = null;
+            using TestCleanupScope cleanup = new();
+            service = new AssetChangeRefreshService(
+                type => true,
+                (guid, path, type) =>
+                {
+                    published.Add(guid);
+                    if (guid == "original")
+                    {
+                        if (dispose)
+                        {
+                            service.Dispose();
+                        }
+                        else
+                        {
+                            service.SetSuspended(true);
+                        }
+                    }
+                },
+                (path, known) => ("replacement", path, typeof(PlayModeDataObject))
+            );
+            cleanup.Defer(service.Dispose);
+            service.Track("Assets/Replaced.asset", "original");
+            service.EnqueueGuid("original");
+            service.ProcessSlice(double.MaxValue);
+            Assert.That(published, Is.EqualTo(new[] { "original" }));
+            if (!dispose)
+            {
+                service.SetSuspended(false);
+                service.ProcessSlice(double.MaxValue);
+                Assert.That(published, Is.EqualTo(new[] { "original", "replacement" }));
+            }
+        }
+
         [TestCase(1000)]
         [TestCase(10000)]
         [TestCase(100000)]

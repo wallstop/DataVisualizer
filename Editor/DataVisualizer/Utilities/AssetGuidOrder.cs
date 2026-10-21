@@ -3,9 +3,35 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 #if UNITY_EDITOR
     using System;
     using System.Collections.Generic;
+    using WallstopStudios.DataVisualizer.Editor.Data;
 
     public static class AssetGuidOrder
     {
+        public static int RemovePersistedReferences(List<TypeObjectOrder> orders, List<LastObjectSelectionEntry> selections, string guid)
+        {
+            if (string.IsNullOrWhiteSpace(guid))
+            {
+                return 0;
+            }
+            int removed = 0;
+            Predicate<string> matches = candidate => string.Equals(candidate, guid, StringComparison.OrdinalIgnoreCase);
+            if (orders != null)
+            {
+                foreach (TypeObjectOrder order in orders)
+                {
+                    if (order?.ObjectGuids != null)
+                    {
+                        removed += order.ObjectGuids.RemoveAll(matches);
+                    }
+                }
+            }
+            if (selections != null)
+            {
+                removed += selections.RemoveAll(entry => entry != null && string.Equals(entry.objectGuid, guid, StringComparison.OrdinalIgnoreCase));
+            }
+            return removed;
+        }
+
         public static List<string> MergeLoadedOrder(IReadOnlyList<string> canonicalOrder, IReadOnlyList<string> loadedOrder)
         {
             List<string> mergedOrder = CopyDistinct(canonicalOrder);

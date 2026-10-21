@@ -27,6 +27,10 @@ the database idles; nothing is lost.
 The window refreshes itself when a tracked `.asset` file is imported, moved, or deleted, and a theme change to the applied theme applies immediately. If a view looks stale after
 such a change, check the console for errors from other packages first: an exception in another import handler can stop Unity's broadcast chain.
 
+Missing scripts temporarily remove unavailable rows but keep their GUID and saved order for recovery. Moves retain that identity. Confirmed deletion removes saved order/selection
+references even if the live wrapper was already unavailable. A type that definitively leaves the managed scope also drops its old membership. Refresh work pauses with its owner;
+resume completes pending work once, and closing the owner discards callbacks.
+
 While the editor is playing, package-driven work pauses entirely and refresh requests are remembered until you leave Play Mode. See
 [While the editor is playing](organizing.md#while-the-editor-is-playing).
 
