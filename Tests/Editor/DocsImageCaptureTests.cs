@@ -7,6 +7,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.UIElements;
+    using WallstopStudios.DataVisualizer.Editor.Search;
     using Object = UnityEngine.Object;
 
     internal sealed class DocsImageCaptureTests
@@ -163,6 +164,52 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.AreEqual("a", observed, "The production change callback must receive the staged query.");
             field.Blur();
             Assert.AreEqual("a", field.value, "Moving the capture tree to another panel must not restore placeholder text.");
+        }
+
+        [Test]
+        public void ShouldCompleteEverySliceOfTheOwnedSearchBeforeCapture()
+        {
+            List<AssetSearchDocument> documents = new();
+            for (int index = 0; index < 8; index++)
+            {
+                documents.Add(new AssetSearchDocument(index.ToString(), "Fixture", typeof(DocsImageCaptureTests), null));
+            }
+            AssetSearchQuery query = new(documents, new[] { "Fixture" }, 25);
+            int slices = DocsImageCapture.CompleteSearchQuery(budget =>
+            {
+                query.Advance(budget);
+                return query.IsComplete;
+            });
+            Assert.That(slices, Is.EqualTo(8));
+            Assert.That(query.Results.Count, Is.EqualTo(8));
+            for (int index = 0; index < query.Results.Count; index++)
+            {
+                Assert.That(query.Results[index].Document.Guid, Is.EqualTo(index.ToString()));
+            }
+        }
+
+        [Test]
+        public void ShouldFailClosedWhenOwnedSearchCannotComplete()
+        {
+            Assert.Throws<TimeoutException>(() => DocsImageCapture.CompleteSearchQuery(_ => false, timeoutMilliseconds: 1));
+        }
+
+        [Test]
+        public void ShouldCaptureCompleteSearchOnColdAndRepeatedWindows()
+        {
+            string directory = Path.Combine("Temp", "DocsSearch-" + Guid.NewGuid().ToString("N"));
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() =>
+            {
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+            });
+            for (int capture = 0; capture < 3; capture++)
+            {
+                AssertValidPngFile(DocsImageCapture.CaptureShot("search", directory));
+            }
         }
 
         [Test]
