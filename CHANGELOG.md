@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Add paged C# and JSON discovery of browser-eligible types with exact identities, without opening a window or loading assets (#315, #316).
+
 - Add shared C# and JSON previews and cooperative create, clone, rename, move and delete operations (#315, #316).
 
 - Add shared C# and JSON configuration for data folders and active asset selection, with read-only preview and idempotent apply (#315, #316).

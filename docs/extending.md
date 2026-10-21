@@ -297,6 +297,32 @@ after loading/creation or lifecycle hooks report `outcome_unknown`. Inspect memo
 continue. Create/clone/rename retain Before/After hooks and save their changes. Only affected assets are saved. Browser arrangements are an adapter concern; this service changes
 asset files.
 
+## Discover available types
+
+`EditorTypeCatalog` snapshots the browser's eligible loaded ScriptableObject types on the editor main thread. It does not open a window, construct objects, load assets, or change
+settings. Types use ordinal assembly-qualified identity order, independent of the browser's saved namespace/type order. This catalog lists eligible types, including unmanaged ones;
+it does not report asset counts or which types the user manages. Create a new snapshot after assembly reload or type changes. It owns no resources to dispose.
+
+```csharp
+var catalog = new WallstopStudios.DataVisualizer.Editor.Utilities.EditorTypeCatalog();
+foreach (System.Type type in catalog.GetPage(0, 100))
+{
+    UnityEngine.Debug.Log(type.AssemblyQualifiedName);
+}
+```
+
+JSON uses the same catalog with bounded pages of 1–1000 types. Only `schemaVersion`, `operation`, `offset` and `pageSize` apply; nonempty scope, filter, configuration and mutation
+fields are rejected. Unknown fields follow the schema-v1 ignored-member rule. Catalog sessions finish synchronously in `Start`; cancellation and disposal leave completed snapshots
+readable. A complete page describes loaded types, not complete asset indexing. Each item has `typeIdentity`, full type `name` and code `ok`; asset paths/GUIDs are empty.
+
+```csharp
+using (var session = WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationSession.Start(
+    "{\"schemaVersion\":1,\"operation\":\"catalog\",\"offset\":0,\"pageSize\":100}"))
+{
+    UnityEngine.Debug.Log(session.GetResponseJson());
+}
+```
+
 ## Configure editor preferences from C#
 
 `EditorConfigurationService` operates on an explicit `DataVisualizerSettings` instance without opening a window. The browser uses the same service for its data-folder and active
