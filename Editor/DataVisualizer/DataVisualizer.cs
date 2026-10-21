@@ -1693,6 +1693,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _selectedObject = null;
             _selectedObjects.Clear();
             _selectedLabelUsage.Clear();
+            _selectedObjectOrderIndex.Clear();
 #if ODIN_INSPECTOR
             _odinPropertyTree = null;
 #endif
@@ -2667,6 +2668,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _selectedObjects.Clear();
                 _selectedLabelUsage.Clear();
+                _selectedObjectOrderIndex.Clear();
             }
             else if (!selectionTypeChanged)
             {
@@ -4993,7 +4995,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             int index = _selectedObjects.IndexOf(objectToDelete);
             _selectedObjects.Remove(objectToDelete);
             _selectedLabelUsage.Remove(objectToDelete);
-            _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects);
+            _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects, _selectedObjectOrderIndex);
             _filteredObjects.Remove(objectToDelete);
             _filteredObjects.RemoveAll(obj => obj == null);
             _selectedObjectOrderIndex.Remove(objectToDelete);
@@ -6267,7 +6269,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void UpdateLabelAreaAndFilter()
         {
-            _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects);
+            _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects, _selectedObjectOrderIndex);
             ClearLabelFilterUI();
             if (_namespaceController.SelectedType == null)
             {
@@ -6313,7 +6315,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         internal void BuildObjectsView()
         {
-            if (0 < _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects))
+            if (0 < _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects, _selectedObjectOrderIndex))
             {
                 _selectedLabelUsage.CopyNamesTo(_currentUniqueLabelsForType);
                 PopulateLabelPillContainers();

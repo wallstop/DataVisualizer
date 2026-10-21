@@ -11,6 +11,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     internal sealed class AssetObjectCacheTests
     {
+        [Test]
+        public void ShouldRemoveDestroyedRowMembershipWithoutChangingLiveOrder()
+        {
+            using TestCleanupScope cleanup = new();
+            PlayModeDataObject live = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(live));
+            PlayModeDataObject destroyed = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            UnityEngine.Object.DestroyImmediate(destroyed);
+            List<ScriptableObject> rows = new() { null, destroyed, live };
+            Dictionary<ScriptableObject, int> order = new() { [destroyed] = 4, [live] = 9 };
+            AssetLabelUsage usage = new();
+            Assert.AreEqual(2, usage.RemoveDestroyedRows(rows, order));
+            CollectionAssert.AreEqual(new[] { live }, rows);
+            Assert.That(!order.ContainsKey(destroyed));
+            Assert.AreEqual(9, order[live]);
+            Assert.AreEqual(0, usage.RemoveDestroyedRows(rows, order));
+        }
+
         [TestCase(false)]
         [TestCase(true)]
         public void ShouldRefreshFieldSnapshotsWithoutMovingExistingRows(bool sorted)

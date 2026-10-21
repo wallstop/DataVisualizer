@@ -74,6 +74,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public int RemoveDestroyedRows(List<ScriptableObject> rows)
         {
+            return RemoveDestroyedRows(rows, null);
+        }
+
+        public int RemoveDestroyedRows(List<ScriptableObject> rows, Dictionary<ScriptableObject, int> rowOrderIndex)
+        {
             int originalCount = rows.Count;
             int writeIndex = 0;
             for (int readIndex = 0; readIndex < originalCount; readIndex++)
@@ -82,6 +87,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 if (asset == null)
                 {
                     Remove(asset);
+                    if (!ReferenceEquals(asset, null))
+                    {
+                        rowOrderIndex?.Remove(asset);
+                    }
                 }
                 else
                 {
