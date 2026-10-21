@@ -34,8 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Fix script-folder scans adding unsupported types. Add only eligible ScriptableObject types without creating instances (#376).
 
-- Fix unnecessary refreshes after unrelated asset moves or deletions. Preserve missing-script identities through moves and recovery, clean deleted saved references, and stop queued
-  refreshes when their owner pauses or closes (#308).
+- Fix unnecessary refreshes after unrelated moves or deletions and keep existing rows in place during edits. Preserve missing-script identities and selection, clear deleted saved
+  references, and stop work for paused or closed owners (#308).
 
 ### Changed
 

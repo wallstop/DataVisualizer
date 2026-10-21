@@ -254,3 +254,26 @@ guarantee. Counts, observer method, controls and raw terminal text remain in the
 Missing selected-script recovery, unavailable deletion during an intentional rebuild, label filtering, Undo/Redo, move, reopen, stale-owner rejection, custom order/selection and
 simulated Play reconciliation passed. Routine operations preserved row/search generations and 9,999 unrelated identities. Independent cleanup found no owned roots or state file,
 one container window, seven editor windows and an idle editor. Actual Play entry, type-catalog cases, 100k measurements and the complete #308 matrix remain open.
+
+## Existing-row refresh after list updates
+
+The [direct final-tree follow-up](performance-refresh-existing-rows-2026-10-21.json) at
+[b0e8b05](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/b0e8b056cd5cd6ee0bb647a1bddedcf987905bae) uses the identical probe source and 10k dataset shape. Existing
+rows now keep their positions when identity, ordering keys and filter membership stay unchanged; copied search fields still refresh. The full scenario and lifecycle tail completed
+in 619.7 seconds, including 452.6 seconds of staging.
+
+| Changed assets | Reconciliation before | Reconciliation after | Explicit callback after |
+| -------------- | --------------------- | -------------------- | ----------------------- |
+| 100            | 515.9 ms              | 438.3 ms             | 8.7 ms                  |
+| 1,000          | 6,114.4 ms            | 1,709.6 ms           | 83.5 ms                 |
+| 10,000         | 220,977.2 ms          | 14,175.7 ms          | 816.4 ms                |
+
+These are sequential single observations in the same warm editor, with tests, recompilation and different cache/background history between runs. They show a large reduction in
+observed reconciliation time, not a percentile or controlled-speedup guarantee. The callback remains synchronous: the 20k-path replay still took 816.4 ms. The longest complete
+refresh slice before the lifecycle tail was 57.2 ms, so the 4 ms service budget is still not a hard whole-slice bound.
+
+The cache-only experiment and the review regression are retained separately in the report. First publication of an already loaded/filtered row reproduced two visible copies before
+repair, then passed with one; the repaired tree also passes 733 EditMode and 15 PlayMode tests. Routine generations, label matches, saved selection/order, missing-script recovery
+and deletion, closed-window reopen and simulated Play reconciliation passed in the direct 10k run, with zero refresh object load calls during bursts. Independent cleanup confirmed
+no owned fixtures/state or browser windows, one container, seven editor windows and an idle AssetDatabase. Complete 100k, actual Play, type-catalog and remaining
+[#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308) acceptance work remains open.

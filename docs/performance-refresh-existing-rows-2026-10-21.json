@@ -1,0 +1,208 @@
+{
+  "schema": "1",
+  "reportKind": "existing-row-refresh-followup",
+  "status": "passed",
+  "runComplete": true,
+  "generatedAtUtc": "2026-10-21T18:14:47.643131+00:00",
+  "sourceRevision": "b0e8b056cd5cd6ee0bb647a1bddedcf987905bae",
+  "probeSourceSha256": "a7998ed239464b60dd55c5b9fcfa752c07c2064ef6053d0855664e9f0560db7c",
+  "environment": {
+    "unityVersion": "6000.5.2f1",
+    "platform": "WindowsEditor",
+    "operatingSystem": "Windows 11 (10.0.26200)",
+    "processor": "Snapdragon X Elite X1E80100",
+    "systemMemoryMegabytes": 65011
+  },
+  "dataset": {
+    "kind": "real Unity assets",
+    "fixtureType": "WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject",
+    "count": 10000,
+    "unchangedRowIdentitiesPreserved": 9999
+  },
+  "method": [
+    "Same dataset; closed-window conditions first, then open conditions; one sample each in a warm editor process.",
+    "Each changed set uses StartAssetEditing, SetLabels for each object, then StopAssetEditing with mandatory cleanup; no await within the batch.",
+    "Writes include resource/progress observer overhead. StopAssetEditing is timed separately and includes the import pipeline, not just the package callback.",
+    "After actual imports, explicitly replay the production callback with duplicate paths, then observe reconciliation until settled plus a 150 ms confirmation delay.",
+    "Counts include natural notifications and replay; editor-update callbacks are not rendered frames and include empty updates. No package-absent control."
+  ],
+  "staging": {
+    "totalMilliseconds": 452571.859,
+    "creationBudgetMilliseconds": 32,
+    "maximumItemsPerBatch": 20,
+    "longestSliceMilliseconds": 460.172
+  },
+  "samples": [
+    {
+      "window": "closed",
+      "changedAssets": 100,
+      "labelCallsMilliseconds": 158.038,
+      "longestLabelCallMilliseconds": 2.546,
+      "writeAndFlushWallMilliseconds": 891.402,
+      "importFlushMilliseconds": 690.594
+    },
+    {
+      "window": "closed",
+      "changedAssets": 1000,
+      "labelCallsMilliseconds": 1442.647,
+      "longestLabelCallMilliseconds": 20.39,
+      "writeAndFlushWallMilliseconds": 4832.872,
+      "importFlushMilliseconds": 2932.27
+    },
+    {
+      "window": "closed",
+      "changedAssets": 10000,
+      "labelCallsMilliseconds": 13921.364,
+      "longestLabelCallMilliseconds": 24.628,
+      "writeAndFlushWallMilliseconds": 44757.933,
+      "importFlushMilliseconds": 27319.354
+    },
+    {
+      "window": "open",
+      "changedAssets": 100,
+      "labelCallsMilliseconds": 108.787,
+      "longestLabelCallMilliseconds": 7.386,
+      "writeAndFlushWallMilliseconds": 737.256,
+      "importFlushMilliseconds": 575.136,
+      "replayedPaths": 200,
+      "explicitReplayCallbackMilliseconds": 8.687,
+      "reconciliationWallMilliseconds": 438.335,
+      "observedEditorUpdateCallbacks": 2772,
+      "maxObservedProcessedDelta": 32,
+      "naturalProcessedBeforeReplay": 28,
+      "pendingBeforeReplay": 72,
+      "processedPaths": 128,
+      "newRefreshObjectLoads": 0
+    },
+    {
+      "window": "open",
+      "changedAssets": 1000,
+      "labelCallsMilliseconds": 1007.063,
+      "longestLabelCallMilliseconds": 2.497,
+      "writeAndFlushWallMilliseconds": 4187.965,
+      "importFlushMilliseconds": 2877.343,
+      "replayedPaths": 2000,
+      "explicitReplayCallbackMilliseconds": 83.543,
+      "reconciliationWallMilliseconds": 1709.58,
+      "observedEditorUpdateCallbacks": 2214,
+      "maxObservedProcessedDelta": 35,
+      "naturalProcessedBeforeReplay": 28,
+      "pendingBeforeReplay": 972,
+      "processedPaths": 1028,
+      "newRefreshObjectLoads": 0
+    },
+    {
+      "window": "open",
+      "changedAssets": 10000,
+      "labelCallsMilliseconds": 11656.778,
+      "longestLabelCallMilliseconds": 20.509,
+      "writeAndFlushWallMilliseconds": 43603.531,
+      "importFlushMilliseconds": 28526.538,
+      "replayedPaths": 20000,
+      "explicitReplayCallbackMilliseconds": 816.383,
+      "reconciliationWallMilliseconds": 14175.718,
+      "observedEditorUpdateCallbacks": 3305,
+      "maxObservedProcessedDelta": 35,
+      "naturalProcessedBeforeReplay": 34,
+      "pendingBeforeReplay": 9966,
+      "processedPaths": 10034,
+      "newRefreshObjectLoads": 0
+    }
+  ],
+  "checks": [
+    "Missing selected-script recovery, cached rename, label include/exclude, Undo/Redo and move passed.",
+    "Routine operations and all bursts preserve row/search generation; zero refresh object load calls during bursts.",
+    "Unavailable deletion clears canonical/saved order and selection during an intentional search rebuild.",
+    "Closed-window rename/reopen and simulated Play notifications preserve custom order and selection; stale owner rejects work."
+  ],
+  "longestRefreshSliceBeforeLifecycleMilliseconds": 57.227,
+  "elapsedSeconds": 619.726762,
+  "peakUnityAllocatedPlusManagedGuardBytes": 2208979410,
+  "cleanup": {
+    "ownedRoot": "Assets/PerfBaselineFixtures-58e887606d3a4e719507fbaec036d7b4",
+    "allOwnedFixtureRootsAbsent": true,
+    "ownedStateFileAbsent": true,
+    "cleanupError": "",
+    "containerWindowsAfter": 1,
+    "editorWindowsAfter": 7,
+    "assetDatabaseBusyAfter": false,
+    "browserWindowsAfter": 0
+  },
+  "resourceLimits": {
+    "cooperativeMinutes": 15,
+    "overlappingMemoryGuardBytes": 17179869184,
+    "minimumStartingFreeDiskBytes": 21474836480,
+    "minimumFreeDiskBytes": 10737418240
+  },
+  "limitations": [
+    "Single observations do not establish distributions, a controlled speedup, or worst-case guarantees.",
+    "Import flush and explicit callback replay are synchronous and cannot be preempted by a cooperative timer.",
+    "Reconciliation spans editor updates but the 4 ms service budget does not bound complete callback/UI slice work.",
+    "Memory counters overlap and are not RSS. No actual Play entry, fresh process, Unity 2021.3 or other platform execution.",
+    "100k assets, type-catalog cases and the complete issue acceptance matrix remain open."
+  ],
+  "rawTerminalReport": "PASS fixtures=10000; fixture staging=452571.859ms; CreationMilliseconds=38706.704; BatchImportMilliseconds=333529.099; InitializationMilliseconds=2038.694; RefreshMilliseconds=401.413; LongestSliceMilliseconds=460.172; creationBudget=32ms; maxBatch=20; unchanged identities=9999; rename loaded 0; search generation before close 3->4; row generation before close 3->3; labels, Undo/Redo, move, deletion passed; processedBeforeLifecycle=11206; longest sliceBeforeLifecycle=57.227ms; selected missing-script recovery passed; actual label burst=100, replayed callback paths=200, callbackMs=8.687, totalMs=1185.811, processed=128, newLoads=0; actual label burst=1000, replayed callback paths=2000, callbackMs=83.543, totalMs=5982.595, processed=1028, newLoads=0; actual label burst=10000, replayed callback paths=20000, callbackMs=816.383, totalMs=58597.163, processed=10034, newLoads=0; missing-script deletion cleared canonical and saved intent; closed-window rename/reopen, stale callback rejection, simulated Play reconciliation and custom order/selection passed; measurements=; phase=ClosedLabelWrites, burst=100, labelNativeMs=158.038, longestLabelCallMs=2.546, labelWallMs=891.402, importFlushMs=690.594; phase=ClosedLabelWrites, burst=1000, labelNativeMs=1442.647, longestLabelCallMs=20.39, labelWallMs=4832.872, importFlushMs=2932.27; phase=ClosedLabelWrites, burst=10000, labelNativeMs=13921.364, longestLabelCallMs=24.628, labelWallMs=44757.933, importFlushMs=27319.354; phase=OpenLabelWrites, burst=100, labelNativeMs=108.787, longestLabelCallMs=7.386, labelWallMs=737.256, importFlushMs=575.136; burst=100, explicitReplayCallbackMs=8.687, reconcileWallMs=438.335, observedUpdates=2772, maxObservedProcessedDelta=32, naturalProcessedBeforeReplay=28, pendingBeforeReplay=72, processed=128, newLoads=0; phase=OpenLabelWrites, burst=1000, labelNativeMs=1007.063, longestLabelCallMs=2.497, labelWallMs=4187.965, importFlushMs=2877.343; burst=1000, explicitReplayCallbackMs=83.543, reconcileWallMs=1709.58, observedUpdates=2214, maxObservedProcessedDelta=35, naturalProcessedBeforeReplay=28, pendingBeforeReplay=972, processed=1028, newLoads=0; phase=OpenLabelWrites, burst=10000, labelNativeMs=11656.778, longestLabelCallMs=20.509, labelWallMs=43603.531, importFlushMs=28526.538; burst=10000, explicitReplayCallbackMs=816.383, reconcileWallMs=14175.718, observedUpdates=3305, maxObservedProcessedDelta=35, naturalProcessedBeforeReplay=34, pendingBeforeReplay=9966, processed=10034, newLoads=0; elapsedSeconds=619.726762; peakTrackedMemory=2208979410",
+  "comparison": {
+    "baselineReport": "performance-refresh-batched-10k-2026-10-21.json",
+    "baselineSourceRevision": "f0599cf2449e38296af8ade2128b455e10650b79",
+    "sameProbeSource": true,
+    "observations": [
+      {
+        "changedAssets": 100,
+        "beforeReconciliationMilliseconds": 515.863,
+        "afterReconciliationMilliseconds": 438.335,
+        "beforeExplicitReplayCallbackMilliseconds": 9.307,
+        "afterExplicitReplayCallbackMilliseconds": 8.687
+      },
+      {
+        "changedAssets": 1000,
+        "beforeReconciliationMilliseconds": 6114.403,
+        "afterReconciliationMilliseconds": 1709.58,
+        "beforeExplicitReplayCallbackMilliseconds": 94.018,
+        "afterExplicitReplayCallbackMilliseconds": 83.543
+      },
+      {
+        "changedAssets": 10000,
+        "beforeReconciliationMilliseconds": 220977.204,
+        "afterReconciliationMilliseconds": 14175.718,
+        "beforeExplicitReplayCallbackMilliseconds": 806.926,
+        "afterExplicitReplayCallbackMilliseconds": 816.383
+      }
+    ],
+    "limitations": "Sequential single before/after runs in the same warm process; tests, recompilation, cache history and background work differ. No percentile or controlled-speedup guarantee."
+  },
+  "cacheOnlyExperiment": {
+    "rows": 10000,
+    "updatesPerPass": 1000,
+    "passes": 3,
+    "beforeMilliseconds": [
+      1288.819,
+      1426.779,
+      1379.569
+    ],
+    "afterMilliseconds": [
+      46.704,
+      44.849,
+      47.472
+    ],
+    "afterSourceRevision": "f95e0870677b7b6b27be79db476c5a23f300a09b",
+    "note": "Non-persisted ScriptableObjects, fields changed and snapshots refreshed; isolates cache updates, not native import or browser work."
+  },
+  "reviewRegression": {
+    "probeSourceSha256": "9002423e4e8725faf5fa108e07ca12d8df554e6c08d97843f48f058f5adb933a",
+    "beforeSourceRevision": "c2e92c1a514b8d00aa86c1788d03585e42063185",
+    "afterSourceRevision": "b0e8b056cd5cd6ee0bb647a1bddedcf987905bae",
+    "scenario": "First cache notification for an already loaded/filtered row after removing only its cache entry.",
+    "beforeVisibleCopies": 2,
+    "afterVisibleCopies": 1,
+    "afterFull12AssetSmokePassed": true,
+    "beforeRaw": "Failed created=12/12; root=Assets/PerfBaselineFixtures-623ef16943324351a49c526292a8f70f; cleanupError=; failedPhase=Interactions; burst=12; changed=12; measurements=; phase=ClosedLabelWrites, burst=12, labelNativeMs=21.831, longestLabelCallMs=2.737, labelWallMs=235.883, importFlushMs=203.821; error=System.Exception: First cache publication duplicated loaded visible row: 2\n  at Session260ReviewProbe.Main (System.Int32 count) [0x01062] in C:\\Code\\DataVisualizer\\Packages\\com.wallstop-studios.data-visualizer\\.artifacts\\session260-review-probe.cs:262 \n  at Session260ReviewProbe.RunAndReport (System.Int32 count) [0x00029] in C:\\Code\\DataVisualizer\\Packages\\com.wallstop-studios.data-visualizer\\.artifacts\\session260-review-probe.cs:79 ",
+    "afterRaw": "PASS fixtures=12; fixture staging=3635.88ms; CreationMilliseconds=50.224; BatchImportMilliseconds=564.1; InitializationMilliseconds=11.198; RefreshMilliseconds=84.016; LongestSliceMilliseconds=491.438; creationBudget=32ms; maxBatch=20; unchanged identities=11; rename loaded 0; search generation before close 3->4; row generation before close 3->3; labels, Undo/Redo, move, deletion passed; processedBeforeLifecycle=40; longest sliceBeforeLifecycle=19.458ms; selected missing-script recovery passed; actual label burst=12, replayed callback paths=24, callbackMs=1.285, totalMs=543.137, processed=24, newLoads=0; missing-script deletion cleared canonical and saved intent; closed-window rename/reopen, stale callback rejection, simulated Play reconciliation and custom order/selection passed; measurements=; phase=ClosedLabelWrites, burst=12, labelNativeMs=26.838, longestLabelCallMs=12.842, labelWallMs=230.771, importFlushMs=193.42; phase=OpenLabelWrites, burst=12, labelNativeMs=17.085, longestLabelCallMs=1.826, labelWallMs=235.684, importFlushMs=203.638; burst=12, explicitReplayCallbackMs=1.285, reconcileWallMs=304.482, observedUpdates=2052, maxObservedProcessedDelta=9, naturalProcessedBeforeReplay=12, pendingBeforeReplay=0, processed=24, newLoads=0; elapsedSeconds=13.4303462; peakTrackedMemory=2114557821"
+  },
+  "validation": {
+    "functionalSourceRevision": "b0e8b056cd5cd6ee0bb647a1bddedcf987905bae",
+    "editModePassed": 733,
+    "playModePassed": 15,
+    "packageFilesVerified": 249
+  }
+}

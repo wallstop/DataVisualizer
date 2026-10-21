@@ -15,6 +15,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private readonly List<ScriptableObject> _ordered;
         private readonly List<AssetSearchDocument> _documents = new();
         private readonly Dictionary<string, ScriptableObject> _byGuid = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _documentIndexByGuid = new(StringComparer.Ordinal);
         private readonly Dictionary<ScriptableObject, AssetSearchDocument> _keys = new();
         private bool _isSorted = true;
 
@@ -58,6 +59,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _ordered.Clear();
             _documents.Clear();
             _byGuid.Clear();
+            _documentIndexByGuid.Clear();
             _keys.Clear();
             _isSorted = true;
         }
@@ -81,6 +83,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 _byGuid.Add(entry.Guid, entry.Value);
                 _ordered.Add(entry.Value);
                 _keys.Add(entry.Value, entry.Key);
+                _documentIndexByGuid.Add(entry.Guid, _documents.Count);
                 _documents.Add(entry.Key);
             }
             _isSorted = entries.Count < 2;
@@ -96,8 +99,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
             // A destroyed Unity wrapper still occupies managed collections.
             Version++;
-            _ordered.Remove(previous);
-            _documents.Remove(_keys[previous]);
+            int index = _documentIndexByGuid[guid];
+            _ordered.RemoveAt(index);
+            _documents.RemoveAt(index);
+            _documentIndexByGuid.Remove(guid);
+            IndexDocumentsFrom(index);
             _keys.Remove(previous);
             _byGuid.Remove(guid);
             return true;
@@ -108,6 +114,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             if (string.IsNullOrEmpty(guid))
             {
                 return false;
+            }
+            AssetSearchDocument replacement = value != null ? new AssetSearchDocument(guid, value.name, value.GetType(), value) : null;
+            if (value != null && _byGuid.TryGetValue(guid, out ScriptableObject previous) && ReferenceEquals(previous, value) && CompareDocuments(_keys[value], replacement) == 0)
+            {
+                if (sorted)
+                {
+                    Sort();
+                }
+                Version++;
+                _keys[value] = replacement;
+                _documents[_documentIndexByGuid[guid]] = replacement;
+                return true;
             }
             bool removed = Remove(guid);
             if (value == null)
@@ -121,10 +139,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
             Version++;
             _byGuid[guid] = value;
-            _keys[value] = new AssetSearchDocument(guid, value.name, value.GetType(), value);
+            _keys[value] = replacement;
             if (!sorted)
             {
                 _ordered.Add(value);
+                _documentIndexByGuid[guid] = _documents.Count;
                 _documents.Add(_keys[value]);
                 _isSorted = _documents.Count < 2;
                 return true;
@@ -147,6 +166,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
             _ordered.Insert(low, value);
             _documents.Insert(low, _keys[value]);
+            IndexDocumentsFrom(low);
             return true;
         }
 
@@ -171,6 +191,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _ordered.Clear();
             foreach (AssetSearchDocument document in _documents)
             {
+                _documentIndexByGuid[document.Guid] = _ordered.Count;
                 _ordered.Add(_byGuid[document.Guid]);
             }
             _isSorted = true;
@@ -182,6 +203,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             AssetSearchDocument left = _keys[first];
             AssetSearchDocument right = _keys[second];
             return CompareDocuments(left, right);
+        }
+
+        private void IndexDocumentsFrom(int start)
+        {
+            for (int index = start; index < _documents.Count; index++)
+            {
+                _documentIndexByGuid[_documents[index].Guid] = index;
+            }
         }
     }
 }
