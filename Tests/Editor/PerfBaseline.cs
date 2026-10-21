@@ -65,6 +65,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string DefaultOutputDirectory = "Temp/PerfBaseline";
         private const string PackagePath = "Packages/com.wallstop-studios.data-visualizer/package.json";
 
+        private const int ColdRepetitions = 5;
         private const int WarmupRepetitions = 5;
         private const int WarmRepetitions = 30;
         private const int SearchRepetitions = 30;
@@ -121,7 +122,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             report file, and reads the JSON when the summary announces completion;
             every measured duration lives inside this editor process.
         */
-        public static void RunBaseline(string outputDirectory, int[] fixtureSizes = null, double timeoutMinutes = DefaultTimeoutMinutes)
+        public static void RunBaseline(
+            string outputDirectory,
+            int[] fixtureSizes = null,
+            double timeoutMinutes = DefaultTimeoutMinutes,
+            Type[] fixtureTypes = null,
+            double stagingBudgetMilliseconds = 4,
+            int maximumStagingItems = 10
+        )
         {
             if (_active != null)
             {
@@ -143,6 +151,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new ArgumentOutOfRangeException(nameof(timeoutMinutes), "Choose a finite run budget greater than zero and no longer than 24 hours.");
             }
 
+            if (double.IsNaN(stagingBudgetMilliseconds) || double.IsInfinity(stagingBudgetMilliseconds) || stagingBudgetMilliseconds <= 0 || maximumStagingItems < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(stagingBudgetMilliseconds), "Use a finite positive staging budget and a positive item limit.");
+            }
+
             int[] sizes = fixtureSizes == null ? (int[])FixtureSizes.Clone() : (int[])fixtureSizes.Clone();
             if (sizes.Length == 0)
             {
@@ -157,7 +170,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
             }
 
-            RunState state = new(outputDirectory, sizes, timeoutMinutes);
+            // Validate type distributions before subscribing or creating an asset folder.
+            using PerfFixtureStaging validation = new(sizes[0], fixtureTypes: fixtureTypes);
+            Type[] types = new Type[validation.FixtureTypes.Count];
+            for (int index = 0; index < types.Length; index++)
+            {
+                types[index] = validation.FixtureTypes[index];
+            }
+            foreach (int size in sizes)
+            {
+                if (size < types.Length)
+                {
+                    throw new ArgumentException("Each size needs at least one asset per fixture type.", nameof(fixtureSizes));
+                }
+            }
+            RunState state = new(outputDirectory, sizes, timeoutMinutes, types, stagingBudgetMilliseconds, maximumStagingItems);
             _active = state;
             EditorApplication.update += Tick;
             AssemblyReloadEvents.beforeAssemblyReload += Cancel;
@@ -357,6 +384,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 return;
             }
 
+            double now = state.Watchdog.Elapsed.TotalMilliseconds;
+            if (state.Current != null && 0 < state.LastTickMilliseconds)
+            {
+                state.Current.LongestObservedEditorUpdateGapMilliseconds = Math.Max(state.Current.LongestObservedEditorUpdateGapMilliseconds, now - state.LastTickMilliseconds);
+            }
+            state.LastTickMilliseconds = now;
+            Stopwatch tick = Stopwatch.StartNew();
             try
             {
                 Advance(state);
@@ -364,6 +398,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             catch (Exception error)
             {
                 FinishWithError(state, $"phase {state.Phase} threw: {error.GetType().Name}: {error.Message}");
+            }
+            if (state.Current != null)
+            {
+                state.Current.LongestDriverTickMilliseconds = Math.Max(state.Current.LongestDriverTickMilliseconds, tick.Elapsed.TotalMilliseconds);
             }
         }
 
@@ -393,6 +431,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 case Phase.BetweenWarmRepetitions:
                     AdvanceWarmCycle(state);
                     return;
+                case Phase.ColdOpen:
+                    OpenWindow(state, cold: true);
+                    return;
                 case Phase.WarmOpen:
                     OpenWindow(state, cold: false);
                     return;
@@ -411,18 +452,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             int size = state.Sizes[state.SizeIndex];
-            SizeResult result = new() { Size = size };
+            SizeResult result = new() { Size = size, FixtureTypes = state.FixtureTypes };
             state.Current = result;
             state.Results.Add(result);
 
             state.Staging?.Dispose();
-            state.Staging = new PerfFixtureStaging(size);
+            state.Staging = new PerfFixtureStaging(size, fixtureTypes: state.FixtureTypes);
             state.Phase = Phase.Staging;
         }
 
         private static void StageFixtures(RunState state)
         {
-            state.Staging.Advance();
+            state.Staging.Advance(state.StagingBudgetMilliseconds, state.MaximumStagingItems);
             if (state.Staging.CreatedCount == state.Current.Size)
             {
                 state.Phase = Phase.RefreshingFixtures;
@@ -448,11 +489,23 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void OpenWindow(RunState state, bool cold)
         {
+            state.OpenClock.Restart();
+            PerfReadinessSample sample = new()
+            {
+                size = state.Current.Size,
+                mode =
+                    cold ? "cold-window-warm-process"
+                    : state.WarmRepetition < WarmupRepetitions ? "warmup"
+                    : "warm",
+            };
+            state.Readiness = sample;
+            state.Current.ReadinessSamples.Add(sample);
             if (state.Preferences == null)
             {
                 state.PreviousSelection = Selection.objects;
                 state.Preferences = DocsImageCapture.WindowPreferenceSnapshot.Capture();
             }
+            state.Preferences.ApplyWidePanes();
             FieldInfo instanceField = typeof(DataVisualizerWindow).GetField(InstanceFieldName, StaticMembers);
             if (instanceField == null)
             {
@@ -465,18 +518,46 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             DataVisualizerSettings settings = typeof(DataVisualizerWindow).GetProperty("Settings", Members)?.GetValue(window) as DataVisualizerSettings;
             DataVisualizerUserState userState = typeof(DataVisualizerWindow).GetProperty("UserState", Members)?.GetValue(window) as DataVisualizerUserState;
             state.WindowState = new PerfWindowStateScope(settings, userState, state.OutputDirectory);
+            foreach (Type type in state.FixtureTypes)
+            {
+                if (!state.WindowState.UserState.managedTypeNames.Contains(type.FullName))
+                {
+                    state.WindowState.UserState.managedTypeNames.Add(type.FullName);
+                }
+                List<string> order = state.WindowState.UserState.GetOrCreateTypeOrderList(NamespaceController.GetNamespaceKey(type));
+                if (!order.Contains(type.FullName))
+                {
+                    order.Add(type.FullName);
+                }
+            }
+            state.WindowState.UserState.labelFilterConfigs.Clear();
+            state.WindowState.UserState.namespaceCollapseStates.Clear();
             // Set the owned path first so even a later setup failure cannot save into the host file.
             SetWindowField(window, "_userStateFilePath", state.WindowState.FilePath);
             SetWindowField(window, "_userState", state.WindowState.UserState);
             SetWindowField(window, "_settings", state.WindowState.Settings);
+            window.rootVisualElement.generateVisualContent += _ =>
+            {
+                if (sample.firstRootPaintMilliseconds < 0 && ReferenceEquals(state.Window, window))
+                {
+                    sample.firstRootPaintMilliseconds = state.OpenClock.Elapsed.TotalMilliseconds;
+                }
+            };
             window.ShowPopup();
-            // Show may enable the window again; restore its owned path before deferred initialization.
+            // Show may enable the window again; restore owned state before deferred initialization.
             SetWindowField(window, "_userStateFilePath", state.WindowState.FilePath);
+            SetWindowField(window, "_userState", state.WindowState.UserState);
+            SetWindowField(window, "_settings", state.WindowState.Settings);
             window.position = new Rect(40f, 40f, 1180f, 780f);
             state.PhaseClock.Restart();
             window.CreateGUI();
             InvokeInitialContentLoad(window);
-            GetNamespaceController(window).SelectType(window, typeof(PlayModeDataObject));
+            NamespaceController controller = GetNamespaceController(window);
+            controller.SelectType(window, state.FixtureTypes[0]);
+            if (controller.SelectedType != state.FixtureTypes[0])
+            {
+                throw new InvalidOperationException("The benchmark did not select its configured fixture type.");
+            }
             state.Phase = cold ? Phase.WaitingColdReady : Phase.WaitingWarmReady;
         }
 
@@ -487,6 +568,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new InvalidOperationException($"the search cache did not become ready within {SearchCacheTimeoutSeconds}s at size {state.Current.Size}.");
             }
 
+            ObserveReadiness(state);
             if (!IsSearchCachePopulated(state.Window))
             {
                 /*
@@ -500,12 +582,30 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 return; // the next editor tick continues the async batch load
             }
 
+            PerfReadinessSample sample = state.Readiness;
+            if (sample.legacyIndexReadyMilliseconds < 0)
+            {
+                sample.legacyIndexReadyMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+                sample.openToIndexMilliseconds = state.OpenClock.Elapsed.TotalMilliseconds;
+            }
+            if (sample.firstRootPaintMilliseconds < 0 || sample.firstUsableRowsMilliseconds < 0 || sample.inspectorReadyMilliseconds < 0)
+            {
+                EditorApplication.QueuePlayerLoopUpdate();
+                return;
+            }
+            sample.complete = true;
             state.PhaseClock.Stop();
-            double readyMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+            double readyMilliseconds = sample.legacyIndexReadyMilliseconds;
             if (state.Phase == Phase.WaitingColdReady)
             {
-                state.Current.ColdOpenMilliseconds = readyMilliseconds;
-                state.Current.ColdComplete = true;
+                state.Current.ColdOpenSamples.Add(readyMilliseconds);
+                state.Current.ColdOpenMilliseconds = state.Current.ColdOpenSamples[0];
+                if (state.Current.ColdOpenSamples.Count < ColdRepetitions)
+                {
+                    CloseWindow(state);
+                    state.Phase = Phase.ColdOpen;
+                    return;
+                }
                 state.SearchRepetition = 0;
                 state.SelectionRepetition = 0;
                 state.Phase = Phase.InteractionSamples;
@@ -521,15 +621,59 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        private static void ObserveReadiness(RunState state)
+        {
+            Stopwatch observer = Stopwatch.StartNew();
+            PerfReadinessSample sample = state.Readiness;
+            DataVisualizerWindow window = state.Window;
+            int realized = 0;
+            window
+                .rootVisualElement.Query<VisualElement>(className: "object-item")
+                .ForEach(element =>
+                {
+                    if (0 < element.worldBound.width && 0 < element.worldBound.height && element.parent?.userData is ScriptableObject asset && asset != null)
+                    {
+                        realized++;
+                    }
+                });
+            sample.realizedRows = Math.Max(sample.realizedRows, realized);
+            double elapsed = state.OpenClock.Elapsed.TotalMilliseconds;
+            if (0 < realized && sample.firstUsableRowsMilliseconds < 0)
+            {
+                sample.firstUsableRowsMilliseconds = elapsed;
+            }
+            if (
+                sample.inspectorReadyMilliseconds < 0
+                && typeof(DataVisualizerWindow).GetField("_currentInspectorScriptableObject", Members)?.GetValue(window) is SerializedObject inspector
+                && inspector.targetObject != null
+                && window.rootVisualElement.Q("inspector-content") is VisualElement content
+                && 0 < content.childCount
+                && 0 < content.worldBound.width
+                && 0 < content.worldBound.height
+            )
+            {
+                sample.inspectorReadyMilliseconds = elapsed;
+            }
+            sample.loadedRows = (typeof(DataVisualizerWindow).GetField("_selectedObjects", Members)?.GetValue(window) as System.Collections.ICollection)?.Count ?? 0;
+            sample.retainedSearchObjects = (typeof(DataVisualizerWindow).GetField(SearchCacheFieldName, Members)?.GetValue(window) as System.Collections.ICollection)?.Count ?? 0;
+            sample.managedBytes = Math.Max(sample.managedBytes, GC.GetTotalMemory(false));
+            sample.unityAllocatedBytes = Math.Max(sample.unityAllocatedBytes, UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong());
+            sample.unityReservedBytes = Math.Max(sample.unityReservedBytes, UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong());
+            sample.longestIndexSliceMilliseconds = window.LongestSearchIndexSliceMilliseconds;
+            sample.indexSliceOverruns = window.SearchIndexSliceOverrunCount;
+            sample.observations++;
+            sample.observerMilliseconds += observer.Elapsed.TotalMilliseconds;
+        }
+
         private static void RunInteractionSample(RunState state)
         {
-            if (state.SearchRepetition < SearchRepetitions)
+            if (state.SearchRepetition < WarmupRepetitions + SearchRepetitions)
             {
                 MeasureSearch(state, state.SearchRepetition++);
                 return;
             }
 
-            if (state.SelectionRepetition < SelectionRepetitions)
+            if (state.SelectionRepetition < WarmupRepetitions + SelectionRepetitions)
             {
                 MeasureSelection(state, state.SelectionRepetition++);
                 return;
@@ -585,16 +729,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
 
             state.PhaseClock.Stop();
-            state.Current.SearchSamples.Add(state.PhaseClock.Elapsed.TotalMilliseconds);
-            state.Current.SearchMatchCounts.Add(results.Count);
+            if (WarmupRepetitions < state.SearchRepetition)
+            {
+                state.Current.SearchSamples.Add(state.PhaseClock.Elapsed.TotalMilliseconds);
+                state.Current.SearchMatchCounts.Add(results.Count);
+            }
             state.Phase = Phase.InteractionSamples;
         }
 
         private static void MeasureSelection(RunState state, int repetition)
         {
-            int assetIndex = (repetition * 997 + state.Current.Size / 2) % state.Current.Size;
+            int typeCount = state.FixtureTypes.Length;
+            int assetsOfFirstType = (state.Current.Size + typeCount - 1) / typeCount;
+            int assetIndex = ((repetition * 997 + assetsOfFirstType / 2) % assetsOfFirstType) * typeCount;
             string assetPath = $"{state.Staging.Folder}/{FixtureName(assetIndex)}.asset";
-            PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>(assetPath);
+            ScriptableObject asset = AssetDatabase.LoadMainAssetAtPath(assetPath) as ScriptableObject;
             if (asset == null)
             {
                 throw new InvalidOperationException($"The fixture asset '{assetPath}' did not load; selection cannot be measured.");
@@ -609,7 +758,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             state.PhaseClock.Restart();
             selectObject.Invoke(state.Window, new object[] { asset });
             state.PhaseClock.Stop();
-            state.Current.SelectionSamples.Add(state.PhaseClock.Elapsed.TotalMilliseconds);
+            if (WarmupRepetitions <= repetition)
+            {
+                state.Current.SelectionSamples.Add(state.PhaseClock.Elapsed.TotalMilliseconds);
+            }
         }
 
         private static void AdvanceWarmCycle(RunState state)
@@ -663,7 +815,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void Finish(RunState state)
         {
-            string json = BuildJson(state.Results, state.TimeoutMinutes);
+            string json = BuildJson(state.Results, state.TimeoutMinutes, state.StagingBudgetMilliseconds, state.MaximumStagingItems);
             WriteReport(state.OutputDirectory, json);
             string summary = BuildSummary(state.Results);
             TearDown(state);
@@ -855,26 +1007,61 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return value.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
-        private static string BuildJson(List<SizeResult> results, double timeoutMinutes)
+        private static string BuildJson(List<SizeResult> results, double timeoutMinutes, double stagingBudgetMilliseconds, int maximumStagingItems)
         {
             StringBuilder json = new(4096);
             json.Append("{\n  \"schema\": \"").Append(SchemaVersion).Append("\",\n");
             json.Append("  \"generatedAtUtc\": \"").Append(DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)).Append("\",\n");
             json.Append("  \"environment\": ").Append(BuildEnvironmentJson()).Append(",\n");
             json.Append("  \"timeoutMinutes\": ").Append(FormatNumber(timeoutMinutes)).Append(",\n");
-            json.Append("  \"repetitions\": {\"cold\": 1, \"warmWarmups\": ")
+            json.Append("  \"stagingBudgetMilliseconds\": ").Append(FormatNumber(stagingBudgetMilliseconds)).Append(",\n");
+            json.Append("  \"maximumStagingItems\": ").Append(maximumStagingItems).Append(",\n");
+            json.Append("  \"repetitions\": {\"cold\": ")
+                .Append(ColdRepetitions)
+                .Append(", \"warmWarmups\": ")
                 .Append(WarmupRepetitions)
                 .Append(", \"warmSamples\": ")
                 .Append(WarmRepetitions)
+                .Append(", \"searchWarmups\": ")
+                .Append(WarmupRepetitions)
+                .Append(", \"selectionWarmups\": ")
+                .Append(WarmupRepetitions)
                 .Append(", \"searchSamples\": ")
                 .Append(SearchRepetitions)
                 .Append(", \"selectionSamples\": ")
                 .Append(SelectionRepetitions)
                 .Append("},\n");
             json.Append(
-                "  \"gaps\": [\"Play-entry and compile timings are not yet measured\", \"cold is a single sample per size\", \"cross-host spread is not yet collected\"],\n"
+                "  \"gaps\": [\"Play-entry and compile timings are not yet measured\", \"cold windows reuse the editor process; fresh-process controls are not measured\", \"cross-host spread is not yet collected\"],\n"
             );
+            json.Append(
+                "  \"readinessSemantics\": \"Root paint callback and first observed laid-out rows/inspector, not GPU completion. Negative timings are unavailable. Memory values are separate peaks, not a sum. Editor update gaps include scheduling delays. Cold windows share a warm editor process.\",\n"
+            );
+            json.Append("  \"readinessSamples\": [");
+            bool firstReadiness = true;
+            foreach (SizeResult result in results)
+            {
+                foreach (PerfReadinessSample sample in result.ReadinessSamples)
+                {
+                    if (!firstReadiness)
+                    {
+                        json.Append(",");
+                    }
+                    firstReadiness = false;
+                    json.Append(JsonUtility.ToJson(sample));
+                }
+            }
+            json.Append("],\n");
             json.Append("  \"scenarios\": [\n");
+            AppendScenario(
+                json,
+                "longest-observed-editor-update-gap",
+                results,
+                static result => SingleSample(result.LongestObservedEditorUpdateGapMilliseconds, result.FixtureComplete)
+            );
+            json.Append(",\n");
+            AppendScenario(json, "longest-driver-tick", results, static result => SingleSample(result.LongestDriverTickMilliseconds, result.FixtureComplete));
+            json.Append(",\n");
             AppendScenario(json, "fixture-create-calls", results, static result => SingleSample(result.CreationMilliseconds, result.FixtureComplete));
             json.Append(",\n");
             AppendScenario(json, "fixture-initialization", results, static result => SingleSample(result.InitializationMilliseconds, result.FixtureComplete));
@@ -891,7 +1078,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append(",\n");
             AppendScenario(json, "fixture-import", results, static result => SingleSample(result.ImportMilliseconds, result.FixtureComplete));
             json.Append(",\n");
-            AppendScenario(json, "window-open-to-index-ready", results, static result => SingleSample(result.ColdOpenMilliseconds, result.ColdComplete));
+            AppendScenario(json, "window-open-to-index-ready", results, static result => result.ColdOpenSamples);
             json.Append(",\n");
             AppendScenario(json, "window-open-to-index-ready-warm", results, static result => result.WarmOpenSamples);
             json.Append(",\n");
@@ -932,7 +1119,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             else
             {
                 json.Append("\n  ");
-                json.Append(BuildJson(state.Results, state.TimeoutMinutes).TrimEnd('\n'));
+                json.Append(BuildJson(state.Results, state.TimeoutMinutes, state.StagingBudgetMilliseconds, state.MaximumStagingItems).TrimEnd('\n'));
             }
 
             json.Append("\n}\n");
@@ -987,7 +1174,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void AppendSizeSamples(StringBuilder json, SizeResult result, List<double> samples, List<int> matches)
         {
-            json.Append("{\"size\": ").Append(result.Size).Append(", \"samples\": [");
+            json.Append("{\"size\": ").Append(result.Size).Append(", \"fixtureTypeIdentities\": [");
+            for (int index = 0; index < result.FixtureTypes.Length; index++)
+            {
+                if (0 < index)
+                {
+                    json.Append(",");
+                }
+                json.Append("\"").Append(JsonEscape(result.FixtureTypes[index].AssemblyQualifiedName)).Append("\"");
+            }
+            json.Append("], \"samples\": [");
             AppendNumbers(json, samples);
             json.Append("]");
             if (samples.Count > 0)
@@ -1064,8 +1260,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private sealed class SizeResult
         {
             internal int Size;
+            internal Type[] FixtureTypes;
             internal bool FixtureComplete;
-            internal bool ColdComplete;
             internal double CreationMilliseconds;
             internal double BatchImportMilliseconds;
             internal double InitializationMilliseconds;
@@ -1074,7 +1270,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal double LongestCreateMilliseconds;
             internal double LongestSliceMilliseconds;
             internal double ImportMilliseconds;
+            internal double LongestObservedEditorUpdateGapMilliseconds;
+            internal double LongestDriverTickMilliseconds;
+            internal readonly List<PerfReadinessSample> ReadinessSamples = new();
             internal double ColdOpenMilliseconds;
+            internal readonly List<double> ColdOpenSamples = new();
             internal readonly List<double> WarmOpenSamples = new();
             internal readonly List<double> SearchSamples = new();
             internal readonly List<int> SearchMatchCounts = new();
@@ -1085,7 +1285,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             internal readonly string OutputDirectory;
             internal readonly int[] Sizes;
+            internal readonly Type[] FixtureTypes;
             internal readonly double TimeoutMinutes;
+            internal readonly double StagingBudgetMilliseconds;
+            internal readonly int MaximumStagingItems;
             internal readonly Stopwatch Watchdog = Stopwatch.StartNew();
             internal readonly List<SizeResult> Results = new();
             internal Phase Phase = Phase.Idle;
@@ -1098,16 +1301,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal UnityEngine.Object[] PreviousSelection;
             internal object PreviousInstance;
             internal readonly Stopwatch PhaseClock = new();
+            internal readonly Stopwatch OpenClock = new();
+            internal PerfReadinessSample Readiness;
+            internal double LastTickMilliseconds;
             internal int WarmRepetition;
             internal int SearchRepetition;
             internal int SelectionRepetition;
             internal string PendingQuery;
 
-            internal RunState(string outputDirectory, int[] sizes, double timeoutMinutes)
+            internal RunState(string outputDirectory, int[] sizes, double timeoutMinutes, Type[] fixtureTypes, double stagingBudgetMilliseconds, int maximumStagingItems)
             {
                 OutputDirectory = outputDirectory;
                 Sizes = sizes;
+                FixtureTypes = fixtureTypes;
                 TimeoutMinutes = timeoutMinutes;
+                StagingBudgetMilliseconds = stagingBudgetMilliseconds;
+                MaximumStagingItems = maximumStagingItems;
             }
         }
 
@@ -1127,6 +1336,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Finished = 7,
             Staging = 9,
             RefreshingFixtures = 10,
+            ColdOpen = 11,
         }
     }
 }

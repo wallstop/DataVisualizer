@@ -122,3 +122,41 @@ staging tick was 308.276 ms. These are one-sample integration observations, not 
 ## Larger synthetic metadata sets
 
 See [million-record feasibility](million-record-feasibility.md) for the opt-in synthetic experiment, real-asset resource estimates, and support limits.
+
+## Readiness and fixture distributions
+
+The current driver keeps `window-open-to-index-ready` measured from the existing post-show clock. It also records each opening in `readinessSamples`, including five discarded
+warm-up openings, five cold-window openings and 30 measured warm openings. Search and selection also discard five warm-up samples before collecting 30 observations. **Cold-window**
+means a recreated window in the same editor process; it does not mean a fresh editor, cold filesystem cache or a package-absent control. The report states that distinction
+explicitly.
+
+Each record separates the first root paint callback, first observed laid-out object rows, first observed laid-out inspector, and full index readiness from the start of window
+creation. The paint callback does not prove GPU presentation. Row and inspector observations occur on editor updates; their times include observation delay. Negative timings mean
+unavailable, and incomplete records remain marked incomplete on cancellation. The legacy index clock stops at its first ready observation even if rendering finishes later.
+
+The controlled window uses an 1180×780 rectangle with 320/280-point catalog/object panes, then restores host preferences. Records include realized row count, loaded selected-type
+rows, retained search-object count, separate peak managed/Unity-allocated/Unity-reserved bytes, indexing slice overruns, and observation count/cost. These memory quantities overlap
+and must not be summed. The longest driver tick measures synchronous driver work. The longest observed editor-update gap also includes scheduling, background throttling and time
+spent outside the driver; it is an upper-bound observation, not a package-attributed main-thread stall measurement. Instrumentation adds overhead; the per-record observer time
+makes that cost visible.
+
+`fixtureTypes` accepts distinct eligible ScriptableObject types. Fixtures cycle through the supplied array in deterministic order, use the existing deterministic names, and
+preserve authored fixture IDs for `BaseDataObject` types. Ordinary ScriptableObjects need no package base class. Each size must contain at least one asset per supplied type. The
+driver snapshots the type array before starting and records exact assembly-qualified identities in the report. Only the owned cloned window state adds fixture types and clears
+inherited label filters/collapse state; the host state remains unchanged.
+
+```csharp
+WallstopStudios.DataVisualizer.Tests.Editor.PerfBaseline.RunBaseline(
+    "Temp/PerfReadiness",
+    new[] { 100, 1000 },
+    timeoutMinutes: 15,
+    fixtureTypes: new[] { typeof(MyGame.Items.WeaponData), typeof(MyGame.Settings.WorldSettings) });
+```
+
+`stagingBudgetMilliseconds` and `maximumStagingItems` optionally tune creation batches; defaults remain 4 ms and ten items. The report records both values. A larger creation budget
+can amortize Unity import calls but does not bound the following indivisible import. Report longest ticks/imports alongside total staging, and preserve cancellation between
+batches.
+
+Use a single type for a large-type distribution and multiple types for a distributed catalog. Fixtures still use uniquely owned roots and the existing cooperative staging and
+cleanup. These additions do not complete [#306](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/306): fresh-process, matched Play-entry/compile controls, operation
+bursts, interactive filtering/scrolling/type-switch distributions, and the complete size/type matrix require separately recorded runs. Do not count a partial fixture as complete.
