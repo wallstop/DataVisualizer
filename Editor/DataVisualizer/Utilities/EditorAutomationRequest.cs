@@ -17,6 +17,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public string settingsGuid;
         public string dataFolderPath;
         public string selectionMode;
+        public string userStatePath;
+        public string persistenceMode;
+        public string themeGuid;
         public string[] confirmPaths;
         public string text;
         public string[] andLabels;
