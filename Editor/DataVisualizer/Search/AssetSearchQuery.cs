@@ -32,7 +32,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         private readonly int _maximumResults;
         private readonly List<(AssetSearchDocument Document, SearchResultMatchInfo Match)> _results = new();
 
-        public AssetSearchQuery(IReadOnlyList<AssetSearchDocument> documents, string[] terms, int maximumResults, bool sortByIdentity = false)
+        public AssetSearchQuery(IReadOnlyList<AssetSearchDocument> documents, string[] terms, int maximumResults)
+            : this(documents, terms, maximumResults, sortByIdentity: false) { }
+
+        public AssetSearchQuery(IReadOnlyList<AssetSearchDocument> documents, string[] terms, int maximumResults, bool sortByIdentity)
         {
             if (documents == null)
             {
