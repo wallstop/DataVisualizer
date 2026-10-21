@@ -72,6 +72,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 );
                 return 1;
             }
+            ValidateStateFileCollision(request, input, output);
             using EditorAutomationSession session = EditorAutomationSession.Start(request, requireSinglePage: true);
             Stopwatch clock = Stopwatch.StartNew();
             while (!session.IsFinished && !session.IsWaitingForEditor && clock.ElapsedMilliseconds < timeoutMilliseconds)
@@ -88,6 +89,38 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return response.status == "rejected" || response.status == "failed" ? 1
                 : response.complete ? 0
                 : 2;
+        }
+
+        private static void ValidateStateFileCollision(string json, string input, string output)
+        {
+            string statePath;
+            try
+            {
+                EditorAutomationRequest request = new();
+                JsonUtility.FromJsonOverwrite(json, request);
+                if (string.IsNullOrEmpty(request.userStatePath))
+                {
+                    return;
+                }
+                string project = Path.GetDirectoryName(Application.dataPath);
+                statePath = Path.GetFullPath(Path.IsPathRooted(request.userStatePath) ? request.userStatePath : Path.Combine(project, request.userStatePath));
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+            catch (NotSupportedException)
+            {
+                return;
+            }
+            catch (IOException)
+            {
+                return;
+            }
+            if (string.Equals(statePath, input, StringComparison.OrdinalIgnoreCase) || string.Equals(statePath, output, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Request, response and user-state files must be separate. No response was written.");
+            }
         }
 
         private static string ArgumentOrNull(string[] args, string name)

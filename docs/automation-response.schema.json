@@ -90,6 +90,17 @@
           "destinationPath": {
             "type": ["string", "null"],
             "description": "Planned exact asset destination; empty for delete. path remains the original source path."
+          },
+          "userStatePath": {
+            "type": ["string", "null"],
+            "description": "Canonical explicit user-state file; empty for legacy configuration."
+          },
+          "persistenceMode": {
+            "enum": ["user", "settings", null, ""]
+          },
+          "themeGuid": {
+            "type": ["string", "null"],
+            "description": "Stored or proposed theme GUID; empty selects default. Null/empty outside full configuration."
           }
         }
       }

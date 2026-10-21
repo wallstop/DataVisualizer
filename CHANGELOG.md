@@ -14,7 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Add shared C# and JSON previews and cooperative create, clone, rename, move and delete operations (#315, #316).
 
-- Add shared C# and JSON data-folder and active-selection preferences. Configure persistence mode and themes from C# with state migration and idempotent writes (#315, #316).
+- Add shared C# and JSON data-folder and active-selection preferences. Configure persistence mode and themes from C# or JSON with state migration and idempotent writes (#315,
+  #316).
 
 - Add SELECTED processor scope with GUID selections, exact target previews, cancellable preparation and explicit batch failure outcomes (#317).
 

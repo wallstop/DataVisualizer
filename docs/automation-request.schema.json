@@ -9,7 +9,18 @@
       "const": 1
     },
     "operation": {
-      "enum": ["catalog", "query", "validate", "previewProcessor", "applyProcessor", "readConfiguration", "previewConfiguration", "applyConfiguration", "previewAssets", "applyAssets"]
+      "enum": [
+        "catalog",
+        "query",
+        "validate",
+        "previewProcessor",
+        "applyProcessor",
+        "readConfiguration",
+        "previewConfiguration",
+        "applyConfiguration",
+        "previewAssets",
+        "applyAssets"
+      ]
     },
     "typeIdentities": {
       "type": ["array", "null"],
@@ -89,6 +100,18 @@
         "type": "string"
       },
       "description": "Asset create/clone/rename/move: one full destination path per target. Parent folders must exist. Delete accepts none."
+    },
+    "userStatePath": {
+      "type": ["string", "null"],
+      "description": "Configuration only: explicit JSON store outside protected project folders. Enables full state preferences."
+    },
+    "persistenceMode": {
+      "enum": ["user", "settings", null, ""]
+    },
+    "themeGuid": {
+      "type": ["string", "null"],
+      "pattern": "^([0-9a-fA-F]{32})?$",
+      "description": "Full configuration preview/apply: exact theme main GUID, or empty for default."
     }
   },
   "allOf": [
@@ -148,7 +171,7 @@
           "confirmPaths": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 1
+            "maxItems": 2
           }
         }
       }
@@ -190,6 +213,128 @@
             "type": "array",
             "minItems": 1,
             "maxItems": 2000
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["userStatePath"],
+        "properties": {
+          "userStatePath": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "operation": {
+            "enum": ["readConfiguration", "previewConfiguration", "applyConfiguration"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          {
+            "required": ["userStatePath"],
+            "properties": {
+              "userStatePath": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          {
+            "properties": {
+              "operation": {
+                "enum": ["previewConfiguration", "applyConfiguration"]
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "required": ["persistenceMode", "themeGuid"],
+        "properties": {
+          "persistenceMode": {
+            "enum": ["user", "settings"]
+          },
+          "themeGuid": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{32})?$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "applyConfiguration"
+          }
+        }
+      },
+      "then": {
+        "if": {
+          "required": ["userStatePath"],
+          "properties": {
+            "userStatePath": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "confirmPaths": {
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "confirmPaths": {
+              "maxItems": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "required": ["persistenceMode"],
+            "properties": {
+              "persistenceMode": {
+                "enum": ["user", "settings"]
+              }
+            }
+          },
+          {
+            "required": ["themeGuid"],
+            "properties": {
+              "themeGuid": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "required": ["userStatePath"],
+        "properties": {
+          "userStatePath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "operation": {
+            "enum": ["readConfiguration", "previewConfiguration", "applyConfiguration"]
           }
         }
       }

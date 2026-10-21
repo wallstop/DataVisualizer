@@ -84,6 +84,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             session.DefaultPageSize = request.pageSize;
             try
             {
+                if (!configuration && (!string.IsNullOrEmpty(request.userStatePath) || !string.IsNullOrEmpty(request.persistenceMode) || !string.IsNullOrEmpty(request.themeGuid)))
+                {
+                    throw new ArgumentException("State configuration fields are accepted only by configuration operations.");
+                }
                 if (assets)
                 {
                     session.StartAssets(request, requireSinglePage);
@@ -493,12 +497,25 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 Reject("editor_busy", "Wait for compilation and asset updates before reading or applying configuration.");
                 return;
             }
-            EditorConfigurationService service = EditorConfigurationService.FromGuid(request.settingsGuid);
+            bool full = !string.IsNullOrEmpty(request.userStatePath);
+            if (!full && (!string.IsNullOrEmpty(request.persistenceMode) || !string.IsNullOrEmpty(request.themeGuid)))
+            {
+                throw new ArgumentException("State configuration requires an explicit userStatePath.");
+            }
+            EditorConfigurationService service = full
+                ? EditorConfigurationService.FromGuid(request.settingsGuid, request.userStatePath)
+                : EditorConfigurationService.FromGuid(request.settingsGuid);
             if (read)
             {
-                if (!string.IsNullOrEmpty(request.dataFolderPath) || !string.IsNullOrEmpty(request.selectionMode) || (request.confirmPaths?.Length ?? 0) != 0)
+                if (
+                    !string.IsNullOrEmpty(request.dataFolderPath)
+                    || !string.IsNullOrEmpty(request.selectionMode)
+                    || !string.IsNullOrEmpty(request.persistenceMode)
+                    || !string.IsNullOrEmpty(request.themeGuid)
+                    || (request.confirmPaths?.Length ?? 0) != 0
+                )
                 {
-                    throw new ArgumentException("readConfiguration accepts only settingsGuid.");
+                    throw new ArgumentException("readConfiguration accepts settingsGuid and an optional userStatePath.");
                 }
             }
             else
@@ -508,11 +525,27 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 {
                     throw new ArgumentException("selectionMode must explicitly be keep or select.");
                 }
+                if (full)
+                {
+                    if (request.persistenceMode != "user" && request.persistenceMode != "settings")
+                    {
+                        throw new ArgumentException("persistenceMode must explicitly be user or settings.");
+                    }
+                    EditorConfigurationService.ValidateThemeGuid(request.themeGuid);
+                }
                 if (apply)
                 {
-                    if (request.confirmPaths == null || request.confirmPaths.Length != 1 || !string.Equals(request.confirmPaths[0], service.SettingsPath, StringComparison.Ordinal))
+                    if (
+                        request.confirmPaths == null
+                        || request.confirmPaths.Length != (full ? 2 : 1)
+                        || !string.Equals(request.confirmPaths[0], service.SettingsPath, StringComparison.Ordinal)
+                    )
                     {
                         throw new ArgumentException("Confirm the exact settings path from preview before applying configuration.");
+                    }
+                    if (full && !string.Equals(request.confirmPaths[1], service.UserStatePath, StringComparison.Ordinal))
+                    {
+                        throw new ArgumentException("Confirm the canonical user-state path after the settings path.");
                     }
                 }
                 else if ((request.confirmPaths?.Length ?? 0) != 0)
@@ -531,7 +564,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 try
                 {
-                    code = service.Apply(request.dataFolderPath, request.selectionMode == "select") ? "applied" : "unchanged";
+                    bool changed = full
+                        ? service.Apply(request.dataFolderPath, request.selectionMode == "select", request.persistenceMode == "settings", request.themeGuid)
+                        : service.Apply(request.dataFolderPath, request.selectionMode == "select");
+                    code = changed ? "applied" : "unchanged";
                     folder = service.DataFolderPath;
                     selection = service.SelectActiveObject ? "select" : "keep";
                 }
@@ -543,7 +579,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 catch (Exception error)
                 {
                     code = "configuration_failed";
-                    detail = "Apply may have changed settings in memory. Read the settings and inspect disk before retrying. " + error.Message;
+                    detail = "Apply may have changed memory or either file. Inspect both stores before retrying. " + error.Message;
                     failed = true;
                 }
             }
@@ -556,7 +592,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 processedCount = apply && !failed ? 1 : 0,
                 scopeCount = 1,
                 availableCount = 1,
-                coverage = "Explicit settings asset; data folder and active object selection only. Configuration is one synchronous unit.",
+                coverage = full
+                    ? "Explicit settings and user-state stores; full preferences and state migration in one synchronous unit. No cross-file rollback."
+                    : "Explicit settings asset; data folder and active object selection only. Configuration is one synchronous unit.",
                 items = new[]
                 {
                     new EditorAutomationItem
@@ -565,6 +603,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                         path = settingsPath,
                         code = failed ? "outcome_unknown" : code,
                         detail = detail,
+                        userStatePath = full ? service.UserStatePath : null,
+                        persistenceMode =
+                            !full || failed ? null
+                            : read || apply ? (service.PersistStateInSettingsAsset ? "settings" : "user")
+                            : request.persistenceMode,
+                        themeGuid =
+                            !full || failed ? null
+                            : read || apply ? service.ThemeGuid
+                            : request.themeGuid.ToLowerInvariant(),
                         dataFolderPath =
                             failed ? null
                             : read || apply ? service.DataFolderPath

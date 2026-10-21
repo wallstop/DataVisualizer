@@ -422,6 +422,38 @@ Preview and apply also require `dataFolderPath` and `selectionMode`: `keep` leav
 returns the proposed preferences without changing or saving settings. Read returns current preferences. Apply requires `confirmPaths` containing the exact settings path from
 preview.
 
+For full state preferences, provide `userStatePath` on configuration requests. Read accepts that path with `settingsGuid`; preview/apply additionally require `persistenceMode`
+(`user` or `settings`) and `themeGuid` (an exact theme main GUID, or `""` for default), alongside the existing folder/selection fields. The response item includes the canonical
+`userStatePath`, stored/proposed mode and theme. A missing user-state file starts empty without being created by read/preview; corrupt JSON is rejected.
+
+After reviewing full preview, apply must confirm `[item.path, item.userStatePath]` in that order, even when one store is only a source. For example, inside an editor method:
+
+```csharp
+var request = new WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationRequest
+{
+    schemaVersion = 1, operation = "previewConfiguration", settingsGuid = settingsAssetGuid,
+    userStatePath = absoluteUserStateJsonPath, dataFolderPath = "Assets", selectionMode = "select",
+    persistenceMode = "settings", themeGuid = "",
+};
+using (var preview = WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationSession.Start(UnityEngine.JsonUtility.ToJson(request)))
+{
+    var item = UnityEngine.JsonUtility.FromJson<WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationResponse>(preview.GetResponseJson()).items[0];
+    UnityEngine.Debug.Log(item.path + " | " + item.userStatePath + " | " + item.persistenceMode);
+    // After reviewing both stores, confirm this exact configuration.
+    request.operation = "applyConfiguration";
+    request.confirmPaths = new[] { item.path, item.userStatePath };
+    using (var apply = WallstopStudios.DataVisualizer.Editor.Utilities.EditorAutomationSession.Start(UnityEngine.JsonUtility.ToJson(request)))
+    {
+        UnityEngine.Debug.Log(apply.GetResponseJson());
+    }
+}
+```
+
+Full configuration uses the same synchronous C# migration unit, permissions and failure semantics. File/save exceptions return `configuration_failed` with `outcome_unknown`,
+without claiming rollback or a known final mode/theme. Existing two-preference requests omit the user-state context and keep their previous behavior. Request, response and
+user-state files must be distinct; file execution throws before dispatch or response writes on a collision, including requests that would otherwise be rejected. Caller-owned
+contexts and other open windows still require coordination after file edits.
+
 For example, inside an editor method, replace the settings path if your project uses another asset:
 
 ```csharp
