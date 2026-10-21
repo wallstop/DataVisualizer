@@ -5046,9 +5046,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            List<Type> types = scripts
-                ? CollectAddableTypesFromFolder("t:Monoscript", relativePath, ResolveMonoScriptType)
-                : CollectAddableTypesFromFolder($"t:{nameof(ScriptableObject)}", relativePath, ResolveScriptableObjectType);
+            List<Type> types = EditorTypeCatalog.FindTypesInFolder(relativePath, scripts);
+            HashSet<Type> managedTypes = CollectManagedTypes();
+            types.RemoveAll(managedTypes.Contains);
             if (AddManagedTypes(types))
             {
                 SyncNamespaceChanges();
@@ -5983,18 +5983,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 titleLabel.text = currentTitle;
             }
-        }
-
-        private static Type ResolveScriptableObjectType(string assetPath)
-        {
-            ScriptableObject asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(assetPath);
-            return asset != null ? asset.GetType() : null;
-        }
-
-        private static Type ResolveMonoScriptType(string assetPath)
-        {
-            MonoScript script = AssetDatabase.LoadAssetAtPath<MonoScript>(assetPath);
-            return script != null ? script.GetClass() : null;
         }
 
         private static int CompareUsingCustomOrder(string keyA, string keyB, List<string> customOrder)
@@ -7584,27 +7572,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             return managedTypes;
-        }
-
-        private List<Type> CollectAddableTypesFromFolder(string searchFilter, string relativePath, Func<string, Type> resolveAssetType)
-        {
-            string[] assetGuids = AssetDatabase.FindAssets(searchFilter, new[] { relativePath });
-            HashSet<Type> currentlyManagedTypes = CollectManagedTypes();
-            List<Type> types = new(assetGuids.Length);
-            HashSet<Type> seenTypes = new();
-            foreach (string assetGuid in assetGuids)
-            {
-                Type type = resolveAssetType(AssetDatabase.GUIDToAssetPath(assetGuid));
-                if (!EditorTypeCatalog.IsLoadableType(type) || currentlyManagedTypes.Contains(type) || !seenTypes.Add(type))
-                {
-                    continue;
-                }
-
-                types.Add(type);
-            }
-
-            types.Sort(NamespaceTypeOrder.CompareTypesByFullName);
-            return types;
         }
 
         private bool AddManagedTypes(List<Type> typesToAdd)

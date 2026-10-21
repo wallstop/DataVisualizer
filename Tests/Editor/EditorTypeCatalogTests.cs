@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System;
     using System.Collections.Generic;
     using System.Globalization;
+    using System.IO;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
@@ -10,6 +11,102 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class EditorTypeCatalogTests
     {
+        [TestCase(null, false)]
+        [TestCase(typeof(ScriptFolderProbeBehaviour), false)]
+        [TestCase(typeof(EditorTypeCatalogTests), false)]
+        [TestCase(typeof(DateTime), false)]
+        [TestCase(typeof(ScriptableObject), false)]
+        [TestCase(typeof(EditorWindow), false)]
+        [TestCase(typeof(UnityEditor.Editor), false)]
+        [TestCase(typeof(AbstractData), false)]
+        [TestCase(typeof(GenericData<>), false)]
+        [TestCase(typeof(PrivateData), false)]
+        [TestCase(typeof(OperationLifecycleData), true)]
+        [TestCase(typeof(OtherEditorOnlyCreationData), true)]
+        [TestCase(typeof(LayoutTestWindow), false)]
+        public void ShouldRequireSupportedScriptableObjectTypes(Type type, bool expected)
+        {
+            Assert.That(EditorTypeCatalog.IsLoadableType(type), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void ShouldScanActualScriptsWithoutAddingBehavioursOrCreatingObjects()
+        {
+            string[] guids = AssetDatabase.FindAssets($"t:MonoScript {nameof(ScriptFolderProbeBehaviour)}");
+            Assert.That(guids, Has.Length.EqualTo(1));
+            string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+            MonoScript script = AssetDatabase.LoadAssetAtPath<MonoScript>(path);
+            Assert.That(script.GetClass(), Is.EqualTo(typeof(ScriptFolderProbeBehaviour)));
+            int before = Resources.FindObjectsOfTypeAll<OperationLifecycleData>().Length;
+            int hooks = OperationLifecycleData.HookCount;
+            List<Type> types = EditorTypeCatalog.FindTypesInFolder(Path.GetDirectoryName(path).Replace('\\', '/'), true);
+            Assert.That(types, Has.Member(typeof(OperationLifecycleData)));
+            Assert.That(types, Has.Member(typeof(OtherEditorOnlyCreationData)));
+            Assert.That(types, Has.No.Member(typeof(ScriptFolderProbeBehaviour)));
+            Assert.That(types, Has.No.Member(typeof(EditorTypeCatalogTests)));
+            Assert.That(types, Is.Unique);
+            foreach (Type type in types)
+            {
+                Assert.That(EditorTypeCatalog.IsLoadableType(type), Is.True);
+            }
+            Assert.That(Resources.FindObjectsOfTypeAll<OperationLifecycleData>().Length, Is.EqualTo(before));
+            Assert.That(OperationLifecycleData.HookCount, Is.EqualTo(hooks));
+        }
+
+        [Test]
+        public void ShouldDiscoverDistinctOrdinaryTypesFromActualAssetFolders()
+        {
+            using TestCleanupScope cleanup = new();
+            string folder = "Assets/CatalogFolderTests-" + Guid.NewGuid().ToString("N");
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(folder));
+            AssetDatabase.CreateFolder("Assets", Path.GetFileName(folder));
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(folder, false), Is.Empty);
+            foreach (string name in new[] { "First", "Second" })
+            {
+                OtherEditorOnlyCreationData asset = ScriptableObject.CreateInstance<OtherEditorOnlyCreationData>();
+                cleanup.Defer(() =>
+                {
+                    if (asset != null && !EditorUtility.IsPersistent(asset))
+                    {
+                        UnityEngine.Object.DestroyImmediate(asset);
+                    }
+                });
+                AssetDatabase.CreateAsset(asset, folder + "/" + name + ".asset");
+            }
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(folder, false), Is.EqualTo(new[] { typeof(OtherEditorOnlyCreationData) }));
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(folder.ToUpperInvariant(), false), Is.EqualTo(new[] { typeof(OtherEditorOnlyCreationData) }));
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(folder, true), Is.Empty);
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void ShouldIgnoreUnimportedPickerFolders(bool scripts)
+        {
+            using TestCleanupScope cleanup = new();
+            string folder = "Assets/UnimportedCatalogFolder-" + Guid.NewGuid().ToString("N");
+            cleanup.Defer(() =>
+            {
+                if (Directory.Exists(folder))
+                {
+                    Directory.Delete(folder, recursive: true);
+                }
+                AssetDatabase.DeleteAsset(folder);
+            });
+            Directory.CreateDirectory(folder);
+            Assert.That(AssetDatabase.IsValidFolder(folder), Is.False);
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(folder, scripts), Is.Empty);
+            Assert.That(AssetDatabase.IsValidFolder(folder), Is.False);
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void ShouldIgnoreMissingScanFolders(bool scripts)
+        {
+            Assert.That(EditorTypeCatalog.FindTypesInFolder("Assets/DoesNotExist-" + Guid.NewGuid().ToString("N"), scripts), Is.Empty);
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(null, scripts), Is.Empty);
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(string.Empty, scripts), Is.Empty);
+        }
+
         [Test]
         public void ShouldDiscoverExactTypesWithoutLoadingObjectsOrChangingHooks()
         {
