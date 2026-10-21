@@ -4214,36 +4214,27 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void SelectTheme(DataVisualizerThemeSettings theme)
         {
+            if (IsConfigurationEditingPaused || AssetGuidDiscovery.IsAssetDatabaseBusy())
+            {
+                return;
+            }
             string guid = theme != null ? AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(theme)) : string.Empty;
-            PersistSettings(
-                settings =>
+            try
+            {
+                if (new EditorConfigurationService(Settings, UserState, _userStateFilePath).SetThemeGuid(guid))
                 {
-                    if (string.Equals(settings.themeGuid, guid, StringComparison.Ordinal))
-                    {
-                        return false;
-                    }
-
-                    settings.themeGuid = guid;
-                    return true;
-                },
-                state =>
-                {
-                    if (string.Equals(state.themeGuid, guid, StringComparison.Ordinal))
-                    {
-                        return false;
-                    }
-
-                    state.themeGuid = guid;
-                    return true;
+                    _userStateDirty = false;
                 }
-            );
-            /*
-                Applying the resolved selection, not the raw argument, is what
-                makes a cleared selection land on the default theme: SelectTheme
-                persists the empty GUID first, then GetSelectedTheme resolves it
-                to the default asset.
-            */
-            ApplyThemeToWindow(GetSelectedTheme());
+                ApplyThemeToWindow(GetSelectedTheme());
+            }
+            catch (EditorConfigurationException error)
+            {
+                Debug.LogWarning(error.Message);
+            }
+            catch (Exception error)
+            {
+                Debug.LogError("Theme configuration failed; inspect the settings and user-state file before retrying. " + error.Message);
+            }
         }
 
         private void ApplyThemeToWindow(DataVisualizerThemeSettings theme)
@@ -4296,26 +4287,32 @@ namespace WallstopStudios.DataVisualizer.Editor
             )
             {
                 value = settings.persistStateInSettingsAsset,
+                name = "settings-persistence-toggle",
             };
+            prefsToggle.SetEnabled(!IsConfigurationEditingPaused);
             prefsToggle.AddToClassList("settings-prefs-toggle");
             prefsToggle.RegisterValueChangedCallback(evt =>
             {
-                bool newModeIsSettingsAsset = evt.newValue;
-                bool previousModeWasSettingsAsset = Settings.persistStateInSettingsAsset;
-                if (previousModeWasSettingsAsset == newModeIsSettingsAsset)
+                try
                 {
-                    return;
+                    if (!IsConfigurationEditingPaused && !AssetGuidDiscovery.IsAssetDatabaseBusy())
+                    {
+                        if (new EditorConfigurationService(Settings, UserState, _userStateFilePath).SetPersistenceMode(evt.newValue))
+                        {
+                            _userStateDirty = false;
+                        }
+                    }
                 }
-
-                DataVisualizerSettings localSettings = Settings;
-                localSettings.persistStateInSettingsAsset = newModeIsSettingsAsset;
-                MigratePersistenceState(migrateToSettingsAsset: newModeIsSettingsAsset);
-                localSettings.MarkDirty();
-                AssetDatabase.SaveAssets();
-                if (!newModeIsSettingsAsset)
+                catch (EditorConfigurationException error)
                 {
-                    SaveUserStateToFile();
+                    Debug.LogWarning(error.Message);
                 }
+                catch (Exception error)
+                {
+                    Debug.LogError("Persistence configuration failed; inspect both stores before retrying. " + error.Message);
+                }
+                prefsToggle.SetValueWithoutNotify(Settings.persistStateInSettingsAsset);
+                prefsToggle.Label = Settings.persistStateInSettingsAsset ? "Persist State in UserState: " : "Persist State in Settings Asset: ";
             });
             contentWrapper.Add(prefsToggle);
 
@@ -4385,8 +4382,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                     whiteSpace = WhiteSpace.NoWrap,
                 },
             };
+            themeField.SetEnabled(!IsConfigurationEditingPaused);
             themeField.clicked += () =>
             {
+                if (IsConfigurationEditingPaused || AssetGuidDiscovery.IsAssetDatabaseBusy())
+                {
+                    return;
+                }
                 Rect anchor = themeField.worldBound;
                 if (float.IsNaN(anchor.x) || float.IsNaN(anchor.y) || float.IsNaN(anchor.width) || float.IsNaN(anchor.height))
                 {
@@ -4404,6 +4406,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 text = "Reset Theme",
                 tooltip = "Restore the Dx appearance and clear the saved theme selection.",
             };
+            resetThemeButton.SetEnabled(!IsConfigurationEditingPaused);
             resetThemeButton.AddToClassList(StyleConstants.ThemeResetButtonClass);
             resetThemeButton.AddToClassList(StyleConstants.ClickableClass);
             themeContainer.Add(resetThemeButton);
@@ -9683,30 +9686,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             SetObjectOrderForType(type.FullName, orderedGuids);
-        }
-
-        private void MigratePersistenceState(bool migrateToSettingsAsset)
-        {
-            try
-            {
-                DataVisualizerUserState userState = UserState;
-                DataVisualizerSettings settings = Settings;
-                if (migrateToSettingsAsset)
-                {
-                    settings.HydrateFrom(userState);
-                    settings.MarkDirty();
-                    AssetDatabase.SaveAssets();
-                }
-                else
-                {
-                    userState.HydrateFrom(settings);
-                    MarkUserStateDirty();
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Error during persistence state migration: {e}");
-            }
         }
 
         private string GetLastSelectedNamespaceKey()

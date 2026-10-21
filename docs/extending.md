@@ -387,8 +387,29 @@ states, and saves only the explicit writable settings asset. Repeating the same 
 configured; they become dirty but have no file to save. A save exception can leave changed preferences in memory; inspect the settings and resolve the write failure before
 retrying.
 
-This contract covers `DataFolderPath` and `selectActiveObject`. It preserves saved arrangements, persistence mode, and theme selection; their migration contracts and individual
-asset operations remain outside this service. Read preferences again after external edits rather than retaining an earlier snapshot.
+The two-argument `Apply` preserves persistence mode and theme. For state preferences, supply an explicit user-state context:
+
+```csharp
+var configuration = WallstopStudios.DataVisualizer.Editor.Utilities.EditorConfigurationService.FromGuid(
+    settingsAssetGuid, absoluteUserStateJsonPath);
+UnityEngine.Debug.Log(configuration.PersistStateInSettingsAsset + " " + configuration.ThemeGuid);
+// Inspect the source state and destinations before applying this synchronous unit.
+configuration.Apply("Assets", true, persistStateInSettingsAsset: true, themeGuid: "");
+```
+
+`FromGuid(settingsGuid, userStatePath)` reads existing JSON without writing; a missing file starts with empty state, while corrupt JSON is rejected. A user-state path must end in
+`.json`, have an existing parent, and sit outside `Assets`, `Packages` and `ProjectSettings`. Relative paths resolve from the Unity project root. The browser uses the same service
+with its current in-memory state and existing user-state path; C# callers can pass those explicitly to the three-argument constructor.
+
+The full `Apply` validates folder, theme, context and writable stores before mutation. `SetPersistenceMode(bool)` and `SetThemeGuid(string)` change one preference while preserving
+legacy data-folder values. Migration deep-copies all persisted arrangements, selection, filters, processors and saved searches from the active source to the destination. Switching
+to settings preserves the user archive; switching to user state writes it before changing the mode. Only affected stores are saved; unchanged calls leave pending unrelated edits
+unsaved. Theme GUIDs identify exact theme main assets, including package themes; an empty string resets to the default. Migration preserves existing broken theme GUIDs until an
+explicit theme change or reset.
+
+These calls reject Play Mode/transitions, busy state and read-only destinations without dialogs. A file/save exception can leave partial disk or memory changes: no cross-file
+rollback is promised. Inspect both stores before retrying. Contexts own no subscriptions or resources; reload a file context after external edits and coordinate callers that share
+one user-state file. Existing open windows retain their own in-memory state; this API does not broadcast state-file changes to other owners.
 
 ## JSON editor automation
 
