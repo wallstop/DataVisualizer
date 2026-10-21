@@ -43,8 +43,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         summary. The report records the host environment (Unity, OS, CPU,
         memory, DPI, displays, theme, package version, pre-existing managed
         assets) so a number is meaningless without its context, and it records
-        the repetition counts so the first-tranche limits are explicit: cold is
-        one sample, warm is five discarded warm-ups plus thirty samples, and the
+        the repetition counts: cold is five windows in one warm process, warm is
+        five discarded warm-ups plus thirty samples, and the
         remaining T01 acceptance (cross-host spread, Play-entry and
         compile timings) stays open on the roadmap.
 
@@ -70,6 +70,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const int WarmRepetitions = 30;
         private const int SearchRepetitions = 30;
         private const int SelectionRepetitions = 30;
+        private const int InteractionRepetitions = 30;
         private const int SearchCacheTimeoutSeconds = 600;
         private const double DefaultTimeoutMinutes = 90;
         private const string SearchQueryFirst = "Player";
@@ -432,6 +433,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 case Phase.InteractionSamples:
                     RunInteractionSample(state);
                     return;
+                case Phase.WaitingLabelFilter:
+                case Phase.WaitingObjectScroll:
+                case Phase.WaitingTypeSwitch:
+                    WaitInteraction(state);
+                    return;
                 case Phase.WaitingSearchResults:
                     WaitSearchResults(state);
                     return;
@@ -553,6 +559,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 {
                     sample.firstRootPaintMilliseconds = state.OpenClock.Elapsed.TotalMilliseconds;
                 }
+                PerfInteractionSample interaction = state.PendingInteraction;
+                if (interaction != null && !interaction.complete && interaction.firstRootPaintMilliseconds < 0 && ReferenceEquals(state.Window, window))
+                {
+                    interaction.firstRootPaintMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+                }
             };
             window.ShowPopup();
             // Show may enable the window again; restore owned state before deferred initialization.
@@ -619,6 +630,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
                 state.SearchRepetition = 0;
                 state.SelectionRepetition = 0;
+                state.FilterRepetition = 0;
+                state.ScrollRepetition = 0;
+                state.TypeSwitchRepetition = 0;
                 state.Phase = Phase.InteractionSamples;
             }
             else
@@ -687,6 +701,26 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             if (state.SelectionRepetition < WarmupRepetitions + SelectionRepetitions)
             {
                 MeasureSelection(state, state.SelectionRepetition++);
+                return;
+            }
+
+            if (state.FilterRepetition < WarmupRepetitions + InteractionRepetitions)
+            {
+                StartLabelFilter(state, state.FilterRepetition++);
+                return;
+            }
+            if (state.ScrollRepetition < WarmupRepetitions + InteractionRepetitions)
+            {
+                if (state.ScrollRepetition == 0)
+                {
+                    ApplyMeasuredLabelFilter(state.Window, null);
+                }
+                StartObjectScroll(state, state.ScrollRepetition++);
+                return;
+            }
+            if (1 < state.FixtureTypes.Length && state.TypeSwitchRepetition < WarmupRepetitions + InteractionRepetitions)
+            {
+                StartTypeSwitch(state, state.TypeSwitchRepetition++);
                 return;
             }
 
@@ -775,6 +809,167 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        private static PerfInteractionSample StartInteraction(RunState state, string kind, int repetition, Phase phase)
+        {
+            PerfInteractionSample sample = new()
+            {
+                size = state.Current.Size,
+                kind = kind,
+                mode = repetition < WarmupRepetitions ? "warmup" : "warm",
+                selectedType = GetNamespaceController(state.Window).SelectedType.AssemblyQualifiedName,
+            };
+            state.PendingInteraction = sample;
+            state.Current.InteractionSamples.Add(sample);
+            state.Phase = phase;
+            state.PhaseClock.Restart();
+            return sample;
+        }
+
+        private static void ApplyMeasuredLabelFilter(DataVisualizerWindow window, string missingLabel)
+        {
+            TypeLabelFilterConfig filter = (TypeLabelFilterConfig)typeof(DataVisualizerWindow).GetProperty("CurrentTypeLabelFilterConfig", Members).GetValue(window);
+            filter.andLabels.Clear();
+            filter.orLabels.Clear();
+            filter.combinationType = LabelCombinationType.And;
+            if (missingLabel != null)
+            {
+                filter.andLabels.Add(missingLabel);
+            }
+            typeof(DataVisualizerWindow).GetMethod("ApplyLabelFilter", Members).Invoke(window, new object[] { true });
+        }
+
+        private static void StartLabelFilter(RunState state, int repetition)
+        {
+            bool excludeAll = repetition % 2 == 0;
+            int rows = (typeof(DataVisualizerWindow).GetField("_selectedObjects", Members).GetValue(state.Window) as System.Collections.ICollection).Count;
+            PerfInteractionSample sample = StartInteraction(state, "label-filter", repetition, Phase.WaitingLabelFilter);
+            sample.expectedRows = excludeAll ? 0 : rows;
+            ApplyMeasuredLabelFilter(state.Window, excludeAll ? state.MissingLabel : null);
+            sample.actionMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+            state.Window.rootVisualElement.MarkDirtyRepaint();
+        }
+
+        private static void StartObjectScroll(RunState state, int repetition)
+        {
+            ListView list = state.Window.rootVisualElement.Q<ListView>("object-listview");
+            int target = repetition % 2 == 0 ? list.itemsSource.Count - 1 : 0;
+            if (target < 0)
+            {
+                throw new InvalidOperationException("The scroll sample requires loaded object rows.");
+            }
+            state.PendingScrollTarget = (ScriptableObject)list.itemsSource[target];
+            state.ScrollOffsetBefore = list.Q<ScrollView>().scrollOffset;
+            PerfInteractionSample sample = StartInteraction(state, "object-scroll", repetition, Phase.WaitingObjectScroll);
+            sample.expectedRows = list.itemsSource.Count;
+            list.ScrollToItem(target);
+            sample.actionMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+            state.Window.rootVisualElement.MarkDirtyRepaint();
+        }
+
+        private static void StartTypeSwitch(RunState state, int repetition)
+        {
+            NamespaceController controller = GetNamespaceController(state.Window);
+            int next = (Array.IndexOf(state.FixtureTypes, controller.SelectedType) + 1) % state.FixtureTypes.Length;
+            state.PendingType = state.FixtureTypes[next];
+            PerfInteractionSample sample = StartInteraction(state, "type-switch", repetition, Phase.WaitingTypeSwitch);
+            sample.selectedType = state.PendingType.AssemblyQualifiedName;
+            controller.SelectType(state.Window, state.PendingType);
+            sample.actionMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+            state.Window.rootVisualElement.MarkDirtyRepaint();
+        }
+
+        private static void WaitInteraction(RunState state)
+        {
+            if (30 < state.PhaseClock.Elapsed.TotalSeconds)
+            {
+                throw new InvalidOperationException("Interaction did not reach observed readiness: " + state.PendingInteraction.kind);
+            }
+            Stopwatch observer = Stopwatch.StartNew();
+            PerfInteractionSample sample = state.PendingInteraction;
+            ListView list = state.Window.rootVisualElement.Q<ListView>("object-listview");
+            Rect viewport = list.Q<ScrollView>().contentViewport.worldBound;
+            int realized = 0;
+            int visible = 0;
+            bool targetVisible = false;
+            list.Query<VisualElement>(className: "object-item")
+                .ForEach(box =>
+                {
+                    VisualElement row = box.parent;
+                    if (row.userData is not ScriptableObject asset || asset == null || row.worldBound.width <= 0 || row.worldBound.height <= 0)
+                    {
+                        return;
+                    }
+                    realized++;
+                    if (row.worldBound.Overlaps(viewport))
+                    {
+                        visible++;
+                        targetVisible = targetVisible || ReferenceEquals(asset, state.PendingScrollTarget);
+                    }
+                });
+            sample.realizedRows = Math.Max(sample.realizedRows, realized);
+            sample.loadedRows = (typeof(DataVisualizerWindow).GetField("_selectedObjects", Members).GetValue(state.Window) as System.Collections.ICollection).Count;
+            sample.retainedSearchObjects = (typeof(DataVisualizerWindow).GetField(SearchCacheFieldName, Members).GetValue(state.Window) as System.Collections.ICollection).Count;
+            bool ready = 0 < viewport.width && 0 < viewport.height;
+            if (state.Phase == Phase.WaitingLabelFilter)
+            {
+                if (sample.expectedRows == 0)
+                {
+                    Label empty = state.Window.rootVisualElement.Q<Label>("empty-object-list-label");
+                    ready =
+                        list.itemsSource.Count == 0
+                        && list.resolvedStyle.display == DisplayStyle.None
+                        && empty.resolvedStyle.display != DisplayStyle.None
+                        && 0 < empty.worldBound.width
+                        && 0 < empty.worldBound.height;
+                }
+                else
+                {
+                    ready = ready && list.itemsSource.Count == sample.expectedRows && 0 < visible && list.resolvedStyle.display != DisplayStyle.None;
+                }
+            }
+            else if (state.Phase == Phase.WaitingObjectScroll)
+            {
+                ready = ready && targetVisible;
+                sample.viewportMoved = list.Q<ScrollView>().scrollOffset != state.ScrollOffsetBefore;
+            }
+            else
+            {
+                SerializedObject inspector = typeof(DataVisualizerWindow).GetField("_currentInspectorScriptableObject", Members).GetValue(state.Window) as SerializedObject;
+                VisualElement content = state.Window.rootVisualElement.Q("inspector-content");
+                ready =
+                    ready
+                    && GetNamespaceController(state.Window).SelectedType == state.PendingType
+                    && !(bool)typeof(DataVisualizerWindow).GetField("_isLoadingObjectsAsync", Members).GetValue(state.Window)
+                    && 0 < visible
+                    && inspector != null
+                    && inspector.targetObject != null
+                    && inspector.targetObject.GetType() == state.PendingType
+                    && content != null
+                    && 0 < content.childCount
+                    && 0 < content.worldBound.width
+                    && 0 < content.worldBound.height;
+            }
+            sample.observerMilliseconds += observer.Elapsed.TotalMilliseconds;
+            if (!ready || sample.firstRootPaintMilliseconds < 0)
+            {
+                EditorApplication.QueuePlayerLoopUpdate();
+                return;
+            }
+            sample.observedReadyMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+            sample.complete = true;
+            if (sample.mode == "warm")
+            {
+                List<double> samples =
+                    state.Phase == Phase.WaitingLabelFilter ? state.Current.FilterSamples
+                    : state.Phase == Phase.WaitingObjectScroll ? state.Current.ScrollSamples
+                    : state.Current.TypeSwitchSamples;
+                samples.Add(sample.observedReadyMilliseconds);
+            }
+            state.PendingInteraction = null;
+            state.PendingScrollTarget = null;
+            state.Phase = Phase.InteractionSamples;
+        }
+
         private static void AdvanceWarmCycle(RunState state)
         {
             CloseWindow(state);
@@ -804,6 +999,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             PerfWindowStateScope isolatedState = state.WindowState;
             state.Window = null;
             state.WindowState = null;
+            state.PendingInteraction = null;
+            state.PendingScrollTarget = null;
             // A destroyed wrapper still owns restoration; a run that never opened a window does not.
             if (ReferenceEquals(window, null) && isolatedState == null)
             {
@@ -1041,6 +1238,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 .Append(SearchRepetitions)
                 .Append(", \"selectionSamples\": ")
                 .Append(SelectionRepetitions)
+                .Append(", \"interactionWarmups\": ")
+                .Append(WarmupRepetitions)
+                .Append(", \"interactionSamples\": ")
+                .Append(InteractionRepetitions)
                 .Append("},\n");
             json.Append(
                 "  \"gaps\": [\"Play-entry and compile timings are not yet measured\", \"cold windows reuse the editor process; fresh-process controls are not measured\", \"cross-host spread is not yet collected\"],\n"
@@ -1059,6 +1260,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         json.Append(",");
                     }
                     firstReadiness = false;
+                    json.Append(JsonUtility.ToJson(sample));
+                }
+            }
+            json.Append("],\n");
+            json.Append(
+                "  \"interactionSemantics\": \"Five warmups then 30 warm observations per interaction; root paint is not GPU completion; readiness is observed layout, with observer delay. Small scrolls can be no-ops. Type switching requires at least two fixture types.\",\n"
+            );
+            json.Append("  \"interactionSamples\": [\n");
+            bool firstInteraction = true;
+            foreach (SizeResult result in results)
+            {
+                foreach (PerfInteractionSample sample in result.InteractionSamples)
+                {
+                    if (!firstInteraction)
+                    {
+                        json.Append(",\n");
+                    }
+                    firstInteraction = false;
                     json.Append(JsonUtility.ToJson(sample));
                 }
             }
@@ -1096,6 +1315,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AppendScenario(json, "search-first-results", results, static result => result.SearchSamples, static result => result.SearchMatchCounts);
             json.Append(",\n");
             AppendScenario(json, "selection", results, static result => result.SelectionSamples);
+            json.Append(",\n");
+            AppendScenario(json, "label-filter-observed-ready", results, static result => result.FilterSamples);
+            json.Append(",\n");
+            AppendScenario(json, "object-scroll-observed-ready", results, static result => result.ScrollSamples);
+            json.Append(",\n");
+            AppendScenario(json, "type-switch-observed-ready", results, static result => result.TypeSwitchSamples);
             json.Append("\n  ]\n}\n");
             return json.ToString();
         }
@@ -1290,6 +1515,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal readonly List<double> SearchSamples = new();
             internal readonly List<int> SearchMatchCounts = new();
             internal readonly List<double> SelectionSamples = new();
+            internal readonly List<double> FilterSamples = new();
+            internal readonly List<double> ScrollSamples = new();
+            internal readonly List<double> TypeSwitchSamples = new();
+            internal readonly List<PerfInteractionSample> InteractionSamples = new();
         }
 
         private sealed class RunState
@@ -1302,6 +1531,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal readonly int MaximumStagingItems;
             internal readonly Stopwatch Watchdog = Stopwatch.StartNew();
             internal readonly List<SizeResult> Results = new();
+            internal readonly string MissingLabel = "PerfAbsentLabel-" + Guid.NewGuid().ToString("N");
             internal Phase Phase = Phase.Idle;
             internal int SizeIndex = -1;
             internal SizeResult Current;
@@ -1319,6 +1549,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal int SearchRepetition;
             internal int SelectionRepetition;
             internal string PendingQuery;
+            internal int FilterRepetition;
+            internal int ScrollRepetition;
+            internal int TypeSwitchRepetition;
+            internal PerfInteractionSample PendingInteraction;
+            internal ScriptableObject PendingScrollTarget;
+            internal Vector2 ScrollOffsetBefore;
+            internal Type PendingType;
 
             internal RunState(string outputDirectory, int[] sizes, double timeoutMinutes, Type[] fixtureTypes, double stagingBudgetMilliseconds, int maximumStagingItems)
             {
@@ -1348,6 +1585,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Staging = 9,
             RefreshingFixtures = 10,
             ColdOpen = 11,
+            WaitingLabelFilter = 12,
+            WaitingObjectScroll = 13,
+            WaitingTypeSwitch = 14,
         }
     }
 }
