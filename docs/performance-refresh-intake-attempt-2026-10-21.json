@@ -1,0 +1,67 @@
+{
+  "schema": "1",
+  "status": "cancelled",
+  "runComplete": false,
+  "functionalSourceRevision": "27d022d811176b80611fb9d94e72a9d5ff831aa9",
+  "probeSourceSha256": "e285bc44aa5488008457f3df5c8731a2ac5173962fef68b4d75a63c5c7b9f762",
+  "dataset": {
+    "kind": "real Unity main assets",
+    "fixtureType": "WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject",
+    "requested": 10000,
+    "created": 10000
+  },
+  "stopCriteria": {
+    "minutes": 20,
+    "conservativeTrackedMemoryGiB": 16,
+    "minimumFreeDiskGiB": 10
+  },
+  "terminal": {
+    "phase": "Cancelled",
+    "task": "RanToCompletion",
+    "elapsedSeconds": 1212.576,
+    "peakConservativeTrackedBytes": 2467508372,
+    "failedPhase": "Reconciliation",
+    "activeBurst": 10000,
+    "writeCallsReturned": 10000
+  },
+  "completedBursts": [
+    {
+      "changedAssets": 100,
+      "callbackMilliseconds": 0.362,
+      "reconciliationMilliseconds": 558.204,
+      "observedUpdates": 12,
+      "maximumProcessedDelta": 24,
+      "naturalProcessedBeforeReplay": 15,
+      "pendingBeforeReplay": 85,
+      "processed": 115,
+      "newObjectLoads": 0
+    },
+    {
+      "changedAssets": 1000,
+      "callbackMilliseconds": 0.443,
+      "reconciliationMilliseconds": 2778.359,
+      "observedUpdates": 61,
+      "maximumProcessedDelta": 29,
+      "naturalProcessedBeforeReplay": 9,
+      "pendingBeforeReplay": 991,
+      "processed": 1009,
+      "newObjectLoads": 0
+    }
+  ],
+  "limits": [
+    "Only 100/1k replays completed; counts include natural callbacks and explicit duplicate replays.",
+    "One warm-session observation, not percentiles or a controlled speedup.",
+    "The final 10k callback timer and reconciliation outcome were not recorded; do not infer them from control flow.",
+    "The final lifecycle tail was not reached. Input copies and native calls remain indivisible.",
+    "The 32 ms / 20-item fixture staging budget, native import flushes and 20-minute cooperative limit do not bound an individual native call."
+  ],
+  "cleanup": {
+    "ownedFixtureRoots": 0,
+    "browserWindows": 0,
+    "editorWindows": 7,
+    "nativeHosts": 1,
+    "sharedPendingPaths": 0,
+    "assetDatabaseIdle": true
+  },
+  "rawTerminalReport": "Cancelled created=10000/10000; root=Assets/PerfBaselineFixtures-25280384b4ee49238073f062eb8402cb; cleanupError=; failedPhase=Reconciliation; burst=10000; changed=10000; measurements=; phase=ClosedLabelWrites, burst=100, labelNativeMs=144.547, longestLabelCallMs=11.019, labelWallMs=955.909, importFlushMs=698.937; phase=ClosedLabelWrites, burst=1000, labelNativeMs=1823.558, longestLabelCallMs=9.414, labelWallMs=7471.221, importFlushMs=5120.521; phase=ClosedLabelWrites, burst=10000, labelNativeMs=19184.558, longestLabelCallMs=34.836, labelWallMs=69846.757, importFlushMs=45616.401; phase=OpenLabelWrites, burst=100, labelNativeMs=129.441, longestLabelCallMs=2.277, labelWallMs=1059.418, importFlushMs=764.393; burst=100, explicitReplayCallbackMs=0.362, reconcileWallMs=558.204, observedUpdates=12, maxObservedProcessedDelta=24, naturalProcessedBeforeReplay=15, pendingBeforeReplay=85, processed=115, newLoads=0; phase=OpenLabelWrites, burst=1000, labelNativeMs=1742.042, longestLabelCallMs=7.356, labelWallMs=8324.859, importFlushMs=5894.168; burst=1000, explicitReplayCallbackMs=0.443, reconcileWallMs=2778.359, observedUpdates=61, maxObservedProcessedDelta=29, naturalProcessedBeforeReplay=9, pendingBeforeReplay=991, processed=1009, newLoads=0; phase=OpenLabelWrites, burst=10000, labelNativeMs=16831.298, longestLabelCallMs=78.095, labelWallMs=67986.763, importFlushMs=46104.837; error=System.OperationCanceledException: 20-minute stop limit reached\n  at Session263RefreshProbe.CheckResources () [0x000ab] in C:\\Code\\DataVisualizer\\Packages\\com.wallstop-studios.data-visualizer\\.artifacts\\session263-refresh-probe.cs:62 \n  at Session263RefreshProbe.Settle (WallstopStudios.DataVisualizer.Editor.DataVisualizer window) [0x00027] in C:\\Code\\DataVisualizer\\Packages\\com.wallstop-studios.data-visualizer\\.artifacts\\session263-refresh-probe.cs:25 \n  at Session263RefreshProbe.Main (System.Int32 count) [0x01f6f] in C:\\Code\\DataVisualizer\\Packages\\com.wallstop-studios.data-visualizer\\.artifacts\\session263-refresh-probe.cs:339 \n  at Session263RefreshProbe.RunAndReport (System.Int32 count) [0x00029] in C:\\Code\\DataVisualizer\\Packages\\com.wallstop-studios.data-visualizer\\.artifacts\\session263-refresh-probe.cs:79 "
+}
