@@ -347,6 +347,10 @@ Selection can round-trip through `JsonUtility` using its existing serialized fie
 settings. Types use ordinal assembly-qualified identity order, independent of the browser's saved namespace/type order. This catalog lists eligible types, including unmanaged ones;
 it does not report asset counts or which types the user manages. Create a new snapshot after assembly reload or type changes. It owns no resources to dispose.
 
+`IsLoadableType` applies the same eligibility rules to a candidate type, including ScriptableObject assignability. `FindTypesInFolder(path, scripts)` discovers distinct eligible
+types from an existing asset folder, sorted by full name. Script scans read MonoScript assets; asset scans read main-asset type metadata. Neither creates ScriptableObject
+instances.
+
 ```csharp
 var catalog = new WallstopStudios.DataVisualizer.Editor.Utilities.EditorTypeCatalog();
 foreach (System.Type type in catalog.GetPage(0, 100))

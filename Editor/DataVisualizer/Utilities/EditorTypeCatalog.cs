@@ -24,18 +24,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             Types = types.AsReadOnly();
         }
 
-        internal static bool IsLoadableType(Type type)
+        public static bool IsLoadableType(Type type)
         {
             if (type == null)
             {
                 /*
-                    MonoScript.GetClass() returns null for scripts without a MonoBehaviour
-                    class. Treat those as not loadable instead of throwing.
+                    MonoScript.GetClass() can return null for unsupported scripts. Treat those as not loadable instead of throwing.
                 */
                 return false;
             }
 
             return type != typeof(ScriptableObject)
+                && typeof(ScriptableObject).IsAssignableFrom(type)
                 && !type.IsAbstract
                 && !type.IsGenericType
                 && !type.IsInterface
@@ -45,6 +45,40 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 && !IsSubclassOf(type, typeof(ScriptableSingleton<>))
                 && type.Namespace?.StartsWith("UnityEditor", StringComparison.Ordinal) != true
                 && type.Namespace?.StartsWith("UnityEngine", StringComparison.Ordinal) != true;
+        }
+
+        /// <summary>Find eligible types in an asset or script folder without creating instances.</summary>
+        public static List<Type> FindTypesInFolder(string folderPath, bool scripts)
+        {
+            if (!AssetDatabase.IsValidFolder(folderPath))
+            {
+                throw new ArgumentException("Use an existing Unity asset folder.", nameof(folderPath));
+            }
+
+            string filter = scripts ? "t:MonoScript" : $"t:{nameof(ScriptableObject)}";
+            string[] guids = AssetDatabase.FindAssets(filter, new[] { folderPath });
+            HashSet<Type> seen = new();
+            List<Type> types = new();
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                Type type;
+                if (scripts)
+                {
+                    MonoScript script = AssetDatabase.LoadAssetAtPath<MonoScript>(path);
+                    type = script == null ? null : script.GetClass();
+                }
+                else
+                {
+                    type = AssetDatabase.GetMainAssetTypeAtPath(path);
+                }
+                if (IsLoadableType(type) && seen.Add(type))
+                {
+                    types.Add(type);
+                }
+            }
+            types.Sort(Data.NamespaceTypeOrder.CompareTypesByFullName);
+            return types;
         }
 
         private static bool IsSubclassOf(Type typeToCheck, Type baseClass)
