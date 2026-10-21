@@ -122,3 +122,70 @@ staging tick was 308.276 ms. These are one-sample integration observations, not 
 ## Larger synthetic metadata sets
 
 See [million-record feasibility](million-record-feasibility.md) for the opt-in synthetic experiment, real-asset resource estimates, and support limits.
+
+## Readiness and fixture distributions
+
+The current driver keeps `window-open-to-index-ready` measured from the existing post-show clock. It also records each opening in `readinessSamples`, including five discarded
+warm-up openings, five cold-window openings and 30 measured warm openings. Search and selection also discard five warm-up samples before collecting 30 observations. **Cold-window**
+means a recreated window in the same editor process; it does not mean a fresh editor, cold filesystem cache or a package-absent control. The report states that distinction
+explicitly.
+
+Each record separates the first root paint callback, first observed laid-out object rows, first observed laid-out inspector, and full index readiness from the start of window
+creation. The paint callback does not prove GPU presentation. Row and inspector observations occur on editor updates; their times include observation delay. Negative timings mean
+unavailable, and incomplete records remain marked incomplete on cancellation. The legacy index clock stops at its first ready observation even if rendering finishes later.
+
+The controlled window uses an 1180×780 rectangle with 320/280-point catalog/object panes, then restores host preferences. Records include realized row count, loaded selected-type
+rows, retained search-object count, separate peak managed/Unity-allocated/Unity-reserved bytes, indexing slice overruns, and observation count/cost. These memory quantities overlap
+and must not be summed. The longest driver tick measures synchronous driver work. The longest observed editor-update gap also includes scheduling, background throttling and time
+spent outside the driver; it is an upper-bound observation, not a package-attributed main-thread stall measurement. Instrumentation adds overhead; the per-record observer time
+makes that cost visible.
+
+`fixtureTypes` accepts distinct eligible ScriptableObject types. Fixtures cycle through the supplied array in deterministic order, use the existing deterministic names, and
+preserve authored fixture IDs for `BaseDataObject` types. Ordinary ScriptableObjects need no package base class. Each size must contain at least one asset per supplied type. The
+driver snapshots the type array before starting and records exact assembly-qualified identities in the report. Only the owned cloned window state adds fixture types and clears
+inherited label filters/collapse state; the host state remains unchanged.
+
+```csharp
+WallstopStudios.DataVisualizer.Tests.Editor.PerfBaseline.RunBaseline(
+    "Temp/PerfReadiness",
+    new[] { 100, 1000 },
+    timeoutMinutes: 15,
+    fixtureTypes: new[] { typeof(MyGame.Items.WeaponData), typeof(MyGame.Settings.WorldSettings) });
+```
+
+`stagingBudgetMilliseconds` and `maximumStagingItems` optionally tune creation batches; defaults remain 4 ms and ten items. The report records both values. A larger creation budget
+can amortize Unity import calls but does not bound the following indivisible import. Report longest ticks/imports alongside total staging, and preserve cancellation between
+batches.
+
+Use a single type for a large-type distribution and multiple types for a distributed catalog. Fixtures still use uniquely owned roots and the existing cooperative staging and
+cleanup. These additions do not complete [#306](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/306): fresh-process, matched Play-entry/compile controls, operation
+bursts, interactive filtering/scrolling/type-switch distributions, and the complete size/type matrix require separately recorded runs. Do not count a partial fixture as complete.
+
+### Recorded mixed-type readiness run
+
+[The unchanged raw report](performance-readiness-2026-10-21.json) was generated on 2026-10-21 at 06:35:51 UTC from
+[7644f3a](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/7644f3a3becc4aa8d0990bc1de2f52df50e70a63). Unity 6000.5.2f1 ran on Windows 11, Snapdragon X Elite, 65,011 MB
+RAM, Adreno X1-85, one 96-DPI display, 1.0 pixels-per-point and the dark editor skin. Each real-asset dataset alternated an ordinary SO (`OtherEditorOnlyCreationData`) with a
+`BaseDataObject` (`PlayModeDataObject`); this is a two-type distribution, not hundreds of types. Creation used an explicit 32 ms budget and ten-item limit.
+
+Values below are median / nearest-rank p95 milliseconds for 30 measured warm windows after five discarded openings. Each size also has five cold-window observations, five
+search/selection warm-ups and 30 search/selection samples in the raw file. These cold windows share a warm editor process. Both datasets and all 80 readiness records completed.
+
+| Observation                  | 100 assets    | 1,000 assets    |
+| ---------------------------- | ------------- | --------------- |
+| First root paint             | 260.7 / 332.9 | 277.2 / 337.9   |
+| First laid-out rows          | 351.8 / 420.7 | 384.7 / 467.4   |
+| First laid-out inspector     | 351.8 / 420.7 | 384.7 / 467.4   |
+| Full index from creation     | 487.6 / 679.3 | 748.8 / 1,899.4 |
+| Legacy post-show index clock | 438.9 / 633.1 | 704.8 / 1,857.9 |
+| Observer work per opening    | 3.1 / 4.0     | 11.5 / 80.9     |
+
+Realized rows stayed at 18 while the search retained 111 and 1,011 objects, including 11 background objects. This confirms viewport virtualization and growing object retention; it
+does not satisfy #309's bounded-retention outcome. Total staging was 2,895.9 / 27,607.6 ms. Longest import batches were 120.5 / 151.6 ms; longest driver ticks were 220.3 / 228.9
+ms; observed editor-update gaps reached 461.9 / 655.8 ms. Those gaps include scheduling and editor work outside the package. Instrumentation cost is material and is not subtracted
+from the readiness times. These are observational results, not a controlled speedup claim or a 10k/100k support guarantee. The run restored seven editor windows and left no owned
+fixture roots or temporary state files. Unity 2021.3 and other platforms were not executed.
+
+The driver now charges a transition tick to the dataset that owned it at entry and resets update-gap observation between sizes. Final fixture teardown completes before report
+publication on the next tick; report writing and host-preference restoration remain outside the sampled driver ticks. The archived report above predates this diagnostic repair; its
+paint, row, inspector, indexing and retention observations remain valid, but corrected longest-driver-tick values require a repeat run.

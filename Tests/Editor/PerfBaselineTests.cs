@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System;
     using System.Collections;
     using System.Collections.Generic;
+    using System.Text.RegularExpressions;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
@@ -40,6 +41,104 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             yield return new TestCaseData("new\nline", "new\\nline").SetName("ShouldEscapeNewlines");
             yield return new TestCaseData("tab\there", "tab\\there").SetName("ShouldEscapeTabs");
             yield return new TestCaseData("control\u0001char", "control\\u0001char").SetName("ShouldEscapeControlCharacters");
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldRestoreOwnerWhenFinalReportCannotBeWritten()
+        {
+            string output = "Temp/PerfPublicationFailure-" + Guid.NewGuid().ToString("N");
+            int hosts = EditorSurfaceCapture.CountNativeWindowHosts();
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(output, new[] { 2 }, timeoutMinutes: 5);
+            for (int tick = 0; tick < 600 && !PerfBaseline.Status().StartsWith("InteractionSamples:", StringComparison.Ordinal); tick++)
+            {
+                yield return null;
+            }
+            Assert.That(PerfBaseline.Status(), Does.StartWith("InteractionSamples:"));
+            System.IO.Directory.CreateDirectory(output + "/perf-baseline.json");
+            LogAssert.Expect(LogType.Error, new Regex(@"\[PerfBaseline\] FAILED: phase Finished threw: .*"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[PerfBaseline\] the error report could not be written: .*"));
+            for (int tick = 0; tick < 3000 && PerfBaseline.Status() != "Idle"; tick++)
+            {
+                yield return null;
+            }
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+            Assert.That(EditorSurfaceCapture.CountNativeWindowHosts(), Is.EqualTo(hosts));
+            Assert.That(System.IO.Directory.GetFiles(output, "window-state-*.json"), Is.Empty);
+            yield return null;
+        }
+
+        [TestCase(double.NaN, 10)]
+        [TestCase(double.PositiveInfinity, 10)]
+        [TestCase(0, 10)]
+        [TestCase(-1, 10)]
+        [TestCase(4, 0)]
+        public void ShouldRejectInvalidStagingBudgetsBeforeStarting(double milliseconds, int items)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                PerfBaseline.RunBaseline("Temp/Unused", new[] { 2 }, stagingBudgetMilliseconds: milliseconds, maximumStagingItems: items)
+            );
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldStageOrdinaryAndBaseFixturesInDeterministicTypeOrder(bool ordinaryFirst)
+        {
+            Type[] types = ordinaryFirst
+                ? new[] { typeof(OtherEditorOnlyCreationData), typeof(PlayModeDataObject) }
+                : new[] { typeof(PlayModeDataObject), typeof(OtherEditorOnlyCreationData) };
+            Type[] expected = (Type[])types.Clone();
+            using PerfFixtureStaging staging = new(7, fixtureTypes: types);
+            types[0] = typeof(string);
+            while (staging.CreatedCount < staging.TargetCount)
+            {
+                staging.Advance(double.MaxValue, maximumItems: 3);
+            }
+            staging.Refresh();
+            Assert.That(staging.IsComplete, Is.True);
+            for (int index = 0; index < staging.TargetCount; index++)
+            {
+                string path = staging.Folder + "/" + PerfBaseline.FixtureName(index) + ".asset";
+                ScriptableObject asset = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+                Assert.That(asset != null);
+                Assert.That(asset.GetType(), Is.EqualTo(expected[index % expected.Length]));
+                Assert.That(asset.name, Is.EqualTo(PerfBaseline.FixtureName(index)));
+                if (asset is BaseDataObject data)
+                {
+                    Assert.That(data.Id, Is.EqualTo(PerfBaseline.FixtureId(index)));
+                }
+            }
+        }
+
+        [TestCase(typeof(string))]
+        [TestCase(typeof(ScriptableObject))]
+        [TestCase(typeof(ScriptFolderProbeBehaviour))]
+        [TestCase(typeof(EditorTypeCatalogTests.AbstractData))]
+        [TestCase(typeof(EditorTypeCatalogTests.GenericData<>))]
+        public void ShouldRejectUnsupportedFixtureTypesBeforeStarting(Type type)
+        {
+            Assert.Throws<ArgumentException>(() => PerfBaseline.RunBaseline("Temp/Unused", new[] { 2 }, fixtureTypes: new[] { type }));
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+        }
+
+        [Test]
+        public void ShouldRejectEmptyDuplicateAndIncompleteTypeDistributions()
+        {
+            Assert.Throws<ArgumentException>(() => PerfBaseline.RunBaseline("Temp/Unused", new[] { 2 }, fixtureTypes: Array.Empty<Type>()));
+            Assert.Throws<ArgumentException>(() =>
+                PerfBaseline.RunBaseline("Temp/Unused", new[] { 2 }, fixtureTypes: new[] { typeof(PlayModeDataObject), typeof(PlayModeDataObject) })
+            );
+            Assert.Throws<ArgumentException>(() =>
+                PerfBaseline.RunBaseline(
+                    "Temp/Unused",
+                    new[] { 2 },
+                    fixtureTypes: new[] { typeof(PlayModeDataObject), typeof(OtherEditorOnlyCreationData), typeof(SelectionPersistenceGuidData) }
+                )
+            );
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
         }
 
         [Test]

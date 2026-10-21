@@ -99,12 +99,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             return remainingTypeNames;
         }
 
-        internal static bool IsTypeRemovable(Type type)
-        {
-            return type == null || (!typeof(BaseDataObject).IsAssignableFrom(type) && !type.IsAttributeDefined<CustomDataVisualizationAttribute>());
-        }
-
-        internal static string GetNamespaceKey(Type type)
+        public static string GetNamespaceKey(Type type)
         {
             const string emptyNamespace = "No Namespace";
             if (type == null)
@@ -125,6 +120,11 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             int lastSeparatorIndex = namespaceName.LastIndexOf('.');
             return lastSeparatorIndex < 0 ? namespaceName : namespaceName.Substring(lastSeparatorIndex + 1);
+        }
+
+        internal static bool IsTypeRemovable(Type type)
+        {
+            return type == null || (!typeof(BaseDataObject).IsAssignableFrom(type) && !type.IsAttributeDefined<CustomDataVisualizationAttribute>());
         }
 
         internal static string GetTypeDisplayName(Type type)

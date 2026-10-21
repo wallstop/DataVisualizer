@@ -1,6 +1,7 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
+    using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
     using UnityEditor;
@@ -14,6 +15,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     {
         internal string Folder { get; }
         internal int TargetCount { get; }
+        internal IReadOnlyList<Type> FixtureTypes { get; }
         internal int CreatedCount { get; private set; }
         internal bool IsComplete { get; private set; }
         internal double CreationMilliseconds { get; private set; }
@@ -34,13 +36,27 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private bool _disposed;
         private bool _markerWritten;
 
-        internal PerfFixtureStaging(int count, Action<ScriptableObject, string> createAsset = null)
+        internal PerfFixtureStaging(int count, Action<ScriptableObject, string> createAsset = null, Type[] fixtureTypes = null)
         {
             if (count < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
             }
 
+            Type[] types = fixtureTypes == null ? new[] { typeof(PlayModeDataObject) } : (Type[])fixtureTypes.Clone();
+            if (types.Length == 0 || count < types.Length)
+            {
+                throw new ArgumentException("Each fixture type needs at least one asset.", nameof(fixtureTypes));
+            }
+            HashSet<Type> unique = new();
+            foreach (Type type in types)
+            {
+                if (!EditorTypeCatalog.IsLoadableType(type) || !unique.Add(type))
+                {
+                    throw new ArgumentException("Use distinct eligible ScriptableObject fixture types.", nameof(fixtureTypes));
+                }
+            }
+            FixtureTypes = Array.AsReadOnly(types);
             _createAsset = createAsset ?? AssetDatabase.CreateAsset;
             TargetCount = count;
             Folder = "Assets/PerfBaselineFixtures-" + Guid.NewGuid().ToString("N");
@@ -105,7 +121,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new ObjectDisposedException(nameof(PerfFixtureStaging));
             }
 
-            if (budgetMilliseconds <= 0 || maximumItems < 1)
+            if (double.IsNaN(budgetMilliseconds) || double.IsInfinity(budgetMilliseconds) || budgetMilliseconds <= 0 || maximumItems < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(budgetMilliseconds));
             }
@@ -150,7 +166,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     while (CreatedCount < TargetCount && items < maximumItems && (items == 0 || slice.Elapsed.TotalMilliseconds < budgetMilliseconds))
                     {
                         Stopwatch initializeAsset = Stopwatch.StartNew();
-                        PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
+                        Type fixtureType = FixtureTypes[CreatedCount % FixtureTypes.Count];
+                        ScriptableObject asset = ScriptableObject.CreateInstance(fixtureType);
                         cleanup.Defer(() =>
                         {
                             if (asset != null && !AssetDatabase.Contains(asset))
@@ -159,8 +176,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                             }
                         });
                         asset.name = PerfBaseline.FixtureName(CreatedCount);
-                        asset.BeforeCreate();
-                        asset._assetGuid = PerfBaseline.FixtureId(CreatedCount);
+                        if (asset is BaseDataObject data)
+                        {
+                            data.BeforeCreate();
+                            data._assetGuid = PerfBaseline.FixtureId(CreatedCount);
+                        }
                         InitializationMilliseconds += initializeAsset.Elapsed.TotalMilliseconds;
                         Stopwatch create = Stopwatch.StartNew();
                         _createAsset(asset, $"{Folder}/{asset.name}.asset");
@@ -179,15 +199,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 for (int index = firstCreated; index < CreatedCount; index++)
                 {
                     string path = $"{Folder}/{PerfBaseline.FixtureName(index)}.asset";
-                    PlayModeDataObject asset = AssetDatabase.LoadAssetAtPath<PlayModeDataObject>(path);
-                    if (asset == null)
+                    ScriptableObject asset = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+                    if (asset == null || asset.GetType() != FixtureTypes[index % FixtureTypes.Count])
                     {
                         throw new InvalidOperationException("Fixture import did not persist the expected type: " + path);
                     }
-                    asset.AfterCreate();
-                    if (!string.Equals(asset.Id, PerfBaseline.FixtureId(index), StringComparison.Ordinal))
+                    if (asset is BaseDataObject data)
                     {
-                        throw new InvalidOperationException("Fixture import changed its authored identity: " + path);
+                        data.AfterCreate();
+                        if (!string.Equals(data.Id, PerfBaseline.FixtureId(index), StringComparison.Ordinal))
+                        {
+                            throw new InvalidOperationException("Fixture import changed its authored identity: " + path);
+                        }
                     }
                 }
                 InitializationMilliseconds += initialization.Elapsed.TotalMilliseconds;
