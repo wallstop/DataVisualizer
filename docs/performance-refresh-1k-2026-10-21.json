@@ -1,0 +1,132 @@
+{
+  "schema": "1",
+  "reportKind": "incremental-refresh-label-control",
+  "status": "passed",
+  "runComplete": true,
+  "generatedAtUtc": "2026-10-21T08:12:29.979656+00:00",
+  "sourceRevision": "5b8741d618806ae12deb61bce24b4418aa225011",
+  "probeSourceSha256": "0d36e0f0fdec1022733ed12a4c91550dd70a67d7539fafd81755c6bbb98a142b",
+  "probeAssembly": "PipelineRunScript_session259-refresh-probe_083fcfe852984512aaca7f6aa905c6e8",
+  "environment": {
+    "unityVersion": "6000.5.2f1",
+    "platform": "WindowsEditor",
+    "operatingSystem": "Windows 11  (10.0.26200)",
+    "processorType": "Snapdragon(R) X Elite - X1E80100 - Qualcomm(R) Oryon(TM) CPU",
+    "processorCount": 12,
+    "systemMemoryMegabytes": 65011,
+    "graphicsDevice": "Qualcomm(R) Adreno(TM) X1-85 GPU",
+    "dpi": 96,
+    "editorPixelsPerPoint": 1,
+    "darkTheme": true,
+    "displayCount": 1,
+    "packageVersion": "0.1.1",
+    "preExistingScriptableObjectAssets": 225
+  },
+  "dataset": {
+    "kind": "real Unity assets",
+    "fixtureType": "WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject",
+    "requested": 1000,
+    "created": 1000,
+    "unchangedRowIdentitiesPreserved": 999
+  },
+  "method": [
+    "One warm editor process; one sample per size and condition, closed condition first.",
+    "Same staged dataset, loaded objects and per-call SetLabels workload; closed control has no DataVisualizer window but project import hooks remain active.",
+    "Yield and persist progress every sixteen label writes; check resources before each write.",
+    "Open-window workload follows rename, label filtering, Undo/Redo, move and missing-script recovery checks.",
+    "After real writes, explicitly invoke production OnPostprocessAllAssets with duplicate paths, then wait for the queue and index to settle.",
+    "Callback timing measures the explicit replay only. Processed counts include real notifications, work between yields and the explicit replay; they are not unique asset counts.",
+    "The settle observer includes a 150 ms confirmation delay and editor scheduling. Reconciliation is wall time, not CPU time."
+  ],
+  "staging": {
+    "creationBudgetMilliseconds": 32,
+    "maximumItemsPerBatch": 20,
+    "totalMilliseconds": 29766.293,
+    "creationMilliseconds": 3565.878,
+    "batchImportMilliseconds": 18393.691,
+    "initializationMilliseconds": 191.511,
+    "refreshMilliseconds": 608.176,
+    "longestSliceMilliseconds": 310.391
+  },
+  "labelSamples": [
+    {
+      "window": "closed",
+      "changedAssets": 100,
+      "nativeCallsMilliseconds": 14361.119,
+      "longestNativeCallMilliseconds": 165.741,
+      "wallMilliseconds": 14651.066
+    },
+    {
+      "window": "closed",
+      "changedAssets": 1000,
+      "nativeCallsMilliseconds": 136710.305,
+      "longestNativeCallMilliseconds": 159.778,
+      "wallMilliseconds": 140489.518
+    },
+    {
+      "window": "open",
+      "changedAssets": 100,
+      "nativeCallsMilliseconds": 14299.045,
+      "longestNativeCallMilliseconds": 162.889,
+      "wallMilliseconds": 14646.072,
+      "replayedPaths": 200,
+      "explicitReplayCallbackMilliseconds": 9.017,
+      "reconciliationWallMilliseconds": 383.32,
+      "endToEndMilliseconds": 15039.806,
+      "processedPaths": 173,
+      "newRefreshObjectLoads": 0
+    },
+    {
+      "window": "open",
+      "changedAssets": 1000,
+      "nativeCallsMilliseconds": 139556.761,
+      "longestNativeCallMilliseconds": 169.566,
+      "wallMilliseconds": 143500.897,
+      "replayedPaths": 2000,
+      "explicitReplayCallbackMilliseconds": 77.69,
+      "reconciliationWallMilliseconds": 2765.84,
+      "endToEndMilliseconds": 146345.687,
+      "processedPaths": 1468,
+      "newRefreshObjectLoads": 0
+    }
+  ],
+  "checks": [
+    "Missing selected script retains saved identity and recovers inspector selection.",
+    "Cached rename loads zero objects; label include/exclude, Undo/Redo and move reconcile.",
+    "Routine operations and both label/replay samples preserve row/search generation; an intentional later search rebuild advances only search generation.",
+    "Unavailable asset deletion clears canonical order, saved order and saved selection during an explicit search rebuild.",
+    "Closed-window rename/reopen preserves custom order and selection; disposed owner rejects stale GUID work.",
+    "Simulated Play notifications suspend/resume reconciliation and preserve order and selection."
+  ],
+  "processedPathsBeforeLifecycleTail": 1657,
+  "longestRefreshSliceBeforeLifecycleMilliseconds": 16.814,
+  "elapsedSeconds": 357.7022492,
+  "peakUnityAllocatedPlusManagedGuardBytes": 1975784133,
+  "cleanup": {
+    "ownedRoot": "Assets/PerfBaselineFixtures-2ef3303b0fc54581bd1938138104adfe",
+    "ownedRootAbsent": true,
+    "allOwnedFixtureRootsAbsent": true,
+    "ownedStateFileAbsent": true,
+    "containerWindowsAfter": 1,
+    "editorWindowsAfter": 7,
+    "assetDatabaseBusyAfter": false,
+    "cleanupError": ""
+  },
+  "resourceLimits": {
+    "timeMinutes": 15,
+    "minimumStartingFreeDiskBytes": 21474836480,
+    "minimumFreeDiskBytes": 10737418240,
+    "conservativeTrackedMemoryStopBytes": 17179869184,
+    "peakConservativeTrackedBytes": 1940265466
+  },
+  "limitations": [
+    "Single samples do not establish medians, p95, speedup, or worst-case guarantees.",
+    "Sequential per-asset label writes plus a duplicate-path replay are not a single atomic bulk import.",
+    "The measured SetLabels call includes synchronous project hooks; the control does not isolate Unity-only or package-absent cost.",
+    "Closed/open conditions are ordered and have different labels, cache history and prior interaction history.",
+    "Replay callback is synchronous and measured 77.690 ms at 2000 paths; this is not a cooperative-callback guarantee.",
+    "The memory guard sums overlapping counters and is not RSS.",
+    "Actual Play Mode transitions, fresh processes, Unity 2021.3, other platforms, 10k bursts and 100k assets remain unverified here."
+  ],
+  "rawTerminalReport": "PASS fixtures=1000; fixture staging=29766.293ms; CreationMilliseconds=3565.878; BatchImportMilliseconds=18393.691; InitializationMilliseconds=191.511; RefreshMilliseconds=608.176; LongestSliceMilliseconds=310.391; creationBudget=32ms; maxBatch=20; unchanged identities=999; rename loaded 0; search generation before close 2->3; row generation before close 2->2; labels, Undo/Redo, move, deletion passed; processedBeforeLifecycle=1657; longest sliceBeforeLifecycle=16.814ms; selected missing-script recovery passed; actual label burst=100, replayed callback paths=200, callbackMs=9.017, totalMs=15039.806, processed=173, newLoads=0; actual label burst=1000, replayed callback paths=2000, callbackMs=77.69, totalMs=146345.687, processed=1468, newLoads=0; missing-script deletion cleared canonical and saved intent; closed-window rename/reopen, stale callback rejection, simulated Play reconciliation and custom order/selection passed; measurements=; phase=ClosedLabelWrites, burst=100, labelNativeMs=14361.119, longestLabelCallMs=165.741, labelWallMs=14651.066; phase=ClosedLabelWrites, burst=1000, labelNativeMs=136710.305, longestLabelCallMs=159.778, labelWallMs=140489.518; phase=OpenLabelWrites, burst=100, labelNativeMs=14299.045, longestLabelCallMs=162.889, labelWallMs=14646.072; burst=100, explicitReplayCallbackMs=9.017, reconcileWallMs=383.32, processed=173, newLoads=0; phase=OpenLabelWrites, burst=1000, labelNativeMs=139556.761, longestLabelCallMs=169.566, labelWallMs=143500.897; burst=1000, explicitReplayCallbackMs=77.69, reconcileWallMs=2765.84, processed=1468, newLoads=0; elapsedSeconds=357.7022492; peakTrackedMemory=1975784133"
+}

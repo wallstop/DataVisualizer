@@ -210,3 +210,26 @@ Cleanup was verified independently: no owned fixture roots remained, the editor 
 were stopped during staging at 7,175 and 10,536 assets to strengthen the probe and repair review findings; neither measured 100k. The report retains the original terminal error,
 source identities, resource limits and unverified cells. Keep [#306](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/306) and
 [#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308) open for the remaining measurement work.
+
+## Completed 1k refresh control on 2026-10-21
+
+A follow-up [1,000-real-asset report](performance-refresh-1k-2026-10-21.json) at
+[5b8741d](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/5b8741d618806ae12deb61bce24b4418aa225011) completed in 357.7 seconds on the same host. It records sequential
+label writes with the browser closed, then open, followed by an explicit duplicate-path callback replay. The closed control retains project import hooks; it does not isolate
+Unity-only cost. Each cell is one warm-process observation, with closed conditions first.
+
+| Changed assets | Closed label wall time | Open label wall time | Replay paths | Explicit callback | Reconciliation wall | Processed paths | New refresh loads |
+| -------------- | ---------------------- | -------------------- | ------------ | ----------------- | ------------------- | --------------- | ----------------- |
+| 100            | 14,651.1 ms            | 14,646.1 ms          | 200          | 9.0 ms            | 383.3 ms            | 173             | 0                 |
+| 1,000          | 140,489.5 ms           | 143,500.9 ms         | 2,000        | 77.7 ms           | 2,765.8 ms          | 1,468           | 0                 |
+
+The closed 1k condition spent 136,710.3 ms inside `SetLabels`; expensive fixture writes occur even with no browser window. This explains why future large runs must budget and
+report write cost separately; it does not identify the earlier cancelled run's active burst or prove a package speedup. Replay callback time covers that explicit invocation only.
+Processed counts include natural notifications and replay across editor yields, rather than unique assets. Reconciliation includes scheduling and a 150 ms confirmation delay. The
+synchronous 77.7 ms replay also leaves callback scalability open; cooperative refresh processing does not bound callback duration.
+
+The run preserved 999 unrelated row identities and routine row/search generations, recovered a missing selected script, cleared unavailable deletion from saved identity, and passed
+label filters, Undo/Redo, move, closed-window reopen, stale-owner rejection, custom order/selection and simulated Play reconciliation. A deliberate search rebuild advanced search
+generation separately. The longest observed refresh slice before the lifecycle tail was 16.8 ms. Cleanup independently confirmed no owned fixtures or state file, one container
+window, seven editor windows, and an idle AssetDatabase. This completes this 1k scenario; 10k bursts, 100k measurements, actual Play transitions and the complete
+[#308](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/308) matrix remain open.
