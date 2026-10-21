@@ -33,6 +33,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             NormalizedAsciiText = NormalizeAsciiOrNull(text.ToString());
         }
 
+        public static int CompareIdentity(AssetSearchDocument left, AssetSearchDocument right)
+        {
+            int name = string.Compare(left.Name, right.Name, StringComparison.Ordinal);
+            if (name != 0)
+            {
+                return name;
+            }
+            int type = string.Compare(left.TypeFullName, right.TypeFullName, StringComparison.Ordinal);
+            return type != 0 ? type : string.Compare(left.Guid, right.Guid, StringComparison.Ordinal);
+        }
+
         public static string NormalizeAsciiOrNull(string text)
         {
             if (text == null)

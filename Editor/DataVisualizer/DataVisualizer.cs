@@ -133,6 +133,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public double LongestSearchIndexSliceMilliseconds { get; private set; }
         public double LongestSearchQuerySliceMilliseconds { get; private set; }
+        public int SearchQuerySliceOverrunCount { get; private set; }
         public int SearchIndexSliceOverrunCount { get; private set; }
 
         internal DataVisualizerUserState UserState
@@ -2182,13 +2183,6 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            double elapsed = sliceClock.Elapsed.TotalMilliseconds;
-            LongestSearchIndexSliceMilliseconds = Math.Max(LongestSearchIndexSliceMilliseconds, elapsed);
-            if (4 < elapsed)
-            {
-                SearchIndexSliceOverrunCount++;
-            }
-
             // Continue with next batch
             if (0 < _pendingSearchCacheGuids.Count)
             {
@@ -2203,6 +2197,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _assetObjectCache.Sort();
                 _isSearchCachePopulated = true;
                 RefreshActiveSearch();
+            }
+            double elapsed = sliceClock.Elapsed.TotalMilliseconds;
+            LongestSearchIndexSliceMilliseconds = Math.Max(LongestSearchIndexSliceMilliseconds, elapsed);
+            if (4 < elapsed)
+            {
+                SearchIndexSliceOverrunCount++;
             }
         }
 
@@ -3296,12 +3296,17 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
             System.Diagnostics.Stopwatch preparation = System.Diagnostics.Stopwatch.StartNew();
-            _assetObjectCache.Sort();
             int indexGeneration = _searchCacheGeneration;
             int snapshotVersion = _assetObjectCache.Version;
             string[] terms = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            AssetSearchQuery query = new(_assetObjectCache.Documents, terms, showAll ? int.MaxValue : MaxSearchResults);
-            LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, preparation.Elapsed.TotalMilliseconds);
+            AssetSearchQuery query = new(_assetObjectCache.Documents, terms, showAll ? int.MaxValue : MaxSearchResults, sortByIdentity: !_assetObjectCache.IsSorted);
+            double preparationMilliseconds = preparation.Elapsed.TotalMilliseconds;
+            LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, preparationMilliseconds);
+            if (4 < preparationMilliseconds)
+            {
+                SearchQuerySliceOverrunCount++;
+            }
+            int reportedQueryOverruns = 0;
             if (reuseView || arrivalsOnly)
             {
                 _searchPopover.Q<Label>("search-status").text = "Searching available records…";
@@ -3341,6 +3346,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return true;
                 }
                 query.Advance(budgetMilliseconds);
+                SearchQuerySliceOverrunCount += query.SliceOverrunCount - reportedQueryOverruns;
+                reportedQueryOverruns = query.SliceOverrunCount;
                 LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, query.LongestSliceMilliseconds);
                 if (query.IsComplete || (!arrivalsOnly && publishedCount != query.Results.Count))
                 {
@@ -3364,8 +3371,9 @@ namespace WallstopStudios.DataVisualizer.Editor
                     return true;
                 }
                 Label currentStatus = _searchPopover.Q<Label>("search-status");
-                currentStatus.text = arrivalsOnly
-                    ? $"Searching {query.ScannedCount} / {query.RecordCount} available records… (updating results)"
+                currentStatus.text =
+                    query.IsPreparing ? $"Ordering {query.RecordCount} available records…"
+                    : arrivalsOnly ? $"Searching {query.ScannedCount} / {query.RecordCount} available records… (updating results)"
                     : $"{query.Results.Count} matches so far · Searching {query.ScannedCount} / {query.RecordCount} available records…";
                 if (!_isSearchCachePopulated)
                 {
