@@ -172,6 +172,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         */
         internal bool IsAssetEditingSuspended => _suspendedForPlayMode;
 
+        private bool IsConfigurationEditingPaused => IsAssetEditingSuspended || EditorApplication.isPlayingOrWillChangePlaymode;
+
         private TypeLabelFilterConfig CurrentTypeLabelFilterConfig => LoadOrCreateLabelFilterConfig(_namespaceController.SelectedType);
 
         private ProcessorState CurrentProcessorState => LoadOrCreateProcessorState(_namespaceController.SelectedType);
@@ -2493,6 +2495,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _createObjectButton?.SetEnabled(!paused);
             _addTypeButton?.SetEnabled(!paused);
             _inspectorContainer?.SetEnabled(!paused);
+            _settingsPopover?.Q("settings-selection-toggle")?.SetEnabled(!paused);
+            _settingsPopover?.Q("settings-data-folder-button")?.SetEnabled(!paused);
         }
 
         private void LoadInitialContent()
@@ -4326,11 +4330,28 @@ namespace WallstopStudios.DataVisualizer.Editor
             )
             {
                 value = settings.selectActiveObject,
+                name = "settings-selection-toggle",
             };
+            selectionToggle.SetEnabled(!IsConfigurationEditingPaused);
             selectionToggle.AddToClassList("settings-prefs-toggle");
             selectionToggle.RegisterValueChangedCallback(evt =>
             {
-                ApplySelectActiveObjectPreference(Settings, evt.newValue);
+                if (IsConfigurationEditingPaused || AssetGuidDiscovery.IsAssetDatabaseBusy())
+                {
+                    selectionToggle.SetValueWithoutNotify(Settings.selectActiveObject);
+                    selectionToggle.Label = Settings.selectActiveObject ? "Don't Select Active Object: " : "Select Active Object: ";
+                    return;
+                }
+                try
+                {
+                    ApplySelectActiveObjectPreference(Settings, evt.newValue);
+                }
+                catch (EditorConfigurationException error)
+                {
+                    selectionToggle.SetValueWithoutNotify(Settings.selectActiveObject);
+                    selectionToggle.Label = Settings.selectActiveObject ? "Don't Select Active Object: " : "Select Active Object: ";
+                    Debug.LogWarning(error.Message);
+                }
             });
             contentWrapper.Add(selectionToggle);
 
@@ -4414,7 +4435,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 Settings
             );
             dataFolderContainer.Add(dataFolderPathDisplay);
-            Button selectFolderButton = new(() => SelectDataFolderForPopover(dataFolderPathDisplay)) { text = "Select" };
+            Button selectFolderButton = new(() => SelectDataFolderForPopover(dataFolderPathDisplay)) { text = "Select", name = "settings-data-folder-button" };
+            selectFolderButton.SetEnabled(!IsConfigurationEditingPaused);
             selectFolderButton.AddToClassList("settings-data-folder-button");
             selectFolderButton.AddToClassList(StyleConstants.ClickableClass);
             dataFolderContainer.Add(selectFolderButton);
@@ -4423,6 +4445,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         private void SelectDataFolderForPopover(Label displayField)
         {
+            if (IsConfigurationEditingPaused || AssetGuidDiscovery.IsAssetDatabaseBusy())
+            {
+                return;
+            }
             if (displayField == null)
             {
                 Debug.LogError("Cannot select data folder: Display field reference is null.");
@@ -4473,8 +4499,25 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            new EditorConfigurationService(settings).SetDataFolderPath(relativePath);
-            displayField.text = settings.DataFolderPath;
+            string canonical = AssetsFolderUtility.GetCanonicalAssetsFolderOrNull(relativePath);
+            if (canonical == null)
+            {
+                EditorUtility.DisplayDialog("Invalid Folder", "Select an existing folder that Unity has imported under Assets.", "OK");
+                return;
+            }
+            if (IsConfigurationEditingPaused || AssetGuidDiscovery.IsAssetDatabaseBusy())
+            {
+                return;
+            }
+            try
+            {
+                new EditorConfigurationService(settings).SetDataFolderPath(canonical);
+                displayField.text = settings.DataFolderPath;
+            }
+            catch (EditorConfigurationException error)
+            {
+                Debug.LogWarning(error.Message);
+            }
         }
 
         private void OpenRenamePopover(Label titleLabel, VisualElement source, ScriptableObject dataObject)

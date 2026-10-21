@@ -37,6 +37,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return true;
         }
 
+        /// <summary>Resolves a folder picker result to Unity's canonical spelling.</summary>
+        public static string GetCanonicalAssetsFolderOrNull(string path)
+        {
+            if (string.IsNullOrEmpty(path) || (path != "Assets" && !path.StartsWith("Assets/", StringComparison.Ordinal)))
+            {
+                return null;
+            }
+            string canonical = AssetDatabase.GUIDToAssetPath(AssetDatabase.AssetPathToGUID(path));
+            return AssetDatabase.IsValidFolder(canonical) && (canonical == "Assets" || canonical.StartsWith("Assets/", StringComparison.Ordinal)) ? canonical : null;
+        }
+
         public static bool TrySelectAssetsFolder(string dialogTitle, out string relativePath)
         {
             string selectedAbsolutePath = EditorUtility.OpenFolderPanel(title: dialogTitle, folder: "Assets", defaultName: "");
