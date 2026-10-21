@@ -266,6 +266,34 @@ earlier update. Create and confirm a new preview after such a change. Asset cont
 changed any subset, including assets outside the scope. No automatic Undo, rollback, retry or recovery is promised. Inspect the assets and use version control to recover.
 Configuration and individual create/clone/rename/move/delete services remain outside this processor API.
 
+## Preview and apply individual asset operations
+
+`EditorAssetOperation` supports Create, Clone, Rename, Move and Delete for exact ScriptableObject main assets under `Assets`. It does not open a window. Supply explicit source
+GUIDs and one full destination path per target; Create accepts destination paths without source GUIDs, while Delete accepts source GUIDs without destinations. Parent folders must
+already exist. Batches contain 1–1000 targets. Preview validates metadata synchronously without loading assets or invoking lifecycle hooks. `ConfirmationPaths` lists every affected
+path.
+
+```csharp
+using (var operation = new WallstopStudios.DataVisualizer.Editor.Utilities.EditorAssetOperation(
+    WallstopStudios.DataVisualizer.Editor.Utilities.EditorAssetOperationKind.Clone,
+    typeof(MyGame.Data.QuestData),
+    new[] { sourceAssetGuid },
+    new[] { "Assets/Quest copy.asset" }))
+{
+    foreach (string path in operation.ConfirmationPaths) UnityEngine.Debug.Log(path);
+    // Call Apply only after reviewing the exact preview paths.
+    operation.Apply();
+    operation.Advance(4);
+    UnityEngine.Debug.Log(operation.Status);
+}
+```
+
+Keep the operation alive across editor updates until `IsFinished`; `Advance(0)` performs at most one asset. Dispose/Cancel preserves completed outcomes and stops before the next
+asset. Apply rejects Play Mode/transitions; busy asset updates defer work. Every target is revalidated immediately before mutation. Stale targets report `stale_target`; exceptions
+after loading/creation or lifecycle hooks report `outcome_unknown`. Inspect memory and disk before retrying: no rollback or whole-batch Undo is promised. Other safe targets
+continue. Create/clone/rename retain Before/After hooks and save their changes. Only affected assets are saved. Browser arrangements are an adapter concern; this service changes
+asset files.
+
 ## Configure editor preferences from C#
 
 `EditorConfigurationService` operates on an explicit `DataVisualizerSettings` instance without opening a window. The browser uses the same service for its data-folder and active
