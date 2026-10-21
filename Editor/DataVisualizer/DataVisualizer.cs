@@ -2324,7 +2324,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 bool labelsChanged = _selectedLabelUsage.Update(current);
                 _assetLabelsChanged = labelsChanged || !wasInList || _assetLabelsChanged;
                 bool matchesNow = LabelFilterEvaluator.Matches(_selectedLabelUsage.GetOrRead(current), CurrentTypeLabelFilterConfig);
-                if (sameLoadedRow && matchedBefore && !matchesNow)
+                if (!sameLoadedRow || (matchedBefore && !matchesNow))
                 {
                     _filteredObjects.Remove(current);
                 }
