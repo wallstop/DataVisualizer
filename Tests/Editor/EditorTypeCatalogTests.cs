@@ -74,14 +74,37 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetDatabase.CreateAsset(asset, folder + "/" + name + ".asset");
             }
             Assert.That(EditorTypeCatalog.FindTypesInFolder(folder, false), Is.EqualTo(new[] { typeof(OtherEditorOnlyCreationData) }));
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(folder.ToUpperInvariant(), false), Is.EqualTo(new[] { typeof(OtherEditorOnlyCreationData) }));
             Assert.That(EditorTypeCatalog.FindTypesInFolder(folder, true), Is.Empty);
         }
 
         [TestCase(true)]
         [TestCase(false)]
-        public void ShouldRejectMissingScanFolders(bool scripts)
+        public void ShouldIgnoreUnimportedPickerFolders(bool scripts)
         {
-            Assert.Throws<ArgumentException>(() => EditorTypeCatalog.FindTypesInFolder("Assets/DoesNotExist-" + Guid.NewGuid().ToString("N"), scripts));
+            using TestCleanupScope cleanup = new();
+            string folder = "Assets/UnimportedCatalogFolder-" + Guid.NewGuid().ToString("N");
+            cleanup.Defer(() =>
+            {
+                if (Directory.Exists(folder))
+                {
+                    Directory.Delete(folder, recursive: true);
+                }
+                AssetDatabase.DeleteAsset(folder);
+            });
+            Directory.CreateDirectory(folder);
+            Assert.That(AssetDatabase.IsValidFolder(folder), Is.False);
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(folder, scripts), Is.Empty);
+            Assert.That(AssetDatabase.IsValidFolder(folder), Is.False);
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void ShouldIgnoreMissingScanFolders(bool scripts)
+        {
+            Assert.That(EditorTypeCatalog.FindTypesInFolder("Assets/DoesNotExist-" + Guid.NewGuid().ToString("N"), scripts), Is.Empty);
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(null, scripts), Is.Empty);
+            Assert.That(EditorTypeCatalog.FindTypesInFolder(string.Empty, scripts), Is.Empty);
         }
 
         [Test]

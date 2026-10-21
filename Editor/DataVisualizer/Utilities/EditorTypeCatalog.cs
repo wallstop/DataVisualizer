@@ -50,13 +50,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         /// <summary>Find eligible types in an asset or script folder without creating instances.</summary>
         public static List<Type> FindTypesInFolder(string folderPath, bool scripts)
         {
-            if (!AssetDatabase.IsValidFolder(folderPath))
+            string canonical = string.IsNullOrWhiteSpace(folderPath) ? null : AssetDatabase.GUIDToAssetPath(AssetDatabase.AssetPathToGUID(folderPath));
+            if (!AssetDatabase.IsValidFolder(canonical))
             {
-                throw new ArgumentException("Use an existing Unity asset folder.", nameof(folderPath));
+                return new List<Type>();
             }
 
             string filter = scripts ? "t:MonoScript" : $"t:{nameof(ScriptableObject)}";
-            string[] guids = AssetDatabase.FindAssets(filter, new[] { folderPath });
+            string[] guids = AssetDatabase.FindAssets(filter, new[] { canonical });
             HashSet<Type> seen = new();
             List<Type> types = new();
             foreach (string guid in guids)
