@@ -2288,7 +2288,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            bool hadPrevious = _assetObjectCache.Contains(guid);
+            bool hadPrevious = _assetObjectCache.TryGetDocument(guid, out AssetSearchDocument previousDocument);
             bool hadLoadedPrevious = _assetObjectCache.TryGetLoaded(guid, out ScriptableObject previous);
             ScriptableObject current = null;
             if (type != null && IsTrackedAssetType(type))
@@ -2410,10 +2410,13 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _assetSelectionReplacement = current;
             }
 
-            if (hadPrevious && ((current == null && path == null) || (current != null && current.GetType() != previous.GetType())))
+            if (hadPrevious && ((current == null && path == null) || (current != null && current.GetType() != previousDocument.ExactType)))
             {
-                _asyncDisplayOrderByGuid.Remove(guid);
-                Type oldType = previous.GetType();
+                Type oldType = previousDocument.ExactType;
+                if (oldType == selectedType)
+                {
+                    _asyncDisplayOrderByGuid.Remove(guid);
+                }
                 if (!_removedAssetOrders.TryGetValue(oldType, out HashSet<string> removed))
                 {
                     removed = new HashSet<string>(StringComparer.Ordinal);

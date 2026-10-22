@@ -55,6 +55,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AssetObjectCache second = new(metadata);
             Assert.That(second.UseMetadata("guid", new HashSet<Type> { typeof(PlayModeDataObject) }));
             Assert.That(second.ObjectLoadCount, Is.Zero);
+            Assert.That(second.TryGetDocument("guid", out AssetSearchDocument copied));
+            Assert.That(copied.ExactType, Is.EqualTo(typeof(PlayModeDataObject)));
+            Assert.That(!second.TryGetLoaded("guid", out _));
+            Assert.That(!second.TryGetDocument("absent", out _));
             AssetSearchQuery query = new(second.Documents, new[] { "field text" }, 25);
             while (!query.IsComplete)
             {
@@ -82,13 +86,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AssetDatabase.CreateAsset(asset, path);
             string guid = AssetDatabase.AssetPathToGUID(path);
             AssetMetadataStore metadata = new();
+            AssetObjectCache warmWrongType = new(metadata);
+            warmWrongType.Upsert(guid, asset, false);
             metadata.Upsert(
                 new AssetMetadataRecord(new AssetSearchDocument(guid, "Wrong exact type", typeof(EditorOnlyCreationData), null), typeof(EditorOnlyCreationData), path, null, null)
             );
+            Assert.That(warmWrongType.UseMetadata(guid, new HashSet<Type> { typeof(EditorOnlyCreationData) }));
             AssetObjectCache wrongType = new(metadata);
             Assert.That(wrongType.UseMetadata(guid, new HashSet<Type> { typeof(EditorOnlyCreationData) }));
             metadata.Clear();
             Assert.That(!wrongType.TryGet(guid, out _), "A copied type identity must still reject a different type on disk");
+            Assert.That(!warmWrongType.TryGet(guid, out _), "A loaded hint must also match the latest copied exact type");
             metadata.Upsert(new AssetMetadataRecord(guid, asset));
             AssetObjectCache deleted = new(metadata);
             Assert.That(deleted.UseMetadata(guid, new HashSet<Type> { typeof(PlayModeDataObject) }));

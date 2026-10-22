@@ -46,6 +46,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return !string.IsNullOrEmpty(guid) && _documentIndexByGuid.ContainsKey(guid) && (_ordered == null || (TryGetLoaded(guid, out ScriptableObject value) && value != null));
         }
 
+        public bool TryGetDocument(string guid, out AssetSearchDocument document)
+        {
+            if (!string.IsNullOrEmpty(guid) && _documentIndexByGuid.TryGetValue(guid, out int index))
+            {
+                document = _documents[index];
+                return true;
+            }
+            document = null;
+            return false;
+        }
+
         public bool TryGetLoaded(string guid, out ScriptableObject value)
         {
             if (!string.IsNullOrEmpty(guid) && _byGuid.TryGetValue(guid, out WeakReference<ScriptableObject> reference) && reference.TryGetTarget(out ScriptableObject found))
@@ -60,7 +71,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         // Resolve only for visible search results or an explicit asset operation.
         public bool TryGet(string guid, out ScriptableObject value)
         {
-            if (TryGetLoaded(guid, out ScriptableObject loaded) && (loaded != null || _ordered != null))
+            if (
+                TryGetLoaded(guid, out ScriptableObject loaded)
+                && (_ordered != null || (loaded != null && _documentIndexByGuid.TryGetValue(guid, out int loadedIndex) && loaded.GetType() == _documents[loadedIndex].ExactType))
+            )
             {
                 value = loaded;
                 return true;
