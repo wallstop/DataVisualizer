@@ -262,9 +262,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             Stopwatch stopwatch = Stopwatch.StartNew();
             while (_incomingPaths.TryDequeue(out string incoming))
             {
-                if (IsProjectAssetPath(incoming) && _queuedPaths.Add(incoming))
+                if (IsProjectAssetPath(incoming))
                 {
-                    _pendingAssetPaths.Enqueue(incoming);
+                    Metadata.RemovePath(incoming);
+                    if (_queuedPaths.Add(incoming))
+                    {
+                        _pendingAssetPaths.Enqueue(incoming);
+                    }
                 }
                 if (budgetMilliseconds <= stopwatch.Elapsed.TotalMilliseconds)
                 {
@@ -276,7 +280,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 string path = _pendingAssetPaths.Dequeue();
                 _queuedPaths.Remove(path);
                 _assetsByPath.TryGetValue(path, out (Type Type, string Guid) previous);
-                IndexPath(path);
+                IndexPath(path, invalidateMetadata: phase == AssetGuidTypeIndexState.ReconcilingChanges);
                 _assetsByPath.TryGetValue(path, out (Type Type, string Guid) current);
                 if (
                     phase == AssetGuidTypeIndexState.ReconcilingChanges
@@ -341,10 +345,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             for (int index = 0; index < paths.Count; index++)
             {
                 string path = paths[index];
-                if (IsProjectAssetPath(path) && _queuedPaths.Add(path))
+                if (IsProjectAssetPath(path))
                 {
-                    _pendingAssetPaths.Enqueue(path);
-                    added++;
+                    Metadata.RemovePath(path);
+                    if (_queuedPaths.Add(path))
+                    {
+                        _pendingAssetPaths.Enqueue(path);
+                        added++;
+                    }
                 }
             }
             return added;
@@ -405,17 +413,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return changed;
         }
 
-        private bool IndexPath(string path)
+        private bool IndexPath(string path, bool invalidateMetadata = true)
         {
-            bool changed = RemovePath(path);
             TypeQueryCount++;
             Type type = AssetDatabase.GetMainAssetTypeAtPath(path);
+            string guid = type != null && typeof(ScriptableObject).IsAssignableFrom(type) ? AssetDatabase.AssetPathToGUID(path) : null;
+            bool preserveMetadata =
+                !invalidateMetadata
+                && !string.IsNullOrEmpty(guid)
+                && Metadata.TryGet(guid, out AssetMetadataRecord record)
+                && record.ExactType == type
+                && string.Equals(record.Path, path, StringComparison.OrdinalIgnoreCase);
+            bool changed = RemovePath(path, invalidateMetadata: !preserveMetadata);
             if (type == null || !typeof(ScriptableObject).IsAssignableFrom(type))
             {
                 return changed;
             }
 
-            string guid = AssetDatabase.AssetPathToGUID(path);
             if (string.IsNullOrWhiteSpace(guid))
             {
                 return changed;
@@ -432,9 +446,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             return true;
         }
 
-        private bool RemovePath(string path)
+        private bool RemovePath(string path, bool invalidateMetadata = true)
         {
-            bool metadataRemoved = Metadata.RemovePath(path);
+            bool metadataRemoved = invalidateMetadata && Metadata.RemovePath(path);
             if (string.IsNullOrWhiteSpace(path) || !_assetsByPath.TryGetValue(path, out (Type Type, string Guid) indexedAsset))
             {
                 return metadataRemoved;

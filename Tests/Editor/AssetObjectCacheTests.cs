@@ -12,6 +12,23 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     internal sealed class AssetObjectCacheTests
     {
         [Test]
+        public void ShouldRepublishMetadataForRetainedRowsAfterInvalidation()
+        {
+            using TestCleanupScope cleanup = new();
+            PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(asset));
+            AssetMetadataStore metadata = new();
+            AssetObjectCache cache = new(new List<ScriptableObject>(), metadata);
+            cache.Upsert("guid", asset, false);
+            metadata.Clear();
+            asset.Description = "Changed after invalidation";
+            Assert.That(cache.ResetRetainingRows(new[] { asset }, _ => true), Is.EqualTo(1));
+            Assert.That(metadata.TryGet("guid", out AssetMetadataRecord record));
+            Assert.That(ReferenceEquals(record.Document, cache.Documents[0]));
+            Assert.That(record.Document.Match(new[] { "Changed after invalidation" }).isMatch);
+        }
+
+        [Test]
         public void ShouldRemoveDestroyedRowMembershipWithoutChangingLiveOrder()
         {
             using TestCleanupScope cleanup = new();

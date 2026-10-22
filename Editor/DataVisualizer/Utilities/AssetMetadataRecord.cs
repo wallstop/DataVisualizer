@@ -11,7 +11,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     {
         public string Guid => Document.Guid;
         public string Path { get; }
-        public Type ExactType { get; }
+        public Type ExactType => Document.ExactType;
         public string DisplayTitle { get; }
         public IReadOnlyList<string> Labels { get; }
         public AssetSearchDocument Document { get; }
@@ -28,8 +28,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public AssetMetadataRecord(AssetSearchDocument document, Type exactType, string path, string displayTitle, IReadOnlyList<string> labels)
         {
             Document = document ?? throw new ArgumentNullException(nameof(document));
-            ExactType = exactType ?? throw new ArgumentNullException(nameof(exactType));
-            if (string.IsNullOrEmpty(document.Guid) || !string.Equals(document.TypeFullName, exactType.FullName, StringComparison.Ordinal))
+            if (exactType == null)
+            {
+                throw new ArgumentNullException(nameof(exactType));
+            }
+            if (string.IsNullOrEmpty(document.Guid) || !ReferenceEquals(document.ExactType, exactType))
             {
                 throw new ArgumentException("Metadata requires a GUID and matching exact type.", nameof(document));
             }

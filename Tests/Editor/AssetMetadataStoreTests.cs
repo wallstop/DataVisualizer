@@ -64,8 +64,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(store.Count, Is.Zero);
         }
 
-        [Test]
-        public void ShouldInvalidateCapturedRecordsBeforeClassificationAndOnReset()
+        [TestCase(false, false)]
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        public void ShouldInvalidateCapturedRecordsBeforeClassificationAndOnReset(bool finishSnapshot, bool deferred)
         {
             string root = "Assets/MetadataStoreTests-" + Guid.NewGuid().ToString("N");
             using TestCleanupScope cleanup = new();
@@ -84,7 +87,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(index.Metadata.Upsert(captured));
             Assert.That(captured.Path, Is.EqualTo(path));
             CollectionAssert.AreEqual(new[] { "Authored" }, captured.Labels);
-            index.ApplyAssetChanges(new[] { path }, null, null, null);
+            if (finishSnapshot)
+            {
+                while (!index.ProcessPendingSlice(double.MaxValue)) { }
+                Assert.That(index.Metadata.TryGet(guid, out _), "Initial classification must preserve a valid published snapshot");
+            }
+            if (deferred)
+            {
+                index.EnqueueDeferredAssetChanges(new[] { path }, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+                while (!index.ProcessPendingSlice(double.MaxValue)) { }
+            }
+            else
+            {
+                index.ApplyAssetChanges(new[] { path }, null, null, null);
+            }
             Assert.That(!index.Metadata.TryGet(guid, out _), "Reimports must invalidate even before the initial path snapshot");
             index.Metadata.Upsert(captured);
             index.ApplyAssetChanges(null, new[] { path }, null, null);

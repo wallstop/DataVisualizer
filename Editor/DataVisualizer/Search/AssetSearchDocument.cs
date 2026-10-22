@@ -9,6 +9,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
     // Contains copied text only; querying a document never reads a Unity object.
     public sealed class AssetSearchDocument
     {
+        public Type ExactType { get; }
         public string Guid { get; }
         public string Name { get; }
         public string TypeName { get; }
@@ -19,6 +20,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
 
         public AssetSearchDocument(string guid, string name, Type type, object fieldSource)
         {
+            ExactType = type ?? throw new ArgumentNullException(nameof(type));
             Guid = guid ?? string.Empty;
             Name = name ?? string.Empty;
             TypeName = type.Name;
