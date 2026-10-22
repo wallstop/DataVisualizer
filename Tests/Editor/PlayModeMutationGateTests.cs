@@ -1,13 +1,16 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
+    using System.Collections;
     using System.Collections.Generic;
     using System.Reflection;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
+    using UnityEngine.TestTools;
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.Editor;
+    using WallstopStudios.DataVisualizer.Editor.Data;
     using WallstopStudios.DataVisualizer.Editor.Styles;
     using WallstopStudios.DataVisualizer.Editor.UI;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
@@ -99,6 +102,125 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private static void ResumeFromPlayMode(DataVisualizerWindow window)
         {
             window.HandlePlayModeStateChanged(PlayModeStateChange.EnteredEditMode);
+        }
+
+        private static IEnumerator WaitForRefresh(DataVisualizerWindow window)
+        {
+            AssetChangeRefreshService service = ReadPrivateField<AssetChangeRefreshService>(window, "_assetChanges");
+            for (int tick = 0; tick < 3000; tick++)
+            {
+                if (
+                    window.IsSearchIndexComplete
+                    && AssetGuidTypeIndex.Shared.IsComplete
+                    && service.PendingCount == 0
+                    && !ReadPrivateField<bool>(window, "_isLoadingObjectsAsync")
+                    && !ReadPrivateField<bool>(window, "_needsRefresh")
+                )
+                {
+                    yield break;
+                }
+                yield return null;
+            }
+            Assert.Fail("Asset changes did not settle after the Play transition.");
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldReconcileActualPlayModeAssetChangesWithoutDomainReload()
+        {
+            using TestCleanupScope cleanup = new();
+            bool previousOptionsEnabled = EditorSettings.enterPlayModeOptionsEnabled;
+            EnterPlayModeOptions previousOptions = EditorSettings.enterPlayModeOptions;
+            cleanup.Defer(() =>
+            {
+                EditorSettings.enterPlayModeOptions = previousOptions;
+                EditorSettings.enterPlayModeOptionsEnabled = previousOptionsEnabled;
+            });
+            EditorSettings.enterPlayModeOptionsEnabled = true;
+            EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload | EnterPlayModeOptions.DisableSceneReload;
+            string folder = CreateFixtureFolder();
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(folder));
+            object previousInstance = ReadSharedInstance();
+            cleanup.Defer(() => RestoreSharedInstance(previousInstance));
+            cleanup.Defer(() => AssetGuidTypeIndex.Shared.Cancel());
+            DataVisualizerSettings settings = ScriptableObject.CreateInstance<DataVisualizerSettings>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(settings));
+            string output = "Temp/PlayRefresh-" + Guid.NewGuid().ToString("N");
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            using PerfWindowStateScope state = new(settings, new DataVisualizerUserState(), output);
+            Type type = typeof(TestDataObject);
+            state.UserState.managedTypeNames.Add(type.FullName);
+            state.UserState.GetOrCreateTypeOrderList(NamespaceController.GetNamespaceKey(type)).Add(type.FullName);
+            DataVisualizerWindow window = ScriptableObject.CreateInstance<DataVisualizerWindow>();
+            using TestCleanupScope windowCleanup = new();
+            windowCleanup.Defer(() => EditorSurfaceCapture.CloseWindow(window));
+            SetPrivateField(window, "_settings", state.Settings);
+            SetPrivateField(window, "_userState", state.UserState);
+            SetPrivateField(window, "_userStateFilePath", state.FilePath);
+            EditorSurfaceCapture.ShowPopup(window);
+            SetPrivateField(window, "_settings", state.Settings);
+            SetPrivateField(window, "_userState", state.UserState);
+            SetPrivateField(window, "_userStateFilePath", state.FilePath);
+            window.CreateGUI();
+            ScriptableObject moved = CreateFixtureAsset(folder, "Moved.asset");
+            CreateFixtureAsset(folder, "Deleted.asset");
+            TestDataObject edited = (TestDataObject)CreateFixtureAsset(folder, "Edited.asset");
+            InvokePrivate(window, "LoadInitialContent");
+            NamespaceController controller = ReadPrivateField<NamespaceController>(window, "_namespaceController");
+            controller.SelectType(window, type);
+            yield return WaitForRefresh(window);
+            InvokePrivate(window, "SelectObject", moved);
+            string movedGuid = AssetDatabase.AssetPathToGUID(folder + "/Moved.asset");
+            string deletedGuid = AssetDatabase.AssetPathToGUID(folder + "/Deleted.asset");
+            string editedGuid = AssetDatabase.AssetPathToGUID(folder + "/Edited.asset");
+            AssetObjectCache cache = ReadPrivateField<AssetObjectCache>(window, "_assetObjectCache");
+            Assert.That(cache.Contains(movedGuid));
+            Assert.That(cache.Contains(deletedGuid));
+            Assert.That(cache.Contains(editedGuid));
+            int originalRows = ReadPrivateField<List<ScriptableObject>>(window, "_selectedObjects").Count;
+            int generation = ReadPrivateField<int>(window, "_asyncLoadGeneration");
+            yield return new EnterPlayMode(false);
+            Assert.That(EditorApplication.isPlaying);
+            Assert.That(ReadPrivateField<bool>(window, "_suspendedForPlayMode"));
+            Assert.That(window.rootVisualElement.Q<Button>("create-object-button").enabledSelf, Is.False);
+            Assert.That(AssetDatabase.MoveAsset(folder + "/Moved.asset", folder + "/Renamed.asset"), Is.Empty);
+            Assert.That(AssetDatabase.DeleteAsset(folder + "/Deleted.asset"));
+            edited.Description = "changedduringactualplay";
+            AssetDatabase.SetLabels(edited, new[] { "DuringPlay" });
+            EditorUtility.SetDirty(edited);
+            AssetDatabase.SaveAssets();
+            ScriptableObject added = CreateFixtureAsset(folder, "Added.asset");
+            string addedGuid = AssetDatabase.AssetPathToGUID(folder + "/Added.asset");
+            for (int tick = 0; tick < 5; tick++)
+            {
+                yield return null;
+            }
+            Assert.That(cache.Contains(deletedGuid), "The suspended window must keep its pre-play snapshot.");
+            Assert.That(!cache.Contains(addedGuid));
+            yield return new ExitPlayMode();
+            Assert.That(!EditorApplication.isPlaying);
+            yield return WaitForRefresh(window);
+            Assert.That(!ReadPrivateField<bool>(window, "_suspendedForPlayMode"));
+            Assert.That(window.rootVisualElement.Q<Button>("create-object-button").enabledSelf);
+            Assert.That(cache.Contains(movedGuid));
+            Assert.That(!cache.Contains(deletedGuid));
+            Assert.That(cache.Contains(addedGuid));
+            Assert.That(cache.TryGetDocument(editedGuid, out var document));
+            Assert.That(document.Match(new[] { "changedduringactualplay" }).isMatch);
+            Assert.That(AssetGuidTypeIndex.Shared.Metadata.TryGet(editedGuid, out AssetMetadataRecord metadata));
+            Assert.That(metadata.Labels, Does.Contain("DuringPlay"));
+            Assert.That(ReadPrivateField<ScriptableObject>(window, "_selectedObject") == moved);
+            Assert.That(ReadPrivateField<List<ScriptableObject>>(window, "_selectedObjects"), Does.Contain(added));
+            Assert.That(ReadPrivateField<List<ScriptableObject>>(window, "_selectedObjects").Count, Is.EqualTo(originalRows));
+            Assert.That(ReadPrivateField<int>(window, "_asyncLoadGeneration"), Is.EqualTo(generation), "Routine changes must preserve row loading generations.");
+        }
+
+        [UnityTearDown]
+        public IEnumerator RestoreEditModeAfterFailedTransition()
+        {
+            if (EditorApplication.isPlaying)
+            {
+                yield return new ExitPlayMode();
+            }
         }
 
         [Test]
