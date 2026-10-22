@@ -71,7 +71,35 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test]
-        public void ShouldResolveSharedMatchesOnlyForExplicitObjectAccess()
+        public void ShouldRejectChangedTypesAndDeletedAssetsWhileSharedMetadataIsAbsent()
+        {
+            string root = "Assets/MetadataSearchIdentityTests-" + Guid.NewGuid().ToString("N");
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(root));
+            AssetDatabase.CreateFolder("Assets", System.IO.Path.GetFileName(root));
+            PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            string path = root + "/Record.asset";
+            AssetDatabase.CreateAsset(asset, path);
+            string guid = AssetDatabase.AssetPathToGUID(path);
+            AssetMetadataStore metadata = new();
+            metadata.Upsert(
+                new AssetMetadataRecord(new AssetSearchDocument(guid, "Wrong exact type", typeof(EditorOnlyCreationData), null), typeof(EditorOnlyCreationData), path, null, null)
+            );
+            AssetObjectCache wrongType = new(metadata);
+            Assert.That(wrongType.UseMetadata(guid, new HashSet<Type> { typeof(EditorOnlyCreationData) }));
+            metadata.Clear();
+            Assert.That(!wrongType.TryGet(guid, out _), "A copied type identity must still reject a different type on disk");
+            metadata.Upsert(new AssetMetadataRecord(guid, asset));
+            AssetObjectCache deleted = new(metadata);
+            Assert.That(deleted.UseMetadata(guid, new HashSet<Type> { typeof(PlayModeDataObject) }));
+            metadata.Clear();
+            Assert.That(AssetDatabase.DeleteAsset(path));
+            Assert.That(!deleted.TryGet(guid, out _));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldResolveSharedMatchesOnlyForExplicitObjectAccess(bool invalidateMetadata)
         {
             string root = "Assets/MetadataSearchTests-" + Guid.NewGuid().ToString("N");
             using TestCleanupScope cleanup = new();
@@ -88,6 +116,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             first.Upsert(guid, asset, false);
             AssetObjectCache second = new(metadata);
             Assert.That(second.UseMetadata(guid, new HashSet<Type> { typeof(PlayModeDataObject) }));
+            if (invalidateMetadata)
+            {
+                Assert.That(metadata.Remove(guid));
+            }
             Assert.That(!second.TryGetLoaded(guid, out _));
             Assert.That(second.ObjectLoadCount, Is.Zero);
             Assert.That(second.TryGet(guid, out ScriptableObject resolved));

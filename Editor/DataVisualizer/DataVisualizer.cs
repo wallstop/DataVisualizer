@@ -8205,8 +8205,10 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _projectUniqueLabelsCache.Clear();
             HashSet<string> allLabelsSet = new(StringComparer.Ordinal);
-            foreach (AssetSearchDocument document in _assetObjectCache.Documents)
+            IReadOnlyList<AssetSearchDocument> documents = _assetObjectCache.Documents;
+            for (int documentIndex = 0; documentIndex < documents.Count; documentIndex++)
             {
+                AssetSearchDocument document = documents[documentIndex];
                 if (!AssetGuidTypeIndex.Shared.Metadata.TryGet(document.Guid, out AssetMetadataRecord record))
                 {
                     continue;

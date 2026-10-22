@@ -67,14 +67,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
             if (Contains(guid))
             {
+                AssetSearchDocument document = _documents[_documentIndexByGuid[guid]];
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 if (!string.IsNullOrEmpty(path))
                 {
                     ObjectLoadCount++;
                     ScriptableObject asset = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
-                    if (asset != null && _metadata.TryGet(guid, out AssetMetadataRecord record) && asset.GetType() == record.ExactType)
+                    if (asset != null && asset.GetType() == document.ExactType)
                     {
-                        Remember(guid, asset, record.Document);
+                        Remember(guid, asset, document);
                         value = asset;
                         return true;
                     }
