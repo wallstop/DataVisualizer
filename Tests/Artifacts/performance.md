@@ -357,3 +357,40 @@ input. Conditions run in fixed order with uncontrolled GC history.
 Percentiles use the nearest-rank 29th sorted observation of 30. The 10k component total does not establish the 100 ms end-to-end target. The original 10k non-ASCII production
 window probe also passes 60 sustained arrivals with stable visible hits and GUID highlights. Shared-index integration, real-asset partial/complete search distributions and wider
 platform execution remain open in [#310](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/310).
+
+## Interaction readiness observations
+
+The driver records five discarded warm-ups and 30 warm samples for each supported interaction in `interactionSamples`, while preserving the existing search, selection and opening
+scenarios. Label filtering alternates an absent-label filter and all rows through the production filter path. Scrolling alternates the first and last object. Type switching cycles
+through the supplied exact fixture types and requires at least two types; a single-type run leaves that scenario's sample array empty.
+
+`actionMilliseconds` measures the synchronous request. `firstRootPaintMilliseconds` observes the next root paint callback after that request; it does not prove GPU presentation or
+that the target control has painted. `observedReadyMilliseconds` waits for the requested state to have layout and for a root paint to have occurred. Empty filters require a
+laid-out empty-state message, scrolling requires the target row to overlap the viewport, and type switches require completed object loading plus visible rows and inspector content
+for the requested type. These are editor observations, not human task times or proof that every inspector binding has completed.
+
+The raw records include the peak realized row count during each interaction, loaded selected-type rows, retained search objects, observer cost, selected type and expected filter
+count. `viewportMoved` distinguishes a genuine scroll from a request whose target already fits. Warm-up records remain available with `mode=warmup`; scenario aggregates include
+only the 30 measured observations. Cancellation and failure retain the pending record with `complete=false` and unavailable readiness times of -1.
+
+The [completed 100/1k report](performance-interactions-2026-10-21.json), from
+[27d022d](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/27d022d811176b80611fb9d94e72a9d5ff831aa9), contains 80 complete readiness records and 210 complete
+interaction records over ordinary ScriptableObjects and BaseDataObjects. The source revision was added to the emitted report; observation values are unchanged. All 30 measured
+scrolls per size moved the viewport. The same warm editor process supplies five cold-window observations, five discarded warm-ups and 30 measured samples; there are no
+fresh-process controls.
+
+| Real fixtures | Label-filter readiness p95 (ms) | Scroll readiness p95 (ms) | Type-switch readiness p95 (ms) | Maximum realized rows | Retained search objects |
+| ------------- | ------------------------------- | ------------------------- | ------------------------------ | --------------------- | ----------------------- |
+| 100           | 54.0820                         | 70.5025                   | 152.9545                       | 18                    | 111                     |
+| 1,000         | 41.1804                         | 35.2236                   | 318.6824                       | 18                    | 1,011                   |
+
+Percentiles use the nearest-rank 29th observation of 30. Each type holds half the fixtures; label filtering includes both empty and unfiltered outcomes. These observations do not
+prove a 10k target, bounded asset retention or many-type scaling. Cleanup independently confirmed no owned fixture roots, state files or browser windows, one native window host,
+seven editor windows, an empty shared queue and an idle AssetDatabase.
+
+The [extracted failed 10k attempt](performance-interactions-10k-attempt-2026-10-21.json) preserves failure, staging and 10k observations from the earlier 100/1k/10k run at 6bb6655.
+All 10,000 fixtures existed, but the search warm-up timed out on World before measured 10k search, interaction or warm-open samples. Its five cold-window records observe the legacy
+first-cache flag; that source could finish readiness while shared classification remained pending. Their `complete` and `openToIndexMilliseconds` fields do not prove stabilized
+full indexing. The repaired driver retains that legacy timestamp but waits for shared classification, selected rows and queued refreshes before full readiness. A controlled
+regression reproduces the old premature completion; the original timeout's exact cause remains unconfirmed. The full 10k/50k/100k, many-type, Play/compile and platform matrices
+remain open in [#306](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/306).

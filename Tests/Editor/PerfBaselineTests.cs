@@ -44,6 +44,98 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
+        public IEnumerator ShouldKeepLegacyReadinessSeparateFromPendingSharedIndexWork()
+        {
+            string output = "Temp/PerfPendingIndex-" + Guid.NewGuid().ToString("N");
+            var index = WallstopStudios.DataVisualizer.Editor.Utilities.AssetGuidTypeIndex.Shared;
+            Func<bool> previous = index.AssetDatabaseBusyOverride;
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(() => index.AssetDatabaseBusyOverride = previous);
+            cleanup.Defer(PerfBaseline.Cancel);
+            index.AssetDatabaseBusyOverride = () => true;
+            PerfBaseline.RunBaseline(output, new[] { 2 }, timeoutMinutes: 5);
+            for (int tick = 0; tick < 300; tick++)
+            {
+                yield return null;
+            }
+            Assert.That(!index.IsComplete);
+            PerfBaseline.Cancel();
+            string json = System.IO.File.ReadAllText(output + "/perf-baseline.json");
+            InteractionReport report = JsonUtility.FromJson<InteractionErrorReport>(json).partialResults ?? JsonUtility.FromJson<InteractionReport>(json);
+            bool observedLegacyReady = false;
+            foreach (PerfReadinessSample sample in report.readinessSamples)
+            {
+                observedLegacyReady = observedLegacyReady || 0 <= sample.legacyIndexReadyMilliseconds;
+                Assert.That(sample.complete, Is.False, "Shared classification is still blocked.");
+                Assert.That(sample.openToIndexMilliseconds, Is.EqualTo(-1));
+            }
+            Assert.That(observedLegacyReady, Is.True);
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldRecordInteractionReadinessAndRestoreNativeOwners()
+        {
+            string output = "Temp/PerfInteractions-" + Guid.NewGuid().ToString("N");
+            int hosts = EditorSurfaceCapture.CountNativeWindowHosts();
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(output, new[] { 4 }, timeoutMinutes: 5, fixtureTypes: new[] { typeof(OtherEditorOnlyCreationData), typeof(PlayModeDataObject) });
+            for (int tick = 0; tick < 6000 && PerfBaseline.Status() != "Idle"; tick++)
+            {
+                yield return null;
+            }
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+            InteractionReport report = JsonUtility.FromJson<InteractionReport>(System.IO.File.ReadAllText(output + "/perf-baseline.json"));
+            Assert.That(report.interactionSamples.Length, Is.EqualTo(105));
+            Dictionary<string, int> measured = new(StringComparer.Ordinal);
+            foreach (PerfInteractionSample sample in report.interactionSamples)
+            {
+                Assert.That(sample.complete, Is.True);
+                Assert.That(0 <= sample.firstRootPaintMilliseconds);
+                Assert.That(sample.firstRootPaintMilliseconds <= sample.observedReadyMilliseconds);
+                Assert.That(sample.actionMilliseconds <= sample.observedReadyMilliseconds);
+                Assert.That(2 <= sample.loadedRows);
+                if (sample.mode == "warm")
+                {
+                    measured.TryGetValue(sample.kind, out int count);
+                    measured[sample.kind] = count + 1;
+                }
+            }
+            foreach (string kind in new[] { "label-filter", "object-scroll", "type-switch" })
+            {
+                Assert.That(measured[kind], Is.EqualTo(30));
+            }
+            Assert.That(EditorSurfaceCapture.CountNativeWindowHosts(), Is.EqualTo(hosts));
+            Assert.That(System.IO.Directory.GetFiles(output, "window-state-*.json"), Is.Empty);
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldKeepIncompleteInteractionWhenCancelledBeforeReadiness()
+        {
+            string output = "Temp/PerfInteractionCancel-" + Guid.NewGuid().ToString("N");
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(output, new[] { 2 }, timeoutMinutes: 5);
+            for (int tick = 0; tick < 3000 && !PerfBaseline.Status().StartsWith("WaitingLabelFilter:", StringComparison.Ordinal); tick++)
+            {
+                yield return null;
+            }
+            Assert.That(PerfBaseline.Status(), Does.StartWith("WaitingLabelFilter:"));
+            PerfBaseline.Cancel();
+            InteractionErrorReport report = JsonUtility.FromJson<InteractionErrorReport>(System.IO.File.ReadAllText(output + "/perf-baseline.json"));
+            Assert.That(report.phase, Is.EqualTo("WaitingLabelFilter"));
+            Assert.That(report.partialResults.interactionSamples.Length, Is.EqualTo(1));
+            Assert.That(report.partialResults.interactionSamples[0].complete, Is.False);
+            Assert.That(report.partialResults.interactionSamples[0].observedReadyMilliseconds, Is.EqualTo(-1));
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+            Assert.That(System.IO.Directory.GetFiles(output, "window-state-*.json"), Is.Empty);
+        }
+
+        [UnityTest]
         public IEnumerator ShouldRestoreOwnerWhenFinalReportCannotBeWritten()
         {
             string output = "Temp/PerfPublicationFailure-" + Guid.NewGuid().ToString("N");
@@ -456,6 +548,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             StringAssert.Contains("\"fixturesRequested\": 100", report);
             StringAssert.DoesNotContain("\"samples\": [0]", report);
             Assert.AreEqual("Idle", PerfBaseline.Status());
+        }
+
+        [Serializable]
+        private sealed class InteractionReport
+        {
+            public PerfInteractionSample[] interactionSamples = Array.Empty<PerfInteractionSample>();
+            public PerfReadinessSample[] readinessSamples = Array.Empty<PerfReadinessSample>();
+        }
+
+        [Serializable]
+        private sealed class InteractionErrorReport
+        {
+            public string phase = string.Empty;
+            public InteractionReport partialResults = null;
         }
     }
 }
