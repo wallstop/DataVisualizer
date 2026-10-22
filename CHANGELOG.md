@@ -34,8 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Fix script-folder scans adding unsupported types. Add only eligible ScriptableObject types without creating instances (#376).
 
-- Fix browser type scans blocking project imports. Keep unchanged rows stable, ignore unrelated edits, preserve missing-script selection, clear deleted references, and pause or
-  stop refreshes with their owner (#308).
+- Fix browser refreshes stalling asset imports. Keep unchanged rows stable, ignore unrelated edits, preserve missing-script selection, clear deleted references, and pause or stop
+  refreshes with their owner (#308).
 
 ### Changed
 

@@ -1374,10 +1374,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         public void QueueAssetChanges(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
         {
             _assetChanges?.SetSuspended(IsAssetEditingSuspended || EditorApplication.isPlayingOrWillChangePlaymode);
-            _assetChanges?.Enqueue(deleted);
-            _assetChanges?.Enqueue(movedFrom);
-            _assetChanges?.Enqueue(imported);
-            _assetChanges?.Enqueue(moved);
+            _assetChanges?.EnqueueDeferred(deleted);
+            _assetChanges?.EnqueueDeferred(movedFrom);
+            _assetChanges?.EnqueueDeferred(imported);
+            _assetChanges?.EnqueueDeferred(moved);
         }
 
         public SavedAssetSearchPanel OpenSavedSearches()

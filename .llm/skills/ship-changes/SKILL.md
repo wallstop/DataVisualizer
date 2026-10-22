@@ -46,6 +46,19 @@ suites stay outside it.
 5. Unity EditMode tests; PlayMode tests when runtime lifecycle or persistence
    changed.
 
+## Documentation and Test Evidence
+
+- Keep `docs/` user-facing: usage, API/schema references, support limits and site assets.
+- Store retained raw reports, benchmark procedures and experiment write-ups in
+  `Tests/Artifacts/`; leave transient output in ignored `.artifacts/` or configured
+  temporary directories. Keep session narratives in ignored `progress/`.
+- Preserve raw report bytes, provenance, failure status and Unity GUIDs when moving
+  evidence. Repair links and site navigation; inspect the built site and package
+  payload to confirm test evidence ships in neither. See
+  [artifact conventions](../../../Tests/Artifacts/README.md).
+- Before handoff, sweep new documentation for test-run diaries or internal design
+  notes. User-facing performance summaries must retain source/host and sample limits.
+
 ## Commits
 
 - Write commit messages in Simplified Technical English (see `.llm/context.md`):
