@@ -295,7 +295,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         internal static string FixtureSearchText(int index)
         {
-            return "perfsearchfield" + index.ToString("D6", CultureInfo.InvariantCulture);
+            return "perf検索é" + index.ToString("D6", CultureInfo.InvariantCulture);
         }
 
         internal static string FixtureName(int index)
@@ -816,6 +816,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             };
             state.Current.SearchObservations.Add(sample);
             state.PendingSearch = sample;
+            state.QuerySliceOverrunsBefore = state.Window.SearchQuerySliceOverrunCount;
             state.PhaseClock.Restart();
             searchField.value = query;
             sample.actionMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
@@ -838,8 +839,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             sample.records = window.ActiveSearchRecordCount;
             sample.scanned = window.ActiveSearchScannedCount;
             sample.matches = window.ActiveSearchMatchCount;
+            sample.visibleMatches = window.ActiveSearchPreviewRowCount;
+            sample.reachedLimit = window.ActiveSearchReachedLimit;
             sample.indexComplete = window.IsSearchIndexComplete;
-            if (0 < sample.matches && sample.firstResultMilliseconds < 0)
+            sample.sliceOverruns = window.SearchQuerySliceOverrunCount - state.QuerySliceOverrunsBefore;
+            sample.longestWindowQuerySliceMilliseconds = window.LongestSearchQuerySliceMilliseconds;
+            if (0 < sample.visibleMatches && sample.firstResultMilliseconds < 0)
             {
                 sample.firstResultMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
             }
@@ -852,6 +857,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             if ((0 <= sample.expectedMatches && sample.matches != sample.expectedMatches) || (sample.expectedMatches < 0 && sample.matches == 0))
             {
                 throw new InvalidOperationException($"The {sample.kind} search returned {sample.matches} unexpected matches.");
+            }
+            if (sample.visibleMatches != sample.matches)
+            {
+                throw new InvalidOperationException($"The {sample.kind} publication could not resolve every visible match.");
             }
             sample.complete = true;
             if (sample.kind == "common-name" && sample.mode == "warm")
@@ -1649,6 +1658,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal int SearchRepetition;
             internal int SelectionRepetition;
             internal int SearchKind;
+            internal int QuerySliceOverrunsBefore;
             internal PerfSearchSample PendingSearch;
             internal int FilterRepetition;
             internal int ScrollRepetition;
