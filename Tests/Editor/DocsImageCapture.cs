@@ -122,7 +122,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string SearchPopoverElementName = "search-popover";
         private const string SearchFieldElementName = "global-search-field";
         private const string SearchResultsFieldName = "_currentSearchResultItems";
-        private const string SearchCacheFieldName = "_allManagedObjectsCache";
         private const string SearchCachePopulatedFieldName = "_isSearchCachePopulated";
         private const string SearchQuery = "a";
         private const string ObjectColumnElementName = "object-column";
@@ -1222,11 +1221,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void StageSearchState(DataVisualizerWindow window, string fixtureFolder)
         {
-            FieldInfo cacheField = typeof(DataVisualizerWindow).GetField(SearchCacheFieldName, ReflectedInstanceMembers);
-            if (cacheField?.GetValue(window) is not List<ScriptableObject> cache)
-            {
-                throw new InvalidOperationException("The DataVisualizer window exposes no search cache; the capture " + "driver cannot stage the search results.");
-            }
+            List<ScriptableObject> cache = new();
 
             FieldInfo populatedField = typeof(DataVisualizerWindow).GetField(SearchCachePopulatedFieldName, ReflectedInstanceMembers);
             if (populatedField == null)
@@ -1253,6 +1248,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
 
                 string path = AssetDatabase.GetAssetPath(asset);
+                cache.Add(asset);
                 indexedCache.Upsert(AssetDatabase.AssetPathToGUID(path), asset, sorted: false);
             }
             indexedCache.Sort();

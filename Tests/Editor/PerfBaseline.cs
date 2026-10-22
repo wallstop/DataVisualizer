@@ -80,7 +80,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string SearchPopoverFieldName = "_searchPopover";
         private const string SearchTriggerFieldName = "_searchField";
         private const string SearchFieldElementName = "global-search-field";
-        private const string SearchCacheFieldName = "_allManagedObjectsCache";
         private const string SearchCachePopulatedFieldName = "_isSearchCachePopulated";
         private const string SearchResultsFieldName = "_currentSearchResultItems";
 
@@ -688,7 +687,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 sample.inspectorReadyMilliseconds = elapsed;
             }
             sample.loadedRows = (typeof(DataVisualizerWindow).GetField("_selectedObjects", Members)?.GetValue(window) as System.Collections.ICollection)?.Count ?? 0;
-            sample.retainedSearchObjects = (typeof(DataVisualizerWindow).GetField(SearchCacheFieldName, Members)?.GetValue(window) as System.Collections.ICollection)?.Count ?? 0;
+            sample.retainedSearchObjects = window.RetainedSearchObjectCount;
             sample.managedBytes = Math.Max(sample.managedBytes, GC.GetTotalMemory(false));
             sample.unityAllocatedBytes = Math.Max(sample.unityAllocatedBytes, UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong());
             sample.unityReservedBytes = Math.Max(sample.unityReservedBytes, UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong());
@@ -916,7 +915,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 });
             sample.realizedRows = Math.Max(sample.realizedRows, realized);
             sample.loadedRows = (typeof(DataVisualizerWindow).GetField("_selectedObjects", Members).GetValue(state.Window) as System.Collections.ICollection).Count;
-            sample.retainedSearchObjects = (typeof(DataVisualizerWindow).GetField(SearchCacheFieldName, Members).GetValue(state.Window) as System.Collections.ICollection).Count;
+            sample.retainedSearchObjects = state.Window.RetainedSearchObjectCount;
             bool ready = 0 < viewport.width && 0 < viewport.height;
             if (state.Phase == Phase.WaitingLabelFilter)
             {

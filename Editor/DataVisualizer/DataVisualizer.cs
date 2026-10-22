@@ -131,6 +131,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             state.window._suppressListSelectionCallback = state.suppressed
         );
 
+        public int RetainedSearchObjectCount => _assetObjectCache?.RetainedObjectCount ?? 0;
+        public int SearchResultObjectLoadCount => _assetObjectCache?.ObjectLoadCount ?? 0;
+        public int SearchIndexObjectLoadCount { get; private set; }
+        public int SharedSearchMetadataReuseCount { get; private set; }
+
         public double LongestSearchIndexSliceMilliseconds { get; private set; }
         public double LongestSearchQuerySliceMilliseconds { get; private set; }
         public int SearchQuerySliceOverrunCount { get; private set; }
@@ -216,7 +221,6 @@ namespace WallstopStudios.DataVisualizer.Editor
         private int _hiddenNamespaces;
 
         private readonly List<ScriptableObject> _selectedObjects = new();
-        private readonly List<ScriptableObject> _allManagedObjectsCache = new();
         private readonly List<VisualElement> _currentSearchResultItems = new();
         private readonly List<VisualElement> _currentTypePopoverItems = new();
 
@@ -1680,7 +1684,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _nextColorIndex = 0;
             Instance = this;
             _assetChanges?.Dispose();
-            _assetObjectCache = new AssetObjectCache(_allManagedObjectsCache, AssetGuidTypeIndex.Shared.Metadata);
+            _assetObjectCache = new AssetObjectCache(AssetGuidTypeIndex.Shared.Metadata);
             _assetChanges = new AssetChangeRefreshService(IsTrackedAssetType, ApplyAssetChange);
             ObjectChangeEvents.changesPublished -= HandleAssetObjectChanges;
             ObjectChangeEvents.changesPublished += HandleAssetObjectChanges;
@@ -2163,12 +2167,22 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     continue;
                 }
+                if (_assetObjectCache.UseMetadata(guid, _searchCacheManagedTypes))
+                {
+                    SharedSearchMetadataReuseCount++;
+                    if (AssetGuidTypeIndex.Shared.Metadata.TryGet(guid, out AssetMetadataRecord record))
+                    {
+                        _assetChanges?.Track(record.Path, guid);
+                    }
+                    continue;
+                }
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 if (string.IsNullOrWhiteSpace(path))
                 {
                     continue;
                 }
 
+                SearchIndexObjectLoadCount++;
                 ScriptableObject obj = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
                 /*
                     Verify it's a managed type (O(1) against the set cached for this run). No cache
@@ -2274,11 +2288,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            bool hadPrevious = _assetObjectCache.TryGet(guid, out ScriptableObject previous);
+            bool hadPrevious = _assetObjectCache.Contains(guid);
+            bool hadLoadedPrevious = _assetObjectCache.TryGetLoaded(guid, out ScriptableObject previous);
             ScriptableObject current = null;
             if (type != null && IsTrackedAssetType(type))
             {
-                if (hadPrevious && previous != null && previous.GetType() == type && string.Equals(AssetDatabase.GetAssetPath(previous), path, StringComparison.Ordinal))
+                if (hadLoadedPrevious && previous != null && previous.GetType() == type && string.Equals(AssetDatabase.GetAssetPath(previous), path, StringComparison.Ordinal))
                 {
                     current = previous;
                 }
@@ -2308,12 +2323,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            bool selected = hadPrevious && ReferenceEquals(_selectedObject, previous);
+            bool selected = hadLoadedPrevious && ReferenceEquals(_selectedObject, previous);
             Type selectedType = _namespaceController.SelectedType;
-            bool wasInList = hadPrevious && _selectedObjectOrderIndex.ContainsKey(previous);
+            bool wasInList = hadLoadedPrevious && _selectedObjectOrderIndex.ContainsKey(previous);
             bool sameLoadedRow = wasInList && ReferenceEquals(current, previous) && type == selectedType;
             bool matchedBefore = sameLoadedRow && LabelFilterEvaluator.Matches(_selectedLabelUsage.GetOrRead(previous), CurrentTypeLabelFilterConfig);
-            if (hadPrevious && (current == null || current != previous || type != selectedType))
+            if (hadLoadedPrevious && (current == null || current != previous || type != selectedType))
             {
                 _selectedObjects.Remove(previous);
                 _filteredObjects.Remove(previous);
@@ -8190,11 +8205,15 @@ namespace WallstopStudios.DataVisualizer.Editor
 
             _projectUniqueLabelsCache.Clear();
             HashSet<string> allLabelsSet = new(StringComparer.Ordinal);
-            foreach (ScriptableObject dataObject in _allManagedObjectsCache)
+            foreach (AssetSearchDocument document in _assetObjectCache.Documents)
             {
-                string[] labels = AssetDatabase.GetLabels(dataObject);
-                foreach (string label in labels)
+                if (!AssetGuidTypeIndex.Shared.Metadata.TryGet(document.Guid, out AssetMetadataRecord record))
                 {
+                    continue;
+                }
+                for (int labelIndex = 0; labelIndex < record.Labels.Count; labelIndex++)
+                {
+                    string label = record.Labels[labelIndex];
                     if (!string.IsNullOrWhiteSpace(label))
                     {
                         allLabelsSet.Add(label.Trim());
@@ -8770,7 +8789,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (asset != null && asset.GetType() == type)
                 {
                     _assetChanges?.Track(path, guid);
-                    if (!_assetObjectCache.Contains(guid))
+                    if (!_assetObjectCache.RememberLoaded(guid, asset))
                     {
                         _assetObjectCache.Upsert(guid, asset, _isSearchCachePopulated);
                     }
