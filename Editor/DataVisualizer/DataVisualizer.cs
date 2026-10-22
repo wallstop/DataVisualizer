@@ -135,6 +135,8 @@ namespace WallstopStudios.DataVisualizer.Editor
         public string ActiveSearchText => _activePopover == _searchPopover ? _observedSearchText : null;
         public int ActiveSearchGeneration => _searchQueryGeneration;
         public int ActiveSearchMatchCount => _observedSearchQuery?.Results.Count ?? 0;
+        public int ActiveSearchPreviewRowCount => _currentSearchResultItems.Count;
+        public bool ActiveSearchReachedLimit => _observedSearchQuery?.ReachedLimit ?? false;
         public int ActiveSearchScannedCount => _observedSearchQuery?.ScannedCount ?? 0;
         public int ActiveSearchRecordCount => _observedSearchQuery?.RecordCount ?? 0;
         public bool IsSearchIndexComplete => _isSearchCachePopulated && !_isLoadingSearchCacheAsync;
@@ -143,6 +145,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         public bool IsActiveSearchComplete =>
             _activePopover == _searchPopover
             && _observedSearchQuery != null
+            && _observedSearchPublished
             && _observedSearchQuery.IsComplete
             && _observedSearchCacheGeneration == _searchCacheGeneration
             && _observedSearchCacheVersion == _assetObjectCache.Version;
@@ -369,6 +372,7 @@ namespace WallstopStudios.DataVisualizer.Editor
         private AssetSearchResultsView _allSearchResultsView;
         private int _searchQueryGeneration;
         private AssetSearchQuery _observedSearchQuery;
+        private bool _observedSearchPublished;
         private string _observedSearchText;
         private int _observedSearchCacheGeneration;
         private int _observedSearchCacheVersion;
@@ -3342,6 +3346,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             int snapshotVersion = _assetObjectCache.Version;
             string[] terms = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             AssetSearchQuery query = new(_assetObjectCache.Documents, terms, showAll ? int.MaxValue : MaxSearchResults, sortByIdentity: !_assetObjectCache.IsSorted);
+            _observedSearchPublished = false;
             _observedSearchQuery = query;
             _observedSearchText = searchText;
             _observedSearchCacheGeneration = indexGeneration;
@@ -3398,6 +3403,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 if (query.IsComplete || (!arrivalsOnly && publishedCount != query.Results.Count))
                 {
                     RenderSearchResults(query, snapshotVersion == _assetObjectCache.Version);
+                    _observedSearchPublished = query.IsComplete;
                     publishedCount = query.Results.Count;
                 }
                 if (query.IsComplete)
