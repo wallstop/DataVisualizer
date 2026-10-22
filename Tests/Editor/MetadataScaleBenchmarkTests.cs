@@ -61,6 +61,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             string[] terms = { "absent-marker" };
             AssetSearchQuery[] queries = new AssetSearchQuery[32];
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => Array.Clear(queries, 0, queries.Length));
             long before = GC.GetTotalMemory(true);
             for (int index = 0; index < queries.Length; index++)
             {
