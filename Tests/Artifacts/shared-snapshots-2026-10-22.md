@@ -39,6 +39,36 @@ still-live older query.
 | 100,000   | 0.4028            | 0.0238             | 0.7500                         |
 | 1,000,000 | 0.8347            | 0.0109             | 7.6211                         |
 
+## Real 10k follow-up
+
+The unchanged existing driver at e66610d completed its real-asset run within the original 20-minute watchdog. The exact emitted
+[report](performance-shared-snapshots-real-10k-2026-10-22.json) has SHA-256 `48c2288c963166ae383c88e2a923eb2b3a6defd7f63e6b066eb01ba1604305ec`. Its driver SHA-256 is
+`642fbafdd8baa81527b4c89da75414c20335772eafaebfd3062455f7ab9891c4`. Staging uses 64 ms/100-item limits; query slices remain configured at 4 ms.
+
+All 10,000 uniquely owned fixtures were staged, half ordinary ScriptableObjects and half BaseDataObjects. All 140 query, 40 readiness and 105 interaction observations completed.
+Each query condition has five warmups and 30 warm samples over 10,014 available records, including the existing background. Every measured scroll moved. Rare and absent conditions
+scanned the entire snapshot with expected match counts.
+
+| Condition   | Completed publication median / p95 (ms) |
+| ----------- | --------------------------------------- |
+| common-name | 46.9809 / 60.5581                       |
+| rare-guid   | 46.4008 / 55.0250                       |
+| rare-field  | 47.8924 / 53.2614                       |
+| no-match    | 25.4281 / 32.8696                       |
+
+p95 is nearest rank over 30 samples. These clocks run from scripted field input to observed current query completion in the UI tree. They include input and editor scheduling, but
+do not confirm layout, paint or GPU completion. No-match first-result values remain -1. These observations do not prove rendered partial-index latency or a general 100 ms
+guarantee.
+
+Global search retained zero strong asset references. The selected type still retained 5,000 objects, with at most 18 realized rows. The longest observed index slice was 51.5209 ms;
+query slices reached 4.0381 ms with 329 counted overruns including warmups. These are not whole-frame bounds.
+
+The editor process stayed warm. Cold windows and warm reopens are not fresh-process samples; the driver resets the shared index between windows, so warm reopens do not demonstrate
+an across-close cache hit. This sequential follow-up uses different fixture GUIDs and process history from earlier reports and is not a controlled speedup comparison.
+
+Independent cleanup confirms an idle driver and AssetDatabase, stopped Play Mode, one native host, seven editor windows, no owned fixture roots or state files, zero shared
+metadata/pending paths, no suspension and 228 ScriptableObject assets, matching the pre-run count.
+
 ## Remaining limits
 
 The metadata store, view and tracker still retain about 1.4 GiB at one million records. Rare and absent full queries still scan every document; their active p95 is about 1.64
