@@ -9,6 +9,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     public sealed class AssetObjectCache
     {
         public int Count => _byGuid.Count;
+        public bool IsSorted => _isSorted;
         public int Version { get; private set; }
         public IReadOnlyList<AssetSearchDocument> Documents => _documents;
 
@@ -23,17 +24,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         {
             _ordered = ordered ?? throw new ArgumentNullException(nameof(ordered));
             _ordered.Clear();
-        }
-
-        private static int CompareDocuments(AssetSearchDocument left, AssetSearchDocument right)
-        {
-            int name = string.Compare(left.Name, right.Name, StringComparison.Ordinal);
-            if (name != 0)
-            {
-                return name;
-            }
-            int type = string.Compare(left.TypeFullName, right.TypeFullName, StringComparison.Ordinal);
-            return type != 0 ? type : string.Compare(left.Guid, right.Guid, StringComparison.Ordinal);
         }
 
         public bool Contains(string guid)
@@ -116,7 +106,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 return false;
             }
             AssetSearchDocument replacement = value != null ? new AssetSearchDocument(guid, value.name, value.GetType(), value) : null;
-            if (value != null && _byGuid.TryGetValue(guid, out ScriptableObject previous) && ReferenceEquals(previous, value) && CompareDocuments(_keys[value], replacement) == 0)
+            if (
+                value != null
+                && _byGuid.TryGetValue(guid, out ScriptableObject previous)
+                && ReferenceEquals(previous, value)
+                && AssetSearchDocument.CompareIdentity(_keys[value], replacement) == 0
+            )
             {
                 if (sorted)
                 {
@@ -187,7 +182,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 return;
             }
             Version++;
-            _documents.Sort(CompareDocuments);
+            _documents.Sort(AssetSearchDocument.CompareIdentity);
             _ordered.Clear();
             foreach (AssetSearchDocument document in _documents)
             {
@@ -202,7 +197,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             // Snapshot keys keep order valid while other imported objects await reconciliation.
             AssetSearchDocument left = _keys[first];
             AssetSearchDocument right = _keys[second];
-            return CompareDocuments(left, right);
+            return AssetSearchDocument.CompareIdentity(left, right);
         }
 
         private void IndexDocumentsFrom(int start)

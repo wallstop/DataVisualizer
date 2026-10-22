@@ -332,3 +332,28 @@ with zero new refresh object loads; reconciliation took 558.204/2778.359 ms. The
 cooperative stop occurred after all 10k write calls returned, as final reconciliation started. Its callback timer, final reconciliation and lifecycle tail were not recorded; no
 complete 10k result is claimed. Native import flushes remain separate in the raw terminal report. Independent cleanup confirmed no owned roots/browser windows, seven editor
 windows, one native host, no shared pending paths and an idle AssetDatabase.
+
+## Partial search preparation
+
+Partial-index queries capture immutable document references and order that snapshot in cooperative merge steps. Each budget check covers at most 64 merge steps; a zero budget
+advances one step for deterministic probes. The query preserves ordinal name, exact type and GUID ordering before applying the existing result cap. Warm, sorted caches skip
+ordering. New arrivals cannot move an in-flight cursor, and closing or replacing a query still cancels publication through the owning window's generation.
+
+Snapshot allocation/copying and individual text comparisons remain indivisible. `LongestSearchQuerySliceMilliseconds` includes snapshot preparation and query work;
+`SearchQuerySliceOverrunCount` counts preparation and algorithm slices above their budgets. These values exclude result rendering. `LongestSearchIndexSliceMilliseconds` and its
+overrun counter now include the final cache sort and active-search publication, which previously happened after timing stopped. The final cache sort remains synchronous; its cost
+is now visible rather than attributed only to text extraction. These are diagnostic observations, not hard main-thread limits.
+
+The [raw preparation report](performance-search-preparation-2026-10-21.json) records five warm-ups and 30 samples per size over synthetic non-ASCII immutable documents, using an
+absent query that scans every record. The reference performs a synchronous snapshot `Array.Sort` with the current identity comparator; it is not a replay of a historical window.
+Queries run directly to completion without editor scheduling between slices, so total times are component CPU observations and exclude extraction, debounce, presentation and user
+input. Conditions run in fixed order with uncontrolled GC history.
+
+| Synthetic records | Synchronous reference preparation p95 (ms) | Cooperative preparation p95 (ms) | Cooperative total p95 (ms) | Longest slice p95 (ms) |
+| ----------------- | ------------------------------------------ | -------------------------------- | -------------------------- | ---------------------- |
+| 10,000            | 52.3284                                    | 0.0678                           | 93.2034                    | 4.0718                 |
+| 100,000           | 799.3907                                   | 0.9443                           | 1220.3685                  | 4.1301                 |
+
+Percentiles use the nearest-rank 29th sorted observation of 30. The 10k component total does not establish the 100 ms end-to-end target. The original 10k non-ASCII production
+window probe also passes 60 sustained arrivals with stable visible hits and GUID highlights. Shared-index integration, real-asset partial/complete search distributions and wider
+platform execution remain open in [#310](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/310).

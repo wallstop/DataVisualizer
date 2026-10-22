@@ -39,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Search available asset text while indexing continues. Keep queries responsive and refresh open results as records arrive or change (#310).
+- Search available asset text while indexing continues. Keep queries responsive, preserve result order, and refresh open searches as records arrive or change (#310).
 
 - Simplify label filtering with Match all and Match any, keyboard-selectable pills, clear controls, and a readable Advanced expression. Keep missing active labels and show neutral
   counts (#314).

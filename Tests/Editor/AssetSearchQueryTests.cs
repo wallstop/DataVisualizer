@@ -7,6 +7,80 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class AssetSearchQueryTests
     {
+        [Test]
+        public void ShouldPreserveThePublicThreeArgumentConstructorSignature()
+        {
+            // Public metadata is the binary contract; optional arguments cannot preserve it.
+            var constructor = typeof(AssetSearchQuery).GetConstructor(new[] { typeof(IReadOnlyList<AssetSearchDocument>), typeof(string[]), typeof(int) });
+            Assert.That(constructor != null);
+            AssetSearchQuery query = (AssetSearchQuery)constructor.Invoke(new object[] { Array.Empty<AssetSearchDocument>(), Array.Empty<string>(), 25 });
+            query.Advance();
+            Assert.That(query.IsComplete);
+        }
+
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(31)]
+        [TestCase(100)]
+        [TestCase(257)]
+        public void ShouldSortPartialSnapshotsAcrossBudgetedMergeSteps(int count)
+        {
+            List<AssetSearchDocument> documents = new();
+            for (int index = count - 1; 0 <= index; index--)
+            {
+                documents.Add(new AssetSearchDocument(index.ToString("D4"), "Match " + index % 7, typeof(AssetSearchQueryTests), null));
+            }
+            AssetSearchDocument[] expected = documents.ToArray();
+            Array.Sort(expected, AssetSearchDocument.CompareIdentity);
+            AssetSearchQuery query = new(documents, new[] { "match" }, int.MaxValue, sortByIdentity: true);
+            bool preparing = query.IsPreparing;
+            query.Advance(0);
+            if (preparing)
+            {
+                Assert.That(query.IsPreparing);
+                Assert.AreEqual(0, query.ScannedCount);
+                Assert.That(query.Results, Is.Empty);
+            }
+            // Arrivals and replacements cannot change this query's captured ordering.
+            documents.Clear();
+            documents.Add(new AssetSearchDocument("new", "Match arrival", typeof(AssetSearchQueryTests), null));
+            int steps = 0;
+            while (!query.IsComplete && steps++ < 10000)
+            {
+                query.Advance(0);
+            }
+            Assert.That(query.IsComplete);
+            Assert.That(!query.IsPreparing);
+            Assert.AreEqual(count, query.ScannedCount);
+            Assert.AreEqual(count, query.Results.Count);
+            for (int index = 0; index < expected.Length; index++)
+            {
+                Assert.AreSame(expected[index], query.Results[index].Document);
+            }
+        }
+
+        [Test]
+        public void ShouldKeepOrdinalIdentityOrderAndLimitsAfterPreparation()
+        {
+            AssetSearchDocument[] documents =
+            {
+                new("c", "same", typeof(AssetSearchQueryTests), null),
+                new("b", "Same", typeof(AssetSearchQueryTests), null),
+                new("a", "Same", typeof(AssetSearchQueryTests), null),
+                new("d", "Same", typeof(TestDataObject), null),
+            };
+            AssetSearchQuery query = new(documents, new[] { "same" }, 3, sortByIdentity: true);
+            query.Advance(double.PositiveInfinity);
+            Assert.That(query.IsComplete);
+            Assert.That(query.ReachedLimit);
+            Assert.AreEqual(3, query.ScannedCount);
+            Assert.AreEqual("a", query.Results[0].Document.Guid);
+            Assert.AreEqual("b", query.Results[1].Document.Guid);
+            Assert.AreEqual("d", query.Results[2].Document.Guid);
+        }
+
         [TestCase(1)]
         [TestCase(25)]
         [TestCase(100)]
