@@ -57,20 +57,31 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static long MeasureConcurrentQueryHeap(AssetObjectCache cache, bool shared)
+        private static (long Copying, long Shared) MeasureConcurrentQueryHeap(AssetObjectCache cache)
         {
             string[] terms = { "absent-marker" };
-            AssetSearchQuery[] queries = new AssetSearchQuery[32];
+            AssetSearchQuery[] copying = new AssetSearchQuery[32];
+            AssetSearchQuery[] shared = new AssetSearchQuery[32];
             using TestCleanupScope cleanup = new();
-            cleanup.Defer(() => Array.Clear(queries, 0, queries.Length));
-            long before = GC.GetTotalMemory(true);
-            for (int index = 0; index < queries.Length; index++)
+            cleanup.Defer(() =>
             {
-                queries[index] = shared ? cache.CreateQuery(terms, 25) : new AssetSearchQuery(cache.Documents, terms, 25);
+                Array.Clear(copying, 0, copying.Length);
+                Array.Clear(shared, 0, shared.Length);
+            });
+            long before = GC.GetTotalMemory(true);
+            for (int index = 0; index < copying.Length; index++)
+            {
+                copying[index] = new AssetSearchQuery(cache.Documents, terms, 25);
             }
-            long retained = GC.GetTotalMemory(true) - before;
-            GC.KeepAlive(queries);
-            return retained;
+            long afterCopying = GC.GetTotalMemory(true);
+            for (int index = 0; index < shared.Length; index++)
+            {
+                shared[index] = cache.CreateQuery(terms, 25);
+            }
+            long afterShared = GC.GetTotalMemory(true);
+            GC.KeepAlive(copying);
+            GC.KeepAlive(shared);
+            return (afterCopying - before, afterShared - afterCopying);
         }
 
         private static IEnumerator MeasureSize(int size, List<string> scenarios, List<string> mutations, Action<string, int> reportProgress, Action checkpoint)
@@ -223,8 +234,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(restored, Is.EqualTo(1000));
             Assert.That(dataset.Index.Metadata.Count, Is.EqualTo(size));
             reportProgress("measuring concurrent snapshot ownership", size);
-            long copyingQueryHeap = MeasureConcurrentQueryHeap(dataset.View, false);
-            long sharedQueryHeap = MeasureConcurrentQueryHeap(dataset.View, true);
+            (long copyingQueryHeap, long sharedQueryHeap) = MeasureConcurrentQueryHeap(dataset.View);
             foreach (int count in new[] { size / 10, size })
             {
                 IReadOnlyList<AssetSearchDocument> available = count == size ? dataset.View.Documents : new ArraySegment<AssetSearchDocument>(dataset.Documents, 0, count);
