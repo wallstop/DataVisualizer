@@ -102,6 +102,26 @@ def case_classifies_tuple_members_and_preserves_slices() -> None:
         remove_temp_root(root)
 
 
+def case_preserves_operator_method_classification() -> None:
+    root = new_temp_root(prefix="member-order-operators-")
+    try:
+        write_fixture_file(root, "Operators.cs", """public class Operators
+{
+    public static int Value => 1;
+    public static int First() => 0;
+    public static Operators operator +(Operators left, Operators right) => left;
+    public static bool operator ==(Operators left, Operators right) => true;
+    public static bool operator !=(Operators left, Operators right) => false;
+    public static implicit operator (int, int)(Operators value) => (0, 0);
+    public static explicit operator Operators((int, int) value) => null;
+}
+""")
+        output, exit_code = invoke_member_order_lint(root)
+        assert_exit_code(0, f"operator overloads must remain methods: {output}", exit_code)
+    finally:
+        remove_temp_root(root)
+
+
 def case_fails_on_tier_and_access_inversions() -> None:
     root = new_temp_root(prefix="member-order-")
     try:
@@ -695,6 +715,7 @@ def main() -> int:
     run_cases([
         ("Passes_CanonicalOrder", case_passes_canonical_order),
         ("ClassifiesTupleMembersAndPreservesSlices", case_classifies_tuple_members_and_preserves_slices),
+        ("PreservesOperatorMethodClassification", case_preserves_operator_method_classification),
         ("Fails_OnTierAndAccessInversions", case_fails_on_tier_and_access_inversions),
         ("Fails_OnUnderscoredMethodName", case_fails_on_underscored_method_name),
         ("Fails_OnUnderscoredGenericMethodName", case_fails_on_underscored_generic_method_name),

@@ -582,7 +582,11 @@ def declaration_prefix(masked: str, start: int, end: int) -> Optional[Declaratio
     scan = start
     while scan < end:
         char = masked[scan]
-        if char == "(" and callable_name_before(masked, scan) is None:
+        is_operator_header = char in "(=" and re.search(r"(?<!@)\boperator\b", masked[start:scan]) is not None
+        if char == "=" and is_operator_header:
+            scan += 1
+            continue
+        if char == "(" and not is_operator_header and callable_name_before(masked, scan) is None:
             # A tuple in a return/member type is not a method parameter list.
             close = skip_balanced(masked, scan)
             if close < 0:
