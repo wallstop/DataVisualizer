@@ -57,7 +57,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static (long Copying, long Shared) MeasureConcurrentQueryHeap(AssetObjectCache cache)
+        private static void MeasureConcurrentQueryHeap(AssetObjectCache cache, out long copyingHeap, out long sharedHeap)
         {
             string[] terms = { "absent-marker" };
             AssetSearchQuery[] copying = new AssetSearchQuery[32];
@@ -81,7 +81,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             long afterShared = GC.GetTotalMemory(true);
             GC.KeepAlive(copying);
             GC.KeepAlive(shared);
-            return (afterCopying - before, afterShared - afterCopying);
+            copyingHeap = afterCopying - before;
+            sharedHeap = afterShared - afterCopying;
         }
 
         private static IEnumerator MeasureSize(int size, List<string> scenarios, List<string> mutations, Action<string, int> reportProgress, Action checkpoint)
@@ -234,7 +235,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(restored, Is.EqualTo(1000));
             Assert.That(dataset.Index.Metadata.Count, Is.EqualTo(size));
             reportProgress("measuring concurrent snapshot ownership", size);
-            (long copyingQueryHeap, long sharedQueryHeap) = MeasureConcurrentQueryHeap(dataset.View);
+            MeasureConcurrentQueryHeap(dataset.View, out long copyingQueryHeap, out long sharedQueryHeap);
             foreach (int count in new[] { size / 10, size })
             {
                 IReadOnlyList<AssetSearchDocument> available = count == size ? dataset.View.Documents : new ArraySegment<AssetSearchDocument>(dataset.Documents, 0, count);
