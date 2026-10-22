@@ -90,6 +90,39 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
             InteractionReport report = JsonUtility.FromJson<InteractionReport>(System.IO.File.ReadAllText(output + "/perf-baseline.json"));
             Assert.That(report.interactionSamples.Length, Is.EqualTo(105));
+            Assert.That(report.searchObservations.Length, Is.EqualTo(140));
+            Dictionary<string, int> searchCounts = new(StringComparer.Ordinal);
+            foreach (PerfSearchSample sample in report.searchObservations)
+            {
+                Assert.That(sample.complete, Is.True, sample.kind);
+                Assert.That(sample.indexComplete, Is.True, sample.kind);
+                Assert.That(sample.actionMilliseconds <= sample.completedMilliseconds, sample.kind);
+                if (sample.kind == "no-match")
+                {
+                    Assert.That(sample.matches, Is.Zero);
+                    Assert.That(sample.firstResultMilliseconds, Is.EqualTo(-1));
+                    Assert.That(sample.scanned, Is.EqualTo(sample.records));
+                }
+                else
+                {
+                    Assert.That(0 <= sample.firstResultMilliseconds, sample.kind);
+                    Assert.That(sample.firstResultMilliseconds <= sample.completedMilliseconds, sample.kind);
+                }
+                if (sample.kind == "rare-guid" || sample.kind == "rare-field")
+                {
+                    Assert.That(sample.matches, Is.EqualTo(1));
+                    Assert.That(sample.scanned, Is.EqualTo(sample.records));
+                }
+                if (sample.mode == "warm")
+                {
+                    searchCounts.TryGetValue(sample.kind, out int count);
+                    searchCounts[sample.kind] = count + 1;
+                }
+            }
+            foreach (string kind in new[] { "common-name", "rare-guid", "rare-field", "no-match" })
+            {
+                Assert.That(searchCounts[kind], Is.EqualTo(30), kind);
+            }
             Dictionary<string, int> measured = new(StringComparer.Ordinal);
             foreach (PerfInteractionSample sample in report.interactionSamples)
             {
@@ -110,6 +143,29 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
             Assert.That(EditorSurfaceCapture.CountNativeWindowHosts(), Is.EqualTo(hosts));
             Assert.That(System.IO.Directory.GetFiles(output, "window-state-*.json"), Is.Empty);
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldRetainIncompleteSearchWhenCancelledBeforeObservation()
+        {
+            string output = "Temp/PerfSearchCancel-" + Guid.NewGuid().ToString("N");
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(output, new[] { 2 }, timeoutMinutes: 5);
+            for (int tick = 0; tick < 3000 && !PerfBaseline.Status().StartsWith("WaitingSearchResults:", StringComparison.Ordinal); tick++)
+            {
+                yield return null;
+            }
+            Assert.That(PerfBaseline.Status(), Does.StartWith("WaitingSearchResults:"));
+            PerfBaseline.Cancel();
+            InteractionErrorReport report = JsonUtility.FromJson<InteractionErrorReport>(System.IO.File.ReadAllText(output + "/perf-baseline.json"));
+            Assert.That(report.partialResults.searchObservations.Length, Is.EqualTo(1));
+            PerfSearchSample sample = report.partialResults.searchObservations[0];
+            Assert.That(sample.complete, Is.False);
+            Assert.That(sample.completedMilliseconds, Is.EqualTo(-1));
+            Assert.That(sample.query, Is.Not.Empty);
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
         }
 
         [UnityTest]
@@ -553,6 +609,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Serializable]
         private sealed class InteractionReport
         {
+            public PerfSearchSample[] searchObservations = Array.Empty<PerfSearchSample>();
             public PerfInteractionSample[] interactionSamples = Array.Empty<PerfInteractionSample>();
             public PerfReadinessSample[] readinessSamples = Array.Empty<PerfReadinessSample>();
         }

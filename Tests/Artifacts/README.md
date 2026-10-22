@@ -15,3 +15,13 @@ retain reports here only when they support reviewable tests or measurements. Kee
 
 The user-facing [performance guide](../../docs/performance.md) explains expected behavior and support limits. Public docs contain user guidance, API/schema references and required
 site assets. Test transcripts, raw samples, benchmark procedures and experiment design belong here; session logs belong in ignored `progress/`.
+
+## Search completion observations
+
+`PerfBaseline.RunBaseline` records `searchObservations` for common names, a rare GUID, a rare field token, and no matches. Each supported condition has five warm-ups and 30 warm
+samples. It waits for a current query publication, including zero matches, and a complete window index. `firstResultMilliseconds` records the first observed match; it stays `-1`
+for no matches. `completedMilliseconds` records the first observed completed snapshot. Both include field input and editor scheduling, and exclude GPU completion.
+
+Rare field tokens are deterministic fixture strings on `BaseDataObject.Description` and `OtherEditorOnlyCreationData.SearchText`. Other ordinary fixture types skip that condition.
+The legacy `search-first-results` scenario retains common-name first-result observations. Common queries can stop at the production result cap; rare/no-match cases scan the full
+snapshot. Cancelled reports keep the active sample with `complete=false` and unavailable completion time. These runs do not measure partial-index or fresh-process latency.
