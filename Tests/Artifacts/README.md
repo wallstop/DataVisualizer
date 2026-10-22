@@ -6,6 +6,7 @@ This directory preserves recorded test evidence. It is excluded from the documen
 - [Performance observations](performance.md): staging, readiness, search, refresh, intake, raw reports, environments and incomplete attempts.
 - [Subasset experiment](subasset-feasibility.md): test-only identity and read-only inspection evidence.
 - [Prefab experiment](prefab-feasibility.md): test-only component discovery, inspection and cold-process observations.
+- [Real 10k metadata/search observation](shared-search-10k-2026-10-22.md): final-tree interaction samples, ownership and cleanup limits.
 - [Million-record experiment](million-record-feasibility.md): synthetic metadata scale, resource estimates and limits.
 
 These are observations at the recorded source revisions, not support guarantees or current benchmark results. Keep emitted samples unchanged; document corrections, provenance and

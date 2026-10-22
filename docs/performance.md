@@ -5,6 +5,9 @@ results may update as more assets become available. See [Search and filtering](s
 
 ## What affects responsiveness
 
+The browser keeps copied search text and asset labels in memory for reuse when the window rebuilds. Building this data still reads tracked assets. The selected type's list keeps
+its loaded objects, so a large type can still use substantial memory.
+
 Large projects take longer to index. Serialized field size, custom inspectors, Unity imports, storage and other editor work also affect responsiveness. Asset creation and import
 can block the editor independently of DxVisualizer. A cooperative processing budget cannot interrupt an individual Unity API call or garbage collection.
 
