@@ -136,6 +136,98 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        [TestCase("remove")]
+        [TestCase("replace")]
+        [TestCase("add")]
+        [TestCase("clear")]
+        [TestCase("sync")]
+        [TestCase("async")]
+        public void ShouldKeepSharedQueriesStableAcrossCacheMutations(string mutation)
+        {
+            AssetMetadataStore metadata = new();
+            AssetObjectCache cache = CreateCache(metadata, 31);
+            cache.Sort();
+            List<AssetSearchDocument> expected = new(cache.Documents);
+            AssetSearchQuery first = cache.CreateQuery(new[] { "Match" }, int.MaxValue);
+            first.Advance(0);
+            AssetSearchQuery second = cache.CreateQuery(new[] { "Match" }, int.MaxValue);
+            switch (mutation)
+            {
+                case "remove":
+                    cache.Remove("0");
+                    break;
+                case "replace":
+                    Put(metadata, cache, "0", "Replacement");
+                    break;
+                case "add":
+                    Put(metadata, cache, "new", "Match arrival");
+                    break;
+                case "clear":
+                    cache.Clear();
+                    Put(metadata, cache, "new", "Match after reset");
+                    break;
+                case "sync":
+                case "async":
+                    Put(metadata, cache, "new", "A Match first");
+                    if (mutation == "sync")
+                    {
+                        cache.Sort();
+                    }
+                    else
+                    {
+                        while (!cache.AdvanceSort(0)) { }
+                    }
+                    break;
+            }
+            foreach (AssetSearchQuery query in new[] { first, second })
+            {
+                while (!query.IsComplete)
+                {
+                    query.Advance();
+                }
+                Assert.That(query.RecordCount, Is.EqualTo(31));
+                Assert.That(query.Results.Count, Is.EqualTo(31));
+                for (int index = 0; index < expected.Count; index++)
+                {
+                    Assert.That(ReferenceEquals(query.Results[index].Document, expected[index]));
+                }
+            }
+            AssetSearchQuery current = cache.CreateQuery(new[] { "Match" }, int.MaxValue);
+            while (!current.IsComplete)
+            {
+                current.Advance();
+            }
+            Assert.That(current.RecordCount, Is.EqualTo(cache.Count));
+            int expectedMatches =
+                mutation == "clear" ? 1
+                : mutation == "remove" || mutation == "replace" ? 30
+                : 32;
+            Assert.That(current.Results.Count, Is.EqualTo(expectedMatches));
+            AssertLookups(cache);
+            Assert.That(cache.RetainedObjectCount, Is.Zero);
+            Assert.That(cache.ObjectLoadCount, Is.Zero);
+        }
+
+        [Test]
+        public void ShouldKeepSortedQueryPreparationAllocationIndependentOfRecordCount()
+        {
+            AssetObjectCache cache = CreateCache(new AssetMetadataStore(), 10000);
+            cache.Sort();
+            string[] terms = { "absent" };
+            cache.CreateQuery(terms, 25);
+            AssetSearchQuery[] queries = new AssetSearchQuery[32];
+            long before = GC.GetTotalMemory(true);
+            for (int index = 0; index < queries.Length; index++)
+            {
+                queries[index] = cache.CreateQuery(terms, 25);
+            }
+            long retained = GC.GetTotalMemory(true) - before;
+            Assert.That(retained, Is.LessThan(128 * 1024), "Concurrent sorted queries must not each retain a reference array per record");
+            Assert.That(queries[0].RecordCount, Is.EqualTo(10000));
+            GC.KeepAlive(queries);
+            GC.KeepAlive(cache);
+        }
+
         [Test]
         public void ShouldRejectInvalidBudgetsAndStronglyOwnedCooperativeSorts()
         {

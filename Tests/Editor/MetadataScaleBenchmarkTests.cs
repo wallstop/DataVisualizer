@@ -6,6 +6,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.Diagnostics;
     using System.Globalization;
     using System.IO;
+    using System.Runtime.CompilerServices;
     using System.Security.Cryptography;
     using System.Text;
     using NUnit.Framework;
@@ -55,7 +56,36 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 .ToLowerInvariant();
         }
 
-        private static IEnumerator MeasureSize(int size, List<string> scenarios, Action<string, int> reportProgress, Action checkpoint)
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void MeasureConcurrentQueryHeap(AssetObjectCache cache, out long copyingHeap, out long sharedHeap)
+        {
+            string[] terms = { "absent-marker" };
+            AssetSearchQuery[] copying = new AssetSearchQuery[32];
+            AssetSearchQuery[] shared = new AssetSearchQuery[32];
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() =>
+            {
+                Array.Clear(copying, 0, copying.Length);
+                Array.Clear(shared, 0, shared.Length);
+            });
+            long before = GC.GetTotalMemory(true);
+            for (int index = 0; index < copying.Length; index++)
+            {
+                copying[index] = new AssetSearchQuery(cache.Documents, terms, 25);
+            }
+            long afterCopying = GC.GetTotalMemory(true);
+            for (int index = 0; index < shared.Length; index++)
+            {
+                shared[index] = cache.CreateQuery(terms, 25);
+            }
+            long afterShared = GC.GetTotalMemory(true);
+            GC.KeepAlive(copying);
+            GC.KeepAlive(shared);
+            copyingHeap = afterCopying - before;
+            sharedHeap = afterShared - afterCopying;
+        }
+
+        private static IEnumerator MeasureSize(int size, List<string> scenarios, List<string> mutations, Action<string, int> reportProgress, Action checkpoint)
         {
             reportProgress("collecting baseline", size);
             Stopwatch collection = Stopwatch.StartNew();
@@ -204,6 +234,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(removed, Is.EqualTo(1000));
             Assert.That(restored, Is.EqualTo(1000));
             Assert.That(dataset.Index.Metadata.Count, Is.EqualTo(size));
+            reportProgress("measuring concurrent snapshot ownership", size);
+            MeasureConcurrentQueryHeap(dataset.View, out long copyingQueryHeap, out long sharedQueryHeap);
             foreach (int count in new[] { size / 10, size })
             {
                 IReadOnlyList<AssetSearchDocument> available = count == size ? dataset.View.Documents : new ArraySegment<AssetSearchDocument>(dataset.Documents, 0, count);
@@ -222,7 +254,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     {
                         reportProgress("query " + size + "/" + count + "/" + term, repetition + Warmups);
                         Stopwatch total = Stopwatch.StartNew();
-                        AssetSearchQuery query = new(available, new[] { term }, 25, sortByIdentity: count != size);
+                        AssetSearchQuery query =
+                            count == size ? dataset.View.CreateQuery(new[] { term }, 25) : new AssetSearchQuery(available, new[] { term }, 25, sortByIdentity: true);
                         double preparation = total.Elapsed.TotalMilliseconds;
                         double active = preparation;
                         Stopwatch unit = new();
@@ -250,7 +283,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         yield return null;
                     }
                     Stopwatch cancellation = Stopwatch.StartNew();
-                    AssetSearchQuery abandoned = new(available, new[] { "absent-marker" }, 25, sortByIdentity: count != size);
+                    AssetSearchQuery abandoned =
+                        count == size
+                            ? dataset.View.CreateQuery(new[] { "absent-marker" }, 25)
+                            : new AssetSearchQuery(available, new[] { "absent-marker" }, 25, sortByIdentity: true);
                     double cancelPreparation = cancellation.Elapsed.TotalMilliseconds;
                     abandoned.Advance(BudgetMilliseconds);
                     double firstUnit = cancellation.Elapsed.TotalMilliseconds;
@@ -262,6 +298,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                             + size
                             + ",\"availableRecords\":"
                             + count
+                            + ",\"snapshotOwnership\":\""
+                            + (count == size ? "shared sorted cache" : "copied partial input")
+                            + "\",\"concurrentQueries\":32,\"copyingQueryHeapDeltaBytes\":"
+                            + copyingQueryHeap
+                            + ",\"sharedQueryHeapDeltaBytes\":"
+                            + sharedQueryHeap
                             + ",\"term\":\""
                             + term
                             + "\",\"sharedStoreHeapDeltaBytes\":"
@@ -320,7 +362,35 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     checkpoint();
                 }
             }
+            reportProgress("measuring edits after shared queries", size);
+            AssetSearchQuery retainedQuery = dataset.View.CreateQuery(new[] { "record" }, 25);
+            long beforeMutation = GC.GetTotalMemory(true);
+            double[] mutationTimes = new double[2];
+            for (int index = 0; index < mutationTimes.Length; index++)
+            {
+                AssetSearchDocument original = dataset.Documents[index];
+                AssetSearchDocument replacement = new(original.Guid, original.Name, original.ExactType, null);
+                dataset.Index.Metadata.Upsert(new AssetMetadataRecord(replacement, replacement.ExactType, "Assets/Synthetic/" + original.Guid + ".asset", original.Name, null));
+                Stopwatch mutation = Stopwatch.StartNew();
+                Assert.That(dataset.View.UseMetadata(original.Guid, managedTypes));
+                mutationTimes[index] = mutation.Elapsed.TotalMilliseconds;
+            }
+            long mutationHeap = GC.GetTotalMemory(true) - beforeMutation;
+            mutations.Add(
+                "{\"records\":"
+                    + size
+                    + ",\"firstChangeMs\":"
+                    + Number(mutationTimes[0])
+                    + ",\"secondChangeMs\":"
+                    + Number(mutationTimes[1])
+                    + ",\"retainedHeapDeltaBytes\":"
+                    + mutationHeap
+                    + "}"
+            );
+            retainedQuery.Advance();
+            Assert.That(retainedQuery.RecordCount, Is.EqualTo(size));
             Assert.That(dataset.View.RetainedObjectCount, Is.Zero);
+            GC.KeepAlive(retainedQuery);
             GC.KeepAlive(dataset);
         }
 
@@ -330,6 +400,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public IEnumerator ShouldMeasureSyntheticMetadataScale()
         {
             List<string> scenarios = new();
+            List<string> mutations = new();
             string environment = "{}";
             string sourceHash = SourceHash();
             string startedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
@@ -343,7 +414,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Directory.CreateDirectory(Path.GetDirectoryName(Output));
                 File.WriteAllText(
                     Output,
-                    "{\n\"schema\":3,\n\"fixtureKind\":\"synthetic Unicode metadata with labels and nested field text, no Unity objects or assets\",\n"
+                    "{\n\"schema\":4,\n\"fixtureKind\":\"synthetic Unicode metadata with labels and nested field text, no Unity objects or assets\",\n"
                         + "\"startedUtc\":\""
                         + startedUtc
                         + "\",\"sourceSha256\":\""
@@ -368,7 +439,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         + progress
                         + ",\n\"environment\":"
                         + environment
-                        + ",\n\"scenarios\":[\n"
+                        + ",\n\"snapshotMutations\":["
+                        + string.Join(",", mutations)
+                        + "],\n\"scenarios\":[\n"
                         + string.Join(",\n", scenarios)
                         + "\n]}\n"
                 );
@@ -381,6 +454,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 yield return MeasureSize(
                     size,
                     scenarios,
+                    mutations,
                     (stage, count) =>
                     {
                         bool changed = !string.Equals(phase, stage, StringComparison.Ordinal);

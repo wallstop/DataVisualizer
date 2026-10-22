@@ -25,6 +25,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private Dictionary<string, int> _documentIndexByGuid = new(StringComparer.Ordinal);
         private ConditionalWeakTable<ScriptableObject, AssetSearchDocument> _keys = new();
         private bool _isSorted = true;
+        private bool _documentsShared;
         private AssetSearchOrdering _ordering;
         private int _orderingVersion;
         private List<AssetSearchDocument> _orderedDocuments;
@@ -44,6 +45,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public AssetObjectCache(AssetMetadataStore metadata)
         {
             _metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
+        }
+
+        public AssetSearchQuery CreateQuery(string[] terms, int maximumResults)
+        {
+            if (!_isSorted)
+            {
+                return new AssetSearchQuery(_documents, terms, maximumResults, sortByIdentity: true);
+            }
+            AssetSearchSnapshot snapshot = new(_documents);
+            AssetSearchQuery query = new(snapshot, terms, maximumResults);
+            _documentsShared = true;
+            return query;
         }
 
         public bool Contains(string guid)
@@ -129,7 +142,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             CancelOrdering();
             Version++;
             _ordered?.Clear();
-            _documents.Clear();
+            if (_documentsShared)
+            {
+                _documents = new List<AssetSearchDocument>();
+                _documentsShared = false;
+            }
+            else
+            {
+                _documents.Clear();
+            }
             _byGuid.Clear();
             _documentIndexByGuid.Clear();
             _keys = new ConditionalWeakTable<ScriptableObject, AssetSearchDocument>();
@@ -167,6 +188,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 return false;
             }
+            DetachSharedDocuments();
             Version++;
             _ordered?.RemoveAt(index);
             _documents.RemoveAt(index);
@@ -198,6 +220,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
             if (_documentIndexByGuid.TryGetValue(guid, out int index) && AssetSearchDocument.CompareIdentity(_documents[index], document) == 0)
             {
+                DetachSharedDocuments();
                 Version++;
                 _documents[index] = document;
                 if (_ordered != null)
@@ -233,6 +256,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             }
             CancelOrdering();
             Version++;
+            DetachSharedDocuments();
             _documents.Sort(AssetSearchDocument.CompareIdentity);
             _ordered?.Clear();
             for (int index = 0; index < _documents.Count; index++)
@@ -286,6 +310,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 if (_documents.Count <= index)
                 {
                     _documents = _orderedDocuments;
+                    _documentsShared = false;
                     _documentIndexByGuid = _orderedIndices;
                     _isSorted = true;
                     Version++;
@@ -319,6 +344,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         private void PutDocument(AssetSearchDocument document, bool sorted)
         {
+            DetachSharedDocuments();
             if (_documentIndexByGuid.TryGetValue(document.Guid, out int existing))
             {
                 _documents[existing] = document;
@@ -352,6 +378,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             IndexDocumentsFrom(low);
             _isSorted = sorted || _documents.Count < 2;
             Version++;
+        }
+
+        private void DetachSharedDocuments()
+        {
+            if (_documentsShared)
+            {
+                _documents = new List<AssetSearchDocument>(_documents);
+                _documentsShared = false;
+            }
         }
 
         private void Remember(string guid, ScriptableObject asset, AssetSearchDocument document)

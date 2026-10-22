@@ -39,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Keep copied search metadata across window rebuilds without retaining every indexed asset. Load matches for visible search results and explicit navigation (#309, #310).
+- Keep repeated searches responsive and reuse search data across window rebuilds. Load assets for visible matches and navigation without retaining every indexed asset (#309, #310).
 
 - Search available asset text while indexing continues. Speed up Unicode queries, keep final ordering responsive, and refresh open searches as records arrive or change (#310).
 
