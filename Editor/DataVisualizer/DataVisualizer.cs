@@ -2177,7 +2177,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return; // superseded by a newer PopulateSearchCacheAsync run
             }
 
-            if (!_isLoadingSearchCacheAsync || _pendingSearchCacheGuids.Count == 0)
+            if (!_isLoadingSearchCacheAsync)
             {
                 _isLoadingSearchCacheAsync = false;
                 return;
@@ -2223,21 +2223,22 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
             }
 
-            // Continue with next batch
-            if (0 < _pendingSearchCacheGuids.Count)
+            bool complete = false;
+            if (_pendingSearchCacheGuids.Count == 0)
+            {
+                complete = _assetObjectCache.AdvanceSort(Math.Max(0, 4 - sliceClock.Elapsed.TotalMilliseconds));
+            }
+            if (!complete)
             {
                 _searchCacheLoadTask = rootVisualElement.schedule.Execute(() => ContinuePopulatingSearchCache(generation));
                 _searchCacheLoadTask.ExecuteLater(10);
-                RefreshActiveSearch();
             }
             else
             {
                 _isLoadingSearchCacheAsync = false;
-                // Sort the fully-loaded cache once (search reads it sorted by name then type).
-                _assetObjectCache.Sort();
                 _isSearchCachePopulated = true;
-                RefreshActiveSearch();
             }
+            RefreshActiveSearch();
             double elapsed = sliceClock.Elapsed.TotalMilliseconds;
             LongestSearchIndexSliceMilliseconds = Math.Max(LongestSearchIndexSliceMilliseconds, elapsed);
             if (4 < elapsed)
@@ -2556,7 +2557,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _asyncLoadTask.ExecuteLater(10);
             }
 
-            if (_isLoadingSearchCacheAsync && 0 < _pendingSearchCacheGuids.Count)
+            if (_isLoadingSearchCacheAsync)
             {
                 _searchCacheLoadTask?.Pause();
                 _searchCacheLoadTask = rootVisualElement.schedule.Execute(() => ContinuePopulatingSearchCache(_searchCacheGeneration));

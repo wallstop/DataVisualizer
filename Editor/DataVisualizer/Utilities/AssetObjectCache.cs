@@ -2,6 +2,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Runtime.CompilerServices;
     using UnityEditor;
     using UnityEngine;
@@ -19,11 +20,15 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         private readonly List<ScriptableObject> _ordered;
         private readonly AssetMetadataStore _metadata;
-        private readonly List<AssetSearchDocument> _documents = new();
+        private List<AssetSearchDocument> _documents = new();
         private readonly Dictionary<string, WeakReference<ScriptableObject>> _byGuid = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, int> _documentIndexByGuid = new(StringComparer.Ordinal);
+        private Dictionary<string, int> _documentIndexByGuid = new(StringComparer.Ordinal);
         private ConditionalWeakTable<ScriptableObject, AssetSearchDocument> _keys = new();
         private bool _isSorted = true;
+        private AssetSearchOrdering _ordering;
+        private int _orderingVersion;
+        private List<AssetSearchDocument> _orderedDocuments;
+        private Dictionary<string, int> _orderedIndices;
 
         // Retained for callers that explicitly request a strongly owned object list.
         public AssetObjectCache(List<ScriptableObject> ordered)
@@ -121,6 +126,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public void Clear()
         {
+            CancelOrdering();
             Version++;
             _ordered?.Clear();
             _documents.Clear();
@@ -225,6 +231,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 return;
             }
+            CancelOrdering();
             Version++;
             _documents.Sort(AssetSearchDocument.CompareIdentity);
             _ordered?.Clear();
@@ -238,6 +245,65 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 }
             }
             _isSorted = true;
+        }
+
+        // Publish the documents and GUID lookup together; readers keep the previous valid view.
+        public bool AdvanceSort(double budgetMilliseconds = 4)
+        {
+            if (double.IsNaN(budgetMilliseconds) || budgetMilliseconds < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(budgetMilliseconds));
+            }
+            if (_ordered != null)
+            {
+                throw new InvalidOperationException("Cooperative sorting requires a metadata-only cache.");
+            }
+            if (_isSorted)
+            {
+                CancelOrdering();
+                return true;
+            }
+            Stopwatch clock = Stopwatch.StartNew();
+            if (_ordering == null || _orderingVersion != Version)
+            {
+                CancelOrdering();
+                _ordering = new AssetSearchOrdering(_documents);
+                _orderingVersion = Version;
+            }
+            if (!_ordering.IsComplete)
+            {
+                _ordering.Advance(Math.Max(0, budgetMilliseconds - clock.Elapsed.TotalMilliseconds));
+                return false;
+            }
+            if (_orderedDocuments == null)
+            {
+                _orderedDocuments = new List<AssetSearchDocument>(_documents.Count);
+                _orderedIndices = new Dictionary<string, int>(_documents.Count, StringComparer.Ordinal);
+            }
+            do
+            {
+                int index = _orderedDocuments.Count;
+                if (_documents.Count <= index)
+                {
+                    _documents = _orderedDocuments;
+                    _documentIndexByGuid = _orderedIndices;
+                    _isSorted = true;
+                    Version++;
+                    CancelOrdering();
+                    return true;
+                }
+                AssetSearchDocument document = _ordering.Documents[index];
+                _orderedDocuments.Add(document);
+                _orderedIndices.Add(document.Guid, index);
+            } while (clock.Elapsed.TotalMilliseconds < budgetMilliseconds);
+            return false;
+        }
+
+        public void CancelOrdering()
+        {
+            _ordering = null;
+            _orderedDocuments = null;
+            _orderedIndices = null;
         }
 
         private AssetSearchDocument Capture(string guid, ScriptableObject value)

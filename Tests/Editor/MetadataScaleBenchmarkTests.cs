@@ -121,10 +121,32 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
             longestBuild = Math.Max(longestBuild, slice.Elapsed.TotalMilliseconds);
             double viewWall = viewClock.Elapsed.TotalMilliseconds;
+            reportProgress("ordering metadata view", size);
             Stopwatch finalSort = Stopwatch.StartNew();
-            dataset.View.Sort();
+            double finalSortActiveMilliseconds = 0;
+            double longestFinalSortSliceMilliseconds = 0;
+            int finalSortSlices = 0;
+            int finalSortOverruns = 0;
+            bool sorted;
+            do
+            {
+                Stopwatch sortSlice = Stopwatch.StartNew();
+                sorted = dataset.View.AdvanceSort(BudgetMilliseconds);
+                double elapsed = sortSlice.Elapsed.TotalMilliseconds;
+                finalSortActiveMilliseconds += elapsed;
+                longestFinalSortSliceMilliseconds = Math.Max(longestFinalSortSliceMilliseconds, elapsed);
+                finalSortSlices++;
+                if (BudgetMilliseconds < elapsed)
+                {
+                    finalSortOverruns++;
+                }
+                if (!sorted)
+                {
+                    yield return null;
+                }
+            } while (!sorted);
             double finalSortMilliseconds = finalSort.Elapsed.TotalMilliseconds;
-            longestBuild = Math.Max(longestBuild, finalSortMilliseconds);
+            longestBuild = Math.Max(longestBuild, longestFinalSortSliceMilliseconds);
             Assert.That(dataset.View.Count, Is.EqualTo(size));
             Assert.That(dataset.View.RetainedObjectCount, Is.Zero);
             Assert.That(dataset.View.ObjectLoadCount, Is.Zero);
@@ -250,6 +272,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                             + Number(viewWall)
                             + ",\"finalViewSortMs\":"
                             + Number(finalSortMilliseconds)
+                            + ",\"finalViewSortActiveMs\":"
+                            + Number(finalSortActiveMilliseconds)
+                            + ",\"longestFinalViewSortSliceMs\":"
+                            + Number(longestFinalSortSliceMilliseconds)
+                            + ",\"finalViewSortSlices\":"
+                            + finalSortSlices
+                            + ",\"finalViewSortOverruns\":"
+                            + finalSortOverruns
                             + ",\"invalidateRestore1000Ms\":"
                             + Number(invalidateRestore)
                             + ",\"retainedAssetReferences\":0,\"objectLoads\":0"
@@ -313,7 +343,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Directory.CreateDirectory(Path.GetDirectoryName(Output));
                 File.WriteAllText(
                     Output,
-                    "{\n\"schema\":2,\n\"fixtureKind\":\"synthetic Unicode metadata with labels and nested field text, no Unity objects or assets\",\n"
+                    "{\n\"schema\":3,\n\"fixtureKind\":\"synthetic Unicode metadata with labels and nested field text, no Unity objects or assets\",\n"
                         + "\"startedUtc\":\""
                         + startedUtc
                         + "\",\"sourceSha256\":\""

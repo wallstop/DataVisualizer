@@ -9,7 +9,8 @@ The browser keeps copied search text and asset labels in memory for reuse when t
 its loaded objects, so a large type can still use substantial memory.
 
 Large projects take longer to index. Serialized field size, custom inspectors, Unity imports, storage and other editor work also affect responsiveness. Asset creation and import
-can block the editor independently of DxVisualizer. A cooperative processing budget cannot interrupt an individual Unity API call or garbage collection.
+can block the editor independently of DxVisualizer. Final search-index sorting and GUID lookup preparation also yield between updates. A cooperative processing budget cannot
+interrupt an individual Unity API call, snapshot or lookup allocation, or garbage collection.
 
 Routine asset changes update affected rows. Import callbacks capture changed paths for later processing, so the queue can continue after the callback returns. Very large bursts
 still require array copies and processing time. Queue counts can include duplicate paths until coalescing finishes.
