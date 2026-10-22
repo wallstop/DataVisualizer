@@ -10,23 +10,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
     {
         public event Action SliceCompleted;
 
-        private static (string Guid, string Path, Type Type) Resolve(string path, string knownGuid)
-        {
-            // Resolve retained identity first: the old side of a move is already gone.
-            string currentPath = string.IsNullOrEmpty(knownGuid) ? path : AssetDatabase.GUIDToAssetPath(knownGuid);
-            if (!string.IsNullOrEmpty(currentPath))
-            {
-                string guid = AssetDatabase.AssetPathToGUID(currentPath, AssetPathToGUIDOptions.OnlyExistingAssets);
-                if (!string.IsNullOrEmpty(guid))
-                {
-                    return (guid, currentPath, AssetDatabase.GetMainAssetTypeAtPath(currentPath));
-                }
-            }
-
-            string replacementGuid = AssetDatabase.AssetPathToGUID(path, AssetPathToGUIDOptions.OnlyExistingAssets);
-            return string.IsNullOrEmpty(replacementGuid) ? (null, null, null) : (replacementGuid, path, AssetDatabase.GetMainAssetTypeAtPath(path));
-        }
-
         public int PendingCount => _pending.Count + _incomingPaths.Count;
         public int PendingInputPathCount => _incomingPaths.Count;
         public int ProcessedPathCount { get; private set; }
@@ -53,6 +36,23 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _isRelevant = isRelevant ?? throw new ArgumentNullException(nameof(isRelevant));
             _publish = publish ?? throw new ArgumentNullException(nameof(publish));
             _resolve = resolve ?? Resolve;
+        }
+
+        private static (string Guid, string Path, Type Type) Resolve(string path, string knownGuid)
+        {
+            // Resolve retained identity first: the old side of a move is already gone.
+            string currentPath = string.IsNullOrEmpty(knownGuid) ? path : AssetDatabase.GUIDToAssetPath(knownGuid);
+            if (!string.IsNullOrEmpty(currentPath))
+            {
+                string guid = AssetDatabase.AssetPathToGUID(currentPath, AssetPathToGUIDOptions.OnlyExistingAssets);
+                if (!string.IsNullOrEmpty(guid))
+                {
+                    return (guid, currentPath, AssetDatabase.GetMainAssetTypeAtPath(currentPath));
+                }
+            }
+
+            string replacementGuid = AssetDatabase.AssetPathToGUID(path, AssetPathToGUIDOptions.OnlyExistingAssets);
+            return string.IsNullOrEmpty(replacementGuid) ? (null, null, null) : (replacementGuid, path, AssetDatabase.GetMainAssetTypeAtPath(path));
         }
 
         public bool Track(string path, string guid)
