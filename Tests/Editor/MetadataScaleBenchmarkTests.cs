@@ -6,6 +6,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.Diagnostics;
     using System.Globalization;
     using System.IO;
+    using System.Security.Cryptography;
     using System.Text;
     using NUnit.Framework;
     using UnityEngine.TestTools;
@@ -14,8 +15,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     /*
         Opt-in synthetic feasibility evidence for #323. No Unity objects or assets
-        are created. The production search snapshot and per-window identity tracker
-        are measured separately from the unfinished shared metadata index (#309).
+        are created. The production shared metadata store, window document view and identity tracker
+        are measured without AssetDatabase classification or real-asset support claims.
         NUnit owns iteration and disposal; every timed unit runs on the editor thread.
     */
     public sealed class MetadataScaleBenchmarkTests
@@ -45,6 +46,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return text.Append(']').ToString();
         }
 
+        private static string SourceHash()
+        {
+            using SHA256 hash = SHA256.Create();
+            return BitConverter
+                .ToString(hash.ComputeHash(File.ReadAllBytes("Packages/com.wallstop-studios.data-visualizer/Tests/Editor/MetadataScaleBenchmarkTests.cs")))
+                .Replace("-", string.Empty)
+                .ToLowerInvariant();
+        }
+
         private static IEnumerator MeasureSize(int size, List<string> scenarios, Action<string, int> reportProgress, Action checkpoint)
         {
             reportProgress("collecting baseline", size);
@@ -61,7 +71,25 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 string guid = (index + 1).ToString("x32", CultureInfo.InvariantCulture);
                 string name = index == size - 1 ? "needle" : "record " + index.ToString(CultureInfo.InvariantCulture);
-                dataset.Documents[index] = new AssetSearchDocument(guid, name, typeof(MetadataScaleBenchmarkTests), null);
+                AssetSearchDocument document = new(
+                    guid,
+                    name + " Café 世界",
+                    typeof(MetadataScaleBenchmarkTests),
+                    new MetadataScaleText
+                    {
+                        Text = "Description résumé 世界",
+                        Child = new MetadataScaleText { Text = "Nested field text" },
+                    }
+                );
+                AssetMetadataRecord record = new(
+                    document,
+                    typeof(MetadataScaleBenchmarkTests),
+                    "Assets/Synthetic/" + guid + ".asset",
+                    "Display " + name,
+                    new[] { "Shared", "Label " + index % 17 }
+                );
+                dataset.Index.Metadata.Upsert(record);
+                dataset.Documents[index] = record.Document;
                 if (BudgetMilliseconds <= slice.Elapsed.TotalMilliseconds)
                 {
                     longestBuild = Math.Max(longestBuild, slice.Elapsed.TotalMilliseconds);
@@ -75,6 +103,33 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             double buildWall = construction.Elapsed.TotalMilliseconds;
             collection.Restart();
             long documentHeap = GC.GetTotalMemory(true) - before;
+            longestCollection = Math.Max(longestCollection, collection.Elapsed.TotalMilliseconds);
+            Stopwatch viewClock = Stopwatch.StartNew();
+            slice.Restart();
+            HashSet<Type> managedTypes = new() { typeof(MetadataScaleBenchmarkTests) };
+            foreach (AssetSearchDocument document in dataset.Documents)
+            {
+                dataset.View.UseMetadata(document.Guid, managedTypes);
+                if (BudgetMilliseconds <= slice.Elapsed.TotalMilliseconds)
+                {
+                    longestBuild = Math.Max(longestBuild, slice.Elapsed.TotalMilliseconds);
+                    Assert.That(GC.GetTotalMemory(false) - before, Is.LessThan(HeapLimitBytes));
+                    reportProgress("building metadata view", dataset.View.Count);
+                    yield return null;
+                    slice.Restart();
+                }
+            }
+            longestBuild = Math.Max(longestBuild, slice.Elapsed.TotalMilliseconds);
+            double viewWall = viewClock.Elapsed.TotalMilliseconds;
+            Stopwatch finalSort = Stopwatch.StartNew();
+            dataset.View.Sort();
+            double finalSortMilliseconds = finalSort.Elapsed.TotalMilliseconds;
+            longestBuild = Math.Max(longestBuild, finalSortMilliseconds);
+            Assert.That(dataset.View.Count, Is.EqualTo(size));
+            Assert.That(dataset.View.RetainedObjectCount, Is.Zero);
+            Assert.That(dataset.View.ObjectLoadCount, Is.Zero);
+            collection.Restart();
+            long viewHeap = GC.GetTotalMemory(true) - before;
             longestCollection = Math.Max(longestCollection, collection.Elapsed.TotalMilliseconds);
             slice.Restart();
             Stopwatch tracking = Stopwatch.StartNew();
@@ -107,9 +162,29 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             double oneChange = refresh.Elapsed.TotalMilliseconds;
             Assert.That(changed, Is.EqualTo(1));
             Assert.That(dataset.Published, Is.EqualTo(1));
+            Stopwatch invalidation = Stopwatch.StartNew();
+            int removed = 0;
+            int restored = 0;
+            for (int index = 0; index < Math.Min(size, 1000); index++)
+            {
+                string guid = dataset.Documents[index].Guid;
+                Assert.That(dataset.Index.Metadata.TryGet(guid, out AssetMetadataRecord record));
+                if (dataset.Index.Metadata.RemovePath(record.Path))
+                {
+                    removed++;
+                }
+                if (dataset.Index.Metadata.Upsert(record))
+                {
+                    restored++;
+                }
+            }
+            double invalidateRestore = invalidation.Elapsed.TotalMilliseconds;
+            Assert.That(removed, Is.EqualTo(1000));
+            Assert.That(restored, Is.EqualTo(1000));
+            Assert.That(dataset.Index.Metadata.Count, Is.EqualTo(size));
             foreach (int count in new[] { size / 10, size })
             {
-                IReadOnlyList<AssetSearchDocument> available = new ArraySegment<AssetSearchDocument>(dataset.Documents, 0, count);
+                IReadOnlyList<AssetSearchDocument> available = count == size ? dataset.View.Documents : new ArraySegment<AssetSearchDocument>(dataset.Documents, 0, count);
                 foreach (string term in new[] { "absent-marker", "needle", "record" })
                 {
                     List<double> totals = new();
@@ -120,12 +195,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         term == "record" ? 25
                         : term == "needle" && count == size ? 1
                         : 0;
-                    int expectedScanned = term == "record" ? 25 : count;
+                    int expectedScanned = term == "record" ? (count == size ? 26 : 25) : count;
                     for (int repetition = -Warmups; repetition < Samples; repetition++)
                     {
                         reportProgress("query " + size + "/" + count + "/" + term, repetition + Warmups);
                         Stopwatch total = Stopwatch.StartNew();
-                        AssetSearchQuery query = new(available, new[] { term }, 25);
+                        AssetSearchQuery query = new(available, new[] { term }, 25, sortByIdentity: count != size);
                         double preparation = total.Elapsed.TotalMilliseconds;
                         double active = preparation;
                         Stopwatch unit = new();
@@ -153,7 +228,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         yield return null;
                     }
                     Stopwatch cancellation = Stopwatch.StartNew();
-                    AssetSearchQuery abandoned = new(available, new[] { "absent-marker" }, 25);
+                    AssetSearchQuery abandoned = new(available, new[] { "absent-marker" }, 25, sortByIdentity: count != size);
                     double cancelPreparation = cancellation.Elapsed.TotalMilliseconds;
                     abandoned.Advance(BudgetMilliseconds);
                     double firstUnit = cancellation.Elapsed.TotalMilliseconds;
@@ -167,9 +242,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                             + count
                             + ",\"term\":\""
                             + term
-                            + "\",\"documentHeapDeltaBytes\":"
+                            + "\",\"sharedStoreHeapDeltaBytes\":"
                             + documentHeap
-                            + ",\"documentAndTrackerHeapDeltaBytes\":"
+                            + ",\"sharedStoreAndViewHeapDeltaBytes\":"
+                            + viewHeap
+                            + ",\"viewBuildWallMs\":"
+                            + Number(viewWall)
+                            + ",\"finalViewSortMs\":"
+                            + Number(finalSortMilliseconds)
+                            + ",\"invalidateRestore1000Ms\":"
+                            + Number(invalidateRestore)
+                            + ",\"retainedAssetReferences\":0,\"objectLoads\":0"
+                            + ",\"sharedStoreViewAndTrackerHeapDeltaBytes\":"
                             + combinedHeap
                             + ",\"buildWallMs\":"
                             + Number(buildWall)
@@ -206,6 +290,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     checkpoint();
                 }
             }
+            Assert.That(dataset.View.RetainedObjectCount, Is.Zero);
             GC.KeepAlive(dataset);
         }
 
@@ -216,6 +301,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             List<string> scenarios = new();
             string environment = "{}";
+            string sourceHash = SourceHash();
+            string startedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+            Stopwatch runClock = Stopwatch.StartNew();
             bool complete = false;
             string phase = "starting";
             int progress = 0;
@@ -225,9 +313,16 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Directory.CreateDirectory(Path.GetDirectoryName(Output));
                 File.WriteAllText(
                     Output,
-                    "{\n\"schema\":1,\n\"fixtureKind\":\"synthetic ASCII metadata, no Unity objects or assets\",\n"
-                        + "\"productionSurfaces\":[\"AssetSearchDocument\",\"AssetSearchQuery\",\"AssetChangeRefreshService\"],\n"
-                        + "\"sharedMetadataIndexMeasured\":false,\n\"realAssets\":0,\n\"diskCacheBytes\":-1,\n"
+                    "{\n\"schema\":2,\n\"fixtureKind\":\"synthetic Unicode metadata with labels and nested field text, no Unity objects or assets\",\n"
+                        + "\"startedUtc\":\""
+                        + startedUtc
+                        + "\",\"sourceSha256\":\""
+                        + sourceHash
+                        + "\",\"elapsedMilliseconds\":"
+                        + Number(runClock.Elapsed.TotalMilliseconds)
+                        + ",\n"
+                        + "\"productionSurfaces\":[\"AssetMetadataStore\",\"AssetMetadataRecord\",\"AssetObjectCache\",\"AssetSearchDocument\",\"AssetSearchQuery\",\"AssetChangeRefreshService\"],\n"
+                        + "\"sharedMetadataStoreMeasured\":true,\"assetDatabaseClassificationMeasured\":false,\n\"realAssets\":0,\n\"diskCacheBytes\":-1,\n"
                         + "\"warmups\":"
                         + Warmups
                         + ",\n\"samples\":"
@@ -309,21 +404,32 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             public int samples = -1;
         }
 
+        private sealed class MetadataScaleText
+        {
+            public string Text;
+            public MetadataScaleText Child;
+        }
+
         private sealed class Dataset : IDisposable
         {
             public AssetSearchDocument[] Documents { get; private set; }
+            public AssetGuidTypeIndex Index { get; } = new(false);
+            public AssetObjectCache View { get; }
             public AssetChangeRefreshService Tracker { get; }
             public int Published { get; private set; }
 
             public Dataset(int size)
             {
                 Documents = new AssetSearchDocument[size];
+                View = new AssetObjectCache(Index.Metadata);
                 Tracker = new AssetChangeRefreshService(_ => true, (_, _, _) => Published++, (path, guid) => (guid, path, typeof(MetadataScaleBenchmarkTests)));
             }
 
             public void Dispose()
             {
                 Tracker.Dispose();
+                View.Clear();
+                Index.Cancel();
                 Documents = null;
             }
         }
