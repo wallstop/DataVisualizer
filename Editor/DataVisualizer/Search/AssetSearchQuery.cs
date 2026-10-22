@@ -7,26 +7,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
     // A metadata snapshot keeps arriving records from moving an in-flight cursor.
     public sealed class AssetSearchQuery
     {
-        private const int SortStepsPerBudgetCheck = 64;
-
         public bool IsComplete { get; private set; }
-        public bool IsPreparing => 0 < _sortWidth;
-        public bool ReachedLimit => _maximumResults <= _results.Count && ScannedCount < _documents.Length;
+        public bool IsPreparing => !_ordering.IsComplete;
+        public bool ReachedLimit => _maximumResults <= _results.Count && ScannedCount < _documents.Count;
         public int ScannedCount { get; private set; }
-        public int RecordCount => _documents.Length;
+        public int RecordCount => _documents.Count;
         public double LongestSliceMilliseconds { get; private set; }
         public int SliceOverrunCount { get; private set; }
         public IReadOnlyList<(AssetSearchDocument Document, SearchResultMatchInfo Match)> Results => _results;
 
-        private AssetSearchDocument[] _documents;
-        private AssetSearchDocument[] _sortBuffer;
-        private int _sortWidth;
-        private int _mergeStart;
-        private int _mergeLeft;
-        private int _mergeRight;
-        private int _mergeLeftEnd;
-        private int _mergeEnd;
-        private int _mergeOutput;
+        private readonly AssetSearchOrdering _ordering;
+        private IReadOnlyList<AssetSearchDocument> _documents;
         private readonly string[] _terms;
         private readonly string[] _normalizedTerms;
         private readonly string[] _normalizedOrdinalTerms;
@@ -38,31 +29,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
 
         public AssetSearchQuery(IReadOnlyList<AssetSearchDocument> documents, string[] terms, int maximumResults, bool sortByIdentity)
         {
-            if (documents == null)
-            {
-                throw new ArgumentNullException(nameof(documents));
-            }
             if (maximumResults <= 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(maximumResults));
             }
-            if (documents is List<AssetSearchDocument> list)
-            {
-                _documents = list.ToArray();
-            }
-            else
-            {
-                _documents = new AssetSearchDocument[documents.Count];
-                for (int index = 0; index < documents.Count; index++)
-                {
-                    _documents[index] = documents[index];
-                }
-            }
-            if (sortByIdentity && 1 < _documents.Length)
-            {
-                _sortBuffer = new AssetSearchDocument[_documents.Length];
-                _sortWidth = 1;
-            }
+            _ordering = new AssetSearchOrdering(documents, sortByIdentity);
+            _documents = _ordering.Documents;
             _terms = terms == null ? Array.Empty<string>() : (string[])terms.Clone();
             _normalizedTerms = new string[_terms.Length];
             _normalizedOrdinalTerms = new string[_terms.Length];
@@ -85,20 +57,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                 return;
             }
             Stopwatch clock = Stopwatch.StartNew();
-            int sortStepsPerCheck = budgetMilliseconds == 0 ? 1 : SortStepsPerBudgetCheck;
-            while (IsPreparing)
+            if (IsPreparing)
             {
-                for (int step = 0; step < sortStepsPerCheck && IsPreparing; step++)
-                {
-                    SortNextDocument();
-                }
-                if (budgetMilliseconds <= clock.Elapsed.TotalMilliseconds)
+                _ordering.Advance(budgetMilliseconds);
+                _documents = _ordering.Documents;
+                if (IsPreparing || budgetMilliseconds <= clock.Elapsed.TotalMilliseconds)
                 {
                     RecordSlice(clock.Elapsed.TotalMilliseconds, budgetMilliseconds);
                     return;
                 }
             }
-            while (ScannedCount < _documents.Length)
+            while (ScannedCount < _documents.Count)
             {
                 AssetSearchDocument document = _documents[ScannedCount++];
                 SearchResultMatchInfo match = MatchOrNull(document);
@@ -111,7 +80,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                     break;
                 }
             }
-            IsComplete = _documents.Length <= ScannedCount || _maximumResults <= _results.Count;
+            IsComplete = _documents.Count <= ScannedCount || _maximumResults <= _results.Count;
             RecordSlice(clock.Elapsed.TotalMilliseconds, budgetMilliseconds);
         }
 
@@ -122,34 +91,6 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             {
                 SliceOverrunCount++;
             }
-        }
-
-        // Merge bounded groups of documents so even one large merge yields before it finishes.
-        private void SortNextDocument()
-        {
-            if (_mergeOutput == _mergeEnd)
-            {
-                if (_mergeStart == _documents.Length)
-                {
-                    (_documents, _sortBuffer) = (_sortBuffer, _documents);
-                    if (_documents.Length - _sortWidth <= _sortWidth)
-                    {
-                        _sortWidth = 0;
-                        _sortBuffer = null;
-                        return;
-                    }
-                    _sortWidth *= 2;
-                    _mergeStart = 0;
-                }
-                _mergeLeft = _mergeStart;
-                _mergeRight = Math.Min(_mergeStart + _sortWidth, _documents.Length);
-                _mergeLeftEnd = _mergeRight;
-                _mergeEnd = Math.Min(_mergeRight + _sortWidth, _documents.Length);
-                _mergeOutput = _mergeStart;
-                _mergeStart = _mergeEnd;
-            }
-            bool takeLeft = _mergeLeft < _mergeLeftEnd && (_mergeEnd <= _mergeRight || AssetSearchDocument.CompareIdentity(_documents[_mergeLeft], _documents[_mergeRight]) <= 0);
-            _sortBuffer[_mergeOutput++] = _documents[takeLeft ? _mergeLeft++ : _mergeRight++];
         }
 
         private SearchResultMatchInfo MatchOrNull(AssetSearchDocument document)

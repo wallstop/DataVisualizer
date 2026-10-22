@@ -41,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Keep copied search metadata across window rebuilds without retaining every indexed asset. Load matches for visible search results and explicit navigation (#309, #310).
 
-- Search available asset text while indexing continues. Speed up queries in Unicode text, preserve result order, and refresh open searches as records arrive or change (#310).
+- Search available asset text while indexing continues. Speed up Unicode queries, keep final ordering responsive, and refresh open searches as records arrive or change (#310).
 
 - Simplify label filtering with Match all and Match any, keyboard-selectable pills, clear controls, and a readable Advanced expression. Keep missing active labels and show neutral
   counts (#314).
