@@ -69,9 +69,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         }
 
         /*
-            OrdinalIgnoreCase uses invariant uppercase casing. Keep surrogate text on the
-            original matching path so supplementary-character behavior stays runtime-owned.
-            This is only a candidate filter; original text still decides every match.
+            OrdinalIgnoreCase uses invariant uppercase casing. Leave malformed UTF-16 on
+            the original path so partial-surrogate matching stays runtime-owned. This is
+            only a candidate filter; original text still decides every match.
         */
         public static string NormalizeOrdinalOrNull(string text)
         {
@@ -79,9 +79,18 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             {
                 return null;
             }
-            foreach (char character in text)
+            for (int index = 0; index < text.Length; index++)
             {
-                if (char.IsSurrogate(character))
+                char character = text[index];
+                if (char.IsHighSurrogate(character))
+                {
+                    if (text.Length <= index + 1 || !char.IsLowSurrogate(text[index + 1]))
+                    {
+                        return null;
+                    }
+                    index++;
+                }
+                else if (char.IsLowSurrogate(character))
                 {
                     return null;
                 }

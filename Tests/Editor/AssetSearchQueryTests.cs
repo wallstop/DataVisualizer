@@ -141,6 +141,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase("Straße", "STRASSE")]
         [TestCase("ıstanbul", "ISTANBUL")]
         [TestCase("e\u0301", "É")]
+        [TestCase("\U000104B0", "\U000104D8")]
+        [TestCase("\U0001E900", "\U0001E922")]
         [TestCase("\U00010400", "\U00010428")]
         [TestCase("emoji 😀", "😀")]
         [TestCase("café", "CAFÉ")]
@@ -186,6 +188,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [TestCase("İstanbul", "istanbul")]
         [TestCase("ıstanbul", "ISTANBUL")]
         [TestCase("e\u0301", "É")]
+        [TestCase("\U000104B0", "\U000104D8")]
+        [TestCase("\U0001E900", "\U0001E922")]
         [TestCase("\U00010400", "\U00010428")]
         [TestCase("emoji 😀", "😀")]
         public void ShouldPreserveFieldMatchesAndOrTermsThroughTheUnicodeFilter(string value, string term)
@@ -214,7 +218,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(unicode.NormalizedOrdinalText, Does.Contain("CAFÉ"));
             AssetSearchDocument supplementary = new("guid", "😀", typeof(AssetSearchQueryTests), null);
             Assert.That(supplementary.NormalizedAsciiText == null);
-            Assert.That(supplementary.NormalizedOrdinalText == null);
+            Assert.That(supplementary.NormalizedOrdinalText, Does.Contain("😀"));
             Assert.That(AssetSearchDocument.NormalizeOrdinalOrNull(null) == null);
             AssetSearchQuery boundary = new(new[] { unicode }, new[] { "café\0AssetSearchQueryTests" }, 25);
             boundary.Advance(double.PositiveInfinity);
@@ -222,6 +226,32 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AssetSearchQuery guidSubstring = new(new[] { unicode }, new[] { "gui" }, 25);
             guidSubstring.Advance(double.PositiveInfinity);
             Assert.That(guidSubstring.Results, Is.Empty);
+        }
+
+        [Test]
+        public void ShouldLeaveMalformedUtf16AndPartialSurrogateTermsToRuntimeMatching()
+        {
+            string high = new(new[] { (char)0xD801 });
+            string low = new(new[] { (char)0xDC28 });
+            string pair = high + low;
+            foreach (string value in new[] { high, low, pair, high + "ordinary", "ordinary" + low })
+            {
+                AssetSearchDocument document = new("guid", "Ordinary", typeof(AssetSearchQueryTests), new SearchTextSource { Text = value });
+                if (value != pair)
+                {
+                    Assert.That(document.NormalizedOrdinalText == null);
+                }
+                foreach (string term in new[] { high, low, pair, "ordinary" })
+                {
+                    SearchResultMatchInfo expected = document.MatchOrNull(new[] { term });
+                    AssetSearchQuery query = new(new[] { document }, new[] { term }, 25);
+                    query.Advance(double.PositiveInfinity);
+                    Assert.That(query.Results.Count, Is.EqualTo(expected == null ? 0 : 1));
+                }
+            }
+            Assert.That(AssetSearchDocument.NormalizeOrdinalOrNull(high) == null);
+            Assert.That(AssetSearchDocument.NormalizeOrdinalOrNull(low) == null);
+            Assert.That(AssetSearchDocument.NormalizeOrdinalOrNull(pair) != null);
         }
 
         [Test]
