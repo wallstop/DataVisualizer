@@ -45,6 +45,30 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             GC.KeepAlive(cache);
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldKeepCapturedTextWhenLoadedAssetsChangeAfterQueryCreation(bool retainObjects)
+        {
+            using TestCleanupScope cleanup = new();
+            PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(asset));
+            asset.name = "Record";
+            asset.Description = "before";
+            AssetObjectCache cache = retainObjects ? new AssetObjectCache(new List<ScriptableObject>()) : new AssetObjectCache(new AssetMetadataStore());
+            cache.Upsert("guid", asset, true);
+            AssetSearchQuery before = cache.CreateQuery(new[] { "before" }, 25);
+            asset.Description = "after";
+            cache.Upsert("guid", asset, true);
+            AssetSearchQuery after = cache.CreateQuery(new[] { "after" }, 25);
+            cache.ResetRetainingRows(new[] { asset }, _ => true);
+            cache.Clear();
+            before.Advance();
+            after.Advance();
+            Assert.That(before.Results.Count, Is.EqualTo(1));
+            Assert.That(after.Results.Count, Is.EqualTo(1));
+            Assert.That(before.Results[0].Document.Match(new[] { "after" }).isMatch, Is.False);
+        }
+
         [Test]
         public void ShouldReuseSharedTextAndLabelsAcrossIndependentSearchCaches()
         {

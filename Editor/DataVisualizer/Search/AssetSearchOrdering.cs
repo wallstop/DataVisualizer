@@ -10,8 +10,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         private const int StepsPerBudgetCheck = 64;
 
         public bool IsComplete => _width == 0;
-        public IReadOnlyList<AssetSearchDocument> Documents => _documents;
+        public IReadOnlyList<AssetSearchDocument> Documents => _snapshot ?? (IReadOnlyList<AssetSearchDocument>)_documents;
 
+        private readonly AssetSearchSnapshot _snapshot;
         private AssetSearchDocument[] _documents;
         private AssetSearchDocument[] _buffer;
         private int _width;
@@ -27,6 +28,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             if (documents == null)
             {
                 throw new ArgumentNullException(nameof(documents));
+            }
+            if (!sortByIdentity && documents is AssetSearchSnapshot snapshot)
+            {
+                _snapshot = snapshot;
+                return;
             }
             if (documents is List<AssetSearchDocument> list)
             {

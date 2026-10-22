@@ -3346,7 +3346,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             int indexGeneration = _searchCacheGeneration;
             int snapshotVersion = _assetObjectCache.Version;
             string[] terms = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            AssetSearchQuery query = new(_assetObjectCache.Documents, terms, showAll ? int.MaxValue : MaxSearchResults, sortByIdentity: !_assetObjectCache.IsSorted);
+            AssetSearchQuery query = _assetObjectCache.CreateQuery(terms, showAll ? int.MaxValue : MaxSearchResults);
             _observedSearchPublished = false;
             _observedSearchQuery = query;
             _observedSearchText = searchText;
