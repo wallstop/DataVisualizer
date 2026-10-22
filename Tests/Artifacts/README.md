@@ -31,3 +31,6 @@ Cancelled reports keep the active sample with `complete=false` and unavailable c
 The [22 October real 10k query-publication report](search-completion-10k-2026-10-22.md) retains complete rare/no-match observations and the earlier cancelled staging attempt.
 
 The [Unicode-prefilter follow-up](search-unicode-10k-2026-10-22.md) records the later 10k publication observations, matching coverage and normalized-string memory tradeoff.
+
+The [final-index ordering experiment](final-index-ordering-2026-10-22.md) records current Unicode metadata scaling, cooperative final-sort calls and an incomplete real 10k
+readiness attempt.
