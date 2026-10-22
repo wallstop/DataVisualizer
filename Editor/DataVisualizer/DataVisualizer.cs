@@ -1680,7 +1680,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _nextColorIndex = 0;
             Instance = this;
             _assetChanges?.Dispose();
-            _assetObjectCache = new AssetObjectCache(_allManagedObjectsCache);
+            _assetObjectCache = new AssetObjectCache(_allManagedObjectsCache, AssetGuidTypeIndex.Shared.Metadata);
             _assetChanges = new AssetChangeRefreshService(IsTrackedAssetType, ApplyAssetChange);
             ObjectChangeEvents.changesPublished -= HandleAssetObjectChanges;
             ObjectChangeEvents.changesPublished += HandleAssetObjectChanges;

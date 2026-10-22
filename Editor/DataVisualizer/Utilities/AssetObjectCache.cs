@@ -14,6 +14,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public IReadOnlyList<AssetSearchDocument> Documents => _documents;
 
         private readonly List<ScriptableObject> _ordered;
+        private readonly AssetMetadataStore _metadata;
         private readonly List<AssetSearchDocument> _documents = new();
         private readonly Dictionary<string, ScriptableObject> _byGuid = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _documentIndexByGuid = new(StringComparer.Ordinal);
@@ -21,7 +22,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private bool _isSorted = true;
 
         public AssetObjectCache(List<ScriptableObject> ordered)
+            : this(ordered, null) { }
+
+        public AssetObjectCache(List<ScriptableObject> ordered, AssetMetadataStore metadata)
         {
+            _metadata = metadata;
             _ordered = ordered ?? throw new ArgumentNullException(nameof(ordered));
             _ordered.Clear();
         }
@@ -105,7 +110,24 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 return false;
             }
-            AssetSearchDocument replacement = value != null ? new AssetSearchDocument(guid, value.name, value.GetType(), value) : null;
+            AssetSearchDocument replacement = null;
+            if (value != null)
+            {
+                if (_metadata != null)
+                {
+                    AssetMetadataRecord record = new(guid, value);
+                    _metadata.Upsert(record);
+                    replacement = record.Document;
+                }
+                else
+                {
+                    replacement = new AssetSearchDocument(guid, value.name, value.GetType(), value);
+                }
+            }
+            else
+            {
+                _metadata?.Remove(guid);
+            }
             if (
                 value != null
                 && _byGuid.TryGetValue(guid, out ScriptableObject previous)

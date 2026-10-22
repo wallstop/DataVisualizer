@@ -19,6 +19,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public static AssetGuidTypeIndex Shared { get; } = new();
 
+        public AssetMetadataStore Metadata { get; } = new();
+
         public bool IsComplete => _state == AssetGuidTypeIndexState.Complete;
 
         public bool IsSuspended => _suspended;
@@ -94,6 +96,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             _queuedPaths.Clear();
             _indexedChanges.Clear();
             TypeQueryCount = 0;
+            Metadata.Clear();
             _assetsByPath.Clear();
             _guidsByType.Clear();
             _suspended = false;
@@ -431,9 +434,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         private bool RemovePath(string path)
         {
+            bool metadataRemoved = Metadata.RemovePath(path);
             if (string.IsNullOrWhiteSpace(path) || !_assetsByPath.TryGetValue(path, out (Type Type, string Guid) indexedAsset))
             {
-                return false;
+                return metadataRemoved;
             }
 
             _assetsByPath.Remove(path);
