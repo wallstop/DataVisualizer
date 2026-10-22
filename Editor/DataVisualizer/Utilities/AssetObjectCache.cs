@@ -14,6 +14,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public IReadOnlyList<AssetSearchDocument> Documents => _documents;
 
         private readonly List<ScriptableObject> _ordered;
+        private readonly AssetMetadataStore _metadata;
         private readonly List<AssetSearchDocument> _documents = new();
         private readonly Dictionary<string, ScriptableObject> _byGuid = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _documentIndexByGuid = new(StringComparer.Ordinal);
@@ -21,7 +22,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private bool _isSorted = true;
 
         public AssetObjectCache(List<ScriptableObject> ordered)
+            : this(ordered, null) { }
+
+        public AssetObjectCache(List<ScriptableObject> ordered, AssetMetadataStore metadata)
         {
+            _metadata = metadata;
             _ordered = ordered ?? throw new ArgumentNullException(nameof(ordered));
             _ordered.Clear();
         }
@@ -62,8 +67,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 if (retained.Contains(entry.Value) && isRelevant(entry.Value.GetType()))
                 {
-                    AssetSearchDocument document =
-                        entry.Value != null ? new AssetSearchDocument(entry.Key, entry.Value.name, entry.Value.GetType(), entry.Value) : _keys[entry.Value];
+                    AssetSearchDocument document = entry.Value != null ? Capture(entry.Key, entry.Value) : _keys[entry.Value];
                     entries.Add((entry.Key, entry.Value, document));
                 }
             }
@@ -105,7 +109,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             {
                 return false;
             }
-            AssetSearchDocument replacement = value != null ? new AssetSearchDocument(guid, value.name, value.GetType(), value) : null;
+            AssetSearchDocument replacement = value != null ? Capture(guid, value) : null;
+            if (value == null)
+            {
+                _metadata?.Remove(guid);
+            }
             if (
                 value != null
                 && _byGuid.TryGetValue(guid, out ScriptableObject previous)
@@ -190,6 +198,17 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 _ordered.Add(_byGuid[document.Guid]);
             }
             _isSorted = true;
+        }
+
+        private AssetSearchDocument Capture(string guid, ScriptableObject value)
+        {
+            if (_metadata == null)
+            {
+                return new AssetSearchDocument(guid, value.name, value.GetType(), value);
+            }
+            AssetMetadataRecord record = new(guid, value);
+            _metadata.Upsert(record);
+            return record.Document;
         }
 
         private int Compare(ScriptableObject first, ScriptableObject second)
