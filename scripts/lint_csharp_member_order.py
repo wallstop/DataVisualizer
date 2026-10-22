@@ -680,21 +680,21 @@ def classify_member(masked: str, member: Member, type_name: str) -> Classificati
         return Classification(unclassifiable=True)
     access = (
         "public"
-        if re.search(r"\bpublic\b", prefix.prefix)
+        if re.search(r"(?<!@)\bpublic\b", prefix.prefix)
         else "protected"
-        if re.search(r"\bprotected\b", prefix.prefix)
+        if re.search(r"(?<!@)\bprotected\b", prefix.prefix)
         else "internal"
-        if re.search(r"\binternal\b", prefix.prefix)
+        if re.search(r"(?<!@)\binternal\b", prefix.prefix)
         else "private"
-        if re.search(r"\bprivate\b", prefix.prefix)
+        if re.search(r"(?<!@)\bprivate\b", prefix.prefix)
         else "none"
     )
-    is_static = re.search(r"\bstatic\b", prefix.prefix) is not None
-    is_const = re.search(r"\bconst\b", prefix.prefix) is not None
+    is_static = re.search(r"(?<!@)\bstatic\b", prefix.prefix) is not None
+    is_const = re.search(r"(?<!@)\bconst\b", prefix.prefix) is not None
 
-    if re.search(r"\bevent\b", prefix.prefix):
+    if re.search(r"(?<!@)\bevent\b", prefix.prefix):
         return Classification(tier="event", access=access)
-    if re.search(r"\bdelegate\b", prefix.prefix):
+    if re.search(r"(?<!@)\bdelegate\b", prefix.prefix):
         return Classification(tier="delegate", access=access)
 
     if is_const:

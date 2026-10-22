@@ -72,12 +72,12 @@ def case_classifies_tuple_members_and_preserves_slices() -> None:
     root = new_temp_root(prefix="member-order-tuples-")
     try:
         members = [
-            "    public static (int, int) Shared => (1, 2);\n",
+            "    public static (int @private, int @public) Shared => (1, 2);\n",
             "    public static (int X, (int Y, int Z) Other) SharedField;\n",
-            "    public (int X, int Y) Value { get; set; }\n",
+            "    public (int @static, int @private) Value { get; set; }\n",
             "    public System.Collections.Generic.List<(int X, int Y)> Field;\n",
             "    private static int First() { return 0; }\n",
-            "    [Example(1)]\n    private static (int Left, int Right) Second() { return (0, 0); }\n",
+            "    [Example(@private: 1)]\n    private static (int Left, int Right) Second() { return (0, 0); }\n",
             "    private static (int, (int, int)) Third<T>() => (0, (0, 0));\n",
             "    private (T, T) Fourth<T>() where T : class => (null, null);\n",
             "    private System.Threading.Tasks.Task<(int, int)> Fifth() => null;\n",
