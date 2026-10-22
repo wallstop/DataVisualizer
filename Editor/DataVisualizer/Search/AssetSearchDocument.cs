@@ -15,6 +15,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         public string TypeName { get; }
         public string TypeFullName { get; }
         public string NormalizedAsciiText { get; }
+        public string NormalizedOrdinalText { get; }
 
         private readonly List<(string Name, string Value)> _fields = new();
 
@@ -32,7 +33,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             {
                 text.Append('\0').Append(field.Value);
             }
-            NormalizedAsciiText = NormalizeAsciiOrNull(text.ToString());
+            string capturedText = text.ToString();
+            NormalizedAsciiText = NormalizeAsciiOrNull(capturedText);
+            if (NormalizedAsciiText == null)
+            {
+                NormalizedOrdinalText = NormalizeOrdinalOrNull(capturedText);
+            }
         }
 
         public static int CompareIdentity(AssetSearchDocument left, AssetSearchDocument right)
@@ -60,6 +66,28 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                 }
             }
             return text.ToLowerInvariant();
+        }
+
+        /*
+            OrdinalIgnoreCase uses invariant uppercase casing. Keep surrogate text on the
+            original matching path so supplementary-character behavior stays runtime-owned.
+            This is only a candidate filter; original text still decides every match.
+        */
+        public static string NormalizeOrdinalOrNull(string text)
+        {
+            if (text == null)
+            {
+                return null;
+            }
+            foreach (char character in text)
+            {
+                if (char.IsSurrogate(character))
+                {
+                    return null;
+                }
+            }
+            string normalized = text.ToUpperInvariant();
+            return normalized.Length == text.Length ? normalized : null;
         }
 
         public SearchResultMatchInfo Match(string[] terms)
