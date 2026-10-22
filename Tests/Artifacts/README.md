@@ -22,6 +22,7 @@ site assets. Test transcripts, raw samples, benchmark procedures and experiment 
 samples. It waits for a current query publication, including zero matches, and a complete window index. `firstResultMilliseconds` records the first observed match; it stays `-1`
 for no matches. `completedMilliseconds` records the first observed completed snapshot. Both include field input and editor scheduling, and exclude GPU completion.
 
-Rare field tokens include Unicode and are deterministic fixture strings on `BaseDataObject.Description` and `OtherEditorOnlyCreationData.SearchText`. Other ordinary fixture types skip that condition.
-The legacy `search-first-results` scenario retains common-name first-result observations. Common queries can stop at the production result cap; rare/no-match cases scan the full
-snapshot. Each observation records metadata hits, rendered preview rows, result-cap status, query overrun deltas and the cumulative window maximum query slice. Cancelled reports keep the active sample with `complete=false` and unavailable completion time. These runs do not measure partial-index or fresh-process latency.
+Rare field tokens include Unicode and are deterministic fixture strings on `BaseDataObject.Description` and `OtherEditorOnlyCreationData.SearchText`. Other ordinary fixture types
+skip that condition. The legacy `search-first-results` scenario retains common-name first-result observations. Common queries can stop at the production result cap; rare/no-match
+cases scan the full snapshot. Each observation records metadata hits, rendered preview rows, result-cap status, query overrun deltas and the cumulative window maximum query slice.
+Cancelled reports keep the active sample with `complete=false` and unavailable completion time. These runs do not measure partial-index or fresh-process latency.
