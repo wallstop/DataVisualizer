@@ -114,9 +114,9 @@ authorize adding a storage engine or promising one-million-asset support.
 describe the measured revision, not the later repaired tree.
 
 The opt-in driver completed all 18 partial/full scenarios in 888.85 seconds on Unity 6000.5.2f1 Windows. Each query discards five warm-ups and records 30 samples. Each synthetic
-record has a unique GUID/path/name/title, two copied labels, and two shared Unicode field-text values including nested text. No Unity objects, asset files, native imports or
-AssetDatabase classification are created or measured. The store is owned by an isolated production `AssetGuidTypeIndex`; queries use its copied documents through
-`AssetObjectCache`.
+record has a unique GUID/path/name/title, two copied labels, and two shared field-text values including nested text, with Unicode in names and one field. No Unity objects, asset
+files, native imports or AssetDatabase classification are created or measured. The store is owned by an isolated production `AssetGuidTypeIndex`; queries use its copied documents
+through `AssetObjectCache`.
 
 | Records   | Store (MiB) | Store + view (MiB) | With tracker (MiB) | Final sort (ms) |
 | --------- | ----------- | ------------------ | ------------------ | --------------- |
