@@ -11,10 +11,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public string query;
         public bool complete;
         public bool indexComplete;
+        public bool reachedLimit;
         public int generation;
+        public int sliceOverruns;
+        public double longestWindowQuerySliceMilliseconds;
         public int records;
         public int scanned;
         public int matches;
+        public int visibleMatches;
         public int expectedMatches;
         public double actionMilliseconds;
         public double firstResultMilliseconds = -1;

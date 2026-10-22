@@ -34,6 +34,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(window.IsActiveSearchComplete, Is.True);
             Assert.That(window.ActiveSearchText, Is.EqualTo(absent));
             Assert.That(window.ActiveSearchMatchCount, Is.Zero);
+            Assert.That(window.ActiveSearchPreviewRowCount, Is.Zero);
+            Assert.That(window.ActiveSearchReachedLimit, Is.False);
             Assert.That(window.ActiveSearchScannedCount, Is.EqualTo(window.ActiveSearchRecordCount));
             int generation = window.ActiveSearchGeneration;
             field.value = string.Empty;

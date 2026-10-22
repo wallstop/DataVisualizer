@@ -96,6 +96,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 Assert.That(sample.complete, Is.True, sample.kind);
                 Assert.That(sample.indexComplete, Is.True, sample.kind);
+                Assert.That(sample.visibleMatches, Is.EqualTo(sample.matches), sample.kind);
                 Assert.That(sample.actionMilliseconds <= sample.completedMilliseconds, sample.kind);
                 if (sample.kind == "no-match")
                 {
