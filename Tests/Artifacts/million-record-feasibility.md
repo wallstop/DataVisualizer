@@ -1,8 +1,8 @@
 # Million-record feasibility
 
 This is a synthetic metadata experiment for [#323](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/323), not a claim that DxVisualizer supports one million Unity
-assets. The current browser still retains loaded assets; the shared metadata index proposed in [#309](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/309) is
-unfinished.
+assets. At the measured source below, the browser retained loaded assets and the shared metadata index proposed in
+[#309](https://github.com/Ambiguous-Interactive/DxVisualizer/issues/309) is unfinished. A later shared-store observation is recorded at the end of this report.
 
 ## What was measured
 
@@ -105,3 +105,53 @@ interactive work. Normal EditMode runs skip the fixture.
 Repeat against #309's actual shared index after it exists. Measure representative Unicode/field text, repeated invalidation, UI debounce/rendering, native retention and working
 set, then stage the real-asset pilots under the budget above. Partitioning or disk-backed queries need a measured workload and invalidation/caching design; this experiment does not
 authorize adding a storage engine or promising one-million-asset support.
+
+## Shared-store follow-up on 22 October 2026
+
+[Raw samples](performance-shared-metadata-2026-10-22.json) record the proposed shared metadata store and window document view at
+[4bbf255](https://github.com/Ambiguous-Interactive/DxVisualizer/commit/4bbf255456643460d2a5a3cf82ee7cda299decc7). The emitted report is preserved unchanged; its driver SHA-256 is
+`ebbffcb27eae6d16cc935b6d561516007b800c49a512bf2c709e1d758bd82d91`. Subsequent lifecycle and navigation repairs in PRs #395 and #396 were validated separately. These timings
+describe the measured revision, not the later repaired tree.
+
+The opt-in driver completed all 18 partial/full scenarios in 888.85 seconds on Unity 6000.5.2f1 Windows. Each query discards five warm-ups and records 30 samples. Each synthetic
+record has a unique GUID/path/name/title, two copied labels, and two shared Unicode field-text values including nested text. No Unity objects, asset files, native imports or
+AssetDatabase classification are created or measured. The store is owned by an isolated production `AssetGuidTypeIndex`; queries use its copied documents through
+`AssetObjectCache`.
+
+| Records   | Store (MiB) | Store + view (MiB) | With tracker (MiB) | Final sort (ms) |
+| --------- | ----------- | ------------------ | ------------------ | --------------- |
+| 10,000    | 3.84        | 4.45               | 5.39               | 42.14           |
+| 100,000   | 95.07       | 100.25             | 109.27             | 504.24          |
+| 1,000,000 | 974.59      | 1019.86            | 1156.45            | 6233.71         |
+
+Heap deltas follow forced collections in one warm editor process and include harness references. They are not isolated allocation counts or native memory. Construction, sorting,
+invalidation and heap observations are single samples per size. Zero retained object references and zero object-load calls refer to the synthetic metadata view. The selected-type
+browser still retains loaded rows; no bounded real-asset/native-memory claim follows.
+
+| Full records | Query         | Active median / p95 (ms) | Runner wall median / p95 (ms) |
+| ------------ | ------------- | ------------------------ | ----------------------------- |
+| 10,000       | absent-marker | 70.97 / 74.49            | 78.30 / 82.55                 |
+| 10,000       | needle        | 96.43 / 99.17            | 106.28 / 113.32               |
+| 10,000       | record        | 0.20 / 0.23              | 0.20 / 0.23                   |
+| 100,000      | absent-marker | 667.05 / 726.79          | 726.32 / 793.24               |
+| 100,000      | needle        | 923.85 / 992.69          | 1003.41 / 1066.79             |
+| 100,000      | record        | 0.24 / 0.45              | 0.24 / 0.45                   |
+| 1,000,000    | absent-marker | 6839.30 / 7311.97        | 7446.14 / 7965.52             |
+| 1,000,000    | needle        | 9268.66 / 9778.27        | 10117.44 / 10591.04           |
+| 1,000,000    | record        | 2.45 / 3.24              | 2.45 / 3.24                   |
+
+p95 is nearest rank (sample 29 of 30). Raw data also separates the 10% partial snapshots. Partial snapshots use cooperative ordering; complete views use their separately measured
+final sort. Common queries stop after 25 results; rare/no-match queries scan every available record. Timings exclude production window input/debounce, rendering and real object
+extraction. The final synchronous sort can exceed the 4 ms target; this run accounts for that cost and does not make it cooperative.
+
+Each size also removes and restores 1,000 identical records and applies one synthetic tracked change. These are instrumented component observations, not concurrent real imports or
+a full invalidation workload. The cancellation boundary measures preparation plus one query slice, then verifies the abandoned scan stays stopped. It does not measure
+input-to-cancellation latency or every editor stall. Forced collection and longest observed construction/query units are reported separately. There is no persistent cache;
+`diskCacheBytes: -1` means unavailable.
+
+The explicit run has a 30-minute runner limit and a 2 GiB managed-heap increase guard during construction. It reached every declared size. No real million-asset experiment was
+started. The earlier disposable-project resource/time stop criteria remain required before real staging.
+
+Keep the recommendation unchanged: do not claim million-asset support. Representative metadata already costs about one GiB here, and rare scans and final sorting stall for seconds.
+Bounded selected-row retention, global stall/input cancellation observations, native/cache measurements and real-asset matrices remain open under #309, #310 and #323. Measure
+representative projects before choosing partitioning, an inverted index or disk-backed storage; this synthetic result alone does not justify a storage engine.
