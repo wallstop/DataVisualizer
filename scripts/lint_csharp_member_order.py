@@ -40,9 +40,8 @@ Both rules tokenize rather than grep, because the interesting words are not alwa
   * ``record`` is contextual and is a perfectly good field or parameter name.
   * ``[Attr(new[] { 1, 2 })]`` puts a brace before the member's own body brace.
   * a field initializer -- ``private int[] _a = { 1, 2 };`` -- does the same.
-  * ``private (int X, int Y) _point;`` opens a tuple type, not a parameter list, so a member whose
-    declaration prefix breaks at ``(`` is only a method when the token before the paren is an
-    identifier (or ``>`` of a generic, or ``operator``).
+  * ``private (int X, int Y) _point;`` opens a tuple type, not a parameter list. Skip
+    balanced type-position tuples before looking for the method name and parameter list.
 Parameter lists, attribute sections and bracketed types are skipped as balanced spans, and
 comments and string literals are masked to spaces first so a brace inside either cannot count.
 
@@ -569,6 +568,7 @@ class DeclarationPrefix:
 
     prefix: str
     break_char: str
+    break_index: int
 
 
 def declaration_prefix(masked: str, start: int, end: int) -> Optional[DeclarationPrefix]:
@@ -576,14 +576,21 @@ def declaration_prefix(masked: str, start: int, end: int) -> Optional[Declaratio
 
     Everything from the first token through the character that opens its body
     or terminates its header. Balanced ``[...]`` spans (attributes, an
-    indexer's parameter brackets) are skipped whole. Returns None when a span
+    indexer's parameter brackets) and type-position tuples are skipped whole. Returns None when a span
     never closes (the member is reported through the placement rules instead).
     """
     scan = start
     while scan < end:
         char = masked[scan]
-        if char == "{" or char == "(" or char == "=" or char == ";":
-            return DeclarationPrefix(prefix=masked[start:scan].strip(), break_char=char)
+        if char == "(" and callable_name_before(masked, scan) is None:
+            # A tuple in a return/member type is not a method parameter list.
+            close = skip_balanced(masked, scan)
+            if close < 0:
+                return None
+            scan = close
+            continue
+        if char in "{(=;":
+            return DeclarationPrefix(prefix=masked[start:scan].strip(), break_char=char, break_index=scan)
         if char == "[":
             close = skip_balanced(masked, scan)
             if close < 0:
@@ -591,7 +598,7 @@ def declaration_prefix(masked: str, start: int, end: int) -> Optional[Declaratio
             scan = close
             continue
         scan += 1
-    return DeclarationPrefix(prefix=masked[start:end].strip(), break_char="")
+    return DeclarationPrefix(prefix=masked[start:end].strip(), break_char="", break_index=end)
 
 
 def is_plain_equals(masked: str, index: int) -> bool:
@@ -696,29 +703,6 @@ def classify_member(masked: str, member: Member, type_name: str) -> Classificati
     if prefix.break_char == "(":
         if re.search(r"(\boperator\b|\bimplicit\b|\bexplicit\b)", prefix.prefix):
             return Classification(tier="static method" if is_static else "method", access=access)
-        # Find the paren that terminated the prefix: the first top-level `(` after the header.
-        paren = -1
-        scan = member.header_start
-        while scan < member.end:
-            if masked[scan] == "(":
-                paren = scan
-                break
-            if masked[scan] == "[":
-                close = skip_balanced(masked, scan)
-                if close < 0:
-                    break
-                scan = close - 1
-                continue
-            scan += 1
-        callable = callable_name_before(masked, paren) if paren >= 0 else None
-        if callable is None:
-            # A type-position paren: a tuple-typed member. Property or field, per its accessor.
-            kind = accessor_kind(masked, member.header_start, member.end)
-            if kind is None:
-                return Classification(unclassifiable=True)
-            if kind == "property":
-                return Classification(tier="static property" if is_static else "property", access=access)
-            return Classification(tier="static field" if is_static else "field", access=access)
         last_ident_match = re.search(r"~?[A-Za-z_]\w*\s*$", prefix.prefix)
         last_ident = last_ident_match.group(0).strip() if last_ident_match else None
         if last_ident is not None and (last_ident == type_name or last_ident == f"~{type_name}"):
@@ -988,32 +972,7 @@ def member_name(masked: str, member: Member) -> Optional[str]:
     if prefix is None:
         return None
     if prefix.break_char == "(":
-        # The name sits before the paren -- unless a tuple type opened it
-        # (`private (int X, int Y) _point;`), in which case it sits after the span.
-        paren = -1
-        scan = member.header_start
-        while scan < member.end:
-            if masked[scan] == "(":
-                paren = scan
-                break
-            if masked[scan] == "[":
-                inner = skip_balanced(masked, scan)
-                if inner < 0:
-                    return None
-                scan = inner - 1
-                continue
-            scan += 1
-        if paren >= 0:
-            callable = callable_name_before(masked, paren)
-            if callable is not None:
-                return callable
-        scan = skip_balanced(masked, paren) if paren >= 0 else member.header_start
-        if scan < 0:
-            return None
-        while scan < member.end and SPACEY.search(masked[scan]):
-            scan += 1
-        after = re.match(r"[A-Za-z_]\w*", masked[scan : member.end])
-        return after.group(0) if after is not None else None
+        return callable_name_before(masked, prefix.break_index)
     last = re.search(r"~?[A-Za-z_]\w*\s*$", prefix.prefix)
     return last.group(0).strip() if last is not None else None
 
