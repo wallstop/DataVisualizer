@@ -364,34 +364,39 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
             }
             reportProgress("measuring edits after shared queries", size);
-            AssetSearchQuery retainedQuery = dataset.View.CreateQuery(new[] { "record" }, 25);
-            long beforeMutation = GC.GetTotalMemory(true);
-            double[] mutationTimes = new double[2];
-            for (int index = 0; index < mutationTimes.Length; index++)
+            foreach (AssetObjectCache queryView in new[] { dataset.PartialView, dataset.View })
             {
-                AssetSearchDocument original = dataset.Documents[index];
-                AssetSearchDocument replacement = new(original.Guid, original.Name, original.ExactType, null);
-                dataset.Index.Metadata.Upsert(new AssetMetadataRecord(replacement, replacement.ExactType, "Assets/Synthetic/" + original.Guid + ".asset", original.Name, null));
-                Stopwatch mutation = Stopwatch.StartNew();
-                Assert.That(dataset.View.UseMetadata(original.Guid, managedTypes));
-                mutationTimes[index] = mutation.Elapsed.TotalMilliseconds;
+                AssetSearchQuery retainedQuery = queryView.CreateQuery(new[] { "record" }, 25);
+                long beforeMutation = GC.GetTotalMemory(true);
+                double[] mutationTimes = new double[2];
+                for (int index = 0; index < mutationTimes.Length; index++)
+                {
+                    AssetSearchDocument original = dataset.Documents[index];
+                    AssetSearchDocument replacement = new(original.Guid, original.Name, original.ExactType, null);
+                    dataset.Index.Metadata.Upsert(new AssetMetadataRecord(replacement, replacement.ExactType, "Assets/Synthetic/" + original.Guid + ".asset", original.Name, null));
+                    Stopwatch mutation = Stopwatch.StartNew();
+                    Assert.That(queryView.UseMetadata(original.Guid, managedTypes));
+                    mutationTimes[index] = mutation.Elapsed.TotalMilliseconds;
+                }
+                long mutationHeap = GC.GetTotalMemory(true) - beforeMutation;
+                mutations.Add(
+                    "{\"records\":"
+                        + queryView.Count
+                        + ",\"snapshotOwnership\":\""
+                        + (ReferenceEquals(queryView, dataset.View) ? "shared sorted cache" : "shared unsorted cache")
+                        + "\",\"firstChangeMs\":"
+                        + Number(mutationTimes[0])
+                        + ",\"secondChangeMs\":"
+                        + Number(mutationTimes[1])
+                        + ",\"retainedHeapDeltaBytes\":"
+                        + mutationHeap
+                        + "}"
+                );
+                retainedQuery.Advance();
+                Assert.That(retainedQuery.RecordCount, Is.EqualTo(queryView.Count));
+                Assert.That(queryView.RetainedObjectCount, Is.Zero);
+                GC.KeepAlive(retainedQuery);
             }
-            long mutationHeap = GC.GetTotalMemory(true) - beforeMutation;
-            mutations.Add(
-                "{\"records\":"
-                    + size
-                    + ",\"firstChangeMs\":"
-                    + Number(mutationTimes[0])
-                    + ",\"secondChangeMs\":"
-                    + Number(mutationTimes[1])
-                    + ",\"retainedHeapDeltaBytes\":"
-                    + mutationHeap
-                    + "}"
-            );
-            retainedQuery.Advance();
-            Assert.That(retainedQuery.RecordCount, Is.EqualTo(size));
-            Assert.That(dataset.View.RetainedObjectCount, Is.Zero);
-            GC.KeepAlive(retainedQuery);
             GC.KeepAlive(dataset);
         }
 
@@ -424,7 +429,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         + Number(runClock.Elapsed.TotalMilliseconds)
                         + ",\n"
                         + "\"productionSurfaces\":[\"AssetMetadataStore\",\"AssetMetadataRecord\",\"AssetObjectCache\",\"AssetSearchDocument\",\"AssetSearchQuery\",\"AssetChangeRefreshService\"],\n"
-                        + "\"sharedMetadataStoreMeasured\":true,\"assetDatabaseClassificationMeasured\":false,\n\"realAssets\":0,\n\"diskCacheBytes\":-1,\n"
+                        + "\"partialViewFraction\":0.1,\"sharedMetadataStoreMeasured\":true,\"assetDatabaseClassificationMeasured\":false,\n\"realAssets\":0,\n\"diskCacheBytes\":-1,\n"
                         + "\"warmups\":"
                         + Warmups
                         + ",\n\"samples\":"
