@@ -131,6 +131,22 @@ namespace WallstopStudios.DataVisualizer.Editor
             state.window._suppressListSelectionCallback = state.suppressed
         );
 
+        /// <summary>The active query text, or null after cancellation or dismissal.</summary>
+        public string ActiveSearchText => _activePopover == _searchPopover ? _observedSearchText : null;
+        public int ActiveSearchGeneration => _searchQueryGeneration;
+        public int ActiveSearchMatchCount => _observedSearchQuery?.Results.Count ?? 0;
+        public int ActiveSearchScannedCount => _observedSearchQuery?.ScannedCount ?? 0;
+        public int ActiveSearchRecordCount => _observedSearchQuery?.RecordCount ?? 0;
+        public bool IsSearchIndexComplete => _isSearchCachePopulated && !_isLoadingSearchCacheAsync;
+
+        /// <summary>True only after the active query has published a current snapshot, including zero matches.</summary>
+        public bool IsActiveSearchComplete =>
+            _activePopover == _searchPopover
+            && _observedSearchQuery != null
+            && _observedSearchQuery.IsComplete
+            && _observedSearchCacheGeneration == _searchCacheGeneration
+            && _observedSearchCacheVersion == _assetObjectCache.Version;
+
         public int RetainedSearchObjectCount => _assetObjectCache?.RetainedObjectCount ?? 0;
         public int SearchResultObjectLoadCount => _assetObjectCache?.ObjectLoadCount ?? 0;
         public int SearchIndexObjectLoadCount { get; private set; }
@@ -352,6 +368,10 @@ namespace WallstopStudios.DataVisualizer.Editor
         private bool _showAllSearchResults;
         private AssetSearchResultsView _allSearchResultsView;
         private int _searchQueryGeneration;
+        private AssetSearchQuery _observedSearchQuery;
+        private string _observedSearchText;
+        private int _observedSearchCacheGeneration;
+        private int _observedSearchCacheVersion;
         private int _searchHighlightIndex = -1;
         private int _typePopoverHighlightIndex = -1;
         private string _lastTypeAddSearchTerm;
@@ -1962,6 +1982,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchQueryTask?.Pause();
             _searchQueryTask = null;
             _advanceSearchQuery = null;
+            _observedSearchQuery = null;
+            _observedSearchText = null;
             CloseAssetTool();
             _objectSelectionInput?.Dispose();
             _objectSelectionInput = null;
@@ -3278,6 +3300,8 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchQueryTask?.Pause();
             _searchQueryTask = null;
             _advanceSearchQuery = null;
+            _observedSearchQuery = null;
+            _observedSearchText = null;
             if (!refresh)
             {
                 _searchHighlightGuid = null;
@@ -3318,6 +3342,10 @@ namespace WallstopStudios.DataVisualizer.Editor
             int snapshotVersion = _assetObjectCache.Version;
             string[] terms = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             AssetSearchQuery query = new(_assetObjectCache.Documents, terms, showAll ? int.MaxValue : MaxSearchResults, sortByIdentity: !_assetObjectCache.IsSorted);
+            _observedSearchQuery = query;
+            _observedSearchText = searchText;
+            _observedSearchCacheGeneration = indexGeneration;
+            _observedSearchCacheVersion = snapshotVersion;
             double preparationMilliseconds = preparation.Elapsed.TotalMilliseconds;
             LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, preparationMilliseconds);
             if (4 < preparationMilliseconds)
@@ -3988,6 +4016,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _searchQueryTask?.Pause();
                 _searchQueryTask = null;
                 _advanceSearchQuery = null;
+                _observedSearchQuery = null;
+                _observedSearchText = null;
                 _searchHighlightGuid = null;
             }
             else if (_activePopover == _typeAddPopover)
