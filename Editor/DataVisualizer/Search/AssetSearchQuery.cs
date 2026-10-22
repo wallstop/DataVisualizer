@@ -29,6 +29,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         private int _mergeOutput;
         private readonly string[] _terms;
         private readonly string[] _normalizedTerms;
+        private readonly string[] _normalizedOrdinalTerms;
         private readonly int _maximumResults;
         private readonly List<(AssetSearchDocument Document, SearchResultMatchInfo Match)> _results = new();
 
@@ -64,9 +65,11 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             }
             _terms = terms == null ? Array.Empty<string>() : (string[])terms.Clone();
             _normalizedTerms = new string[_terms.Length];
+            _normalizedOrdinalTerms = new string[_terms.Length];
             for (int index = 0; index < _terms.Length; index++)
             {
                 _normalizedTerms[index] = AssetSearchDocument.NormalizeAsciiOrNull(_terms[index]);
+                _normalizedOrdinalTerms[index] = AssetSearchDocument.NormalizeOrdinalOrNull(_terms[index]);
             }
             _maximumResults = maximumResults;
         }
@@ -151,12 +154,14 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
 
         private SearchResultMatchInfo MatchOrNull(AssetSearchDocument document)
         {
-            if (document.NormalizedAsciiText != null)
+            string normalizedText = document.NormalizedAsciiText ?? document.NormalizedOrdinalText;
+            if (normalizedText != null)
             {
+                string[] normalizedTerms = document.NormalizedAsciiText != null ? _normalizedTerms : _normalizedOrdinalTerms;
                 bool possibleMatch = false;
-                foreach (string term in _normalizedTerms)
+                foreach (string term in normalizedTerms)
                 {
-                    if (term == null || document.NormalizedAsciiText.Contains(term, StringComparison.Ordinal))
+                    if (term == null || normalizedText.Contains(term, StringComparison.Ordinal))
                     {
                         possibleMatch = true;
                         break;
@@ -167,7 +172,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                     return null;
                 }
             }
-            // Non-ASCII input keeps the runtime's full OrdinalIgnoreCase semantics.
+            // Original strings preserve match sources, GUID equality and runtime casing.
             return document.MatchOrNull(_terms);
         }
     }

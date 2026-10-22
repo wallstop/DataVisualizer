@@ -15,6 +15,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         public string TypeName { get; }
         public string TypeFullName { get; }
         public string NormalizedAsciiText { get; }
+        public string NormalizedOrdinalText { get; }
 
         private readonly List<(string Name, string Value)> _fields = new();
 
@@ -32,7 +33,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             {
                 text.Append('\0').Append(field.Value);
             }
-            NormalizedAsciiText = NormalizeAsciiOrNull(text.ToString());
+            string capturedText = text.ToString();
+            NormalizedAsciiText = NormalizeAsciiOrNull(capturedText);
+            if (NormalizedAsciiText == null)
+            {
+                NormalizedOrdinalText = NormalizeOrdinalOrNull(capturedText);
+            }
         }
 
         public static int CompareIdentity(AssetSearchDocument left, AssetSearchDocument right)
@@ -60,6 +66,37 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                 }
             }
             return text.ToLowerInvariant();
+        }
+
+        /*
+            OrdinalIgnoreCase uses invariant uppercase casing. Leave malformed UTF-16 on
+            the original path so partial-surrogate matching stays runtime-owned. This is
+            only a candidate filter; original text still decides every match.
+        */
+        public static string NormalizeOrdinalOrNull(string text)
+        {
+            if (text == null)
+            {
+                return null;
+            }
+            for (int index = 0; index < text.Length; index++)
+            {
+                char character = text[index];
+                if (char.IsHighSurrogate(character))
+                {
+                    if (text.Length <= index + 1 || !char.IsLowSurrogate(text[index + 1]))
+                    {
+                        return null;
+                    }
+                    index++;
+                }
+                else if (char.IsLowSurrogate(character))
+                {
+                    return null;
+                }
+            }
+            string normalized = text.ToUpperInvariant();
+            return normalized.Length == text.Length ? normalized : null;
         }
 
         public SearchResultMatchInfo Match(string[] terms)

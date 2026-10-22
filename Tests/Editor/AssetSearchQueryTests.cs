@@ -136,6 +136,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(!noMatch.ReachedLimit);
         }
 
+        [TestCase("Kelvin", "kelvin")]
+        [TestCase("ſample", "sample")]
+        [TestCase("Straße", "STRASSE")]
+        [TestCase("ıstanbul", "ISTANBUL")]
+        [TestCase("e\u0301", "É")]
+        [TestCase("\U000104B0", "\U000104D8")]
+        [TestCase("\U0001E900", "\U0001E922")]
+        [TestCase("\U00010400", "\U00010428")]
+        [TestCase("emoji 😀", "😀")]
         [TestCase("café", "CAFÉ")]
         [TestCase("İstanbul", "istanbul")]
         [TestCase("Σίσυφος", "σίσυφος")]
@@ -146,6 +155,103 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             AssetSearchQuery query = new(new[] { document }, new[] { term }, 25);
             query.Advance();
             Assert.AreEqual(name.Contains(term, StringComparison.OrdinalIgnoreCase) ? 1 : 0, query.Results.Count);
+        }
+
+        [Test]
+        public void ShouldKeepBmpCaseGroupsCompatibleWithRuntimeOrdinalIgnoreCase()
+        {
+            Dictionary<string, string> groups = new(StringComparer.OrdinalIgnoreCase);
+            for (int code = 0; code < 65536; code++)
+            {
+                char character = (char)code;
+                if (char.IsSurrogate(character))
+                {
+                    continue;
+                }
+                string original = character.ToString();
+                string normalized = AssetSearchDocument.NormalizeOrdinalOrNull(original);
+                if (groups.TryGetValue(original, out string previous))
+                {
+                    Assert.That(normalized, Is.EqualTo(previous), code.ToString("X4"));
+                }
+                else
+                {
+                    groups.Add(original, normalized);
+                }
+            }
+        }
+
+        [TestCase("perf検索é000000", "PERF検索É000000")]
+        [TestCase("Kelvin", "kelvin")]
+        [TestCase("ſample", "sample")]
+        [TestCase("Straße", "STRASSE")]
+        [TestCase("İstanbul", "istanbul")]
+        [TestCase("ıstanbul", "ISTANBUL")]
+        [TestCase("e\u0301", "É")]
+        [TestCase("\U000104B0", "\U000104D8")]
+        [TestCase("\U0001E900", "\U0001E922")]
+        [TestCase("\U00010400", "\U00010428")]
+        [TestCase("emoji 😀", "😀")]
+        public void ShouldPreserveFieldMatchesAndOrTermsThroughTheUnicodeFilter(string value, string term)
+        {
+            AssetSearchDocument document = new("exact-guid", "Ordinary", typeof(AssetSearchQueryTests), new SearchTextSource { Text = value });
+            string[] terms = { "absent", term };
+            SearchResultMatchInfo expected = document.MatchOrNull(terms);
+            AssetSearchQuery query = new(new[] { document }, terms, 25);
+            query.Advance(double.PositiveInfinity);
+            Assert.That(query.Results.Count, Is.EqualTo(expected == null ? 0 : 1));
+            if (expected != null)
+            {
+                Assert.That(query.Results[0].Match.MatchedFields[0].matchedValue, Is.EqualTo(value));
+                Assert.That(query.Results[0].Match.MatchedFields[0].fieldName, Is.EqualTo(nameof(SearchTextSource.Text)));
+            }
+        }
+
+        [Test]
+        public void ShouldCacheUnicodeOnceWithoutDuplicatingTheAsciiCache()
+        {
+            AssetSearchDocument ascii = new("guid", "Ordinary", typeof(AssetSearchQueryTests), null);
+            Assert.That(ascii.NormalizedAsciiText != null);
+            Assert.That(ascii.NormalizedOrdinalText == null);
+            AssetSearchDocument unicode = new("guid", "café", typeof(AssetSearchQueryTests), null);
+            Assert.That(unicode.NormalizedAsciiText == null);
+            Assert.That(unicode.NormalizedOrdinalText, Does.Contain("CAFÉ"));
+            AssetSearchDocument supplementary = new("guid", "😀", typeof(AssetSearchQueryTests), null);
+            Assert.That(supplementary.NormalizedAsciiText == null);
+            Assert.That(supplementary.NormalizedOrdinalText, Does.Contain("😀"));
+            Assert.That(AssetSearchDocument.NormalizeOrdinalOrNull(null) == null);
+            AssetSearchQuery boundary = new(new[] { unicode }, new[] { "café\0AssetSearchQueryTests" }, 25);
+            boundary.Advance(double.PositiveInfinity);
+            Assert.That(boundary.Results, Is.Empty);
+            AssetSearchQuery guidSubstring = new(new[] { unicode }, new[] { "gui" }, 25);
+            guidSubstring.Advance(double.PositiveInfinity);
+            Assert.That(guidSubstring.Results, Is.Empty);
+        }
+
+        [Test]
+        public void ShouldLeaveMalformedUtf16AndPartialSurrogateTermsToRuntimeMatching()
+        {
+            string high = new(new[] { (char)0xD801 });
+            string low = new(new[] { (char)0xDC28 });
+            string pair = high + low;
+            foreach (string value in new[] { high, low, pair, high + "ordinary", "ordinary" + low })
+            {
+                AssetSearchDocument document = new("guid", "Ordinary", typeof(AssetSearchQueryTests), new SearchTextSource { Text = value });
+                if (value != pair)
+                {
+                    Assert.That(document.NormalizedOrdinalText == null);
+                }
+                foreach (string term in new[] { high, low, pair, "ordinary" })
+                {
+                    SearchResultMatchInfo expected = document.MatchOrNull(new[] { term });
+                    AssetSearchQuery query = new(new[] { document }, new[] { term }, 25);
+                    query.Advance(double.PositiveInfinity);
+                    Assert.That(query.Results.Count, Is.EqualTo(expected == null ? 0 : 1));
+                }
+            }
+            Assert.That(AssetSearchDocument.NormalizeOrdinalOrNull(high) == null);
+            Assert.That(AssetSearchDocument.NormalizeOrdinalOrNull(low) == null);
+            Assert.That(AssetSearchDocument.NormalizeOrdinalOrNull(pair) != null);
         }
 
         [Test]
@@ -179,6 +285,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.Throws<ArgumentOutOfRangeException>(() => query.Advance(-1));
             Assert.Throws<ArgumentOutOfRangeException>(() => query.Advance(double.NaN));
             Assert.Throws<ArgumentOutOfRangeException>(() => new AssetSearchQuery(Array.Empty<AssetSearchDocument>(), null, 0));
+        }
+
+        private sealed class SearchTextSource
+        {
+            public string Text;
         }
     }
 }

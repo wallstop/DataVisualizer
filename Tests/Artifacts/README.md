@@ -29,3 +29,5 @@ cases scan the full snapshot. Each observation records metadata hits, published 
 Cancelled reports keep the active sample with `complete=false` and unavailable completion time. These runs do not measure partial-index or fresh-process latency.
 
 The [22 October real 10k query-publication report](search-completion-10k-2026-10-22.md) retains complete rare/no-match observations and the earlier cancelled staging attempt.
+
+The [Unicode-prefilter follow-up](search-unicode-10k-2026-10-22.md) records the later 10k publication observations, matching coverage and normalized-string memory tradeoff.
