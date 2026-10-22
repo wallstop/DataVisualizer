@@ -178,8 +178,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         asset.name = PerfBaseline.FixtureName(CreatedCount);
                         if (asset is BaseDataObject data)
                         {
+                            data.Description = PerfBaseline.FixtureSearchText(CreatedCount);
                             data.BeforeCreate();
                             data._assetGuid = PerfBaseline.FixtureId(CreatedCount);
+                        }
+                        if (asset is OtherEditorOnlyCreationData ordinary)
+                        {
+                            ordinary.SearchText = PerfBaseline.FixtureSearchText(CreatedCount);
                         }
                         InitializationMilliseconds += initializeAsset.Elapsed.TotalMilliseconds;
                         Stopwatch create = Stopwatch.StartNew();

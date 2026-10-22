@@ -81,7 +81,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         private const string SearchTriggerFieldName = "_searchField";
         private const string SearchFieldElementName = "global-search-field";
         private const string SearchCachePopulatedFieldName = "_isSearchCachePopulated";
-        private const string SearchResultsFieldName = "_currentSearchResultItems";
+        private const int SearchKindCount = 4;
 
         private static readonly int[] FixtureSizes = { 100, 1000, 10000 };
 
@@ -291,6 +291,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         internal static string FixtureId(int index)
         {
             return "perf-fixture-" + index.ToString("D6", CultureInfo.InvariantCulture);
+        }
+
+        internal static string FixtureSearchText(int index)
+        {
+            return "perf検索é" + index.ToString("D6", CultureInfo.InvariantCulture);
         }
 
         internal static string FixtureName(int index)
@@ -635,6 +640,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     state.Phase = Phase.ColdOpen;
                     return;
                 }
+                state.SearchKind = 0;
                 state.SearchRepetition = 0;
                 state.SelectionRepetition = 0;
                 state.FilterRepetition = 0;
@@ -699,10 +705,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void RunInteractionSample(RunState state)
         {
-            if (state.SearchRepetition < WarmupRepetitions + SearchRepetitions)
+            if (state.SearchKind < SearchKindCount)
             {
-                MeasureSearch(state, state.SearchRepetition++);
-                return;
+                if (state.SearchRepetition == WarmupRepetitions + SearchRepetitions)
+                {
+                    state.SearchKind++;
+                    state.SearchRepetition = 0;
+                }
+                if (state.SearchKind < SearchKindCount)
+                {
+                    MeasureSearch(state, state.SearchRepetition++);
+                    return;
+                }
             }
 
             if (state.SelectionRepetition < WarmupRepetitions + SelectionRepetitions)
@@ -744,48 +758,117 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void MeasureSearch(RunState state, int repetition)
         {
-            string query = repetition % 2 == 0 ? SearchQueryFirst : SearchQuerySecond;
+            string query;
+            string kind;
+            int expectedMatches;
+            switch (state.SearchKind)
+            {
+                case 0:
+                    kind = "common-name";
+                    query = repetition % 2 == 0 ? SearchQueryFirst : SearchQuerySecond;
+                    expectedMatches = -1;
+                    break;
+                case 1:
+                    kind = "rare-guid";
+                    query = AssetDatabase.AssetPathToGUID($"{state.Staging.Folder}/{FixtureName(state.Current.Size - 1)}.asset");
+                    expectedMatches = 1;
+                    break;
+                case 2:
+                    kind = "rare-field";
+                    int fieldIndex = -1;
+                    for (int index = 0; index < state.FixtureTypes.Length; index++)
+                    {
+                        Type type = state.FixtureTypes[index];
+                        if (typeof(BaseDataObject).IsAssignableFrom(type) || type == typeof(OtherEditorOnlyCreationData))
+                        {
+                            fieldIndex = index;
+                            break;
+                        }
+                    }
+                    if (fieldIndex < 0)
+                    {
+                        state.SearchRepetition = WarmupRepetitions + SearchRepetitions;
+                        return;
+                    }
+                    query = FixtureSearchText(fieldIndex);
+                    expectedMatches = 1;
+                    break;
+                default:
+                    kind = "no-match";
+                    query = state.MissingLabel;
+                    expectedMatches = 0;
+                    break;
+            }
+            if (string.IsNullOrEmpty(query))
+            {
+                throw new InvalidOperationException("The search condition has no query text: " + kind);
+            }
             TextField searchField = FindSearchField(state.Window);
-            state.PendingQuery = query;
-            /*
-                The production search keeps a no-op guard on the last query string, so a
-                sample that repeats the previous query would measure nothing. Clearing
-                the field first guarantees every measured query really runs; the guard's
-                own empty-search pass happens outside the timed region.
-            */
+            // Clear outside the clock so every repetition starts a new query generation.
             searchField.value = string.Empty;
-            /*
-                The production search may build its results synchronously (small
-                caches) or through a debounce (larger ones — the size-1,000 run
-                measured a 0.6 ms callback that had not produced a row yet). The
-                clock keeps running across ticks until the results list carries a
-                row, so the sample is the until-first-results latency the T12
-                acceptance target describes, debounce included.
-            */
+            PerfSearchSample sample = new()
+            {
+                size = state.Current.Size,
+                kind = kind,
+                mode = repetition < WarmupRepetitions ? "warmup" : "warm",
+                query = query,
+                expectedMatches = expectedMatches,
+            };
+            state.Current.SearchObservations.Add(sample);
+            state.PendingSearch = sample;
+            state.QuerySliceOverrunsBefore = state.Window.SearchQuerySliceOverrunCount;
             state.PhaseClock.Restart();
             searchField.value = query;
+            sample.actionMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
             state.Phase = Phase.WaitingSearchResults;
         }
 
         private static void WaitSearchResults(RunState state)
         {
-            if (state.PhaseClock.Elapsed > TimeSpan.FromSeconds(5))
+            PerfSearchSample sample = state.PendingSearch;
+            DataVisualizerWindow window = state.Window;
+            if (state.PhaseClock.Elapsed > TimeSpan.FromSeconds(30))
             {
-                throw new InvalidOperationException($"the search '{state.PendingQuery}' produced no results within 5s at size {state.Current.Size}.");
+                throw new InvalidOperationException($"the search '{sample.kind}' did not complete within 30s at size {state.Current.Size}.");
             }
-
-            if (typeof(DataVisualizerWindow).GetField(SearchResultsFieldName, Members)?.GetValue(state.Window) is not List<VisualElement> results || results.Count == 0)
+            if (!string.Equals(window.ActiveSearchText, sample.query, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("The active query no longer matches the measured input.");
+            }
+            sample.generation = window.ActiveSearchGeneration;
+            sample.records = window.ActiveSearchRecordCount;
+            sample.scanned = window.ActiveSearchScannedCount;
+            sample.matches = window.ActiveSearchMatchCount;
+            sample.visibleMatches = window.ActiveSearchPreviewRowCount;
+            sample.reachedLimit = window.ActiveSearchReachedLimit;
+            sample.indexComplete = window.IsSearchIndexComplete;
+            sample.sliceOverruns = window.SearchQuerySliceOverrunCount - state.QuerySliceOverrunsBefore;
+            sample.longestWindowQuerySliceMilliseconds = window.LongestSearchQuerySliceMilliseconds;
+            if (0 < sample.visibleMatches && sample.firstResultMilliseconds < 0)
+            {
+                sample.firstResultMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+            }
+            if (!window.IsActiveSearchComplete || !sample.indexComplete)
             {
                 EditorApplication.QueuePlayerLoopUpdate();
-                return; // the next editor tick re-checks the results list
+                return;
             }
-
-            state.PhaseClock.Stop();
-            if (WarmupRepetitions < state.SearchRepetition)
+            sample.completedMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+            if ((0 <= sample.expectedMatches && sample.matches != sample.expectedMatches) || (sample.expectedMatches < 0 && sample.matches == 0))
             {
-                state.Current.SearchSamples.Add(state.PhaseClock.Elapsed.TotalMilliseconds);
-                state.Current.SearchMatchCounts.Add(results.Count);
+                throw new InvalidOperationException($"The {sample.kind} search returned {sample.matches} unexpected matches.");
             }
+            if (sample.visibleMatches != sample.matches)
+            {
+                throw new InvalidOperationException($"The {sample.kind} publication could not resolve every visible match.");
+            }
+            sample.complete = true;
+            if (sample.kind == "common-name" && sample.mode == "warm")
+            {
+                state.Current.SearchSamples.Add(sample.firstResultMilliseconds);
+                state.Current.SearchMatchCounts.Add(sample.matches);
+            }
+            state.PendingSearch = null;
             state.Phase = Phase.InteractionSamples;
         }
 
@@ -1274,6 +1357,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append(
                 "  \"interactionSemantics\": \"Five warmups then 30 warm observations per interaction; root paint is not GPU completion; readiness is observed layout, with observer delay. Small scrolls can be no-ops. Type switching requires at least two fixture types.\",\n"
             );
+            json.Append(
+                "  \"searchSemantics\": \"Five warmups and 30 warm samples per supported condition on a complete index. First result and current snapshot completion include field input and editor observation delay, not GPU paint. No-match first result is -1. Common names may reach the result cap. Rare fields require BaseDataObject or OtherEditorOnlyCreationData fixtures. Partial and fresh-process searches remain unmeasured.\",\n"
+            );
+            json.Append("  \"searchObservations\": [");
+            bool firstSearch = true;
+            foreach (SizeResult result in results)
+            {
+                foreach (PerfSearchSample sample in result.SearchObservations)
+                {
+                    if (!firstSearch)
+                    {
+                        json.Append(",");
+                    }
+                    firstSearch = false;
+                    json.Append(JsonUtility.ToJson(sample));
+                }
+            }
+            json.Append("],\n");
             json.Append("  \"interactionSamples\": [\n");
             bool firstInteraction = true;
             foreach (SizeResult result in results)
@@ -1519,6 +1620,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal double ColdOpenMilliseconds;
             internal readonly List<double> ColdOpenSamples = new();
             internal readonly List<double> WarmOpenSamples = new();
+            internal readonly List<PerfSearchSample> SearchObservations = new();
             internal readonly List<double> SearchSamples = new();
             internal readonly List<int> SearchMatchCounts = new();
             internal readonly List<double> SelectionSamples = new();
@@ -1555,7 +1657,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal int WarmRepetition;
             internal int SearchRepetition;
             internal int SelectionRepetition;
-            internal string PendingQuery;
+            internal int SearchKind;
+            internal int QuerySliceOverrunsBefore;
+            internal PerfSearchSample PendingSearch;
             internal int FilterRepetition;
             internal int ScrollRepetition;
             internal int TypeSwitchRepetition;
