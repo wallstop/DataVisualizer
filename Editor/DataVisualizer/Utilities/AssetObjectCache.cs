@@ -49,12 +49,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public AssetSearchQuery CreateQuery(string[] terms, int maximumResults)
         {
-            if (!_isSorted)
-            {
-                return new AssetSearchQuery(_documents, terms, maximumResults, sortByIdentity: true);
-            }
             AssetSearchSnapshot snapshot = new(_documents);
-            AssetSearchQuery query = new(snapshot, terms, maximumResults);
+            AssetSearchQuery query = new(snapshot, terms, maximumResults, sortByIdentity: !_isSorted);
             _documentsShared = true;
             return query;
         }
@@ -291,7 +287,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
             if (_ordering == null || _orderingVersion != Version)
             {
                 CancelOrdering();
-                _ordering = new AssetSearchOrdering(_documents);
+                _ordering = new AssetSearchOrdering(new AssetSearchSnapshot(_documents));
+                _documentsShared = true;
                 _orderingVersion = Version;
             }
             if (!_ordering.IsComplete)
