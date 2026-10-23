@@ -43,18 +43,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             yield return new TestCaseData("control\u0001char", "control\\u0001char").SetName("ShouldEscapeControlCharacters");
         }
 
-        private static IEnumerator MeasurePartialAndCompleteIndexes(bool pauseExtraction)
+        private static IEnumerator MeasurePartialAndCompleteIndexes(bool pauseExtraction, bool includeRareField = true)
         {
             string output = "Temp/PerfPartialSearch-" + Guid.NewGuid().ToString("N");
             int hosts = EditorSurfaceCapture.CountNativeWindowHosts();
             using TestCleanupScope cleanup = new();
             cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
             cleanup.Defer(PerfBaseline.Cancel);
+            Type[] fixtureTypes = includeRareField
+                ? new[] { typeof(OtherEditorOnlyCreationData), typeof(PlayModeDataObject) }
+                : new[] { typeof(UnindexedAssetGuidDiscoveryData), typeof(SelectionPersistenceGuidData) };
+            int expectedPartialInputs = includeRareField ? 140 : 105;
             PerfBaseline.RunBaseline(
                 output,
                 new[] { 512 },
                 timeoutMinutes: 5,
-                fixtureTypes: new[] { typeof(OtherEditorOnlyCreationData), typeof(PlayModeDataObject) },
+                fixtureTypes: fixtureTypes,
                 stagingBudgetMilliseconds: 64,
                 maximumStagingItems: 100,
                 partialSearchFraction: 0.1,
@@ -66,7 +70,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
             Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
             InteractionReport report = JsonUtility.FromJson<InteractionReport>(System.IO.File.ReadAllText(output + "/perf-baseline.json"));
-            Assert.That(report.searchObservations.Length, Is.EqualTo(280));
+            Assert.That(report.searchObservations.Length, Is.EqualTo(expectedPartialInputs * 2));
             Assert.That(report.requestedPartialSearchFraction, Is.EqualTo(0.1));
             Dictionary<string, int> conditions = new(StringComparer.Ordinal);
             int partialRecords = -1;
@@ -121,8 +125,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     conditions[condition] = count + 1;
                 }
             }
-            Assert.That(liveInputs, Is.EqualTo(140), "Every partial-window input must occur before its rebuild completes");
-            Assert.That(conditions.Count, Is.EqualTo(8));
+            Assert.That(liveInputs, Is.EqualTo(expectedPartialInputs), "Every partial-window input must occur before its rebuild completes");
+            Assert.That(conditions.Count, Is.EqualTo(includeRareField ? 8 : 6));
             foreach (int count in conditions.Values)
             {
                 Assert.That(count, Is.EqualTo(30));
@@ -172,6 +176,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public IEnumerator ShouldMeasureLiveRebuildAndCompleteIndexesSeparately()
         {
             return MeasurePartialAndCompleteIndexes(false);
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldSkipUnsupportedRareFieldsDuringLiveRebuilds()
+        {
+            return MeasurePartialAndCompleteIndexes(false, false);
         }
 
         [TestCase(-1)]

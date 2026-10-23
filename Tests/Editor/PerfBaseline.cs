@@ -912,6 +912,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     if (fieldIndex < 0)
                     {
                         state.SearchRepetition = WarmupRepetitions + SearchRepetitions;
+                        state.Phase = Phase.InteractionSamples;
                         return;
                     }
                     query = FixtureSearchText(fieldIndex);
