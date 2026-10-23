@@ -882,12 +882,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             if (sample.completedMilliseconds < 0)
             {
                 sample.completedMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
-                VisualElement popover = (VisualElement)typeof(DataVisualizerWindow).GetField(SearchPopoverFieldName, Members).GetValue(window);
-                popover.MarkDirtyRepaint();
-                window.Repaint();
             }
             if (sample.publicationPaintMilliseconds < 0)
             {
+                VisualElement popover = (VisualElement)typeof(DataVisualizerWindow).GetField(SearchPopoverFieldName, Members).GetValue(window);
+                popover.MarkDirtyRepaint();
+                window.Repaint();
                 EditorApplication.QueuePlayerLoopUpdate();
                 return;
             }
