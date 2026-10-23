@@ -39,11 +39,15 @@ tracked assets can contribute records, so this is a count threshold, not an exac
 change fails the run. Selected rows seed this warm rebuild, so the actual count can exceed the requested threshold; this is not cold-index latency. The extra window is discarded
 after queries and excluded from ordinary readiness observations.
 
-`indexMode` distinguishes `paused-partial` and `complete`; `availableRecordsAtInput` and `indexCompleteAtInput` describe the input boundary. Both modes use five warm-ups and 30
-samples for common names, rare GUIDs, rare fields and absent text. A rare target absent from the partial cache expects zero matches. Common-name terms may also be absent from the
-partial cache; their minimum is zero, while complete-index common-name samples require at least one hit. These controlled partial observations exercise real available metadata and
-the production search field, query and popover, including input callbacks and UI scheduling. They exclude ongoing extraction and sustained arrivals; no live-indexing latency or
-fresh-process result is claimed.
+`indexMode` distinguishes `paused-partial`, `live-rebuild`, and ordinary `complete` windows. `availableRecordsAtInput` and `indexCompleteAtInput` describe the input boundary;
+`records` and `indexComplete` describe the published snapshot. Optional `pausePartialExtraction: false` leaves extraction running after the threshold and starts the first query
+immediately, before that rebuild completes. Later inputs can arrive after completion: group live-rebuild results by actual input completeness rather than treating all of them as
+partial-index samples. This is a warm metadata rebuild, not cold extraction or sustained import traffic.
+
+Each supported condition retains five warm-ups and 30 samples. Rare targets expect their presence in the current published snapshot; common names can be absent from partial input.
+The driver resets publication and paint clocks when a new query generation supersedes an observed publication, and records `invalidatedPublications`. The final clocks refer to the
+same generation; first-result time can refer to an earlier preview. `targetGuid` identifies a rare fixture independently of its text. Paused observations reject all count/version
+changes. Live observations permit arrivals and verify rare-target presence at current publication. Neither mode measures physical input-to-cancellation or GPU presentation.
 
 The [22 October real 10k query-publication report](search-completion-10k-2026-10-22.md) retains complete rare/no-match observations and the earlier cancelled staging attempt.
 

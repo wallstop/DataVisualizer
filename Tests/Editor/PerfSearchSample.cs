@@ -9,6 +9,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public string kind;
         public string mode;
         public string query;
+        public string targetGuid;
+        public int invalidatedPublications;
         public string indexMode = "complete";
         public int availableRecordsAtInput;
         public bool indexCompleteAtInput;
