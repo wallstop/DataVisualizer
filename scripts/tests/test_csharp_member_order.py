@@ -68,6 +68,60 @@ def case_passes_canonical_order() -> None:
         remove_temp_root(root)
 
 
+def case_classifies_tuple_members_and_preserves_slices() -> None:
+    root = new_temp_root(prefix="member-order-tuples-")
+    try:
+        members = [
+            "    public static (int @private, int @public) Shared => (1, 2);\n",
+            "    public static (int X, (int Y, int Z) Other) SharedField;\n",
+            "    public (int @static, int @private) Value { get; set; }\n",
+            "    public System.Collections.Generic.List<(int X, int Y)> Field;\n",
+            "    private static int First() { return 0; }\n",
+            "    [Example(@private: 1)]\n    private static (int Left, int Right) Second() { return (0, 0); }\n",
+            "    private static (int, (int, int)) Third<T>() => (0, (0, 0));\n",
+            "    private (T, T) Fourth<T>() where T : class => (null, null);\n",
+            "    private System.Threading.Tasks.Task<(int, int)> Fifth() => null;\n",
+            "    private ((int, int)?, int) Sixth() => (null, 0);\n",
+        ]
+        opening = "public sealed class TupleMembers\n{"
+        write_fixture_file(root, "TupleMembers.cs", opening + "".join(members) + "}\n")
+        path = fixture_path(root, "TupleMembers.cs")
+        output, exit_code = invoke_member_order_lint(root)
+        assert_exit_code(0, f"ordered tuple declarations should pass: {output}", exit_code)
+        path.write_text(opening + "".join(reversed(members)) + "}\n", encoding="utf-8")
+        output, exit_code = invoke_member_order_lint(root, ("--fix",))
+        assert_exit_code(0, f"tuple ordering should be fixable: {output}", exit_code)
+        # Equal-tier methods keep relative order; only whole member slices move.
+        expected = members[:4] + [members[6], members[5], members[4]] + list(reversed(members[7:]))
+        assert_true(path.read_text(encoding="utf-8") == opening + "".join(expected) + "}\n", f"tuple repairs must permute exact slices: {path.read_text(encoding='utf-8')!r}")
+        path.write_text("public class Bad { private (int, int) Should_Run<T>() => (0, 0); }", encoding="utf-8")
+        output, exit_code = invoke_member_order_lint(root)
+        assert_exit_code(1, f"tuple method naming should fail: {output}", exit_code)
+        assert_true("Should_Run" in output and "#47" in output, f"tuple method name should be diagnosed: {output}")
+    finally:
+        remove_temp_root(root)
+
+
+def case_preserves_operator_method_classification() -> None:
+    root = new_temp_root(prefix="member-order-operators-")
+    try:
+        write_fixture_file(root, "Operators.cs", """public class Operators
+{
+    public static int Value => 1;
+    public static int First() => 0;
+    public static Operators operator +(Operators left, Operators right) => left;
+    public static bool operator ==(Operators left, Operators right) => true;
+    public static bool operator !=(Operators left, Operators right) => false;
+    public static implicit operator (int, int)(Operators value) => (0, 0);
+    public static explicit operator Operators((int, int) value) => null;
+}
+""")
+        output, exit_code = invoke_member_order_lint(root)
+        assert_exit_code(0, f"operator overloads must remain methods: {output}", exit_code)
+    finally:
+        remove_temp_root(root)
+
+
 def case_fails_on_tier_and_access_inversions() -> None:
     root = new_temp_root(prefix="member-order-")
     try:
@@ -660,6 +714,8 @@ def main() -> int:
 
     run_cases([
         ("Passes_CanonicalOrder", case_passes_canonical_order),
+        ("ClassifiesTupleMembersAndPreservesSlices", case_classifies_tuple_members_and_preserves_slices),
+        ("PreservesOperatorMethodClassification", case_preserves_operator_method_classification),
         ("Fails_OnTierAndAccessInversions", case_fails_on_tier_and_access_inversions),
         ("Fails_OnUnderscoredMethodName", case_fails_on_underscored_method_name),
         ("Fails_OnUnderscoredGenericMethodName", case_fails_on_underscored_generic_method_name),
