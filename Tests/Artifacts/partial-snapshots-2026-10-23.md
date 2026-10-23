@@ -57,6 +57,20 @@ include replacement records and the still-live older query. Another edit before 
 The full/partial views and tracker retain 1,505,087,488 bytes at 1m. Schema 5 adds a separate 10% partial view, so this footprint differs from earlier single-view reports.
 Construction units reach 155.034 ms; a forced collection reaches 1,181.3133 ms. These are managed component observations, not whole-editor stall bounds or native-memory slopes.
 
+## Managed footprint
+
+The store, full view, extra 10% partial view and tracker are measured together after collection. Each dataset begins from its own collected baseline. These are process-heap deltas,
+not native allocations.
+
+| Dataset   | Combined managed heap delta (bytes) |
+| --------- | ----------------------------------- |
+| 10,000    | 8,978,432                           |
+| 100,000   | 142,708,736                         |
+| 1,000,000 | 1,505,087,488                       |
+
+The 100k-to-1m slope is about 1513.8 bytes per additional dataset record under this layout. Keep 1m limited to synthetic feasibility. Measure native/selected-row costs and
+representative invalidation workloads before choosing partitioning or disk-backed queries; construction savings do not remove full-scan cost.
+
 ## Validation and limits
 
 The same C# tree passes 829 EditMode and 15 PlayMode cases. Two earlier local attempts are excluded from the passing evidence: one executed an older measurement assembly while
@@ -67,3 +81,33 @@ This is one warm editor process, without controlled fresh-process comparisons. S
 input-to-cancellation. The raw abandoned-query fields measure one explicit component step and lack of later advancement, not user cancellation latency. Native/project costs,
 selected-object retention, persistent-cache benefit/recovery, rendered partial/full latency and other platforms remain in #309, #310 and #323. No million-asset support or hard
 frame-time guarantee is established.
+
+## Real 10k follow-up
+
+The unchanged driver completed all 40 readiness, 140 query and 105 interaction observations over 10,000 uniquely owned assets, half ordinary ScriptableObjects and half
+BaseDataObjects. The configured watchdog remains 20 minutes, with 64 ms/100-item staging. Every sample is complete, every query observed a complete index, and every measured scroll
+moved. Each query condition has five warmups and 30 warm samples over 10,014 records including existing background assets.
+
+The exact [emitted report](performance-partial-snapshots-real-10k-2026-10-23.json) has SHA-256 `77297871160744c895638a80effab6273c8128862a43134088080f993d96edbe`. PerfBaseline
+source SHA-256 is `642fbafdd8baa81527b4c89da75414c20335772eafaebfd3062455f7ab9891c4`; its source is unchanged from the measured C# tree above.
+
+| Condition   | Completed-publication median / p95 (ms) |
+| ----------- | --------------------------------------- |
+| common-name | 48.6252 / 63.1633                       |
+| rare-guid   | 51.7250 / 54.6500                       |
+| rare-field  | 54.0932 / 76.2043                       |
+| no-match    | 45.0263 / 48.3756                       |
+
+Rare and absent terms scan the full snapshot with the expected one/zero matches; no-match first-result times remain -1. These clocks include scripted field input and editor
+observation through current UI-tree publication. They do not verify layout, paint, GPU completion, partial-index latency or true input-to-cancellation.
+
+The global search cache reports zero retained asset references. The selected-type list still holds 5,000 objects and realizes at most 18 rows. Warm usable-row/inspector p95 is
+1,036.0062 ms, so the 100 ms usable-opening target is not met. Warm full-index readiness p95 is a separate 14,295.5565 ms. The largest index/query slices are 133.1243/4.0409 ms;
+query counters record 414 overruns including warmups. These are not whole-frame bounds.
+
+This remains a warm editor process. Cold windows and warm reopens are not fresh-process samples; the driver clears shared indexing between windows, so reopens do not prove a
+persistent/shared-cache hit across close. Different fixture GUIDs and process history prevent a controlled speedup claim. No native-memory slope is isolated.
+
+Independent cleanup confirms an idle driver and AssetDatabase, stopped Play, the original seven editor windows/one native host, no fixture roots or temporary state files, zero
+shared metadata/pending paths, no suspension and the original 228 ScriptableObject assets. The remaining opening, retention, persistent-cache, rendered-latency and platform
+acceptance stays open in #306, #309, #310 and #323.
