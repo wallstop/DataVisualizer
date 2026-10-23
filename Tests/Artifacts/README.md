@@ -23,7 +23,10 @@ site assets. Test transcripts, raw samples, benchmark procedures and experiment 
 `PerfBaseline.RunBaseline` records `searchObservations` for common names, a rare GUID, a rare field token, and no matches. Each supported condition has five warm-ups and 30 warm
 samples. It waits for a current query publication, including zero matches, and a complete window index. `firstResultMilliseconds` records the first observed preview row; it stays
 `-1` for no matches. `completedMilliseconds` records the first observed completed snapshot. Both include field input and editor scheduling, and do not verify layout, paint or GPU
-completion.
+completion. `publicationPaintMilliseconds` records the first subsequent `generateVisualContent` callback on the visible search popover after current publication is observed. The
+observer rejects hidden/detached popovers and changed query text or generations. The driver requests a repaint after observing publication, so this is a conservative later UI
+Toolkit paint-generation observation; it includes observer scheduling and does not establish GPU presentation, compositor completion or a user's physical input latency. The
+publication clock remains separate. Missing paint observations stay `-1` and prevent a successful sample.
 
 Rare field tokens include Unicode and are deterministic fixture strings on `BaseDataObject.Description` and `OtherEditorOnlyCreationData.SearchText`. Other ordinary fixture types
 skip that condition. The legacy `search-first-results` scenario retains common-name first-result observations. Common queries can stop at the production result cap; rare/no-match

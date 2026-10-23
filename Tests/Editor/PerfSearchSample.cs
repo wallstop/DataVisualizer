@@ -23,5 +23,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public double actionMilliseconds;
         public double firstResultMilliseconds = -1;
         public double completedMilliseconds = -1;
+        public double publicationPaintMilliseconds = -1;
     }
 }
