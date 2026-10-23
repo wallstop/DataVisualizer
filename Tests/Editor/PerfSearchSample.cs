@@ -9,6 +9,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public string kind;
         public string mode;
         public string query;
+        public string indexMode = "complete";
+        public int availableRecordsAtInput;
+        public bool indexCompleteAtInput;
         public bool complete;
         public bool indexComplete;
         public bool reachedLimit;
@@ -20,6 +23,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public int matches;
         public int visibleMatches;
         public int expectedMatches;
+        public int minimumMatches;
         public double actionMilliseconds;
         public double firstResultMilliseconds = -1;
         public double completedMilliseconds = -1;

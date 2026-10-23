@@ -12,6 +12,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.Editor;
     using WallstopStudios.DataVisualizer.Editor.Data;
+    using WallstopStudios.DataVisualizer.Editor.Search;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
     using Debug = UnityEngine.Debug;
@@ -128,7 +129,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             double timeoutMinutes = DefaultTimeoutMinutes,
             Type[] fixtureTypes = null,
             double stagingBudgetMilliseconds = 4,
-            int maximumStagingItems = 10
+            int maximumStagingItems = 10,
+            double partialSearchFraction = 0
         )
         {
             if (_active != null)
@@ -154,6 +156,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             if (double.IsNaN(stagingBudgetMilliseconds) || double.IsInfinity(stagingBudgetMilliseconds) || stagingBudgetMilliseconds <= 0 || maximumStagingItems < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(stagingBudgetMilliseconds), "Use a finite positive staging budget and a positive item limit.");
+            }
+
+            if (double.IsNaN(partialSearchFraction) || double.IsInfinity(partialSearchFraction) || partialSearchFraction < 0 || 1 <= partialSearchFraction)
+            {
+                throw new ArgumentOutOfRangeException(nameof(partialSearchFraction), "Use zero to skip partial search, or a fraction between zero and one.");
             }
 
             int[] sizes = fixtureSizes == null ? (int[])FixtureSizes.Clone() : (int[])fixtureSizes.Clone();
@@ -184,7 +191,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     throw new ArgumentException("Each size needs at least one asset per fixture type.", nameof(fixtureSizes));
                 }
             }
-            RunState state = new(outputDirectory, sizes, timeoutMinutes, types, stagingBudgetMilliseconds, maximumStagingItems);
+            RunState state = new(outputDirectory, sizes, timeoutMinutes, types, stagingBudgetMilliseconds, maximumStagingItems, partialSearchFraction);
             _active = state;
             EditorApplication.update += Tick;
             AssemblyReloadEvents.beforeAssemblyReload += Cancel;
@@ -434,6 +441,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 case Phase.WaitingWarmReady:
                     WaitSearchCacheReady(state);
                     return;
+                case Phase.WaitingPartialIndex:
+                    WaitPartialIndex(state);
+                    return;
                 case Phase.InteractionSamples:
                     RunInteractionSample(state);
                     return;
@@ -474,6 +484,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             int size = state.Sizes[state.SizeIndex];
             SizeResult result = new() { Size = size, FixtureTypes = state.FixtureTypes };
             state.Current = result;
+            state.PartialSearchMeasured = false;
+            state.PartialRebuildStarted = false;
             state.LastTickMilliseconds = 0;
             state.Results.Add(result);
 
@@ -520,7 +532,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     : "warm",
             };
             state.Readiness = sample;
-            state.Current.ReadinessSamples.Add(sample);
+            bool partialWindow = cold && 0 < state.PartialSearchFraction && !state.PartialSearchMeasured;
+            if (!partialWindow)
+            {
+                state.Current.ReadinessSamples.Add(sample);
+            }
             if (state.Preferences == null)
             {
                 state.PreviousSelection = Selection.objects;
@@ -586,7 +602,86 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 throw new InvalidOperationException("The benchmark did not select its configured fixture type.");
             }
-            state.Phase = cold ? Phase.WaitingColdReady : Phase.WaitingWarmReady;
+            state.Phase =
+                partialWindow ? Phase.WaitingPartialIndex
+                : cold ? Phase.WaitingColdReady
+                : Phase.WaitingWarmReady;
+            if (partialWindow)
+            {
+                WaitPartialIndex(state);
+            }
+        }
+
+        private static AssetObjectCache GetSearchCache(DataVisualizerWindow window)
+        {
+            return (AssetObjectCache)typeof(DataVisualizerWindow).GetField("_assetObjectCache", Members).GetValue(window);
+        }
+
+        private static void WaitPartialIndex(RunState state)
+        {
+            if (state.PhaseClock.Elapsed > TimeSpan.FromSeconds(SearchCacheTimeoutSeconds))
+            {
+                throw new InvalidOperationException("The partial index did not reach its requested record count.");
+            }
+            if (!state.PartialRebuildStarted)
+            {
+                ObserveReadiness(state);
+                if (
+                    !state.Window.IsSearchIndexComplete
+                    || !AssetGuidTypeIndex.Shared.IsComplete
+                    || 0 < AssetGuidTypeIndex.Shared.PendingPathCount
+                    || (bool)typeof(DataVisualizerWindow).GetField("_needsRefresh", Members).GetValue(state.Window)
+                    || (bool)typeof(DataVisualizerWindow).GetField("_isLoadingObjectsAsync", Members).GetValue(state.Window)
+                    || state.Readiness.firstRootPaintMilliseconds < 0
+                    || state.Readiness.firstUsableRowsMilliseconds < 0
+                    || state.Readiness.inspectorReadyMilliseconds < 0
+                )
+                {
+                    EditorApplication.QueuePlayerLoopUpdate();
+                    return;
+                }
+                state.PartialRebuildStarted = true;
+                typeof(DataVisualizerWindow).GetMethod("PopulateSearchCacheAsync", Members).Invoke(state.Window, null);
+            }
+            AssetObjectCache cache = GetSearchCache(state.Window);
+            if (state.Window.IsSearchIndexComplete)
+            {
+                throw new InvalidOperationException("Indexing completed before a partial snapshot could be measured. Use a larger fixture.");
+            }
+            if (cache.Count < Math.Max(1, (int)(state.Current.Size * state.PartialSearchFraction)))
+            {
+                EditorApplication.QueuePlayerLoopUpdate();
+                return;
+            }
+            IVisualElementScheduledItem extraction = (IVisualElementScheduledItem)typeof(DataVisualizerWindow).GetField("_searchCacheLoadTask", Members).GetValue(state.Window);
+            if (extraction == null)
+            {
+                EditorApplication.QueuePlayerLoopUpdate();
+                return;
+            }
+            // This controlled window is discarded after queries; CloseWindow owns task cancellation.
+            extraction.Pause();
+            state.PartialRecords = cache.Count;
+            state.PartialVersion = cache.Version;
+            state.MeasuringPartialSearch = true;
+            state.SearchKind = 0;
+            state.SearchRepetition = 0;
+            state.Phase = Phase.InteractionSamples;
+        }
+
+        private static void VerifyPartialIndex(RunState state)
+        {
+            if (!state.MeasuringPartialSearch)
+            {
+                return;
+            }
+            AssetObjectCache cache = GetSearchCache(state.Window);
+            if (state.Window.IsSearchIndexComplete || cache.Count != state.PartialRecords || cache.Version != state.PartialVersion)
+            {
+                throw new InvalidOperationException(
+                    $"The controlled partial index changed during measurement: records {state.PartialRecords}->{cache.Count}, version {state.PartialVersion}->{cache.Version}, complete={state.Window.IsSearchIndexComplete}."
+                );
+            }
         }
 
         private static void WaitSearchCacheReady(RunState state)
@@ -721,6 +816,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
             }
 
+            if (state.MeasuringPartialSearch)
+            {
+                state.MeasuringPartialSearch = false;
+                state.PartialSearchMeasured = true;
+                CloseWindow(state);
+                state.Phase = Phase.ColdOpen;
+                return;
+            }
+
             if (state.SelectionRepetition < WarmupRepetitions + SelectionRepetitions)
             {
                 MeasureSelection(state, state.SelectionRepetition++);
@@ -760,6 +864,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void MeasureSearch(RunState state, int repetition)
         {
+            VerifyPartialIndex(state);
             string query;
             string kind;
             int expectedMatches;
@@ -773,7 +878,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 case 1:
                     kind = "rare-guid";
                     query = AssetDatabase.AssetPathToGUID($"{state.Staging.Folder}/{FixtureName(state.Current.Size - 1)}.asset");
-                    expectedMatches = 1;
+                    expectedMatches = state.MeasuringPartialSearch && !GetSearchCache(state.Window).Contains(query) ? 0 : 1;
                     break;
                 case 2:
                     kind = "rare-field";
@@ -793,7 +898,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         return;
                     }
                     query = FixtureSearchText(fieldIndex);
-                    expectedMatches = 1;
+                    string fieldGuid = AssetDatabase.AssetPathToGUID($"{state.Staging.Folder}/{FixtureName(fieldIndex)}.asset");
+                    expectedMatches = state.MeasuringPartialSearch && !GetSearchCache(state.Window).Contains(fieldGuid) ? 0 : 1;
                     break;
                 default:
                     kind = "no-match";
@@ -815,6 +921,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 mode = repetition < WarmupRepetitions ? "warmup" : "warm",
                 query = query,
                 expectedMatches = expectedMatches,
+                minimumMatches = state.SearchKind == 0 && !state.MeasuringPartialSearch ? 1 : 0,
+                indexMode = state.MeasuringPartialSearch ? "paused-partial" : "complete",
+                availableRecordsAtInput = GetSearchCache(state.Window).Count,
+                indexCompleteAtInput = state.Window.IsSearchIndexComplete,
             };
             state.Current.SearchObservations.Add(sample);
             state.PendingSearch = sample;
@@ -851,6 +961,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void WaitSearchResults(RunState state)
         {
+            VerifyPartialIndex(state);
             PerfSearchSample sample = state.PendingSearch;
             DataVisualizerWindow window = state.Window;
             if (state.PhaseClock.Elapsed > TimeSpan.FromSeconds(30))
@@ -874,7 +985,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 sample.firstResultMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
             }
-            if (!window.IsActiveSearchComplete || !sample.indexComplete)
+            if (!window.IsActiveSearchComplete || (!state.MeasuringPartialSearch && !sample.indexComplete))
             {
                 EditorApplication.QueuePlayerLoopUpdate();
                 return;
@@ -891,7 +1002,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 EditorApplication.QueuePlayerLoopUpdate();
                 return;
             }
-            if ((0 <= sample.expectedMatches && sample.matches != sample.expectedMatches) || (sample.expectedMatches < 0 && sample.matches == 0))
+            if ((0 <= sample.expectedMatches && sample.matches != sample.expectedMatches) || sample.matches < sample.minimumMatches)
             {
                 throw new InvalidOperationException($"The {sample.kind} search returned {sample.matches} unexpected matches.");
             }
@@ -900,7 +1011,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new InvalidOperationException($"The {sample.kind} publication could not resolve every visible match.");
             }
             sample.complete = true;
-            if (sample.kind == "common-name" && sample.mode == "warm")
+            if (sample.kind == "common-name" && sample.mode == "warm" && !state.MeasuringPartialSearch)
             {
                 state.Current.SearchSamples.Add(sample.firstResultMilliseconds);
                 state.Current.SearchMatchCounts.Add(sample.matches);
@@ -1150,7 +1261,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void Finish(RunState state)
         {
-            string json = BuildJson(state.Results, state.TimeoutMinutes, state.StagingBudgetMilliseconds, state.MaximumStagingItems);
+            string json = BuildJson(state.Results, state.TimeoutMinutes, state.StagingBudgetMilliseconds, state.MaximumStagingItems, state.PartialSearchFraction);
             WriteReport(state.OutputDirectory, json);
             string summary = BuildSummary(state.Results);
             TearDown(state);
@@ -1342,7 +1453,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return value.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
-        private static string BuildJson(List<SizeResult> results, double timeoutMinutes, double stagingBudgetMilliseconds, int maximumStagingItems)
+        private static string BuildJson(List<SizeResult> results, double timeoutMinutes, double stagingBudgetMilliseconds, int maximumStagingItems, double partialSearchFraction)
         {
             StringBuilder json = new(4096);
             json.Append("{\n  \"schema\": \"").Append(SchemaVersion).Append("\",\n");
@@ -1351,6 +1462,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append("  \"timeoutMinutes\": ").Append(FormatNumber(timeoutMinutes)).Append(",\n");
             json.Append("  \"stagingBudgetMilliseconds\": ").Append(FormatNumber(stagingBudgetMilliseconds)).Append(",\n");
             json.Append("  \"maximumStagingItems\": ").Append(maximumStagingItems).Append(",\n");
+            json.Append("  \"requestedPartialSearchFraction\": ").Append(FormatNumber(partialSearchFraction)).Append(",\n");
             json.Append("  \"repetitions\": {\"cold\": ")
                 .Append(ColdRepetitions)
                 .Append(", \"warmWarmups\": ")
@@ -1395,7 +1507,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "  \"interactionSemantics\": \"Five warmups then 30 warm observations per interaction; root paint is not GPU completion; readiness is observed layout, with observer delay. Small scrolls can be no-ops. Type switching requires at least two fixture types.\",\n"
             );
             json.Append(
-                "  \"searchSemantics\": \"Five warmups and 30 warm samples per supported condition on a complete index. First result and current snapshot completion include field input and editor observation delay. publicationPaintMilliseconds records a later visible popover generateVisualContent callback, not GPU presentation. No-match first result is -1. Common names may reach the result cap. Rare fields require BaseDataObject or OtherEditorOnlyCreationData fixtures. Partial and fresh-process searches remain unmeasured.\",\n"
+                "  \"searchSemantics\": \"Five warmups and 30 warm samples per supported condition and selected index mode. First result and current snapshot completion include field input and editor observation delay. publicationPaintMilliseconds records a later visible popover generateVisualContent callback, not GPU presentation. No-match first result is -1. Common names may reach the result cap. Rare fields require BaseDataObject or OtherEditorOnlyCreationData fixtures. Optional paused-partial mode rebuilds after initial readiness, then stops extraction at the requested record threshold, records actual input counts and discards that window before ordinary complete-index runs. It excludes live arrivals; fresh-process search remains unmeasured.\",\n"
             );
             json.Append("  \"searchObservations\": [");
             bool firstSearch = true;
@@ -1500,7 +1612,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             else
             {
                 json.Append("\n  ");
-                json.Append(BuildJson(state.Results, state.TimeoutMinutes, state.StagingBudgetMilliseconds, state.MaximumStagingItems).TrimEnd('\n'));
+                json.Append(BuildJson(state.Results, state.TimeoutMinutes, state.StagingBudgetMilliseconds, state.MaximumStagingItems, state.PartialSearchFraction).TrimEnd('\n'));
             }
 
             json.Append("\n}\n");
@@ -1675,6 +1787,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal readonly double TimeoutMinutes;
             internal readonly double StagingBudgetMilliseconds;
             internal readonly int MaximumStagingItems;
+            internal readonly double PartialSearchFraction;
             internal readonly Stopwatch Watchdog = Stopwatch.StartNew();
             internal readonly List<SizeResult> Results = new();
             internal readonly string MissingLabel = "PerfAbsentLabel-" + Guid.NewGuid().ToString("N");
@@ -1696,6 +1809,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal int SelectionRepetition;
             internal int SearchKind;
             internal int QuerySliceOverrunsBefore;
+            internal bool PartialSearchMeasured;
+            internal bool PartialRebuildStarted;
+            internal bool MeasuringPartialSearch;
+            internal int PartialRecords;
+            internal int PartialVersion;
             internal PerfSearchSample PendingSearch;
             internal int FilterRepetition;
             internal int ScrollRepetition;
@@ -1705,7 +1823,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal Vector2 ScrollOffsetBefore;
             internal Type PendingType;
 
-            internal RunState(string outputDirectory, int[] sizes, double timeoutMinutes, Type[] fixtureTypes, double stagingBudgetMilliseconds, int maximumStagingItems)
+            internal RunState(
+                string outputDirectory,
+                int[] sizes,
+                double timeoutMinutes,
+                Type[] fixtureTypes,
+                double stagingBudgetMilliseconds,
+                int maximumStagingItems,
+                double partialSearchFraction
+            )
             {
                 OutputDirectory = outputDirectory;
                 Sizes = sizes;
@@ -1713,6 +1839,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 TimeoutMinutes = timeoutMinutes;
                 StagingBudgetMilliseconds = stagingBudgetMilliseconds;
                 MaximumStagingItems = maximumStagingItems;
+                PartialSearchFraction = partialSearchFraction;
             }
         }
 
@@ -1736,6 +1863,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             WaitingLabelFilter = 12,
             WaitingObjectScroll = 13,
             WaitingTypeSwitch = 14,
+            WaitingPartialIndex = 15,
         }
     }
 }
