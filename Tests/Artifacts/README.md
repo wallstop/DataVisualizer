@@ -7,6 +7,7 @@ This directory preserves recorded test evidence. It is excluded from the documen
 - [Subasset experiment](subasset-feasibility.md): test-only identity and read-only inspection evidence.
 - [Prefab experiment](prefab-feasibility.md): test-only component discovery, inspection and cold-process observations.
 - [Real 10k metadata/search observation](shared-search-10k-2026-10-22.md): final-tree interaction samples, ownership and cleanup limits.
+- [Controlled real partial/full search](partial-real-search-2026-10-23.md): publication and visible-popover paint over 10k real fixtures.
 - [Partial query snapshots](partial-snapshots-2026-10-23.md): partial/full construction, cooperative sorting and first-edit ownership costs.
 - [Shared sorted query snapshots](shared-snapshots-2026-10-22.md): concurrent-query ownership, preparation and first-edit costs.
 - [Million-record experiment](million-record-feasibility.md): synthetic metadata scale, resource estimates and limits.

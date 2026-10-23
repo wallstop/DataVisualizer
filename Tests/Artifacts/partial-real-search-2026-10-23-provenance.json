@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "sourceCommit": "bd533c13d012c2b052d31b6d98c80dabb45c5804",
+  "sourcePath": "Tests/Editor/PerfBaseline.cs",
+  "reportSha256": "ffa0406787fd2583d4c1348a18c8dce4324050e91b0f887df3e503243340676d",
+  "preflight": {
+    "sourceSha256": "e209175eaaa7124a4aaf917c4336a185e9cd2ab6d1d07766b761f6c1288a5d35",
+    "loadedModuleId": "c0360228-36ff-4e5c-8bbe-a6a08c2878a4",
+    "assemblySha256": "6d29017da45aa6756018ca2dc3643c39570a6aa9ed339f5732f5b2f0cc2f642f"
+  },
+  "postflight": {
+    "sourceSha256": "e209175eaaa7124a4aaf917c4336a185e9cd2ab6d1d07766b761f6c1288a5d35",
+    "loadedModuleId": "c0360228-36ff-4e5c-8bbe-a6a08c2878a4",
+    "assemblySha256": "6d29017da45aa6756018ca2dc3643c39570a6aa9ed339f5732f5b2f0cc2f642f",
+    "compilerSourceHash": "e209175eaaa7124a4aaf917c4336a185e9cd2ab6d1d07766b761f6c1288a5d35",
+    "compilerHashAlgorithm": "SHA256"
+  },
+  "verificationSucceededBeforeAndAfter": true
+}
