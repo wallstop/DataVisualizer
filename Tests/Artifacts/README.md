@@ -21,17 +21,28 @@ site assets. Test transcripts, raw samples, benchmark procedures and experiment 
 ## Search completion observations
 
 `PerfBaseline.RunBaseline` records `searchObservations` for common names, a rare GUID, a rare field token, and no matches. Each supported condition has five warm-ups and 30 warm
-samples. It waits for a current query publication, including zero matches, and a complete window index. `firstResultMilliseconds` records the first observed preview row; it stays
-`-1` for no matches. `completedMilliseconds` records the first observed completed snapshot. Both include field input and editor scheduling, and do not verify layout, paint or GPU
-completion. `publicationPaintMilliseconds` records the first subsequent `generateVisualContent` callback on the visible search popover after current publication is observed. The
-observer rejects hidden/detached popovers and changed query text or generations. The driver requests a repaint after observing publication, so this is a conservative later UI
-Toolkit paint-generation observation; it includes observer scheduling and does not establish GPU presentation, compositor completion or a user's physical input latency. The
-publication clock remains separate. Missing paint observations stay `-1` and prevent a successful sample.
+samples. It waits for a current query publication, including zero matches. By default, queries use a complete window index. `firstResultMilliseconds` records the first observed
+preview row; it stays `-1` for no matches. `completedMilliseconds` records the first observed completed snapshot. Both include field input and editor scheduling, and do not verify
+layout, paint or GPU completion. `publicationPaintMilliseconds` records the first subsequent `generateVisualContent` callback on the visible search popover after current
+publication is observed. The observer rejects hidden/detached popovers and changed query text or generations. The driver requests a repaint after observing publication, so this is
+a conservative later UI Toolkit paint-generation observation; it includes observer scheduling and does not establish GPU presentation, compositor completion or a user's physical
+input latency. The publication clock remains separate. Missing paint observations stay `-1` and prevent a successful sample.
 
 Rare field tokens include Unicode and are deterministic fixture strings on `BaseDataObject.Description` and `OtherEditorOnlyCreationData.SearchText`. Other ordinary fixture types
 skip that condition. The legacy `search-first-results` scenario retains common-name first-result observations. Common queries can stop at the production result cap; rare/no-match
 cases scan the full snapshot. Each observation records metadata hits, published preview rows, result-cap status, query overrun deltas and the cumulative window maximum query slice.
-Cancelled reports keep the active sample with `complete=false` and unavailable completion time. These runs do not measure partial-index or fresh-process latency.
+Cancelled reports keep the active sample with `complete=false` and unavailable completion time. Optional `partialSearchFraction` (zero by default; otherwise strictly between zero
+and one) opens an extra controlled window before ordinary readiness measurements. The window first reaches initial readiness, then starts a production cache rebuild. Extraction
+pauses once the available record count reaches that fraction of the requested fixture count. The report records the requested fraction and actual available records; pre-existing
+tracked assets can contribute records, so this is a count threshold, not an exact fixture-completeness percentage. Cache completion before capture or any later cache version/count
+change fails the run. Selected rows seed this warm rebuild, so the actual count can exceed the requested threshold; this is not cold-index latency. The extra window is discarded
+after queries and excluded from ordinary readiness observations.
+
+`indexMode` distinguishes `paused-partial` and `complete`; `availableRecordsAtInput` and `indexCompleteAtInput` describe the input boundary. Both modes use five warm-ups and 30
+samples for common names, rare GUIDs, rare fields and absent text. A rare target absent from the partial cache expects zero matches. Common-name terms may also be absent from the
+partial cache; their minimum is zero, while complete-index common-name samples require at least one hit. These controlled partial observations exercise real available metadata and
+the production search field, query and popover, including input callbacks and UI scheduling. They exclude ongoing extraction and sustained arrivals; no live-indexing latency or
+fresh-process result is claimed.
 
 The [22 October real 10k query-publication report](search-completion-10k-2026-10-22.md) retains complete rare/no-match observations and the earlier cancelled staging attempt.
 

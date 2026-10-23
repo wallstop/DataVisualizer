@@ -75,6 +75,85 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
+        public IEnumerator ShouldMeasurePausedPartialAndCompleteIndexesSeparately()
+        {
+            string output = "Temp/PerfPartialSearch-" + Guid.NewGuid().ToString("N");
+            int hosts = EditorSurfaceCapture.CountNativeWindowHosts();
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(
+                output,
+                new[] { 512 },
+                timeoutMinutes: 5,
+                fixtureTypes: new[] { typeof(OtherEditorOnlyCreationData), typeof(PlayModeDataObject) },
+                stagingBudgetMilliseconds: 64,
+                maximumStagingItems: 100,
+                partialSearchFraction: 0.1
+            );
+            for (int tick = 0; tick < 12000 && PerfBaseline.Status() != "Idle"; tick++)
+            {
+                yield return null;
+            }
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+            InteractionReport report = JsonUtility.FromJson<InteractionReport>(System.IO.File.ReadAllText(output + "/perf-baseline.json"));
+            Assert.That(report.searchObservations.Length, Is.EqualTo(280));
+            Assert.That(report.requestedPartialSearchFraction, Is.EqualTo(0.1));
+            Dictionary<string, int> conditions = new(StringComparer.Ordinal);
+            int partialRecords = -1;
+            foreach (PerfSearchSample sample in report.searchObservations)
+            {
+                Assert.That(sample.complete, sample.kind);
+                Assert.That(0 <= sample.completedMilliseconds && sample.completedMilliseconds <= sample.publicationPaintMilliseconds, sample.kind);
+                if (sample.indexMode == "paused-partial")
+                {
+                    Assert.That(sample.indexCompleteAtInput, Is.False);
+                    Assert.That(sample.indexComplete, Is.False);
+                    Assert.That(0 < sample.availableRecordsAtInput && sample.availableRecordsAtInput < 512);
+                    Assert.That(sample.availableRecordsAtInput, Is.EqualTo(sample.records));
+                    if (partialRecords < 0)
+                    {
+                        partialRecords = sample.records;
+                    }
+                    Assert.That(sample.records, Is.EqualTo(partialRecords));
+                    if (0 <= sample.expectedMatches)
+                    {
+                        Assert.That(sample.matches, Is.EqualTo(sample.expectedMatches));
+                    }
+                }
+                else
+                {
+                    Assert.That(sample.indexMode, Is.EqualTo("complete"));
+                    Assert.That(sample.indexCompleteAtInput);
+                    Assert.That(sample.indexComplete);
+                }
+                if (sample.mode == "warm")
+                {
+                    string condition = sample.indexMode + "/" + sample.kind;
+                    conditions.TryGetValue(condition, out int count);
+                    conditions[condition] = count + 1;
+                }
+            }
+            Assert.That(conditions.Count, Is.EqualTo(8));
+            foreach (int count in conditions.Values)
+            {
+                Assert.That(count, Is.EqualTo(30));
+            }
+            Assert.That(report.readinessSamples.Length, Is.EqualTo(40), "The controlled partial window must not contaminate ordinary readiness.");
+            Assert.That(EditorSurfaceCapture.CountNativeWindowHosts(), Is.EqualTo(hosts));
+        }
+
+        [TestCase(-1)]
+        [TestCase(1)]
+        [TestCase(double.NaN)]
+        [TestCase(double.PositiveInfinity)]
+        public void ShouldRejectInvalidPartialSearchFraction(double fraction)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => PerfBaseline.RunBaseline("Temp/InvalidPartialFraction", partialSearchFraction: fraction));
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+        }
+
+        [UnityTest]
         public IEnumerator ShouldRecordInteractionReadinessAndRestoreNativeOwners()
         {
             string output = "Temp/PerfInteractions-" + Guid.NewGuid().ToString("N");
@@ -612,6 +691,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Serializable]
         private sealed class InteractionReport
         {
+            public double requestedPartialSearchFraction;
             public PerfSearchSample[] searchObservations = Array.Empty<PerfSearchSample>();
             public PerfInteractionSample[] interactionSamples = Array.Empty<PerfInteractionSample>();
             public PerfReadinessSample[] readinessSamples = Array.Empty<PerfReadinessSample>();
