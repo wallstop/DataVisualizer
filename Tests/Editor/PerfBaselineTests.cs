@@ -98,6 +98,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.That(sample.indexComplete, Is.True, sample.kind);
                 Assert.That(sample.visibleMatches, Is.EqualTo(sample.matches), sample.kind);
                 Assert.That(sample.actionMilliseconds <= sample.completedMilliseconds, sample.kind);
+                Assert.That(sample.completedMilliseconds <= sample.publicationPaintMilliseconds, sample.kind);
                 if (sample.kind == "no-match")
                 {
                     Assert.That(sample.matches, Is.Zero);
@@ -165,6 +166,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             PerfSearchSample sample = report.partialResults.searchObservations[0];
             Assert.That(sample.complete, Is.False);
             Assert.That(sample.completedMilliseconds, Is.EqualTo(-1));
+            Assert.That(sample.publicationPaintMilliseconds, Is.EqualTo(-1));
             Assert.That(sample.query, Is.Not.Empty);
             Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
         }

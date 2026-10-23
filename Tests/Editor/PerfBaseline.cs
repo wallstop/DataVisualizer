@@ -577,6 +577,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             window.position = new Rect(40f, 40f, 1180f, 780f);
             state.PhaseClock.Restart();
             window.CreateGUI();
+            VisualElement searchPopover = (VisualElement)typeof(DataVisualizerWindow).GetField(SearchPopoverFieldName, Members).GetValue(window);
+            searchPopover.generateVisualContent += _ => ObserveSearchPaint(state, window, searchPopover);
             InvokeInitialContentLoad(window);
             NamespaceController controller = GetNamespaceController(window);
             controller.SelectType(window, state.FixtureTypes[0]);
@@ -823,6 +825,30 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             state.Phase = Phase.WaitingSearchResults;
         }
 
+        private static void ObserveSearchPaint(RunState state, DataVisualizerWindow window, VisualElement popover)
+        {
+            PerfSearchSample sample = state.PendingSearch;
+            if (
+                sample == null
+                || sample.complete
+                || sample.completedMilliseconds < 0
+                || 0 <= sample.publicationPaintMilliseconds
+                || !ReferenceEquals(state.Window, window)
+                || !window.IsActiveSearchComplete
+                || sample.generation != window.ActiveSearchGeneration
+                || !string.Equals(sample.query, window.ActiveSearchText, StringComparison.Ordinal)
+                || popover.panel == null
+                || popover.resolvedStyle.display == DisplayStyle.None
+                || popover.resolvedStyle.visibility != Visibility.Visible
+                || popover.worldBound.width <= 0
+                || popover.worldBound.height <= 0
+            )
+            {
+                return;
+            }
+            sample.publicationPaintMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+        }
+
         private static void WaitSearchResults(RunState state)
         {
             PerfSearchSample sample = state.PendingSearch;
@@ -853,7 +879,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 EditorApplication.QueuePlayerLoopUpdate();
                 return;
             }
-            sample.completedMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+            if (sample.completedMilliseconds < 0)
+            {
+                sample.completedMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
+                VisualElement popover = (VisualElement)typeof(DataVisualizerWindow).GetField(SearchPopoverFieldName, Members).GetValue(window);
+                popover.MarkDirtyRepaint();
+                window.Repaint();
+            }
+            if (sample.publicationPaintMilliseconds < 0)
+            {
+                EditorApplication.QueuePlayerLoopUpdate();
+                return;
+            }
             if ((0 <= sample.expectedMatches && sample.matches != sample.expectedMatches) || (sample.expectedMatches < 0 && sample.matches == 0))
             {
                 throw new InvalidOperationException($"The {sample.kind} search returned {sample.matches} unexpected matches.");
@@ -1358,7 +1395,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "  \"interactionSemantics\": \"Five warmups then 30 warm observations per interaction; root paint is not GPU completion; readiness is observed layout, with observer delay. Small scrolls can be no-ops. Type switching requires at least two fixture types.\",\n"
             );
             json.Append(
-                "  \"searchSemantics\": \"Five warmups and 30 warm samples per supported condition on a complete index. First result and current snapshot completion include field input and editor observation delay, not GPU paint. No-match first result is -1. Common names may reach the result cap. Rare fields require BaseDataObject or OtherEditorOnlyCreationData fixtures. Partial and fresh-process searches remain unmeasured.\",\n"
+                "  \"searchSemantics\": \"Five warmups and 30 warm samples per supported condition on a complete index. First result and current snapshot completion include field input and editor observation delay. publicationPaintMilliseconds records a later visible popover generateVisualContent callback, not GPU presentation. No-match first result is -1. Common names may reach the result cap. Rare fields require BaseDataObject or OtherEditorOnlyCreationData fixtures. Partial and fresh-process searches remain unmeasured.\",\n"
             );
             json.Append("  \"searchObservations\": [");
             bool firstSearch = true;
