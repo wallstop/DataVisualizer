@@ -7,6 +7,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using Mono.Cecil;
     using Mono.Cecil.Cil;
     using UnityEditor;
+    using PackageInfo = UnityEditor.PackageManager.PackageInfo;
 
     // Test-only provenance: compiler symbols bind source bytes to the loaded module.
     internal sealed class BenchmarkCodeIdentity
@@ -25,7 +26,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public BenchmarkCodeIdentity(Assembly assembly, string sourcePath)
         {
             _assembly = assembly;
-            _sourcePath = sourcePath;
+            _sourcePath = ResolveSourcePath(sourcePath);
             LoadedModuleId = assembly.ManifestModule.ModuleVersionId.ToString("D");
         }
 
@@ -33,6 +34,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         {
             using SHA256 hash = SHA256.Create();
             return Hex(hash.ComputeHash(File.ReadAllBytes(path)));
+        }
+
+        internal static string MapPackageSourcePath(string sourcePath, string assetPath, string resolvedPath)
+        {
+            string path = sourcePath.Replace('\\', '/');
+            if (path.StartsWith("./", StringComparison.Ordinal))
+            {
+                path = path.Substring(2);
+            }
+            if (!string.IsNullOrEmpty(assetPath) && path.StartsWith(assetPath + "/", StringComparison.Ordinal))
+            {
+                return Path.GetFullPath(Path.Combine(resolvedPath, path.Substring(assetPath.Length + 1)));
+            }
+            return Path.GetFullPath(sourcePath);
         }
 
         internal static void ValidateEvidence(bool compiling, bool updating, string loadedModuleId, string diskModuleId, string compilerHash, string sourceHash)
@@ -49,6 +64,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 throw new InvalidOperationException("Benchmark source differs from its compiler checksum. Recompile before measuring.");
             }
+        }
+
+        private static string ResolveSourcePath(string path)
+        {
+            string assetPath = path.Replace('\\', '/');
+            if (assetPath.StartsWith("./", StringComparison.Ordinal))
+            {
+                assetPath = assetPath.Substring(2);
+            }
+            PackageInfo package = assetPath.StartsWith("Packages/", StringComparison.Ordinal) ? PackageInfo.FindForAssetPath(assetPath) : null;
+            return MapPackageSourcePath(path, package?.assetPath, package?.resolvedPath);
         }
 
         private static string Hex(byte[] bytes)
@@ -92,7 +118,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 {
                     foreach (SequencePoint point in method.DebugInformation.SequencePoints)
                     {
-                        if (string.Equals(Path.GetFullPath(point.Document.Url), sourcePath, StringComparison.OrdinalIgnoreCase))
+                        if (
+                            string.Equals(
+                                ResolveSourcePath(point.Document.Url),
+                                sourcePath,
+                                Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal
+                            )
+                        )
                         {
                             document = point.Document;
                             break;

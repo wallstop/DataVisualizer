@@ -18,6 +18,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.Throws<InvalidOperationException>(() => BenchmarkCodeIdentity.ValidateEvidence(compiling, updating, loadedModule, diskModule, compilerHash, sourceHash));
         }
 
+        [TestCase("Packages/example/Tests/Driver.cs")]
+        [TestCase("./Packages/example/Tests/Driver.cs")]
+        [TestCase("Packages\\example\\Tests\\Driver.cs")]
+        public void ShouldMapVirtualPackageSourceToItsPhysicalInstall(string sourcePath)
+        {
+            string resolved = Path.GetFullPath(Path.Combine("Temp", "LinkedPackage"));
+            string physical = Path.Combine(resolved, "Tests", "Driver.cs");
+            Assert.That(BenchmarkCodeIdentity.MapPackageSourcePath(sourcePath, "Packages/example", resolved), Is.EqualTo(physical));
+            Assert.That(BenchmarkCodeIdentity.MapPackageSourcePath(physical, "Packages/example", resolved), Is.EqualTo(physical));
+        }
+
+        [Test]
+        public void ShouldNotMapAnotherPackageWithTheSamePrefix()
+        {
+            const string path = "Packages/example-other/Tests/Driver.cs";
+            Assert.That(BenchmarkCodeIdentity.MapPackageSourcePath(path, "Packages/example", Path.GetFullPath("Temp/LinkedPackage")), Is.EqualTo(Path.GetFullPath(path)));
+        }
+
         [Test]
         public void ShouldVerifyCompilerSourceAndLoadedModuleOnSettledHost()
         {
