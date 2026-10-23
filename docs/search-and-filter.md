@@ -37,6 +37,8 @@ Matching terms are highlighted in the results. The highlight deepens while the p
 
 ### Limits and behavior
 
+- Queries share the available metadata when they start, including during indexing. Later arrivals and edits cannot change an in-flight query's captured records. Partial records are
+  ordered in cooperative slices; allocation and individual Unity calls can still exceed a slice budget.
 - Quick search lists at most 25 results. Choose **Show all results** to browse every available match in a virtualized list. Results continue arriving during a long scan.
 - **Back to quick results** preserves your query. Up and Down select rows in either view; Enter opens the selected asset. Escape closes the view and keeps your text.
 - The full view reports matches found so far while scanning, available matches during indexing, and a total only after both finish.

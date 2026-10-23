@@ -71,7 +71,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             long before = GC.GetTotalMemory(true);
             for (int index = 0; index < copying.Length; index++)
             {
-                copying[index] = new AssetSearchQuery(cache.Documents, terms, 25);
+                copying[index] = new AssetSearchQuery(cache.Documents, terms, 25, sortByIdentity: !cache.IsSorted);
             }
             long afterCopying = GC.GetTotalMemory(true);
             for (int index = 0; index < shared.Length; index++)
@@ -140,6 +140,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             foreach (AssetSearchDocument document in dataset.Documents)
             {
                 dataset.View.UseMetadata(document.Guid, managedTypes);
+                if (dataset.PartialView.Count < size / 10)
+                {
+                    dataset.PartialView.UseMetadata(document.Guid, managedTypes);
+                }
                 if (BudgetMilliseconds <= slice.Elapsed.TotalMilliseconds)
                 {
                     longestBuild = Math.Max(longestBuild, slice.Elapsed.TotalMilliseconds);
@@ -234,11 +238,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(removed, Is.EqualTo(1000));
             Assert.That(restored, Is.EqualTo(1000));
             Assert.That(dataset.Index.Metadata.Count, Is.EqualTo(size));
-            reportProgress("measuring concurrent snapshot ownership", size);
-            MeasureConcurrentQueryHeap(dataset.View, out long copyingQueryHeap, out long sharedQueryHeap);
             foreach (int count in new[] { size / 10, size })
             {
-                IReadOnlyList<AssetSearchDocument> available = count == size ? dataset.View.Documents : new ArraySegment<AssetSearchDocument>(dataset.Documents, 0, count);
+                AssetObjectCache queryView = count == size ? dataset.View : dataset.PartialView;
+                Assert.That(queryView.Count, Is.EqualTo(count));
+                reportProgress("measuring concurrent snapshot ownership", count);
+                MeasureConcurrentQueryHeap(queryView, out long copyingQueryHeap, out long sharedQueryHeap);
                 foreach (string term in new[] { "absent-marker", "needle", "record" })
                 {
                     List<double> totals = new();
@@ -254,8 +259,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     {
                         reportProgress("query " + size + "/" + count + "/" + term, repetition + Warmups);
                         Stopwatch total = Stopwatch.StartNew();
-                        AssetSearchQuery query =
-                            count == size ? dataset.View.CreateQuery(new[] { term }, 25) : new AssetSearchQuery(available, new[] { term }, 25, sortByIdentity: true);
+                        AssetSearchQuery query = queryView.CreateQuery(new[] { term }, 25);
                         double preparation = total.Elapsed.TotalMilliseconds;
                         double active = preparation;
                         Stopwatch unit = new();
@@ -283,10 +287,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         yield return null;
                     }
                     Stopwatch cancellation = Stopwatch.StartNew();
-                    AssetSearchQuery abandoned =
-                        count == size
-                            ? dataset.View.CreateQuery(new[] { "absent-marker" }, 25)
-                            : new AssetSearchQuery(available, new[] { "absent-marker" }, 25, sortByIdentity: true);
+                    AssetSearchQuery abandoned = queryView.CreateQuery(new[] { "absent-marker" }, 25);
                     double cancelPreparation = cancellation.Elapsed.TotalMilliseconds;
                     abandoned.Advance(BudgetMilliseconds);
                     double firstUnit = cancellation.Elapsed.TotalMilliseconds;
@@ -299,7 +300,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                             + ",\"availableRecords\":"
                             + count
                             + ",\"snapshotOwnership\":\""
-                            + (count == size ? "shared sorted cache" : "copied partial input")
+                            + (count == size ? "shared sorted cache" : "shared unsorted cache")
                             + "\",\"concurrentQueries\":32,\"copyingQueryHeapDeltaBytes\":"
                             + copyingQueryHeap
                             + ",\"sharedQueryHeapDeltaBytes\":"
@@ -363,34 +364,39 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
             }
             reportProgress("measuring edits after shared queries", size);
-            AssetSearchQuery retainedQuery = dataset.View.CreateQuery(new[] { "record" }, 25);
-            long beforeMutation = GC.GetTotalMemory(true);
-            double[] mutationTimes = new double[2];
-            for (int index = 0; index < mutationTimes.Length; index++)
+            foreach (AssetObjectCache queryView in new[] { dataset.PartialView, dataset.View })
             {
-                AssetSearchDocument original = dataset.Documents[index];
-                AssetSearchDocument replacement = new(original.Guid, original.Name, original.ExactType, null);
-                dataset.Index.Metadata.Upsert(new AssetMetadataRecord(replacement, replacement.ExactType, "Assets/Synthetic/" + original.Guid + ".asset", original.Name, null));
-                Stopwatch mutation = Stopwatch.StartNew();
-                Assert.That(dataset.View.UseMetadata(original.Guid, managedTypes));
-                mutationTimes[index] = mutation.Elapsed.TotalMilliseconds;
+                AssetSearchQuery retainedQuery = queryView.CreateQuery(new[] { "record" }, 25);
+                long beforeMutation = GC.GetTotalMemory(true);
+                double[] mutationTimes = new double[2];
+                for (int index = 0; index < mutationTimes.Length; index++)
+                {
+                    AssetSearchDocument original = dataset.Documents[index];
+                    AssetSearchDocument replacement = new(original.Guid, original.Name, original.ExactType, null);
+                    dataset.Index.Metadata.Upsert(new AssetMetadataRecord(replacement, replacement.ExactType, "Assets/Synthetic/" + original.Guid + ".asset", original.Name, null));
+                    Stopwatch mutation = Stopwatch.StartNew();
+                    Assert.That(queryView.UseMetadata(original.Guid, managedTypes));
+                    mutationTimes[index] = mutation.Elapsed.TotalMilliseconds;
+                }
+                long mutationHeap = GC.GetTotalMemory(true) - beforeMutation;
+                mutations.Add(
+                    "{\"records\":"
+                        + queryView.Count
+                        + ",\"snapshotOwnership\":\""
+                        + (ReferenceEquals(queryView, dataset.View) ? "shared sorted cache" : "shared unsorted cache")
+                        + "\",\"firstChangeMs\":"
+                        + Number(mutationTimes[0])
+                        + ",\"secondChangeMs\":"
+                        + Number(mutationTimes[1])
+                        + ",\"retainedHeapDeltaBytes\":"
+                        + mutationHeap
+                        + "}"
+                );
+                retainedQuery.Advance();
+                Assert.That(retainedQuery.RecordCount, Is.EqualTo(queryView.Count));
+                Assert.That(queryView.RetainedObjectCount, Is.Zero);
+                GC.KeepAlive(retainedQuery);
             }
-            long mutationHeap = GC.GetTotalMemory(true) - beforeMutation;
-            mutations.Add(
-                "{\"records\":"
-                    + size
-                    + ",\"firstChangeMs\":"
-                    + Number(mutationTimes[0])
-                    + ",\"secondChangeMs\":"
-                    + Number(mutationTimes[1])
-                    + ",\"retainedHeapDeltaBytes\":"
-                    + mutationHeap
-                    + "}"
-            );
-            retainedQuery.Advance();
-            Assert.That(retainedQuery.RecordCount, Is.EqualTo(size));
-            Assert.That(dataset.View.RetainedObjectCount, Is.Zero);
-            GC.KeepAlive(retainedQuery);
             GC.KeepAlive(dataset);
         }
 
@@ -414,7 +420,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Directory.CreateDirectory(Path.GetDirectoryName(Output));
                 File.WriteAllText(
                     Output,
-                    "{\n\"schema\":4,\n\"fixtureKind\":\"synthetic Unicode metadata with labels and nested field text, no Unity objects or assets\",\n"
+                    "{\n\"schema\":5,\n\"fixtureKind\":\"synthetic Unicode metadata with labels and nested field text, no Unity objects or assets\",\n"
                         + "\"startedUtc\":\""
                         + startedUtc
                         + "\",\"sourceSha256\":\""
@@ -423,7 +429,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         + Number(runClock.Elapsed.TotalMilliseconds)
                         + ",\n"
                         + "\"productionSurfaces\":[\"AssetMetadataStore\",\"AssetMetadataRecord\",\"AssetObjectCache\",\"AssetSearchDocument\",\"AssetSearchQuery\",\"AssetChangeRefreshService\"],\n"
-                        + "\"sharedMetadataStoreMeasured\":true,\"assetDatabaseClassificationMeasured\":false,\n\"realAssets\":0,\n\"diskCacheBytes\":-1,\n"
+                        + "\"partialViewFraction\":0.1,\"sharedMetadataStoreMeasured\":true,\"assetDatabaseClassificationMeasured\":false,\n\"realAssets\":0,\n\"diskCacheBytes\":-1,\n"
                         + "\"warmups\":"
                         + Warmups
                         + ",\n\"samples\":"
@@ -519,6 +525,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             public AssetSearchDocument[] Documents { get; private set; }
             public AssetGuidTypeIndex Index { get; } = new(false);
             public AssetObjectCache View { get; }
+            public AssetObjectCache PartialView { get; }
             public AssetChangeRefreshService Tracker { get; }
             public int Published { get; private set; }
 
@@ -526,6 +533,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 Documents = new AssetSearchDocument[size];
                 View = new AssetObjectCache(Index.Metadata);
+                PartialView = new AssetObjectCache(Index.Metadata);
                 Tracker = new AssetChangeRefreshService(_ => true, (_, _, _) => Published++, (path, guid) => (guid, path, typeof(MetadataScaleBenchmarkTests)));
             }
 
@@ -533,6 +541,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 Tracker.Dispose();
                 View.Clear();
+                PartialView.Clear();
                 Index.Cancel();
                 Documents = null;
             }

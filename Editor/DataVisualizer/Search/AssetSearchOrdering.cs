@@ -10,10 +10,9 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         private const int StepsPerBudgetCheck = 64;
 
         public bool IsComplete => _width == 0;
-        public IReadOnlyList<AssetSearchDocument> Documents => _snapshot ?? (IReadOnlyList<AssetSearchDocument>)_documents;
+        public IReadOnlyList<AssetSearchDocument> Documents => _documents;
 
-        private readonly AssetSearchSnapshot _snapshot;
-        private AssetSearchDocument[] _documents;
+        private IReadOnlyList<AssetSearchDocument> _documents;
         private AssetSearchDocument[] _buffer;
         private int _width;
         private int _start;
@@ -29,26 +28,25 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             {
                 throw new ArgumentNullException(nameof(documents));
             }
-            if (!sortByIdentity && documents is AssetSearchSnapshot snapshot)
+            if (documents is AssetSearchSnapshot)
             {
-                _snapshot = snapshot;
-                return;
+                _documents = documents;
             }
-            if (documents is List<AssetSearchDocument> list)
+            else if (documents is List<AssetSearchDocument> list)
             {
                 _documents = list.ToArray();
             }
             else
             {
-                _documents = new AssetSearchDocument[documents.Count];
+                AssetSearchDocument[] copy = new AssetSearchDocument[documents.Count];
                 for (int index = 0; index < documents.Count; index++)
                 {
-                    _documents[index] = documents[index];
+                    copy[index] = documents[index];
                 }
+                _documents = copy;
             }
-            if (sortByIdentity && 1 < _documents.Length)
+            if (sortByIdentity && 1 < _documents.Count)
             {
-                _buffer = new AssetSearchDocument[_documents.Length];
                 _width = 1;
             }
         }
@@ -60,6 +58,10 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                 throw new ArgumentOutOfRangeException(nameof(budgetMilliseconds));
             }
             Stopwatch clock = Stopwatch.StartNew();
+            if (!IsComplete && _buffer == null)
+            {
+                _buffer = new AssetSearchDocument[_documents.Count];
+            }
             int steps = budgetMilliseconds == 0 ? 1 : StepsPerBudgetCheck;
             while (!IsComplete)
             {
@@ -79,10 +81,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         {
             if (_output == _end)
             {
-                if (_start == _documents.Length)
+                if (_start == _documents.Count)
                 {
-                    (_documents, _buffer) = (_buffer, _documents);
-                    if (_documents.Length - _width <= _width)
+                    AssetSearchDocument[] previous = _documents as AssetSearchDocument[];
+                    _documents = _buffer;
+                    _buffer = previous;
+                    if (_documents.Count - _width <= _width)
                     {
                         _width = 0;
                         _buffer = null;
@@ -90,11 +94,13 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                     }
                     _width *= 2;
                     _start = 0;
+                    // The first merge can read an immutable cache view without copying it.
+                    _buffer ??= new AssetSearchDocument[_documents.Count];
                 }
                 _left = _start;
-                _right = Math.Min(_start + _width, _documents.Length);
+                _right = Math.Min(_start + _width, _documents.Count);
                 _leftEnd = _right;
-                _end = Math.Min(_right + _width, _documents.Length);
+                _end = Math.Min(_right + _width, _documents.Count);
                 _output = _start;
                 _start = _end;
             }

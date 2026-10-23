@@ -136,18 +136,28 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
-        [TestCase("remove")]
-        [TestCase("replace")]
-        [TestCase("add")]
-        [TestCase("clear")]
-        [TestCase("sync")]
-        [TestCase("async")]
-        public void ShouldKeepSharedQueriesStableAcrossCacheMutations(string mutation)
+        [TestCase("remove", false)]
+        [TestCase("remove", true)]
+        [TestCase("replace", false)]
+        [TestCase("replace", true)]
+        [TestCase("add", false)]
+        [TestCase("add", true)]
+        [TestCase("clear", false)]
+        [TestCase("clear", true)]
+        [TestCase("sync", false)]
+        [TestCase("sync", true)]
+        [TestCase("async", false)]
+        [TestCase("async", true)]
+        public void ShouldKeepSharedQueriesStableAcrossCacheMutations(string mutation, bool sorted)
         {
             AssetMetadataStore metadata = new();
             AssetObjectCache cache = CreateCache(metadata, 31);
-            cache.Sort();
+            if (sorted)
+            {
+                cache.Sort();
+            }
             List<AssetSearchDocument> expected = new(cache.Documents);
+            expected.Sort(AssetSearchDocument.CompareIdentity);
             AssetSearchQuery first = cache.CreateQuery(new[] { "Match" }, int.MaxValue);
             first.Advance(0);
             AssetSearchQuery second = cache.CreateQuery(new[] { "Match" }, int.MaxValue);
@@ -208,11 +218,15 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(cache.ObjectLoadCount, Is.Zero);
         }
 
-        [Test]
-        public void ShouldKeepSortedQueryPreparationAllocationIndependentOfRecordCount()
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ShouldKeepQueryConstructionAllocationIndependentOfRecordCount(bool sorted)
         {
             AssetObjectCache cache = CreateCache(new AssetMetadataStore(), 10000);
-            cache.Sort();
+            if (sorted)
+            {
+                cache.Sort();
+            }
             string[] terms = { "absent" };
             cache.CreateQuery(terms, 25);
             AssetSearchQuery[] queries = new AssetSearchQuery[32];
@@ -222,7 +236,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 queries[index] = cache.CreateQuery(terms, 25);
             }
             long retained = GC.GetTotalMemory(true) - before;
-            Assert.That(retained, Is.LessThan(128 * 1024), "Concurrent sorted queries must not each retain a reference array per record");
+            Assert.That(retained, Is.LessThan(128 * 1024), "Unadvanced cache queries must not each retain reference arrays per record");
             Assert.That(queries[0].RecordCount, Is.EqualTo(10000));
             GC.KeepAlive(queries);
             GC.KeepAlive(cache);
