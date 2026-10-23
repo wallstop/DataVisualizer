@@ -36,3 +36,13 @@ The [Unicode-prefilter follow-up](search-unicode-10k-2026-10-22.md) records the 
 
 The [final-index ordering experiment](final-index-ordering-2026-10-22.md) records current Unicode metadata scaling, cooperative final-sort calls and an incomplete real 10k
 readiness attempt.
+
+## Benchmark code provenance
+
+The test host must provide Unity's `com.unity.nuget.mono-cecil` package (`Mono.Cecil.dll`). This is a test-only reference; it is excluded from the shipped package.
+
+The synthetic metadata driver emits schema 6. Before collecting records, it matches the loaded test module ID against the disk assembly and compares the driver source bytes with
+its compiler-recorded PDB document checksum. Missing symbols, stale source, a pending compilation/import or a replaced assembly stop the run. Reports distinguish the on-disk source
+SHA-256, compiler checksum/algorithm, loaded module ID and assembly SHA-256. Checkpoints and final completion recheck source and assembly bytes outside query timing intervals.
+`provenanceVerified=false` or a nonempty `provenanceFailure` invalidates a report; `complete=false` remains incomplete. This proves driver identity, not the identity of every
+production dependency. Historical schemas do not provide these checks and remain observations at their documented revisions.

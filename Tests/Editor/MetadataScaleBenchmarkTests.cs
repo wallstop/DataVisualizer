@@ -7,7 +7,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.Globalization;
     using System.IO;
     using System.Runtime.CompilerServices;
-    using System.Security.Cryptography;
     using System.Text;
     using NUnit.Framework;
     using UnityEngine.TestTools;
@@ -45,15 +44,6 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 text.Append(Number(values[index]));
             }
             return text.Append(']').ToString();
-        }
-
-        private static string SourceHash()
-        {
-            using SHA256 hash = SHA256.Create();
-            return BitConverter
-                .ToString(hash.ComputeHash(File.ReadAllBytes("Packages/com.wallstop-studios.data-visualizer/Tests/Editor/MetadataScaleBenchmarkTests.cs")))
-                .Replace("-", string.Empty)
-                .ToLowerInvariant();
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -408,7 +398,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             List<string> scenarios = new();
             List<string> mutations = new();
             string environment = "{}";
-            string sourceHash = SourceHash();
+            BenchmarkCodeIdentity identity = new(
+                typeof(MetadataScaleBenchmarkTests).Assembly,
+                "Packages/com.wallstop-studios.data-visualizer/Tests/Editor/MetadataScaleBenchmarkTests.cs"
+            );
             string startedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
             Stopwatch runClock = Stopwatch.StartNew();
             bool complete = false;
@@ -420,11 +413,23 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Directory.CreateDirectory(Path.GetDirectoryName(Output));
                 File.WriteAllText(
                     Output,
-                    "{\n\"schema\":5,\n\"fixtureKind\":\"synthetic Unicode metadata with labels and nested field text, no Unity objects or assets\",\n"
+                    "{\n\"schema\":6,\n\"fixtureKind\":\"synthetic Unicode metadata with labels and nested field text, no Unity objects or assets\",\n"
                         + "\"startedUtc\":\""
                         + startedUtc
                         + "\",\"sourceSha256\":\""
-                        + sourceHash
+                        + identity.SourceSha256
+                        + "\",\"loadedModuleId\":\""
+                        + identity.LoadedModuleId
+                        + "\",\"assemblySha256\":\""
+                        + identity.AssemblySha256
+                        + "\",\"compilerSourceHash\":\""
+                        + identity.CompilerSourceHash
+                        + "\",\"compilerHashAlgorithm\":\""
+                        + identity.CompilerHashAlgorithm
+                        + "\",\"provenanceVerified\":"
+                        + (identity.Verified ? "true" : "false")
+                        + ",\"provenanceFailure\":\""
+                        + PerfBaseline.JsonEscape(identity.Failure)
                         + "\",\"elapsedMilliseconds\":"
                         + Number(runClock.Elapsed.TotalMilliseconds)
                         + ",\n"
@@ -454,6 +459,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             };
             cleanup.Defer(writeReport);
             writeReport();
+            identity.Verify();
             environment = PerfBaseline.BuildEnvironmentJson();
             foreach (int size in new[] { 10000, 100000, 1000000 })
             {
@@ -468,12 +474,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         progress = count;
                         if (changed)
                         {
+                            identity.Verify();
                             writeReport();
                         }
                     },
-                    writeReport
+                    () =>
+                    {
+                        identity.Verify();
+                        writeReport();
+                    }
                 );
             }
+            identity.Verify();
             phase = "complete";
             complete = true;
         }
@@ -500,6 +512,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             ((IDisposable)measurement).Dispose();
             ReportStatus report = UnityEngine.JsonUtility.FromJson<ReportStatus>(File.ReadAllText(Output));
             Assert.That(!report.complete);
+            Assert.That(report.provenanceVerified);
+            Assert.That(report.provenanceFailure, Is.Empty);
             Assert.That(report.phase, Is.EqualTo("starting"));
             Assert.That(report.warmups, Is.EqualTo(Warmups));
             Assert.That(report.samples, Is.EqualTo(Samples));
@@ -508,6 +522,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Serializable]
         private sealed class ReportStatus
         {
+            public bool provenanceVerified;
+            public string provenanceFailure;
             public bool complete = true;
             public string phase = string.Empty;
             public int warmups = -1;
