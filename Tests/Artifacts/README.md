@@ -41,8 +41,8 @@ after queries and excluded from ordinary readiness observations.
 
 `indexMode` distinguishes `paused-partial`, `live-rebuild`, and ordinary `complete` windows. `availableRecordsAtInput` and `indexCompleteAtInput` describe the input boundary;
 `records` and `indexComplete` describe the published snapshot. Optional `pausePartialExtraction: false` leaves extraction running after the threshold and starts the first query
-immediately, before that rebuild completes. Later inputs can arrive after completion: group live-rebuild results by actual input completeness rather than treating all of them as
-partial-index samples. This is a warm metadata rebuild, not cold extraction or sustained import traffic.
+immediately, before that rebuild completes. Every later live input waits for the previous extraction to settle, then starts a fresh warm rebuild outside its input clock. All live
+inputs therefore start partial; publication can observe a completed index. This is warm metadata reuse, not cold extraction or sustained import traffic.
 
 Each supported condition retains five warm-ups and 30 samples. Rare targets expect their presence in the current published snapshot; common names can be absent from partial input.
 The driver resets publication and paint clocks when a new query generation supersedes an observed publication, and records `invalidatedPublications`. The final clocks refer to the

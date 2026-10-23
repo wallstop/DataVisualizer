@@ -667,9 +667,12 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
             state.PartialRecords = cache.Count;
             state.PartialVersion = cache.Version;
+            if (!state.MeasuringPartialSearch)
+            {
+                state.SearchKind = 0;
+                state.SearchRepetition = 0;
+            }
             state.MeasuringPartialSearch = true;
-            state.SearchKind = 0;
-            state.SearchRepetition = 0;
             MeasureSearch(state, state.SearchRepetition++);
         }
 
@@ -815,6 +818,14 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 }
                 if (state.SearchKind < SearchKindCount)
                 {
+                    if (state.MeasuringPartialSearch && !state.PausePartialExtraction)
+                    {
+                        // Each live input starts partial; previous extraction settles outside its clock.
+                        state.PartialRebuildStarted = false;
+                        state.PhaseClock.Restart();
+                        state.Phase = Phase.WaitingPartialIndex;
+                        return;
+                    }
                     MeasureSearch(state, state.SearchRepetition++);
                     return;
                 }
@@ -1023,6 +1034,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             {
                 // IsActiveSearchComplete proves this query uses the current cache version.
                 sample.expectedMatches = GetSearchCache(window).Contains(sample.targetGuid) ? 1 : 0;
+            }
+            if (sample.kind == "common-name" && sample.indexComplete)
+            {
+                sample.minimumMatches = 1;
             }
             if ((0 <= sample.expectedMatches && sample.matches != sample.expectedMatches) || sample.matches < sample.minimumMatches)
             {
@@ -1544,7 +1559,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "  \"interactionSemantics\": \"Five warmups then 30 warm observations per interaction; root paint is not GPU completion; readiness is observed layout, with observer delay. Small scrolls can be no-ops. Type switching requires at least two fixture types.\",\n"
             );
             json.Append(
-                "  \"searchSemantics\": \"Five warmups and 30 warm samples per supported condition and selected index mode. First result and current snapshot completion include field input and editor observation delay. publicationPaintMilliseconds records a later visible popover generateVisualContent callback, not GPU presentation. No-match first result is -1. Common names may reach the result cap. Rare fields require BaseDataObject or OtherEditorOnlyCreationData fixtures. Optional partial modes rebuild after initial readiness and start queries at the requested record threshold. paused-partial stops extraction; live-rebuild leaves extraction running. Actual input and publication completeness are recorded; a live rebuild can finish before later inputs. The extra window is discarded before ordinary complete-index runs. Fresh-process search remains unmeasured.\",\n"
+                "  \"searchSemantics\": \"Five warmups and 30 warm samples per supported condition and selected index mode. First result and current snapshot completion include field input and editor observation delay. publicationPaintMilliseconds records a later visible popover generateVisualContent callback, not GPU presentation. No-match first result is -1. Common names may reach the result cap. Rare fields require BaseDataObject or OtherEditorOnlyCreationData fixtures. Optional partial modes rebuild after initial readiness and start queries at the requested record threshold. paused-partial stops extraction; live-rebuild leaves extraction running. Each live input starts a fresh warm rebuild after prior extraction settles outside the input clock. Actual input and publication completeness are recorded; extraction can complete before publication. The extra window is discarded before ordinary complete-index runs. Fresh-process search remains unmeasured.\",\n"
             );
             json.Append("  \"searchObservations\": [");
             bool firstSearch = true;

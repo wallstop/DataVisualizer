@@ -75,6 +75,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             foreach (PerfSearchSample sample in report.searchObservations)
             {
                 Assert.That(sample.complete, sample.kind);
+                if (sample.kind == "common-name" && sample.indexComplete)
+                {
+                    Assert.That(0 < sample.matches, sample.kind);
+                }
                 Assert.That(0 <= sample.completedMilliseconds && sample.completedMilliseconds <= sample.publicationPaintMilliseconds, sample.kind);
                 if (sample.indexMode == (pauseExtraction ? "paused-partial" : "live-rebuild"))
                 {
@@ -117,7 +121,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     conditions[condition] = count + 1;
                 }
             }
-            Assert.That(0 < liveInputs, "The first input must occur before the rebuild completes");
+            Assert.That(liveInputs, Is.EqualTo(140), "Every partial-window input must occur before its rebuild completes");
             Assert.That(conditions.Count, Is.EqualTo(8));
             foreach (int count in conditions.Values)
             {
