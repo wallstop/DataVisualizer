@@ -46,8 +46,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             return text.Append(']').ToString();
         }
 
+        // Keep controls rooted while measuring construction and one zero-budget advancement per query.
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void MeasureConcurrentQueryHeap(AssetObjectCache cache, out long copyingHeap, out long sharedHeap)
+        private static void MeasureConcurrentQueryHeap(AssetObjectCache cache, out long copyingHeap, out long sharedHeap, out long advancedCopyingHeap, out long advancedSharedHeap)
         {
             string[] terms = { "absent-marker" };
             AssetSearchQuery[] copying = new AssetSearchQuery[32];
@@ -69,10 +70,22 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 shared[index] = cache.CreateQuery(terms, 25);
             }
             long afterShared = GC.GetTotalMemory(true);
+            foreach (AssetSearchQuery query in copying)
+            {
+                query.Advance(0);
+            }
+            long afterAdvancedCopying = GC.GetTotalMemory(true);
+            foreach (AssetSearchQuery query in shared)
+            {
+                query.Advance(0);
+            }
+            long afterAdvancedShared = GC.GetTotalMemory(true);
             GC.KeepAlive(copying);
             GC.KeepAlive(shared);
             copyingHeap = afterCopying - before;
             sharedHeap = afterShared - afterCopying;
+            advancedCopyingHeap = afterAdvancedCopying - afterShared;
+            advancedSharedHeap = afterAdvancedShared - afterAdvancedCopying;
         }
 
         private static IEnumerator MeasureSize(int size, List<string> scenarios, List<string> mutations, Action<string, int> reportProgress, Action checkpoint)
@@ -233,7 +246,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 AssetObjectCache queryView = count == size ? dataset.View : dataset.PartialView;
                 Assert.That(queryView.Count, Is.EqualTo(count));
                 reportProgress("measuring concurrent snapshot ownership", count);
-                MeasureConcurrentQueryHeap(queryView, out long copyingQueryHeap, out long sharedQueryHeap);
+                MeasureConcurrentQueryHeap(queryView, out long copyingQueryHeap, out long sharedQueryHeap, out long advancedCopyingQueryHeap, out long advancedSharedQueryHeap);
                 foreach (string term in new[] { "absent-marker", "needle", "record" })
                 {
                     List<double> totals = new();
@@ -295,6 +308,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                             + copyingQueryHeap
                             + ",\"sharedQueryHeapDeltaBytes\":"
                             + sharedQueryHeap
+                            + ",\"advancedCopyingQueryHeapDeltaBytes\":"
+                            + advancedCopyingQueryHeap
+                            + ",\"advancedSharedQueryHeapDeltaBytes\":"
+                            + advancedSharedQueryHeap
                             + ",\"term\":\""
                             + term
                             + "\",\"sharedStoreHeapDeltaBytes\":"
