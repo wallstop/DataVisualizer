@@ -90,6 +90,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         */
         private const float ObjectRowFixedHeight = 40f;
 
+        /// <summary>Raised after a completed available-record snapshot reaches the search UI.</summary>
+        public event Action SearchSnapshotPublished;
+
         internal static DataVisualizer Instance;
 
         /*
@@ -130,6 +133,9 @@ namespace WallstopStudios.DataVisualizer.Editor
         private static readonly ReusableDisposalScope<(DataVisualizer window, bool suppressed)> ObjectSelectionCallbackScopes = new(static state =>
             state.window._suppressListSelectionCallback = state.suppressed
         );
+
+        /// <summary>The query generation whose rows are currently displayed.</summary>
+        public int DisplayedSearchGeneration { get; private set; } = -1;
 
         /// <summary>The active query text, or null after cancellation or dismissal.</summary>
         public string ActiveSearchText => _activePopover == _searchPopover ? _observedSearchText : null;
@@ -3322,6 +3328,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 _currentSearchResultItems.Clear();
                 _searchHighlightIndex = -1;
+                DisplayedSearchGeneration = -1;
             }
             PopoverPlacement.ReleaseViewportLimits(_searchPopover);
             int generation = ++_searchQueryGeneration;
@@ -3400,10 +3407,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 LongestSearchQuerySliceMilliseconds = Math.Max(LongestSearchQuerySliceMilliseconds, query.LongestSliceMilliseconds);
                 if (query.IsComplete || (!arrivalsOnly && publishedCount != query.Results.Count))
                 {
-                    RenderSearchResults(query, snapshotVersion == _assetObjectCache.Version);
-                    _observedSearchPublished = query.IsComplete;
-                    publishedIndexComplete = _isSearchCachePopulated;
-                    publishedCount = query.Results.Count;
+                    PublishSnapshot();
                 }
                 if (query.IsComplete)
                 {
@@ -3432,6 +3436,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 }
                 return false;
             }
+            void PublishSnapshot()
+            {
+                RenderSearchResults(query, snapshotVersion == _assetObjectCache.Version);
+                _observedSearchPublished = query.IsComplete;
+                DisplayedSearchGeneration = generation;
+                publishedIndexComplete = _isSearchCachePopulated;
+                publishedCount = query.Results.Count;
+                if (query.IsComplete)
+                {
+                    SearchSnapshotPublished?.Invoke();
+                }
+            }
             void RequestRefresh(bool discardInFlight)
             {
                 if (generation != _searchQueryGeneration || _activePopover != _searchPopover)
@@ -3442,8 +3458,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     if (query.IsComplete && publishedIndexComplete != _isSearchCachePopulated)
                     {
-                        RenderSearchResults(query, snapshotIsCurrent: true);
-                        publishedIndexComplete = _isSearchCachePopulated;
+                        PublishSnapshot();
                     }
                     return;
                 }
