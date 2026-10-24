@@ -3,6 +3,7 @@
 This directory preserves recorded test evidence. It is excluded from the documentation site and the UPM/npm package. Raw JSON reports and their Unity metadata moved here from
 `docs/` without changing their bytes or GUIDs. Historical commit links still locate the original reports.
 
+- [First available search snapshots](first-search-snapshot-2026-10-24.md): live/complete 1k/10k publications, paint generations and focus limits.
 - [Quick-preview object costs](preview-object-cost-2026-10-24.md): partial/full 1k/10k result loads, direct row references and publication clocks.
 - [Performance observations](performance.md): staging, readiness, search, refresh, intake, raw reports, environments and incomplete attempts.
 - [Subasset experiment](subasset-feasibility.md): test-only identity and read-only inspection evidence.
@@ -25,11 +26,17 @@ site assets. Test transcripts, raw samples, benchmark procedures and experiment 
 
 `PerfBaseline.RunBaseline` records `searchObservations` for common names, a rare GUID, a rare field token, and no matches. Each supported condition has five warm-ups and 30 warm
 samples. It waits for a current query publication, including zero matches. By default, queries use a complete window index. `firstResultMilliseconds` records the first observed
-preview row; it stays `-1` for no matches. `completedMilliseconds` records the first observed completed snapshot. Both include field input and editor scheduling, and do not verify
-layout, paint or GPU completion. `publicationPaintMilliseconds` records the first subsequent `generateVisualContent` callback on the visible search popover after current
+preview row; it stays `-1` for no matches. `completedMilliseconds` records the first observed completed current snapshot. Both include field input and editor scheduling, and do not
+verify layout, paint or GPU completion. `publicationPaintMilliseconds` records the first subsequent `generateVisualContent` callback on the visible search popover after current
 publication is observed. The observer rejects hidden/detached popovers and changed query text or generations. The driver requests a repaint after observing publication, so this is
 a conservative later UI Toolkit paint-generation observation; it includes observer scheduling and does not establish GPU presentation, compositor completion or a user's physical
 input latency. The publication clock remains separate. Missing paint observations stay `-1` and prevent a successful sample.
+
+`firstSnapshotMilliseconds` records the first completed available-record snapshot directly at UI-tree publication, including zero matches. It stays fixed across later query
+generations. Its separate generation, record count, match count, index completeness and `firstSnapshotCurrent` fields describe that callback; currency does not mean indexing is
+complete. `firstSnapshotPaintMilliseconds` records the first later visible paint-generation callback for a published snapshot, with its own generation, record count, match count
+and index completeness. Publications can coalesce before painting, so those populations and generations can differ. A callback for a replaced displayed generation is rejected.
+These clocks do not reset the current-cache clocks above and do not establish physical input or GPU presentation. Missing times and counts stay `-1`.
 
 Rare field tokens include Unicode and are deterministic fixture strings on `BaseDataObject.Description` and `OtherEditorOnlyCreationData.SearchText`. Other ordinary fixture types
 skip that condition. The legacy `search-first-results` scenario retains common-name first-result observations. Common queries can stop at the production result cap; rare/no-match

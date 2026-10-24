@@ -1,0 +1,40 @@
+{
+  "sourceRevision": "3e3843ea3db6754383fc804ff2b1cb23d65a8b4f",
+  "preflight": {
+    "surfaces": "Packages/com.wallstop-studios.data-visualizer/Tests/Editor/PerfBaseline.cs|SourceSha256=c507d76d65c71412686f43c84a1793d9fecb3c7ca154eb8bd31c5004bceed533|LoadedModuleId=a1e4ece3-dd62-498b-83b4-b9cf4745196d|AssemblySha256=ebe64d19f9b105a8aa773daa74774d27512aafb78f8c43996e8e3e5eac8a7481|CompilerSourceHash=c507d76d65c71412686f43c84a1793d9fecb3c7ca154eb8bd31c5004bceed533|Verified=True\r\nPackages/com.wallstop-studios.data-visualizer/Tests/Editor/PerfSearchSample.cs|SourceSha256=a8fb2b51de5a2e101a5eb9a8d4ae793f78e1604105c459379ff5e9b5ed822aaa|LoadedModuleId=a1e4ece3-dd62-498b-83b4-b9cf4745196d|AssemblySha256=ebe64d19f9b105a8aa773daa74774d27512aafb78f8c43996e8e3e5eac8a7481|CompilerSourceHash=a8fb2b51de5a2e101a5eb9a8d4ae793f78e1604105c459379ff5e9b5ed822aaa|Verified=True\r\nPackages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/DataVisualizer.cs|SourceSha256=0d82c7e07c96a4f43411db3a9f6033aa3b6aefb5740154f80c866d79f2f759fa|LoadedModuleId=87c91304-983f-41df-8c57-c20c39706a3d|AssemblySha256=6dd05b1459ea6b94b45f0c21abe4d1428efaac52054d50f536b5af5484f3fbf9|CompilerSourceHash=0d82c7e07c96a4f43411db3a9f6033aa3b6aefb5740154f80c866d79f2f759fa|Verified=True\r\nPackages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/NamespaceController.cs|SourceSha256=352660b0f5a9dbeb07b15c3a35403f7c018b0f680ead3de4caa89c3a0900d96a|LoadedModuleId=87c91304-983f-41df-8c57-c20c39706a3d|AssemblySha256=6dd05b1459ea6b94b45f0c21abe4d1428efaac52054d50f536b5af5484f3fbf9|CompilerSourceHash=352660b0f5a9dbeb07b15c3a35403f7c018b0f680ead3de4caa89c3a0900d96a|Verified=True\r\n",
+    "sourceTree": "count=205|manifestSha256=41abafce122cce60444cfd0b680b5a2befcb19718351c1fab40119d08fba07e5",
+    "host": "driver=Idle|windows=7|browsers=0|nativeHosts=1|assetPaths=72|ownedFixturePaths=0|pendingPaths=0|metadata=14|suspended=False|playing=False|updating=False|compiling=False"
+  },
+  "configuration": {
+    "sizes": [
+      1000,
+      10000
+    ],
+    "timeoutMinutes": 30,
+    "stagingBudgetMilliseconds": 64,
+    "maximumStagingItems": 100,
+    "partialSearchFraction": 0.1,
+    "pausePartialExtraction": false
+  },
+  "startedAtApproximateUtc": "2026-10-24T05:42Z",
+  "focusInterventions": [
+    {
+      "recordedUtc": "2026-10-24T05:58:09Z",
+      "datasetSize": 10000,
+      "phase": "WaitingPartialIndex",
+      "queryObservations": 58,
+      "applicationActiveBefore": false,
+      "applicationActiveAfter": true,
+      "action": "FocusWindowIfItsOpen<SceneView>()",
+      "outsideMeasuredInput": true
+    }
+  ],
+  "postflight": {
+    "surfaces": "Packages/com.wallstop-studios.data-visualizer/Tests/Editor/PerfBaseline.cs|SourceSha256=c507d76d65c71412686f43c84a1793d9fecb3c7ca154eb8bd31c5004bceed533|LoadedModuleId=a1e4ece3-dd62-498b-83b4-b9cf4745196d|AssemblySha256=ebe64d19f9b105a8aa773daa74774d27512aafb78f8c43996e8e3e5eac8a7481|CompilerSourceHash=c507d76d65c71412686f43c84a1793d9fecb3c7ca154eb8bd31c5004bceed533|Verified=True\r\nPackages/com.wallstop-studios.data-visualizer/Tests/Editor/PerfSearchSample.cs|SourceSha256=a8fb2b51de5a2e101a5eb9a8d4ae793f78e1604105c459379ff5e9b5ed822aaa|LoadedModuleId=a1e4ece3-dd62-498b-83b4-b9cf4745196d|AssemblySha256=ebe64d19f9b105a8aa773daa74774d27512aafb78f8c43996e8e3e5eac8a7481|CompilerSourceHash=a8fb2b51de5a2e101a5eb9a8d4ae793f78e1604105c459379ff5e9b5ed822aaa|Verified=True\r\nPackages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/DataVisualizer.cs|SourceSha256=0d82c7e07c96a4f43411db3a9f6033aa3b6aefb5740154f80c866d79f2f759fa|LoadedModuleId=87c91304-983f-41df-8c57-c20c39706a3d|AssemblySha256=6dd05b1459ea6b94b45f0c21abe4d1428efaac52054d50f536b5af5484f3fbf9|CompilerSourceHash=0d82c7e07c96a4f43411db3a9f6033aa3b6aefb5740154f80c866d79f2f759fa|Verified=True\r\nPackages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/NamespaceController.cs|SourceSha256=352660b0f5a9dbeb07b15c3a35403f7c018b0f680ead3de4caa89c3a0900d96a|LoadedModuleId=87c91304-983f-41df-8c57-c20c39706a3d|AssemblySha256=6dd05b1459ea6b94b45f0c21abe4d1428efaac52054d50f536b5af5484f3fbf9|CompilerSourceHash=352660b0f5a9dbeb07b15c3a35403f7c018b0f680ead3de4caa89c3a0900d96a|Verified=True\r\n",
+    "sourceTree": "count=205|manifestSha256=41abafce122cce60444cfd0b680b5a2befcb19718351c1fab40119d08fba07e5",
+    "host": "driver=Idle|windows=7|browsers=0|nativeHosts=1|assetPaths=72|ownedFixturePaths=0|pendingPaths=0|metadata=0|suspended=False|playing=False|updating=False|compiling=False"
+  },
+  "allSourceChecksMatch": true,
+  "reportSha256": "4eaa0e360bdea4b9c1eb46219f0a0e0c575592b61fa2385fe24c5be1bb9c90ba",
+  "reportBytes": 749455
+}
