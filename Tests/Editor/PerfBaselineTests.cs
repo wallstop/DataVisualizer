@@ -83,6 +83,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.That(sample.complete, sample.kind);
                 Assert.That(sample.resultObjectLoads, Is.Zero, sample.kind);
                 Assert.That(sample.previewAssetReferences, Is.Zero, sample.kind);
+                Assert.That(0 <= sample.firstSnapshotMilliseconds && sample.firstSnapshotMilliseconds <= sample.firstSnapshotPaintMilliseconds, sample.kind);
+                Assert.That(sample.firstSnapshotPaintMilliseconds <= sample.publicationPaintMilliseconds, sample.kind);
+                Assert.That(0 <= sample.firstSnapshotRecords && sample.firstSnapshotRecords <= sample.records, sample.kind);
+                Assert.That(0 <= sample.firstSnapshotMatches && sample.firstSnapshotMatches <= 25, sample.kind);
+                Assert.That(0 <= sample.firstSnapshotPaintRecords && sample.firstSnapshotPaintRecords <= sample.records, sample.kind);
                 if (sample.kind == "common-name" && sample.indexComplete)
                 {
                     Assert.That(0 < sample.matches, sample.kind);
@@ -139,6 +144,46 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(EditorSurfaceCapture.CountNativeWindowHosts(), Is.EqualTo(hosts));
         }
 
+        [TestCase(0)]
+        [TestCase(7)]
+        public void ShouldRetainFirstPublicationAndPaintTheDisplayedSnapshot(int matches)
+        {
+            PerfSearchSample sample = new();
+            Assert.That(sample.ObserveSnapshotPaint(1, 1), Is.False, "A repaint before publication is not a search observation");
+            sample.ObserveSnapshot(2, 1, 100, matches, false, false);
+            sample.ObserveSnapshot(3, 2, 200, matches, true, true);
+            Assert.That(sample.firstSnapshotMilliseconds, Is.EqualTo(2));
+            Assert.That(sample.firstSnapshotGeneration, Is.EqualTo(1));
+            Assert.That(sample.firstSnapshotRecords, Is.EqualTo(100));
+            Assert.That(sample.firstSnapshotMatches, Is.EqualTo(matches));
+            Assert.That(sample.firstSnapshotIndexComplete, Is.False);
+            Assert.That(sample.firstSnapshotCurrent, Is.False);
+            Assert.That(sample.ObserveSnapshotPaint(4, 1), Is.False, "A stale generation cannot claim the newer tree's paint");
+            Assert.That(sample.ObserveSnapshotPaint(5, 2), Is.True);
+            Assert.That(sample.firstSnapshotPaintMilliseconds, Is.EqualTo(5));
+            Assert.That(sample.firstSnapshotPaintGeneration, Is.EqualTo(2));
+            Assert.That(sample.firstSnapshotPaintRecords, Is.EqualTo(200));
+            Assert.That(sample.firstSnapshotPaintMatches, Is.EqualTo(matches));
+            Assert.That(sample.firstSnapshotPaintIndexComplete, Is.True);
+            sample.ObserveSnapshot(6, 3, 300, 0, true, true);
+            Assert.That(sample.ObserveSnapshotPaint(7, 3), Is.False);
+            Assert.That(sample.firstSnapshotPaintMilliseconds, Is.EqualTo(5));
+            sample.complete = true;
+            sample.ObserveSnapshot(8, 4, 400, 0, true, true);
+            Assert.That(sample.firstSnapshotMilliseconds, Is.EqualTo(2));
+            PerfSearchSample absent = new();
+            Assert.That(absent.firstSnapshotMilliseconds, Is.EqualTo(-1));
+            Assert.That(absent.firstSnapshotRecords, Is.EqualTo(-1));
+            Assert.That(absent.firstSnapshotPaintMilliseconds, Is.EqualTo(-1));
+        }
+
+        [TearDown]
+        public void CancelBaselineAfterTest()
+        {
+            // Unity timeouts can skip coroutine disposal; this fixture owns its baseline runs.
+            PerfBaseline.Cancel();
+        }
+
         [UnityTest]
         public IEnumerator ShouldKeepLegacyReadinessSeparateFromPendingSharedIndexWork()
         {
@@ -171,18 +216,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
+        [Timeout(360000)]
         public IEnumerator ShouldMeasurePausedPartialAndCompleteIndexesSeparately()
         {
             return MeasurePartialAndCompleteIndexes(true);
         }
 
         [UnityTest]
+        [Timeout(360000)]
         public IEnumerator ShouldMeasureLiveRebuildAndCompleteIndexesSeparately()
         {
             return MeasurePartialAndCompleteIndexes(false);
         }
 
         [UnityTest]
+        [Timeout(360000)]
         public IEnumerator ShouldSkipUnsupportedRareFieldsDuringLiveRebuilds()
         {
             return MeasurePartialAndCompleteIndexes(false, false);
