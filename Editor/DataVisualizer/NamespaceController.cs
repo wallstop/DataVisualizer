@@ -815,7 +815,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (next != null)
             {
                 SelectType(dataVisualizer, next);
-                current.GetFirstAncestorOfType<ScrollView>()?.ScrollTo(_namespaceCache[next]);
+                ScrollView scroll = current.GetFirstAncestorOfType<ScrollView>();
+                if (scroll?.panel != null)
+                {
+                    scroll.ScrollTo(_namespaceCache[next]);
+                }
             }
         }
 
