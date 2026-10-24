@@ -1,14 +1,18 @@
 namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
+    using System;
     using System.Collections;
+    using System.Collections.Generic;
     using System.Reflection;
     using NUnit.Framework;
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.TestTools;
     using UnityEngine.UIElements;
+    using WallstopStudios.DataVisualizer.Editor;
     using WallstopStudios.DataVisualizer.Editor.Styles;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
+    using Object = UnityEngine.Object;
 
     public sealed class ObjectRowLayoutTests
     {
@@ -28,7 +32,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(owner.rootVisualElement.Q("type-add-list-content").childCount, Is.Positive, "immediate reopen must rebuild content");
             LayoutTestWindow window = ScriptableObject.CreateInstance<LayoutTestWindow>();
             cleanup.Defer(window.Close);
-            window.position = new Rect(100, 100, 700, 200);
+            window.position = new Rect(100, 100, 700, 320);
             VisualElement root = window.rootVisualElement;
             root.AddToClassList("dataviz-root");
             const string folder = "Packages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/Styles/";
@@ -43,6 +47,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             TextField assetSearch = new("Search all assets");
             assetSearch.AddToClassList("global-search-field");
             root.Add(assetSearch);
+            const string namespaceKey = "Un nom de namespace très long pour vérifier les contrôles";
+            NamespaceController catalog = new(
+                new Dictionary<string, List<Type>>
+                {
+                    {
+                        namespaceKey,
+                        new List<Type> { typeof(OtherEditorOnlyCreationData) }
+                    },
+                },
+                new Dictionary<string, int>()
+            );
+            VisualElement catalogRoot = null;
+            catalog.Build(owner, ref catalogRoot);
+            catalogRoot.style.width = 220;
+            catalogRoot.style.flexShrink = 0;
+            root.Add(catalogRoot);
+            Button collapse = catalogRoot.Q<Button>("namespace-indicator-" + namespaceKey);
+            Assert.That(collapse != null);
             int rowPointerEvents = 0;
             first.RegisterCallback<PointerDownEvent>(_ => rowPointerEvents++);
             using (PointerDownEvent pointer = PointerDownEvent.GetPooled())
@@ -61,7 +83,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.That(theme != null, name);
                 selection.Apply(root, theme);
                 yield return null;
+                collapse.Focus();
                 EditorSurfaceCapture.SettleLayout(window);
+                Assert.That(collapse.resolvedStyle.paddingLeft, Is.Zero, name);
+                Assert.That(collapse.resolvedStyle.paddingRight, Is.Zero, name);
+                float indicatorWidth = collapse.MeasureTextSize(collapse.text, 0, VisualElement.MeasureMode.Undefined, 0, VisualElement.MeasureMode.Undefined).x;
+                Assert.That(
+                    collapse.worldBound.width,
+                    Is.GreaterThanOrEqualTo(indicatorWidth + collapse.resolvedStyle.borderLeftWidth + collapse.resolvedStyle.borderRightWidth),
+                    name
+                );
+                Assert.That(collapse.resolvedStyle.borderLeftWidth, Is.Positive, name + " keyboard focus must remain visible");
+                Assert.That(collapse.tooltip, Does.Contain(namespaceKey), name);
                 float searchLabelWidth = assetSearch
                     .labelElement.MeasureTextSize(assetSearch.label, 0, VisualElement.MeasureMode.Undefined, 0, VisualElement.MeasureMode.Undefined)
                     .x;

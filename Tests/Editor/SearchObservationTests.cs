@@ -122,6 +122,62 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        private static IEnumerator CheckKeyboardNamespaceCollapse(bool persistInSettings)
+        {
+            using TestCleanupScope cleanup = new();
+            PreserveHostState(cleanup);
+            DataVisualizerWindow window = CreateTestWindow(cleanup);
+            DataVisualizerSettings settings = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(
+                AssetDatabase.GUIDToAssetPath(AssetDatabase.FindAssets("t:" + nameof(DataVisualizerSettings))[0])
+            );
+            settings.persistStateInSettingsAsset = persistInSettings;
+            yield return null;
+            VisualElement group = window
+                .rootVisualElement.Q("namespace-list")
+                .Children()
+                .First(candidate => !candidate.Query<VisualElement>(className: "type-item").ToList().Any(item => item.ClassListContains("selected")));
+            string key = (string)group.userData;
+            Button toggle = group.Q<Button>("namespace-indicator-" + key);
+            Assert.That(toggle != null, "Namespace collapse must expose a focusable button");
+            Assert.That(toggle.focusable, Is.True);
+            VisualElement types = group.Q("types-container-" + key);
+            VisualElement selected = window.rootVisualElement.Query<VisualElement>(className: "type-item").ToList().FirstOrDefault(item => item.ClassListContains("selected"));
+            int namespacePointerEvents = 0;
+            group.RegisterCallback<PointerDownEvent>(_ => namespacePointerEvents++);
+            using (PointerDownEvent pointer = PointerDownEvent.GetPooled())
+            {
+                toggle.SendEvent(pointer);
+            }
+            Assert.That(namespacePointerEvents, Is.Zero, "Collapse must not begin a namespace drag");
+            foreach (KeyCode code in new[] { KeyCode.LeftArrow, KeyCode.LeftArrow, KeyCode.RightArrow, KeyCode.RightArrow })
+            {
+                toggle.Focus();
+                using KeyDownEvent keyEvent = KeyDownEvent.GetPooled(new Event { type = EventType.KeyDown, keyCode = code });
+                keyEvent.target = toggle;
+                toggle.SendEvent(keyEvent);
+                Assert.That(types.style.display.value, Is.EqualTo(code == KeyCode.LeftArrow ? DisplayStyle.None : DisplayStyle.Flex));
+                Assert.That(selected == null || selected.ClassListContains("selected"), Is.True, "Collapsing must preserve the selected type");
+                Assert.That(window.rootVisualElement.focusController.focusedElement, Is.EqualTo(toggle));
+            }
+            using (NavigationSubmitEvent submit = NavigationSubmitEvent.GetPooled())
+            {
+                submit.target = toggle;
+                toggle.SendEvent(submit);
+            }
+            Assert.That(types.style.display.value, Is.EqualTo(DisplayStyle.None), "Submit must toggle once");
+            string statePath = Path.Combine(Application.persistentDataPath, "DataVisualizerUserState.json");
+            DataVisualizerUserState saved = persistInSettings ? new DataVisualizerUserState() : DataVisualizerUserState.FromJson(File.ReadAllText(statePath));
+            if (persistInSettings)
+            {
+                saved.HydrateFrom(settings);
+            }
+            Assert.That(saved.namespaceCollapseStates.Find(entry => entry.namespaceKey == key).isCollapsed, Is.True);
+            EditorSurfaceCapture.CloseWindow(window);
+            window = CreateTestWindow(cleanup);
+            yield return null;
+            Assert.That(window.rootVisualElement.Q("types-container-" + key).style.display.value, Is.EqualTo(DisplayStyle.None));
+        }
+
         private static IEnumerator CheckMetadataPreview(bool keyboard, bool deleteBeforeActivation)
         {
             using TestCleanupScope cleanup = new();
@@ -188,6 +244,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.That(window.ActiveSearchText == null);
                 Assert.That(document.Guid, Is.EqualTo(AssetDatabase.AssetPathToGUID(folder + "/Moved.asset")));
             }
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldCollapseNamespacesByKeyboardInUserState()
+        {
+            return CheckKeyboardNamespaceCollapse(false);
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldCollapseNamespacesByKeyboardInSettings()
+        {
+            return CheckKeyboardNamespaceCollapse(true);
         }
 
         [UnityTest]
