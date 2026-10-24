@@ -1,0 +1,73 @@
+{
+  "sourceRevision": "add794a66da76ce9f81ec508750e2c00c1da7351",
+  "startedAt": "2026-10-24 03:40:07 UTC",
+  "completedAt": "2026-10-24 03:56:22 UTC",
+  "rawReport": "performance-preview-object-cost-1k-10k-2026-10-24.json",
+  "rawReportSha256": "f4cb70750482afce79c427ccc06510d058ca04c10febdc888e3a2586b1976669",
+  "preflight": {
+    "provenanceCode": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"Packages/com.wallstop-studios.data-visualizer/Tests/Editor/PerfBaseline.cs|SourceSha256=c9fe5f9f139cf6bd5e333e9821b828aa8b300c9b0aace9ffd85f7b0999f2af7a|LoadedModuleId=8a86fdbc-1259-4b89-a616-d9608e9bcefc|AssemblySha256=405ca82e0f55410fefb23e4fe4af9ab68dac8416e4fff819a4e40ea394b2e7dd|CompilerSourceHash=c9fe5f9f139cf6bd5e333e9821b828aa8b300c9b0aace9ffd85f7b0999f2af7a|Verified=True\\nPackages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/DataVisualizer.cs|SourceSha256=b3053b3f13a2d0757fb0883b3224d00c6f5c12c9ccc6ea1d3e24c2c5236c281a|LoadedModuleId=2fd9e3f5-db4d-4c1a-917f-620beac38cff|AssemblySha256=0a3987f26ca3e973a300cfdd4359b04d45b51724f6ba9928e1ea809874a6fb5f|CompilerSourceHash=b3053b3f13a2d0757fb0883b3224d00c6f5c12c9ccc6ea1d3e24c2c5236c281a|Verified=True\\nPackages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/NamespaceController.cs|SourceSha256=bb8ddfa5fdce47e9d52942ed20af5807cf3a678c23e2e0f31de35729e46dbe5f|LoadedModuleId=2fd9e3f5-db4d-4c1a-917f-620beac38cff|AssemblySha256=0a3987f26ca3e973a300cfdd4359b04d45b51724f6ba9928e1ea809874a6fb5f|CompilerSourceHash=bb8ddfa5fdce47e9d52942ed20af5807cf3a678c23e2e0f31de35729e46dbe5f|Verified=True\"\n}"
+        }
+      ]
+    },
+    "hostStateCode": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"driver=Idle|assets=72|fixtureRoots=|windows=7|browsers=0|nativeHosts=1|pendingPaths=0|suspended=False|metadata=0|playing=False|compiling=False|updating=False\"\n}"
+        }
+      ]
+    },
+    "sourceTreeCode": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"files=205|sourceTreeSha256=52cd93e73ca133d33a860e2f13672a36fa1d1145f8d495fc4bed5fa41aad7b28\"\n}"
+        }
+      ]
+    }
+  },
+  "postflight": {
+    "provenanceCode": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"Packages/com.wallstop-studios.data-visualizer/Tests/Editor/PerfBaseline.cs|SourceSha256=c9fe5f9f139cf6bd5e333e9821b828aa8b300c9b0aace9ffd85f7b0999f2af7a|LoadedModuleId=8a86fdbc-1259-4b89-a616-d9608e9bcefc|AssemblySha256=405ca82e0f55410fefb23e4fe4af9ab68dac8416e4fff819a4e40ea394b2e7dd|CompilerSourceHash=c9fe5f9f139cf6bd5e333e9821b828aa8b300c9b0aace9ffd85f7b0999f2af7a|Verified=True\\nPackages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/DataVisualizer.cs|SourceSha256=b3053b3f13a2d0757fb0883b3224d00c6f5c12c9ccc6ea1d3e24c2c5236c281a|LoadedModuleId=2fd9e3f5-db4d-4c1a-917f-620beac38cff|AssemblySha256=0a3987f26ca3e973a300cfdd4359b04d45b51724f6ba9928e1ea809874a6fb5f|CompilerSourceHash=b3053b3f13a2d0757fb0883b3224d00c6f5c12c9ccc6ea1d3e24c2c5236c281a|Verified=True\\nPackages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/NamespaceController.cs|SourceSha256=bb8ddfa5fdce47e9d52942ed20af5807cf3a678c23e2e0f31de35729e46dbe5f|LoadedModuleId=2fd9e3f5-db4d-4c1a-917f-620beac38cff|AssemblySha256=0a3987f26ca3e973a300cfdd4359b04d45b51724f6ba9928e1ea809874a6fb5f|CompilerSourceHash=bb8ddfa5fdce47e9d52942ed20af5807cf3a678c23e2e0f31de35729e46dbe5f|Verified=True\"\n}"
+        }
+      ]
+    },
+    "hostStateCode": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"driver=Idle|assets=72|fixtureRoots=|windows=7|browsers=0|nativeHosts=1|pendingPaths=0|suspended=False|metadata=0|playing=False|compiling=False|updating=False\"\n}"
+        }
+      ]
+    },
+    "sourceTreeCode": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"files=205|sourceTreeSha256=52cd93e73ca133d33a860e2f13672a36fa1d1145f8d495fc4bed5fa41aad7b28\"\n}"
+        }
+      ]
+    }
+  },
+  "editMode": {
+    "total": 862,
+    "passed": 862,
+    "failed": 0,
+    "skipped": 0,
+    "inconclusive": 0
+  },
+  "playMode": {
+    "total": 15,
+    "passed": 15,
+    "failed": 0,
+    "skipped": 0,
+    "inconclusive": 0
+  }
+}

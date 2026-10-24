@@ -3,6 +3,7 @@
 This directory preserves recorded test evidence. It is excluded from the documentation site and the UPM/npm package. Raw JSON reports and their Unity metadata moved here from
 `docs/` without changing their bytes or GUIDs. Historical commit links still locate the original reports.
 
+- [Quick-preview object costs](preview-object-cost-2026-10-24.md): partial/full 1k/10k result loads, direct row references and publication clocks.
 - [Performance observations](performance.md): staging, readiness, search, refresh, intake, raw reports, environments and incomplete attempts.
 - [Subasset experiment](subasset-feasibility.md): test-only identity and read-only inspection evidence.
 - [Prefab experiment](prefab-feasibility.md): test-only component discovery, inspection and cold-process observations.
@@ -33,6 +34,10 @@ input latency. The publication clock remains separate. Missing paint observation
 Rare field tokens include Unicode and are deterministic fixture strings on `BaseDataObject.Description` and `OtherEditorOnlyCreationData.SearchText`. Other ordinary fixture types
 skip that condition. The legacy `search-first-results` scenario retains common-name first-result observations. Common queries can stop at the production result cap; rare/no-match
 cases scan the full snapshot. Each observation records metadata hits, published preview rows, result-cap status, query overrun deltas and the cumulative window maximum query slice.
+`resultObjectLoads` counts result-resolution loads since input, separately from index extraction. `previewAssetReferences` counts direct `ScriptableObject` wrapper references in
+quick-preview row `userData` after matching publication paint, including destroyed wrappers. This excludes event closures, selected-type rows and native memory; zero counts do not
+prove zero allocation or bounded selected-row retention. Missing observations use `-1`.
+
 Cancelled reports keep the active sample with `complete=false` and unavailable completion time. Optional `partialSearchFraction` (zero by default; otherwise strictly between zero
 and one) opens an extra controlled window before ordinary readiness measurements. The window first reaches initial readiness, then starts a production cache rebuild. Extraction
 pauses once the available record count reaches that fraction of the requested fixture count. The report records the requested fraction and actual available records; pre-existing

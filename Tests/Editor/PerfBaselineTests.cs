@@ -8,6 +8,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using UnityEditor;
     using UnityEngine;
     using UnityEngine.TestTools;
+    using UnityEngine.UIElements;
+    using WallstopStudios.DataVisualizer.Editor.Search;
     using PlayModeDataObject = WallstopStudios.DataVisualizer.Tests.Runtime.PlayModeDataObject;
 
     /*
@@ -79,6 +81,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             foreach (PerfSearchSample sample in report.searchObservations)
             {
                 Assert.That(sample.complete, sample.kind);
+                Assert.That(sample.resultObjectLoads, Is.Zero, sample.kind);
+                Assert.That(sample.previewAssetReferences, Is.Zero, sample.kind);
                 if (sample.kind == "common-name" && sample.indexComplete)
                 {
                     Assert.That(0 < sample.matches, sample.kind);
@@ -410,6 +414,24 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 )
             );
             Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+        }
+
+        [Test]
+        public void ShouldCountOnlyDirectQuickPreviewAssetReferencesIncludingDestroyedWrappers()
+        {
+            using TestCleanupScope cleanup = new();
+            PlayModeDataObject asset = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            cleanup.Defer(() => UnityEngine.Object.DestroyImmediate(asset));
+            PlayModeDataObject destroyed = ScriptableObject.CreateInstance<PlayModeDataObject>();
+            UnityEngine.Object.DestroyImmediate(destroyed);
+            VisualElement root = new();
+            root.Add(new VisualElement { name = "result-item", userData = asset });
+            root.Add(new VisualElement { name = "result-item", userData = destroyed });
+            root.Add(new VisualElement { name = "object-item", userData = asset });
+            root.Add(new VisualElement { name = "result-item", userData = new AssetSearchDocument("guid", "Name", typeof(PlayModeDataObject), null) });
+            Assert.That(PerfBaseline.CountPreviewAssetReferences(root), Is.EqualTo(2));
+            Assert.That(PerfBaseline.CountPreviewAssetReferences(new VisualElement()), Is.Zero);
+            Assert.That(PerfBaseline.CountPreviewAssetReferences(null), Is.Zero);
         }
 
         [Test]
