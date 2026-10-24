@@ -3204,9 +3204,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     if (0 <= _searchHighlightIndex && _searchHighlightIndex < _currentSearchResultItems.Count)
                     {
-                        if (_currentSearchResultItems[_searchHighlightIndex].userData is ScriptableObject selectedObject)
+                        if (_currentSearchResultItems[_searchHighlightIndex].userData is AssetSearchDocument document && NavigateToSearchDocument(document))
                         {
-                            NavigateToObject(selectedObject);
                             _searchField.value = string.Empty;
                         }
 
@@ -3256,7 +3255,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 if (i == _searchHighlightIndex)
                 {
-                    _searchHighlightGuid = item.userData is ScriptableObject asset ? _assetObjectCache.GetGuidOrNull(asset) : null;
+                    _searchHighlightGuid = (item.userData as AssetSearchDocument)?.Guid;
                     item.AddToClassList(SearchResultHighlightClass);
                     scrollView?.ScrollTo(item);
                 }
@@ -3461,15 +3460,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             _searchPopover.Clear();
             _currentSearchResultItems.Clear();
             _searchHighlightIndex = -1;
-            List<(ScriptableObject reference, SearchResultMatchInfo match)> results = new();
-            for (int hitIndex = 0; hitIndex < query.Results.Count; hitIndex++)
-            {
-                var hit = query.Results[hitIndex];
-                if (_assetObjectCache.TryGet(hit.Document.Guid, out ScriptableObject asset) && asset != null)
-                {
-                    results.Add((asset, hit.Match));
-                }
-            }
+            IReadOnlyList<(AssetSearchDocument Document, SearchResultMatchInfo Match)> results = query.Results;
             string count = query.ReachedLimit ? $"First {results.Count} matches" : $"{results.Count} matches";
             bool complete = _isSearchCachePopulated && snapshotIsCurrent;
             Label status = new(
@@ -3514,10 +3505,11 @@ namespace WallstopStudios.DataVisualizer.Editor
             if (0 < results.Count)
             {
                 _searchPopover.style.maxHeight = StyleKeyword.Null;
-                foreach ((ScriptableObject resultObj, SearchResultMatchInfo resultInfo) in results)
+                for (int resultIndex = 0; resultIndex < results.Count; resultIndex++)
                 {
+                    (AssetSearchDocument document, SearchResultMatchInfo resultInfo) = results[resultIndex];
                     List<string> termsMatchingThisObject = new(resultInfo.AllMatchedTerms);
-                    VisualElement resultItem = new() { name = "result-item", userData = resultObj };
+                    VisualElement resultItem = new() { name = "result-item", userData = document };
                     resultItem.AddToClassList(SearchResultItemClass);
                     resultItem.AddToClassList(StyleConstants.ClickableClass);
                     resultItem.style.flexDirection = FlexDirection.Column;
@@ -3529,31 +3521,26 @@ namespace WallstopStudios.DataVisualizer.Editor
                     // ReSharper disable once HeapView.CanAvoidClosure
                     resultItem.RegisterCallback<PointerDownEvent>(evt =>
                     {
-                        if (evt.button != 0 || resultItem.userData is not ScriptableObject clickedObj)
+                        if (evt.button != 0 || resultItem.userData is not AssetSearchDocument clickedDocument)
                         {
                             return;
                         }
 
-                        NavigateToObject(clickedObj);
-                        _searchField.value = string.Empty;
+                        if (NavigateToSearchDocument(clickedDocument))
+                        {
+                            _searchField.value = string.Empty;
+                        }
                         evt.StopPropagation();
                     });
 
                     VisualElement mainInfoRow = new() { style = { flexDirection = FlexDirection.Row, justifyContent = Justify.SpaceBetween } };
                     mainInfoRow.AddToClassList(StyleConstants.ClickableClass);
 
-                    Label nameLabel = CreateHighlightedLabel(resultObj.name, termsMatchingThisObject, "result-name-label", bindToContextHovers: true, resultItem, mainInfoRow);
+                    Label nameLabel = CreateHighlightedLabel(document.Name, termsMatchingThisObject, "result-name-label", bindToContextHovers: true, resultItem, mainInfoRow);
                     nameLabel.AddToClassList("search-result-name-label");
                     nameLabel.AddToClassList(StyleConstants.ClickableClass);
 
-                    Label typeLabel = CreateHighlightedLabel(
-                        resultObj.GetType().Name,
-                        termsMatchingThisObject,
-                        "result-type-label",
-                        bindToContextHovers: true,
-                        resultItem,
-                        mainInfoRow
-                    );
+                    Label typeLabel = CreateHighlightedLabel(document.TypeName, termsMatchingThisObject, "result-type-label", bindToContextHovers: true, resultItem, mainInfoRow);
                     typeLabel.AddToClassList("search-result-type-label");
                     typeLabel.AddToClassList(StyleConstants.ClickableClass);
 
@@ -3631,7 +3618,7 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                     listContainer.Add(resultItem);
                     _currentSearchResultItems.Add(resultItem);
-                    if (string.Equals(_searchHighlightGuid, _assetObjectCache.GetGuidOrNull(resultObj), StringComparison.Ordinal))
+                    if (string.Equals(_searchHighlightGuid, document.Guid, StringComparison.Ordinal))
                     {
                         _searchHighlightIndex = _currentSearchResultItems.Count - 1;
                     }
@@ -3670,11 +3657,8 @@ namespace WallstopStudios.DataVisualizer.Editor
                 _allSearchResultsView = new AssetSearchResultsView(
                     document =>
                     {
-                        if (_assetObjectCache.TryGet(document.Guid, out ScriptableObject asset) && asset != null)
-                        {
-                            // Keep the query so search can reuse it after navigation.
-                            NavigateToObject(asset);
-                        }
+                        // Keep the query so search can reuse it after navigation.
+                        NavigateToSearchDocument(document);
                     },
                     () =>
                     {
@@ -3691,6 +3675,22 @@ namespace WallstopStudios.DataVisualizer.Editor
                 : snapshotIsCurrent ? $"{query.Results.Count} matches · Managed types"
                 : $"{query.Results.Count} available matches · Updating results…";
             _allSearchResultsView.SetResults(query.Results, status);
+        }
+
+        private bool NavigateToSearchDocument(AssetSearchDocument document)
+        {
+            if (
+                document == null
+                || !_assetObjectCache.TryGetDocument(document.Guid, out AssetSearchDocument current)
+                || current.ExactType != document.ExactType
+                || !_assetObjectCache.TryGet(document.Guid, out ScriptableObject asset)
+                || asset == null
+            )
+            {
+                return false;
+            }
+            NavigateToObject(asset);
+            return true;
         }
 
         private void NavigateToObject(ScriptableObject targetObject)

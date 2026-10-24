@@ -7,7 +7,8 @@ results may update as more assets become available. See [Search and filtering](s
 
 The browser keeps copied search text and asset labels in memory for reuse when the window rebuilds. Building this data still reads tracked assets. The selected type's list keeps
 its loaded objects, so a large type can still use substantial memory. Queries share the sorted search index while it stays unchanged. The first edit after a shared query copies
-that document list to preserve older results. Partial indexes still copy and order their available records.
+that document list to preserve older results. Partial-index queries share their available records and cooperative ordering. Quick previews and full results show copied text;
+activating a result resolves its current asset by GUID and exact type.
 
 Large projects take longer to index. Serialized field size, custom inspectors, Unity imports, storage and other editor work also affect responsiveness. Asset creation and import
 can block the editor independently of DxVisualizer. Final search-index sorting and GUID lookup preparation also yield between updates. A cooperative processing budget cannot
