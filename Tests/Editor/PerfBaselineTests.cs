@@ -277,6 +277,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             using TestCleanupScope cleanup = new();
             cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
             cleanup.Defer(PerfBaseline.Cancel);
+            LogAssert.Expect(LogType.Log, new Regex("\\[PerfBaseline\\] complete\\..*search median not measured"));
             PerfBaseline.RunBaseline(
                 output,
                 new[] { 4 },

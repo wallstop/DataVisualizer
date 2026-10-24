@@ -1533,7 +1533,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 summary.Append(", warm open median ");
                 summary.Append(FormatMs(Median(result.WarmOpenSamples)));
                 summary.Append(", search median ");
-                summary.Append(FormatMs(Median(result.SearchSamples)));
+                summary.Append(result.SearchSamples.Count == 0 ? "not measured" : FormatMs(Median(result.SearchSamples)));
                 summary.Append(", selection median ");
                 summary.Append(FormatMs(Median(result.SelectionSamples)));
                 summary.Append("; ");
