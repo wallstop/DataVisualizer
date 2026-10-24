@@ -10,6 +10,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.Editor;
     using WallstopStudios.DataVisualizer.Editor.Data;
+    using WallstopStudios.DataVisualizer.Editor.Search;
     using WallstopStudios.DataVisualizer.Editor.Styles;
     using WallstopStudios.DataVisualizer.Editor.Utilities;
     using DataVisualizerWindow = WallstopStudios.DataVisualizer.Editor.DataVisualizer;
@@ -1212,7 +1213,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
             foreach (VisualElement row in results)
             {
-                if (row.userData is not ScriptableObject asset || asset == null || !expected.Remove(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(asset))))
+                if (row.userData is not AssetSearchDocument document || !expected.Remove(document.Guid))
                 {
                     throw new InvalidOperationException("The search capture contains a duplicate or unexpected fixture identity.");
                 }
