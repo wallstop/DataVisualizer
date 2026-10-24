@@ -122,6 +122,34 @@ namespace WallstopStudios.DataVisualizer.Editor
             return lastSeparatorIndex < 0 ? namespaceName : namespaceName.Substring(lastSeparatorIndex + 1);
         }
 
+        public static Type GetAdjacentVisibleType(VisualElement current, bool forward)
+        {
+            VisualElement parent = current?.parent;
+            if (parent == null)
+            {
+                return null;
+            }
+            for (VisualElement ancestor = parent; ancestor != null; ancestor = ancestor.parent)
+            {
+                if (ancestor.style.display == DisplayStyle.None || ancestor.style.visibility == Visibility.Hidden)
+                {
+                    return null;
+                }
+            }
+            int currentIndex = parent.IndexOf(current);
+            int step = forward ? 1 : -1;
+            for (int offset = 1; offset <= parent.childCount; offset++)
+            {
+                int index = (currentIndex + step * offset + parent.childCount) % parent.childCount;
+                VisualElement candidate = parent[index];
+                if (candidate.userData is Type type && candidate.style.display != DisplayStyle.None && candidate.style.visibility != Visibility.Hidden)
+                {
+                    return type;
+                }
+            }
+            return null;
+        }
+
         internal static bool IsTypeRemovable(Type type)
         {
             return type == null || (!typeof(BaseDataObject).IsAssignableFrom(type) && !type.IsAttributeDefined<CustomDataVisualizationAttribute>());
@@ -140,18 +168,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
 
             return type.Name;
-        }
-
-        private static Type InternalSelected(VisualElement parent, int index)
-        {
-            if (index < 0 || parent.childCount <= index)
-            {
-                return null;
-            }
-
-            VisualElement element = parent.ElementAt(index);
-            element.AddToClassList(StyleConstants.SelectedClass);
-            return element.userData as Type;
         }
 
         private static void SaveNamespaceAndTypeSelectionState(DataVisualizer dataVisualizer, string namespaceKey, Type type)
@@ -400,50 +416,12 @@ namespace WallstopStudios.DataVisualizer.Editor
 
         public void DecrementTypeSelection(DataVisualizer dataVisualizer)
         {
-            /*
-                Arrow-key browsing is manual type switching: the highlight mutations below run
-                before SelectType, so the gate must be here or the visual selection desyncs from
-                the actual selection while suspended.
-            */
-            if (dataVisualizer.IsAssetEditingSuspended)
-            {
-                return;
-            }
-
-            if (!InternalDeselectAndGetCurrentIndex(out VisualElement parent, out int currentIndex))
-            {
-                return;
-            }
-
-            currentIndex--;
-            if (currentIndex < 0)
-            {
-                currentIndex = parent.childCount - 1;
-            }
-
-            Type type = InternalSelected(parent, currentIndex);
-            SelectType(dataVisualizer, type);
+            NavigateTypeSelection(dataVisualizer, forward: false);
         }
 
         public void IncrementTypeSelection(DataVisualizer dataVisualizer)
         {
-            if (dataVisualizer.IsAssetEditingSuspended)
-            {
-                return;
-            }
-
-            if (!InternalDeselectAndGetCurrentIndex(out VisualElement parent, out int currentIndex))
-            {
-                return;
-            }
-
-            currentIndex++;
-            if (parent.childCount <= currentIndex)
-            {
-                currentIndex = 0;
-            }
-            Type type = InternalSelected(parent, currentIndex);
-            SelectType(dataVisualizer, type);
+            NavigateTypeSelection(dataVisualizer, forward: true);
         }
 
         public void SelectType(DataVisualizer dataVisualizer, Type type)
@@ -827,27 +805,22 @@ namespace WallstopStudios.DataVisualizer.Editor
             return typeNames;
         }
 
-        private bool InternalDeselectAndGetCurrentIndex(out VisualElement parent, out int currentIndex)
+        private void NavigateTypeSelection(DataVisualizer dataVisualizer, bool forward)
         {
-            if (!TryGet(_selectedType, out VisualElement element))
+            if (dataVisualizer.IsAssetEditingSuspended || !TryGet(_selectedType, out VisualElement current))
             {
-                parent = default;
-                currentIndex = default;
-                return false;
+                return;
             }
-
-            element.RemoveFromClassList(StyleConstants.SelectedClass);
-            VisualElement candidateParent = element.parent;
-            if (candidateParent == null)
+            Type next = GetAdjacentVisibleType(current, forward);
+            if (next != null)
             {
-                parent = default;
-                currentIndex = default;
-                return false;
+                SelectType(dataVisualizer, next);
+                ScrollView scroll = current.GetFirstAncestorOfType<ScrollView>();
+                if (scroll?.panel != null)
+                {
+                    scroll.ScrollTo(_namespaceCache[next]);
+                }
             }
-
-            parent = candidateParent;
-            currentIndex = candidateParent.IndexOf(element);
-            return true;
         }
 
         private bool TryGet(Type type, out VisualElement element)
