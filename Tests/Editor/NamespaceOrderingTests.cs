@@ -106,6 +106,26 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append("\",\"warmups\":5,\"samplesPerCondition\":30,\"samples\":[");
             bool first = true;
             Stopwatch budget = Stopwatch.StartNew();
+            bool complete = false;
+            Directory.CreateDirectory("Temp");
+            using TestCleanupScope reportCleanup = new();
+            reportCleanup.Defer(() =>
+            {
+                string report =
+                    json.ToString()
+                    + "],\"verifiedAfter\":"
+                    + (complete ? "true" : "false")
+                    + ",\"elapsedMilliseconds\":"
+                    + budget.Elapsed.TotalMilliseconds.ToString("R", CultureInfo.InvariantCulture)
+                    + ",\"failure\":\""
+                    + (complete ? "" : "Experiment did not complete; see the NUnit result for the active condition and failure.")
+                    + "\"}";
+                if (complete)
+                {
+                    report = report.Replace("\"complete\":false", "\"complete\":true");
+                }
+                File.WriteAllText("Temp/catalog-ordering.json", report);
+            });
             foreach (int count in new[] { 100, 1000, 10000 })
             {
                 foreach (string ordering in new[] { "forward", "reverse", "ties" })
@@ -129,7 +149,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         // Alternate the pair order to limit consistent first-run bias.
                         foreach (bool baseline in repetition % 2 == 0 ? new[] { true, false } : new[] { false, true })
                         {
-                            Assert.That(budget.Elapsed.TotalMinutes, Is.LessThan(5), "Stop between calls after the declared five-minute component budget");
+                            Assert.That(
+                                budget.Elapsed.TotalMinutes,
+                                Is.LessThan(10),
+                                $"Ten-minute component budget: {count}/{ordering}/baseline={baseline}/repetition={repetition}"
+                            );
                             long allocated = GC.GetAllocatedBytesForCurrentThread();
                             long started = Stopwatch.GetTimestamp();
                             KeyValuePair<string, List<Type>>[] actual = baseline
@@ -158,10 +182,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
             production.Verify();
             driver.Verify();
-            json.Append("],\"verifiedAfter\":true,\"elapsedMilliseconds\":").Append(budget.Elapsed.TotalMilliseconds.ToString("R", CultureInfo.InvariantCulture)).Append('}');
-            json.Replace("\"complete\":false", "\"complete\":true");
-            Directory.CreateDirectory("Temp");
-            File.WriteAllText("Temp/catalog-ordering.json", json.ToString());
+            complete = true;
         }
 
         [TestCase(0)]

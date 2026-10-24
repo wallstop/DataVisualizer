@@ -155,19 +155,34 @@ namespace WallstopStudios.DataVisualizer.Editor
         public static KeyValuePair<string, List<Type>>[] GetOrderedNamespaceEntries(Dictionary<string, List<Type>> managedTypes, Dictionary<string, int> namespaceOrder)
         {
             KeyValuePair<string, List<Type>>[] entries = new KeyValuePair<string, List<Type>>[managedTypes.Count];
-            long[] sortKeys = new long[entries.Length];
             int defaultOrder = namespaceOrder.Count;
+            int previousRank = int.MinValue;
+            bool alreadyOrdered = true;
             int index = 0;
             foreach (KeyValuePair<string, List<Type>> entry in managedTypes)
             {
-                entries[index] = entry;
+                entries[index++] = entry;
                 int rank = namespaceOrder.GetValueOrDefault(entry.Key, defaultOrder);
+                if (rank < previousRank)
+                {
+                    alreadyOrdered = false;
+                }
+                previousRank = rank;
+            }
+            if (alreadyOrdered)
+            {
+                return entries;
+            }
+
+            long[] sortKeys = new long[entries.Length];
+            for (int i = 0; i < entries.Length; i++)
+            {
+                int rank = namespaceOrder.GetValueOrDefault(entries[i].Key, defaultOrder);
                 /*
                     Array.Sort is not stable. A unique input-index suffix preserves the former
                     stable order, including ties and missing ranks, across the full Int32 range.
                 */
-                sortKeys[index] = ((long)rank << 32) | (uint)index;
-                index++;
+                sortKeys[i] = ((long)rank << 32) | (uint)i;
             }
             Array.Sort(sortKeys, entries);
             return entries;
