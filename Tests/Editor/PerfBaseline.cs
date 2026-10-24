@@ -131,7 +131,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             double stagingBudgetMilliseconds = 4,
             int maximumStagingItems = 10,
             double partialSearchFraction = 0,
-            bool pausePartialExtraction = true
+            bool pausePartialExtraction = true,
+            bool includeSearchMeasurements = true
         )
         {
             if (_active != null)
@@ -164,6 +165,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 throw new ArgumentOutOfRangeException(nameof(partialSearchFraction), "Use zero to skip partial search, or a fraction between zero and one.");
             }
 
+            if (!includeSearchMeasurements && 0 < partialSearchFraction)
+            {
+                throw new ArgumentException("Partial-index measurements require search measurements.", nameof(partialSearchFraction));
+            }
+
             int[] sizes = fixtureSizes == null ? (int[])FixtureSizes.Clone() : (int[])fixtureSizes.Clone();
             if (sizes.Length == 0)
             {
@@ -192,7 +198,17 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                     throw new ArgumentException("Each size needs at least one asset per fixture type.", nameof(fixtureSizes));
                 }
             }
-            RunState state = new(outputDirectory, sizes, timeoutMinutes, types, stagingBudgetMilliseconds, maximumStagingItems, partialSearchFraction, pausePartialExtraction);
+            RunState state = new(
+                outputDirectory,
+                sizes,
+                timeoutMinutes,
+                types,
+                stagingBudgetMilliseconds,
+                maximumStagingItems,
+                partialSearchFraction,
+                pausePartialExtraction,
+                includeSearchMeasurements
+            );
             _active = state;
             EditorApplication.update += Tick;
             AssemblyReloadEvents.beforeAssemblyReload += Cancel;
@@ -838,7 +854,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
         private static void RunInteractionSample(RunState state)
         {
-            if (state.SearchKind < SearchKindCount)
+            if (state.IncludeSearchMeasurements && state.SearchKind < SearchKindCount)
             {
                 if (state.SearchRepetition == WarmupRepetitions + SearchRepetitions)
                 {
@@ -1349,7 +1365,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 state.StagingBudgetMilliseconds,
                 state.MaximumStagingItems,
                 state.PartialSearchFraction,
-                state.PausePartialExtraction
+                state.PausePartialExtraction,
+                state.IncludeSearchMeasurements
             );
             WriteReport(state.OutputDirectory, json);
             string summary = BuildSummary(state.Results);
@@ -1548,7 +1565,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             double stagingBudgetMilliseconds,
             int maximumStagingItems,
             double partialSearchFraction,
-            bool pausePartialExtraction
+            bool pausePartialExtraction,
+            bool includeSearchMeasurements
         )
         {
             StringBuilder json = new(4096);
@@ -1560,6 +1578,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append("  \"maximumStagingItems\": ").Append(maximumStagingItems).Append(",\n");
             json.Append("  \"requestedPartialSearchFraction\": ").Append(FormatNumber(partialSearchFraction)).Append(",\n");
             json.Append("  \"partialExtractionPaused\": ").Append(pausePartialExtraction ? "true" : "false").Append(",\n");
+            json.Append("  \"searchMeasurementsEnabled\": ").Append(includeSearchMeasurements ? "true" : "false").Append(",\n");
             json.Append("  \"repetitions\": {\"cold\": ")
                 .Append(ColdRepetitions)
                 .Append(", \"warmWarmups\": ")
@@ -1567,11 +1586,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 .Append(", \"warmSamples\": ")
                 .Append(WarmRepetitions)
                 .Append(", \"searchWarmups\": ")
-                .Append(WarmupRepetitions)
+                .Append(includeSearchMeasurements ? WarmupRepetitions : 0)
                 .Append(", \"selectionWarmups\": ")
                 .Append(WarmupRepetitions)
                 .Append(", \"searchSamples\": ")
-                .Append(SearchRepetitions)
+                .Append(includeSearchMeasurements ? SearchRepetitions : 0)
                 .Append(", \"selectionSamples\": ")
                 .Append(SelectionRepetitions)
                 .Append(", \"interactionWarmups\": ")
@@ -1691,6 +1710,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append("  \"generatedAtUtc\": \"").Append(DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)).Append("\",\n");
             json.Append("  \"error\": \"").Append(JsonEscape(message)).Append("\",\n");
             json.Append("  \"phase\": \"").Append(state.Phase).Append("\",\n");
+            json.Append("  \"searchMeasurementsEnabled\": ").Append(state.IncludeSearchMeasurements ? "true" : "false").Append(",\n");
             json.Append("  \"environment\": ").Append(BuildEnvironmentJson()).Append(",\n");
             json.Append("  \"timeoutMinutes\": ").Append(FormatNumber(state.TimeoutMinutes)).Append(",\n");
             json.Append("  \"fixturesCreated\": ").Append(state.Staging?.CreatedCount ?? 0).Append(",\n");
@@ -1716,7 +1736,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                             state.StagingBudgetMilliseconds,
                             state.MaximumStagingItems,
                             state.PartialSearchFraction,
-                            state.PausePartialExtraction
+                            state.PausePartialExtraction,
+                            state.IncludeSearchMeasurements
                         )
                         .TrimEnd('\n')
                 );
@@ -1896,6 +1917,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal readonly int MaximumStagingItems;
             internal readonly double PartialSearchFraction;
             internal readonly bool PausePartialExtraction;
+            internal readonly bool IncludeSearchMeasurements;
             internal readonly Stopwatch Watchdog = Stopwatch.StartNew();
             internal readonly List<SizeResult> Results = new();
             internal readonly string MissingLabel = "PerfAbsentLabel-" + Guid.NewGuid().ToString("N");
@@ -1940,7 +1962,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 double stagingBudgetMilliseconds,
                 int maximumStagingItems,
                 double partialSearchFraction,
-                bool pausePartialExtraction
+                bool pausePartialExtraction,
+                bool includeSearchMeasurements
             )
             {
                 OutputDirectory = outputDirectory;
@@ -1951,6 +1974,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 MaximumStagingItems = maximumStagingItems;
                 PartialSearchFraction = partialSearchFraction;
                 PausePartialExtraction = pausePartialExtraction;
+                IncludeSearchMeasurements = includeSearchMeasurements;
             }
         }
 
