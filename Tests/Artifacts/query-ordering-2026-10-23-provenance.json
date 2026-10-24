@@ -1,0 +1,102 @@
+{
+  "hostBaseline": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"driver=Staging: 2096/10000 fixtures|windows=7|nativeHosts=1|preexistingAssets=228\"\n}"
+      }
+    ]
+  },
+  "pausedPreflight": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"sourceSha256=eb443cf5d37116cefe54b2452ab293050ce4ff7b42b86f2ee74db8ead2fb7d29|loadedModuleId=b3c9a87e-9862-46c5-a3b3-8b4bb88943c6|assemblySha256=9fd1442bc4f980851a62d041cd32adb5d744a768bae29afaafaa9b2f0b1cc9f4|compilerSourceHash=eb443cf5d37116cefe54b2452ab293050ce4ff7b42b86f2ee74db8ead2fb7d29|verified=True\"\n}"
+      }
+    ]
+  },
+  "pausedPostflight": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"sourceSha256=eb443cf5d37116cefe54b2452ab293050ce4ff7b42b86f2ee74db8ead2fb7d29|loadedModuleId=b3c9a87e-9862-46c5-a3b3-8b4bb88943c6|assemblySha256=9fd1442bc4f980851a62d041cd32adb5d744a768bae29afaafaa9b2f0b1cc9f4|compilerSourceHash=eb443cf5d37116cefe54b2452ab293050ce4ff7b42b86f2ee74db8ead2fb7d29|verified=True\"\n}"
+      }
+    ]
+  },
+  "pausedCleanup": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"driver=Idle|roots=0|browserWindows=0|windows=7|nativeHosts=1|assets=228|metadata=0|pending=0|playing=False|compiling=False|updating=False\"\n}"
+      }
+    ]
+  },
+  "livePreflight": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"sourceSha256=3ddc133a1cf1f692e53df3a227ea0620d3b1865ea42bb97f095191dba90ed6fa|loadedModuleId=6bc04ef2-8a5f-4591-a1d8-9a459a705875|assemblySha256=ce146096b72f7b3b45de6091de07ed9f9ebc40d05939b2d544d9ca87a61fab72|compilerSourceHash=3ddc133a1cf1f692e53df3a227ea0620d3b1865ea42bb97f095191dba90ed6fa|verified=True\"\n}"
+      }
+    ]
+  },
+  "livePostflight": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"sourceSha256=3ddc133a1cf1f692e53df3a227ea0620d3b1865ea42bb97f095191dba90ed6fa|loadedModuleId=6bc04ef2-8a5f-4591-a1d8-9a459a705875|assemblySha256=ce146096b72f7b3b45de6091de07ed9f9ebc40d05939b2d544d9ca87a61fab72|compilerSourceHash=3ddc133a1cf1f692e53df3a227ea0620d3b1865ea42bb97f095191dba90ed6fa|verified=True\"\n}"
+      }
+    ]
+  },
+  "liveCleanup": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"driver=Idle|roots=0|browserWindows=0|windows=7|nativeHosts=1|assets=228|metadata=0|pending=0|suspended=False|playing=False|compiling=False|updating=False\"\n}"
+      }
+    ]
+  },
+  "unsupportedProbeCleanup": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"driver=Idle|roots=0|browserWindows=0|windows=7|nativeHosts=1|assets=228|metadata=0|pending=0|suspended=False|playing=False|compiling=False|updating=False\"\n}"
+      }
+    ]
+  },
+  "measuredHeads": {
+    "production": "b4016d1877b0e124c3661ad95c9dd6fdfd897daf",
+    "scale": "d7d59e127ed6c775c3cf5c3cea208596a9505163",
+    "pausedDriver": "261a494838e310267e4c7a71229221b093dbd687",
+    "liveDriver": "baf9b9e18ed836cad73d1aaa8f11839424fa823c",
+    "laterSkipRepair": "bb006c9d239074f10c141fe7bfeaa28331e1d389"
+  },
+  "laterSkipRepair": "bb006c9d239074f10c141fe7bfeaa28331e1d389",
+  "unsupportedGreenRegression": {
+    "status": "completed",
+    "duration": 97.82,
+    "summary": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "inconclusive": 0
+    },
+    "results": [
+      {
+        "FullName": "WallstopStudios.DataVisualizer.Tests.Editor.PerfBaselineTests.ShouldSkipUnsupportedRareFieldsDuringLiveRebuilds",
+        "Status": "Passed",
+        "Duration": 97.7546714,
+        "Message": null,
+        "StackTrace": null
+      }
+    ]
+  },
+  "unsupportedGreenCleanup": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"output\": null,\n  \"diagnostics\": [],\n  \"success\": true,\n  \"result\": \"driver=Idle|roots=0|browserWindows=0|windows=7|nativeHosts=1|assets=228|metadata=0|pending=0|suspended=False|playing=False|compiling=False|updating=False\"\n}"
+      }
+    ]
+  }
+}
