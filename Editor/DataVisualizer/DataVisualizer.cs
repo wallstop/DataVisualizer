@@ -2811,7 +2811,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 return;
             }
 
-            Label indicator = namespaceGroupItem.Q<Label>(className: "namespace-indicator");
+            TextElement indicator = namespaceGroupItem.Q<TextElement>(className: "namespace-indicator");
             string nsKey = namespaceGroupItem.userData as string;
             VisualElement typesContainer = namespaceGroupItem.Q<VisualElement>($"types-container-{nsKey}");
 
@@ -8764,7 +8764,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
-        private void ApplyNamespaceCollapsedState(Label indicator, VisualElement typesContainer, bool collapsed, bool saveState)
+        private void ApplyNamespaceCollapsedState(TextElement indicator, VisualElement typesContainer, bool collapsed, bool saveState)
         {
             if (indicator == null || typesContainer == null)
             {

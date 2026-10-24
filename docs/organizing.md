@@ -28,7 +28,8 @@ The **X** on a namespace header or a type row removes it from DxVisualizer. This
 
 ## Collapsing namespaces
 
-The arrow on a namespace header collapses and expands its types. Collapse state persists per namespace.
+The arrow button on a namespace header collapses and expands its types. Focus it with Tab, then press Enter or Space to toggle. Left collapses the namespace; Right expands it.
+These controls keep the selected type. Collapse state persists per namespace; reopening expands the selected type’s namespace so the selection stays visible.
 
 ## Pane widths
 

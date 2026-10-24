@@ -4,6 +4,7 @@ namespace WallstopStudios.DataVisualizer.Editor
     using System;
     using System.Collections.Generic;
     using Data;
+    using Extensions;
     using Styles;
     using UnityEngine;
     using UnityEngine.UIElements;
@@ -255,7 +256,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             return true;
         }
 
-        private static void ApplyNamespaceCollapsedState(DataVisualizer dataVisualizer, Label indicator, VisualElement typesContainer, bool collapsed, bool saveState)
+        private static void ApplyNamespaceCollapsedState(DataVisualizer dataVisualizer, TextElement indicator, VisualElement typesContainer, bool collapsed, bool saveState)
         {
             if (indicator == null || typesContainer == null)
             {
@@ -526,7 +527,12 @@ namespace WallstopStudios.DataVisualizer.Editor
                 header.AddToClassList(StyleConstants.NamespaceHeaderClass);
                 namespaceGroupItem.Add(header);
 
-                Label indicator = new(StyleConstants.ArrowExpanded) { name = $"namespace-indicator-{key}" };
+                Button indicator = new()
+                {
+                    text = StyleConstants.ArrowExpanded,
+                    name = $"namespace-indicator-{key}",
+                    tooltip = $"Collapse or expand {key} (Enter/Space; Left to collapse, Right to expand)",
+                };
                 indicator.AddToClassList(StyleConstants.NamespaceIndicatorClass);
                 indicator.AddToClassList(StyleConstants.ClickableClass);
                 header.Add(indicator);
@@ -632,8 +638,18 @@ namespace WallstopStudios.DataVisualizer.Editor
                 bool isCollapsed = GetIsNamespaceCollapsed(dataVisualizer, namespaceKey);
                 ApplyNamespaceCollapsedState(dataVisualizer, indicator, typesContainer, isCollapsed, false);
 
-                // ReSharper disable once HeapView.CanAvoidClosure
-                indicator.RegisterCallback<PointerDownEvent>(ToggleNamespace);
+                indicator.clicked += ToggleNamespace;
+                indicator.RegisterCallback<PointerDownEvent>(evt => evt.StopPropagation());
+                indicator.RegisterCallback<KeyDownEvent>(evt =>
+                {
+                    if (dataVisualizer.IsAssetEditingSuspended || (evt.keyCode != KeyCode.LeftArrow && evt.keyCode != KeyCode.RightArrow))
+                    {
+                        return;
+                    }
+                    ApplyNamespaceCollapsedState(dataVisualizer, indicator, typesContainer, evt.keyCode == KeyCode.LeftArrow, true);
+                    evt.StopPropagation();
+                    evt.PreventDefaultCompat();
+                });
 
                 // ReSharper disable once ForCanBeConvertedToForeach
                 for (int i = 0; i < types.Count; i++)
@@ -758,25 +774,14 @@ namespace WallstopStudios.DataVisualizer.Editor
 
                 continue;
 
-                void ToggleNamespace(PointerDownEvent evt)
+                void ToggleNamespace()
                 {
-                    if (evt.button != 0 || evt.propagationPhase == PropagationPhase.TrickleDown)
+                    if (dataVisualizer.IsAssetEditingSuspended)
                     {
                         return;
                     }
-
-                    VisualElement parentGroup = header.parent;
-                    Label associatedIndicator = parentGroup?.Q<Label>(className: StyleConstants.NamespaceIndicatorClass);
-                    VisualElement associatedTypesContainer = parentGroup?.Q<VisualElement>($"types-container-{namespaceKey}");
-                    string nsKey = parentGroup?.userData as string;
-
-                    if (associatedIndicator != null && associatedTypesContainer != null && !string.IsNullOrWhiteSpace(nsKey))
-                    {
-                        bool currentlyCollapsed = associatedTypesContainer.style.display == DisplayStyle.None;
-                        bool newCollapsedState = !currentlyCollapsed;
-
-                        ApplyNamespaceCollapsedState(dataVisualizer, associatedIndicator, associatedTypesContainer, newCollapsedState, true);
-                    }
+                    bool collapsed = typesContainer.style.display == DisplayStyle.None;
+                    ApplyNamespaceCollapsedState(dataVisualizer, indicator, typesContainer, !collapsed, true);
                 }
             }
         }
