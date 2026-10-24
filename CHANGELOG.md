@@ -49,7 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Keep the inspector readable with pane controls and single-pane navigation in narrow windows. Restore preferred pane widths when space returns (#313).
 
-- Clarify Add types and search controls. Group row commands in Actions menus and add selected-asset keyboard shortcuts (#312).
+- Clarify Add types and search controls. Group row commands in Actions menus and add selected-asset keyboard shortcuts. Skip hidden catalog entries when browsing with arrow keys
+  (#312).
 
 - Reduce the vertical gap between object rows by at least half (#292).
 

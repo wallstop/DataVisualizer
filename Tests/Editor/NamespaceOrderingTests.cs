@@ -5,8 +5,10 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System.Linq;
     using NUnit.Framework;
     using UnityEngine;
+    using UnityEngine.UIElements;
     using WallstopStudios.DataVisualizer.Editor;
     using WallstopStudios.DataVisualizer.Editor.Data;
+    using WallstopStudios.DataVisualizer.Editor.Styles;
     using CollisionA = WallstopStudios.DataVisualizer.Tests.Editor.TypeIdentityCollision.First.Data;
     using CollisionB = WallstopStudios.DataVisualizer.Tests.Editor.TypeIdentityCollision.Second.Data;
 
@@ -49,6 +51,55 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
 
             yield return Case("Removal_drops_every_ordinal_equal_name", new[] { "Gameplay.EnemyData", "UI.MenuData" }, new[] { "UI.MenuData" }, new[] { "Gameplay.EnemyData" });
+        }
+
+        [TestCase(true, false)]
+        [TestCase(false, false)]
+        [TestCase(true, true)]
+        [TestCase(false, true)]
+        public void ShouldSkipFilteredTypesAndNonTypeRowsWhenNavigating(bool forward, bool hideCurrent)
+        {
+            VisualElement parent = new();
+            VisualElement first = new() { userData = typeof(CollisionA.OrderCollisionData) };
+            VisualElement hidden = new() { userData = typeof(NamespaceOrderingTests) };
+            VisualElement last = new() { userData = typeof(CollisionB.OrderCollisionData) };
+            hidden.style.display = DisplayStyle.None;
+            parent.Add(first);
+            parent.Add(hidden);
+            parent.Add(new VisualElement());
+            parent.Add(last);
+            if (hideCurrent)
+            {
+                first.style.display = DisplayStyle.None;
+            }
+            Assert.That(NamespaceController.GetAdjacentVisibleType(first, forward), Is.EqualTo(typeof(CollisionB.OrderCollisionData)));
+            Assert.That(
+                NamespaceController.GetAdjacentVisibleType(last, forward),
+                Is.EqualTo(hideCurrent ? typeof(CollisionB.OrderCollisionData) : typeof(CollisionA.OrderCollisionData))
+            );
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void ShouldKeepSelectionWhenNoCatalogTypeIsVisible(bool forward)
+        {
+            VisualElement group = new();
+            VisualElement parent = new();
+            VisualElement current = new() { userData = typeof(NamespaceOrderingTests) };
+            group.Add(parent);
+            parent.Add(current);
+            current.AddToClassList(StyleConstants.SelectedClass);
+            group.style.display = DisplayStyle.None;
+            Assert.That(NamespaceController.GetAdjacentVisibleType(current, forward) == null);
+            Assert.That(current.ClassListContains(StyleConstants.SelectedClass), Is.True);
+            group.style.display = DisplayStyle.Flex;
+            current.style.display = DisplayStyle.None;
+            Assert.That(NamespaceController.GetAdjacentVisibleType(current, forward) == null);
+            current.style.display = DisplayStyle.Flex;
+            current.style.visibility = Visibility.Hidden;
+            Assert.That(NamespaceController.GetAdjacentVisibleType(current, forward) == null);
+            Assert.That(NamespaceController.GetAdjacentVisibleType(null, forward) == null);
+            Assert.That(NamespaceController.GetAdjacentVisibleType(new VisualElement(), forward) == null);
         }
 
         [Test]
