@@ -539,6 +539,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         RecalibrateVisualElements(child);
                     }
+                    dataVisualizer.PersistCatalogOrder(namespaceContainer);
                 })
                 {
                     name = "go-up-button",
@@ -565,6 +566,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                     {
                         RecalibrateVisualElements(child);
                     }
+                    dataVisualizer.PersistCatalogOrder(namespaceContainer);
                 })
                 {
                     name = "go-down-button",
@@ -657,6 +659,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         {
                             RecalibrateVisualElements(child);
                         }
+                        dataVisualizer.PersistCatalogOrder(typesContainer);
                     })
                     {
                         name = "go-up-button",
@@ -683,6 +686,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                         {
                             RecalibrateVisualElements(child);
                         }
+                        dataVisualizer.PersistCatalogOrder(typesContainer);
                     })
                     {
                         name = "go-down-button",
