@@ -6362,7 +6362,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 List<Type> orderedTypes = new(types.Count);
                 foreach (VisualElement child in container.Children())
                 {
-                    if (child.userData is Type type && types.Contains(type))
+                    if (child.userData is Type type)
                     {
                         orderedTypes.Add(type);
                     }
