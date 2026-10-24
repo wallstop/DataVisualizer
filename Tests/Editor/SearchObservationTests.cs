@@ -2,7 +2,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
     using System.Collections;
+    using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Reflection;
     using NUnit.Framework;
     using UnityEditor;
@@ -63,6 +65,60 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                         AssetDatabase.SaveAssetIfDirty(settings);
                     }
                 });
+            }
+        }
+
+        private static IEnumerator CheckCatalogArrowPersistence(bool persistInSettings)
+        {
+            using TestCleanupScope cleanup = new();
+            PreserveHostState(cleanup);
+            DataVisualizerWindow window = CreateTestWindow(cleanup);
+            DataVisualizerSettings settings = AssetDatabase.LoadAssetAtPath<DataVisualizerSettings>(
+                AssetDatabase.GUIDToAssetPath(AssetDatabase.FindAssets("t:" + nameof(DataVisualizerSettings))[0])
+            );
+            settings.persistStateInSettingsAsset = persistInSettings;
+            string statePath = Path.Combine(Application.persistentDataPath, "DataVisualizerUserState.json");
+            foreach (bool namespaceMove in new[] { true, false })
+            {
+                foreach (bool toTop in new[] { true, false })
+                {
+                    yield return null;
+                    VisualElement namespaces = window.rootVisualElement.Q<VisualElement>("namespace-list");
+                    VisualElement container = namespaceMove
+                        ? namespaces
+                        : namespaces
+                            .Children()
+                            .Select(group => group.Children().FirstOrDefault(child => child.name.StartsWith("types-container-", StringComparison.Ordinal)))
+                            .FirstOrDefault(types => types != null && 1 < types.childCount);
+                    Assert.That(container != null, "The test needs at least two catalog entries");
+                    Assert.That(container.childCount, Is.GreaterThan(1));
+                    VisualElement moved = container[toTop ? container.childCount - 1 : 0];
+                    object identity = moved.userData;
+                    string namespaceKey = namespaceMove ? null : (string)container.userData;
+                    Button button = moved.Q<Button>(toTop ? "go-up-button" : "go-down-button");
+                    using (NavigationSubmitEvent submit = NavigationSubmitEvent.GetPooled())
+                    {
+                        submit.target = button;
+                        button.SendEvent(submit);
+                    }
+                    Assert.That(container[toTop ? 0 : container.childCount - 1].userData, Is.EqualTo(identity));
+                    List<string> expected = container.Children().Select(child => namespaceMove ? (string)child.userData : ((Type)child.userData).FullName).ToList();
+                    DataVisualizerUserState saved = persistInSettings ? new DataVisualizerUserState() : DataVisualizerUserState.FromJson(File.ReadAllText(statePath));
+                    if (persistInSettings)
+                    {
+                        saved.HydrateFrom(settings);
+                    }
+                    Assert.That(namespaceMove ? saved.namespaceOrder : saved.typeOrders.Find(entry => entry.namespaceKey == namespaceKey).typeNames, Is.EqualTo(expected));
+                    EditorSurfaceCapture.CloseWindow(window);
+                    window = CreateTestWindow(cleanup);
+                    yield return null;
+                    VisualElement reopened = window.rootVisualElement.Q<VisualElement>(namespaceMove ? "namespace-list" : "types-container-" + namespaceKey);
+                    Assert.That(
+                        reopened.Children().Select(child => namespaceMove ? (string)child.userData : ((Type)child.userData).FullName),
+                        Is.EqualTo(expected),
+                        "Arrow order must survive a window reopen"
+                    );
+                }
             }
         }
 
@@ -132,6 +188,18 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 Assert.That(window.ActiveSearchText == null);
                 Assert.That(document.Guid, Is.EqualTo(AssetDatabase.AssetPathToGUID(folder + "/Moved.asset")));
             }
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldPersistCatalogArrowsInUserState()
+        {
+            return CheckCatalogArrowPersistence(false);
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldPersistCatalogArrowsInSettings()
+        {
+            return CheckCatalogArrowPersistence(true);
         }
 
         [UnityTest]

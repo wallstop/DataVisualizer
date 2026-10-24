@@ -6350,6 +6350,46 @@ namespace WallstopStudios.DataVisualizer.Editor
             return row;
         }
 
+        /// <summary>Commits visible catalog order after an arrow move or drag.</summary>
+        internal void PersistCatalogOrder(VisualElement container)
+        {
+            if (container == null)
+            {
+                return;
+            }
+            if (container.userData is string namespaceKey && _scriptableObjectTypes.TryGetValue(namespaceKey, out List<Type> types))
+            {
+                List<Type> orderedTypes = new(types.Count);
+                foreach (VisualElement child in container.Children())
+                {
+                    if (child.userData is Type type)
+                    {
+                        orderedTypes.Add(type);
+                    }
+                }
+                if (orderedTypes.Count != types.Count)
+                {
+                    return;
+                }
+                types.Clear();
+                types.AddRange(orderedTypes);
+                UpdateAndSaveTypeOrder(namespaceKey, types);
+            }
+            else if (container == _namespaceListContainer)
+            {
+                List<string> namespaces = new(_namespaceOrder.Count);
+                foreach (VisualElement child in container.Children())
+                {
+                    if (child.userData is string key && _namespaceOrder.ContainsKey(key))
+                    {
+                        _namespaceOrder[key] = namespaces.Count;
+                        namespaces.Add(key);
+                    }
+                }
+                SetNamespaceOrder(namespaces);
+            }
+        }
+
         internal void UpdateLabelAreaAndFilter()
         {
             _selectedLabelUsage.RemoveDestroyedRows(_selectedObjects, _selectedObjectOrderIndex);
@@ -9274,50 +9314,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 NamespaceController.RecalibrateVisualElements(child);
             }
 
-            int oldDataIndex = _namespaceOrder.GetValueOrDefault(draggedKey, -1);
-            if (oldDataIndex < 0)
-            {
-                return;
-            }
-
-            /*
-                _namespaceOrder is mutated inside these loops, so each pass enumerates a snapshot.
-                The List constructor copies through the dictionary's Count/CopyTo path without an
-                iterator, and one copy covers both branches because only one branch runs.
-            */
-            List<KeyValuePair<string, int>> namespaceOrderSnapshot = new(_namespaceOrder);
-            if (oldDataIndex < targetIndex)
-            {
-                foreach (KeyValuePair<string, int> entry in namespaceOrderSnapshot)
-                {
-                    if (oldDataIndex < entry.Value && entry.Value <= targetIndex)
-                    {
-                        _namespaceOrder[entry.Key] = entry.Value - 1;
-                    }
-                }
-            }
-            else if (targetIndex < oldDataIndex)
-            {
-                foreach (KeyValuePair<string, int> entry in namespaceOrderSnapshot)
-                {
-                    if (targetIndex <= entry.Value && entry.Value < oldDataIndex)
-                    {
-                        _namespaceOrder[entry.Key] = entry.Value + 1;
-                    }
-                }
-            }
-            else
-            {
-                return;
-            }
-
-            _namespaceOrder[draggedKey] = Mathf.Clamp(targetIndex, 0, _namespaceOrder.Count - 1);
-            UpdateAndSaveNamespaceOrder();
-        }
-
-        private void UpdateAndSaveNamespaceOrder()
-        {
-            SetNamespaceOrder(OrderKeysByValueStable(_namespaceOrder));
+            PersistCatalogOrder(_namespaceListContainer);
         }
 
         private void PerformTypeDrop()
@@ -9352,20 +9349,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 NamespaceController.RecalibrateVisualElements(child);
             }
 
-            int namespaceIndex = _namespaceOrder.GetValueOrDefault(namespaceKey, -1);
-            if (0 <= namespaceIndex)
-            {
-                List<Type> typesList = _scriptableObjectTypes.GetValueOrDefault(namespaceKey, null);
-                int? oldDataIndex = typesList?.IndexOf(draggedType);
-                if (0 <= oldDataIndex)
-                {
-                    typesList.RemoveAt(oldDataIndex.Value);
-                    int dataInsertIndex = targetIndex;
-                    dataInsertIndex = Mathf.Clamp(dataInsertIndex, 0, typesList.Count);
-                    typesList.Insert(dataInsertIndex, draggedType);
-                    UpdateAndSaveTypeOrder(namespaceKey, typesList);
-                }
-            }
+            PersistCatalogOrder(typesContainer);
         }
 
         private void UpdateAndSaveTypeOrder(string namespaceKey, List<Type> orderedTypes)
