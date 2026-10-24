@@ -3,6 +3,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
     using System;
     using System.Collections;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Text.RegularExpressions;
     using NUnit.Framework;
     using UnityEditor;
@@ -246,6 +247,68 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
         }
 
+        [Test]
+        public void ShouldRejectPartialSearchWhenSearchMeasurementsAreDisabled()
+        {
+            Assert.Throws<ArgumentException>(() => PerfBaseline.RunBaseline("Temp/Unused", partialSearchFraction: 0.1, includeSearchMeasurements: false));
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void ShouldRecordSearchChoiceWhenCancelledBeforeStaging(bool enabled)
+        {
+            string output = "Temp/PerfBrowsingCancel-" + Guid.NewGuid().ToString("N");
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(PerfBaseline.Cancel);
+            PerfBaseline.RunBaseline(output, new[] { 2 }, includeSearchMeasurements: enabled);
+            PerfBaseline.Cancel();
+            InteractionReport report = JsonUtility.FromJson<InteractionReport>(System.IO.File.ReadAllText(output + "/perf-baseline.json"));
+            Assert.That(report.searchMeasurementsEnabled, Is.EqualTo(enabled));
+            Assert.That(report.readinessSamples, Is.Empty);
+        }
+
+        [UnityTest]
+        public IEnumerator ShouldMeasureBrowsingWithoutSearchQueries()
+        {
+            string output = "Temp/PerfBrowsing-" + Guid.NewGuid().ToString("N");
+            int hosts = EditorSurfaceCapture.CountNativeWindowHosts();
+            using TestCleanupScope cleanup = new();
+            cleanup.Defer(() => System.IO.Directory.Delete(output, recursive: true));
+            cleanup.Defer(PerfBaseline.Cancel);
+            LogAssert.Expect(LogType.Log, new Regex("\\[PerfBaseline\\] complete\\..*search median not measured"));
+            PerfBaseline.RunBaseline(
+                output,
+                new[] { 4 },
+                timeoutMinutes: 5,
+                fixtureTypes: new[] { typeof(OtherEditorOnlyCreationData), typeof(PlayModeDataObject) },
+                includeSearchMeasurements: false
+            );
+            for (int tick = 0; tick < 6000 && PerfBaseline.Status() != "Idle"; tick++)
+            {
+                Assert.That(PerfBaseline.Status().StartsWith("WaitingSearchResults:", StringComparison.Ordinal), Is.False);
+                yield return null;
+            }
+            Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
+            InteractionReport report = JsonUtility.FromJson<InteractionReport>(System.IO.File.ReadAllText(output + "/perf-baseline.json"));
+            Assert.That(report.searchMeasurementsEnabled, Is.False);
+            string json = System.IO.File.ReadAllText(output + "/perf-baseline.json");
+            Assert.That(json, Does.Contain("\"searchWarmups\": 0"));
+            Assert.That(json, Does.Contain("\"searchSamples\": 0"));
+            Assert.That(report.searchObservations, Is.Empty);
+            Assert.That(report.readinessSamples.Length, Is.EqualTo(40));
+            Assert.That(report.readinessSamples.All(sample => sample.complete), Is.True);
+            Assert.That(report.interactionSamples.Length, Is.EqualTo(105));
+            Assert.That(report.interactionSamples.All(sample => sample.complete), Is.True);
+            foreach (string kind in new[] { "label-filter", "object-scroll", "type-switch" })
+            {
+                Assert.That(report.interactionSamples.Count(sample => sample.kind == kind && sample.mode == "warm"), Is.EqualTo(30), kind);
+            }
+            Assert.That(EditorSurfaceCapture.CountNativeWindowHosts(), Is.EqualTo(hosts));
+            Assert.That(System.IO.Directory.GetFiles(output, "window-state-*.json"), Is.Empty);
+        }
+
         [UnityTest]
         public IEnumerator ShouldRecordInteractionReadinessAndRestoreNativeOwners()
         {
@@ -262,6 +325,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(PerfBaseline.Status(), Is.EqualTo("Idle"));
             InteractionReport report = JsonUtility.FromJson<InteractionReport>(System.IO.File.ReadAllText(output + "/perf-baseline.json"));
             Assert.That(report.interactionSamples.Length, Is.EqualTo(105));
+            Assert.That(report.searchMeasurementsEnabled, Is.True);
             Assert.That(report.searchObservations.Length, Is.EqualTo(140));
             Dictionary<string, int> searchCounts = new(StringComparer.Ordinal);
             foreach (PerfSearchSample sample in report.searchObservations)
@@ -802,6 +866,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         [Serializable]
         private sealed class InteractionReport
         {
+            public bool searchMeasurementsEnabled = true;
             public double requestedPartialSearchFraction;
             public bool partialExtractionPaused;
             public PerfSearchSample[] searchObservations = Array.Empty<PerfSearchSample>();

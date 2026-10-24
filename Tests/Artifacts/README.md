@@ -78,3 +78,11 @@ its compiler-recorded PDB document checksum. Missing symbols, stale source, a pe
 SHA-256, compiler checksum/algorithm, loaded module ID and assembly SHA-256. Checkpoints and final completion recheck source and assembly bytes outside query timing intervals.
 `provenanceVerified=false` or a nonempty `provenanceFailure` invalidates a report; `complete=false` remains incomplete. This proves driver identity, not the identity of every
 production dependency. Historical schemas do not provide these checks and remain observations at their documented revisions.
+
+## Browsing measurements
+
+`PerfBaseline.RunBaseline(..., includeSearchMeasurements: false)` measures opening readiness, selection, label filtering, scrolling and type switching without running query
+samples. The default remains the full run. Browsing reports record `searchMeasurementsEnabled=false`, an empty `searchObservations` array and empty search scenario samples; these
+are omitted measurements, not zero query latency. Index extraction and indexing readiness remain enabled. A positive `partialSearchFraction` requires search measurements and is
+rejected before staging when they are disabled. One-type distributions omit type switching; they still measure opening, selection, labels and scrolling. Use separate uniquely owned
+ordinary-SO and BaseDataObject runs to compare one-large-type distributions without conflating their retention or staging costs.
