@@ -35,6 +35,51 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        [TestCase(2, false)]
+        [TestCase(31, false)]
+        [TestCase(257, true)]
+        public void ShouldSharePreparationWithoutSharingQueryProgress(int count, bool advanceWaitingQuery)
+        {
+            AssetMetadataStore metadata = new();
+            AssetObjectCache cache = CreateCache(metadata, count);
+            List<AssetSearchDocument> expected = new(cache.Documents);
+            expected.Sort(AssetSearchDocument.CompareIdentity);
+            AssetSearchQuery waiting = cache.CreateQuery(new[] { "Match" }, int.MaxValue);
+            AssetSearchQuery limited = cache.CreateQuery(new[] { "Match" }, 1);
+            if (advanceWaitingQuery)
+            {
+                waiting.Advance(0);
+            }
+            Assert.That(waiting.IsPreparing);
+            while (!limited.IsComplete)
+            {
+                limited.Advance(0);
+            }
+            Assert.That(!waiting.IsPreparing, "A sibling completed this snapshot's preparation");
+            Assert.That(waiting.ScannedCount, Is.Zero);
+            Assert.That(waiting.Results.Count, Is.Zero);
+            Assert.That(limited.Results.Count, Is.EqualTo(1));
+            AssetSearchQuery absent = cache.CreateQuery(new[] { "absent" }, int.MaxValue);
+            Assert.That(!absent.IsPreparing, "Later queries reuse completed preparation");
+            while (!absent.IsComplete || !waiting.IsComplete)
+            {
+                absent.Advance(0);
+                waiting.Advance(0);
+            }
+            Assert.That(absent.Results.Count, Is.Zero);
+            Assert.That(waiting.Results.Count, Is.EqualTo(count));
+            for (int index = 0; index < expected.Count; index++)
+            {
+                Assert.That(ReferenceEquals(waiting.Results[index].Document, expected[index]));
+            }
+            Put(metadata, cache, "arrival", "A Match arrival");
+            AssetSearchQuery changed = cache.CreateQuery(new[] { "Match" }, int.MaxValue);
+            Assert.That(changed.IsPreparing, "A changed snapshot prepares independently");
+            Assert.That(!waiting.IsPreparing);
+            Assert.That(waiting.RecordCount, Is.EqualTo(count));
+            Assert.That(cache.IsSorted, Is.False, "Query preparation does not publish or mutate the cache");
+        }
+
         [TestCase(0)]
         [TestCase(1)]
         [TestCase(2)]

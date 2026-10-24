@@ -10,6 +10,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         public AssetSearchDocument this[int index] => _documents[index];
 
         private readonly IReadOnlyList<AssetSearchDocument> _documents;
+        private AssetSearchOrdering _ordering;
 
         internal AssetSearchSnapshot(IReadOnlyList<AssetSearchDocument> documents)
         {
@@ -19,6 +20,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
         public IEnumerator<AssetSearchDocument> GetEnumerator()
         {
             return _documents.GetEnumerator();
+        }
+
+        internal AssetSearchOrdering GetOrdering(bool sortByIdentity)
+        {
+            // One snapshot has one source order and one cooperative preparation owner.
+            return _ordering ??= new AssetSearchOrdering(this, sortByIdentity);
         }
 
         IEnumerator IEnumerable.GetEnumerator()

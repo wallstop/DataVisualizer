@@ -33,7 +33,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
             {
                 throw new ArgumentOutOfRangeException(nameof(maximumResults));
             }
-            _ordering = new AssetSearchOrdering(documents, sortByIdentity);
+            _ordering = documents is AssetSearchSnapshot snapshot ? snapshot.GetOrdering(sortByIdentity) : new AssetSearchOrdering(documents, sortByIdentity);
             _documents = _ordering.Documents;
             _terms = terms == null ? Array.Empty<string>() : (string[])terms.Clone();
             _normalizedTerms = new string[_terms.Length];
@@ -67,6 +67,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Search
                     return;
                 }
             }
+            // Another query may have completed the shared preparation since this query last ran.
+            _documents = _ordering.Documents;
             while (ScannedCount < _documents.Count)
             {
                 AssetSearchDocument document = _documents[ScannedCount++];

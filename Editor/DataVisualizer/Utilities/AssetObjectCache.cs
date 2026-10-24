@@ -26,6 +26,8 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         private ConditionalWeakTable<ScriptableObject, AssetSearchDocument> _keys = new();
         private bool _isSorted = true;
         private bool _documentsShared;
+        private AssetSearchSnapshot _querySnapshot;
+        private int _querySnapshotVersion;
         private AssetSearchOrdering _ordering;
         private int _orderingVersion;
         private List<AssetSearchDocument> _orderedDocuments;
@@ -49,8 +51,12 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         public AssetSearchQuery CreateQuery(string[] terms, int maximumResults)
         {
-            AssetSearchSnapshot snapshot = new(_documents);
-            AssetSearchQuery query = new(snapshot, terms, maximumResults, sortByIdentity: !_isSorted);
+            if (_querySnapshot == null || _querySnapshotVersion != Version)
+            {
+                _querySnapshot = new AssetSearchSnapshot(_documents);
+                _querySnapshotVersion = Version;
+            }
+            AssetSearchQuery query = new(_querySnapshot, terms, maximumResults, sortByIdentity: !_isSorted);
             _documentsShared = true;
             return query;
         }
@@ -136,6 +142,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
         public void Clear()
         {
             CancelOrdering();
+            _querySnapshot = null;
             Version++;
             _ordered?.Clear();
             if (_documentsShared)
@@ -306,6 +313,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
                 int index = _orderedDocuments.Count;
                 if (_documents.Count <= index)
                 {
+                    _querySnapshot = null;
                     _documents = _orderedDocuments;
                     _documentsShared = false;
                     _documentIndexByGuid = _orderedIndices;
@@ -379,6 +387,7 @@ namespace WallstopStudios.DataVisualizer.Editor.Utilities
 
         private void DetachSharedDocuments()
         {
+            _querySnapshot = null;
             if (_documentsShared)
             {
                 _documents = new List<AssetSearchDocument>(_documents);
