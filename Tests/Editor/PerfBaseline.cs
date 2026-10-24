@@ -216,6 +216,20 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             }
         }
 
+        internal static int CountPreviewAssetReferences(VisualElement root)
+        {
+            int count = 0;
+            root?.Query<VisualElement>("result-item")
+                .ForEach(row =>
+                {
+                    if (row.userData is ScriptableObject)
+                    {
+                        count++;
+                    }
+                });
+            return count;
+        }
+
         internal static string ResolveOutputDirectory(string[] arguments, string environmentValue)
         {
             for (int index = 0; index < arguments.Length - 1; index++)
@@ -949,6 +963,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             state.Current.SearchObservations.Add(sample);
             state.PendingSearch = sample;
             state.QuerySliceOverrunsBefore = state.Window.SearchQuerySliceOverrunCount;
+            state.QueryResultObjectLoadsBefore = state.Window.SearchResultObjectLoadCount;
             state.PhaseClock.Restart();
             searchField.value = query;
             sample.actionMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
@@ -1010,6 +1025,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             sample.indexComplete = window.IsSearchIndexComplete;
             sample.sliceOverruns = window.SearchQuerySliceOverrunCount - state.QuerySliceOverrunsBefore;
             sample.longestWindowQuerySliceMilliseconds = window.LongestSearchQuerySliceMilliseconds;
+            sample.resultObjectLoads = window.SearchResultObjectLoadCount - state.QueryResultObjectLoadsBefore;
             if (0 < sample.visibleMatches && sample.firstResultMilliseconds < 0)
             {
                 sample.firstResultMilliseconds = state.PhaseClock.Elapsed.TotalMilliseconds;
@@ -1031,6 +1047,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 EditorApplication.QueuePlayerLoopUpdate();
                 return;
             }
+            sample.previewAssetReferences = CountPreviewAssetReferences(window.rootVisualElement.Q("search-popover"));
             if (state.MeasuringPartialSearch && !state.PausePartialExtraction && !string.IsNullOrEmpty(sample.targetGuid))
             {
                 // IsActiveSearchComplete proves this query uses the current cache version.
@@ -1560,7 +1577,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                 "  \"interactionSemantics\": \"Five warmups then 30 warm observations per interaction; root paint is not GPU completion; readiness is observed layout, with observer delay. Small scrolls can be no-ops. Type switching requires at least two fixture types.\",\n"
             );
             json.Append(
-                "  \"searchSemantics\": \"Five warmups and 30 warm samples per supported condition and selected index mode. First result and current snapshot completion include field input and editor observation delay. publicationPaintMilliseconds records a later visible popover generateVisualContent callback, not GPU presentation. No-match first result is -1. Common names may reach the result cap. Rare fields require BaseDataObject or OtherEditorOnlyCreationData fixtures. Optional partial modes rebuild after initial readiness and start queries at the requested record threshold. paused-partial stops extraction; live-rebuild leaves extraction running. Each live input starts a fresh warm rebuild after prior extraction settles outside the input clock. Actual input and publication completeness are recorded; extraction can complete before publication. The extra window is discarded before ordinary complete-index runs. Fresh-process search remains unmeasured.\",\n"
+                "  \"searchSemantics\": \"Five warmups and 30 warm samples per supported condition and selected index mode. First result and current snapshot completion include field input and editor observation delay. publicationPaintMilliseconds records a later visible popover generateVisualContent callback, not GPU presentation. No-match first result is -1. Common names may reach the result cap. Rare fields require BaseDataObject or OtherEditorOnlyCreationData fixtures. Optional partial modes rebuild after initial readiness and start queries at the requested record threshold. paused-partial stops extraction; live-rebuild leaves extraction running. Each live input starts a fresh warm rebuild after prior extraction settles outside the input clock. Actual input and publication completeness are recorded; extraction can complete before publication. The extra window is discarded before ordinary complete-index runs. resultObjectLoads counts cache resolution loads since input, excluding index extraction. previewAssetReferences counts direct ScriptableObject wrapper references in quick-preview row userData after the matching publication paint; it excludes closures, selected rows and native memory. Fresh-process search remains unmeasured.\",\n"
             );
             json.Append("  \"searchObservations\": [");
             bool firstSearch = true;
@@ -1873,6 +1890,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             internal int SelectionRepetition;
             internal int SearchKind;
             internal int QuerySliceOverrunsBefore;
+            internal int QueryResultObjectLoadsBefore;
             internal bool PartialSearchMeasured;
             internal bool PartialRebuildStarted;
             internal bool MeasuringPartialSearch;

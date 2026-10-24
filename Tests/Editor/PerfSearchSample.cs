@@ -24,6 +24,8 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         public int scanned;
         public int matches;
         public int visibleMatches;
+        public int resultObjectLoads = -1;
+        public int previewAssetReferences = -1;
         public int expectedMatches;
         public int minimumMatches;
         public double actionMilliseconds;
