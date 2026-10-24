@@ -249,7 +249,7 @@
     --unity-cursor-color: var(--dataviz-text);
 }
 
-.namespace-indicator:focus {
+.dataviz-root .namespace-indicator:focus {
     border-width: 1px;
     border-color: var(--dataviz-selection);
 }
@@ -619,7 +619,7 @@
     padding-right: 2px;
 }
 
-.namespace-indicator {
+.dataviz-root .namespace-indicator {
     width: 16px;
     min-width: 16px;
     padding: 0;
