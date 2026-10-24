@@ -86,6 +86,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [Test, Explicit("Component measurement; creates no Unity assets or catalog visuals")]
+        [Timeout(650000)]
         public void ShouldMeasureNamespaceOrderingAtScale()
         {
             BenchmarkCodeIdentity production = new(
@@ -95,6 +96,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             BenchmarkCodeIdentity driver = new(typeof(NamespaceOrderingTests).Assembly, "Packages/com.wallstop-studios.data-visualizer/Tests/Editor/NamespaceOrderingTests.cs");
             production.Verify();
             driver.Verify();
+            long allocationControlStart = GC.GetAllocatedBytesForCurrentThread();
+            byte[] allocationControl = new byte[4096];
+            long allocationControlObservedBytes = GC.GetAllocatedBytesForCurrentThread() - allocationControlStart;
+            bool allocationCounterAvailable = 4096 <= allocationControlObservedBytes;
+            GC.KeepAlive(allocationControl);
             StringBuilder json = new();
             json.Append("{\"complete\":false,\"unity\":\"").Append(PerfBaseline.JsonEscape(Application.unityVersion));
             json.Append("\",\"os\":\"").Append(PerfBaseline.JsonEscape(SystemInfo.operatingSystem));
@@ -103,7 +109,9 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             json.Append("\",\"productionModule\":\"").Append(production.LoadedModuleId);
             json.Append("\",\"driverSource\":\"").Append(driver.SourceSha256);
             json.Append("\",\"driverModule\":\"").Append(driver.LoadedModuleId);
-            json.Append("\",\"warmups\":5,\"samplesPerCondition\":30,\"samples\":[");
+            json.Append("\",\"allocationCounterAvailable\":").Append(allocationCounterAvailable ? "true" : "false");
+            json.Append(",\"allocationControlObservedBytes\":").Append(allocationControlObservedBytes);
+            json.Append(",\"warmups\":5,\"samplesPerCondition\":30,\"samples\":[");
             bool first = true;
             Stopwatch budget = Stopwatch.StartNew();
             bool complete = false;
@@ -160,7 +168,7 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
                                 ? InsertionOrderBaseline(managed, ranks)
                                 : NamespaceController.GetOrderedNamespaceEntries(managed, ranks);
                             double milliseconds = (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency;
-                            allocated = GC.GetAllocatedBytesForCurrentThread() - allocated;
+                            allocated = allocationCounterAvailable ? GC.GetAllocatedBytesForCurrentThread() - allocated : -1;
                             Assert.That(actual.Select(entry => entry.Key), Is.EqualTo(expected));
                             if (repetition < 0)
                             {
