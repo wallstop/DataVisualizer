@@ -221,6 +221,59 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
+        public IEnumerator ShouldKeepTheQueryGenerationWhenRefreshHasNoNewMetadata()
+        {
+            using TestCleanupScope cleanup = new();
+            PreserveHostState(cleanup);
+            DataVisualizerWindow window = CreateTestWindow(cleanup);
+            for (int tick = 0; tick < 1000 && !window.IsSearchIndexComplete; tick++)
+            {
+                yield return null;
+            }
+            Assert.That(window.IsSearchIndexComplete, Is.True);
+            TextField field = window.rootVisualElement.Q<TextField>("global-search-field");
+            field.value = "AbsentUnchangedSnapshot" + Guid.NewGuid().ToString("N");
+            int generation = window.ActiveSearchGeneration;
+            window.RefreshActiveSearch();
+            Assert.That(window.ActiveSearchGeneration, Is.EqualTo(generation), "An unchanged in-flight snapshot needs no follow-up query");
+            for (int tick = 0; tick < 1000 && !window.IsActiveSearchComplete; tick++)
+            {
+                window.AdvanceSearchQuery(0);
+                yield return null;
+            }
+            Assert.That(window.IsActiveSearchComplete, Is.True);
+            Assert.That(window.ActiveSearchGeneration, Is.EqualTo(generation));
+            for (int refresh = 0; refresh < 10; refresh++)
+            {
+                window.RefreshActiveSearch();
+                window.AdvanceSearchQuery(0);
+                Assert.That(window.ActiveSearchGeneration, Is.EqualTo(generation), "An unchanged completed snapshot must stay published");
+                Assert.That(window.IsActiveSearchComplete, Is.True);
+            }
+            string marker = field.value;
+            string folder = "Assets/UnchangedSearch" + Guid.NewGuid().ToString("N");
+            AssetDatabase.CreateFolder("Assets", Path.GetFileName(folder));
+            cleanup.Defer(() => AssetDatabase.DeleteAsset(folder));
+            AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<OperationLifecycleData>(), folder + "/" + marker + ".asset");
+            for (int tick = 0; tick < 1000 && (!window.IsActiveSearchComplete || window.ActiveSearchMatchCount != 1); tick++)
+            {
+                window.AdvanceSearchQuery();
+                yield return null;
+            }
+            Assert.That(window.IsActiveSearchComplete, Is.True);
+            Assert.That(window.ActiveSearchMatchCount, Is.EqualTo(1), "New metadata must refresh an already completed query");
+            Assert.That(generation < window.ActiveSearchGeneration);
+            generation = window.ActiveSearchGeneration;
+            window.RefreshActiveSearch(discardInFlight: true);
+            Assert.That(generation < window.ActiveSearchGeneration, "Explicit invalidation must still replace the query");
+            field.value = string.Empty;
+            generation = window.ActiveSearchGeneration;
+            window.RefreshActiveSearch(discardInFlight: true);
+            Assert.That(window.ActiveSearchText == null);
+            Assert.That(window.ActiveSearchGeneration, Is.EqualTo(generation));
+        }
+
+        [UnityTest]
         public IEnumerator ShouldObserveZeroMatchesAndRejectClearedOrDismissedQueries()
         {
             using TestCleanupScope cleanup = new();

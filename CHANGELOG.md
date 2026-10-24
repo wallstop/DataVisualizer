@@ -44,7 +44,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Keep repeated searches responsive during partial indexing by reusing prepared result order and search data across window rebuilds. Load assets only when activating search results
   without retaining every indexed asset (#309, #310).
 
-- Search available asset text while indexing continues. Speed up Unicode queries, keep final ordering responsive, and refresh open searches as records arrive or change (#310).
+- Search available asset text while indexing continues. Speed up Unicode queries, keep final ordering responsive, and refresh open searches as records arrive or change. Keep
+  completed results stable when indexing adds no new search data (#310).
 
 - Simplify label filtering with Match all and Match any, keyboard-selectable pills, clear controls, and a readable Advanced expression. Keep missing active labels and show neutral
   counts (#314).

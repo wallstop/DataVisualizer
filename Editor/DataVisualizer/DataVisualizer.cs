@@ -1498,6 +1498,16 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
         }
 
+        /// <summary>Refreshes changed search metadata while keeping a dismissed popover closed.</summary>
+        public void RefreshActiveSearch(bool discardInFlight = false)
+        {
+            if (_activePopover != _searchPopover || string.IsNullOrWhiteSpace(_lastSearchString))
+            {
+                return;
+            }
+            _requestSearchRefresh?.Invoke(discardInFlight);
+        }
+
         internal void PersistSettings(Func<DataVisualizerSettings, bool> settingsApplier, Func<DataVisualizerUserState, bool> userStateApplier)
         {
             DataVisualizerSettings settings = Settings;
@@ -2245,19 +2255,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 SearchIndexSliceOverrunCount++;
             }
-        }
-
-        /*
-            Re-runs the active search as searchable records arrive or change. Only acts while the search popover is
-            open, so it never reopens a popover the user has dismissed.
-        */
-        private void RefreshActiveSearch(bool discardInFlight = false)
-        {
-            if (_activePopover != _searchPopover || string.IsNullOrWhiteSpace(_lastSearchString))
-            {
-                return;
-            }
-            _requestSearchRefresh?.Invoke(discardInFlight);
         }
 
         private bool IsTrackedAssetType(Type type)
@@ -3377,6 +3374,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             }
             int publishedCount = 0;
             bool refreshPending = false;
+            bool publishedIndexComplete = _isSearchCachePopulated;
             _requestSearchRefresh = RequestRefresh;
             if (_activePopover != _searchPopover)
             {
@@ -3404,6 +3402,7 @@ namespace WallstopStudios.DataVisualizer.Editor
                 {
                     RenderSearchResults(query, snapshotVersion == _assetObjectCache.Version);
                     _observedSearchPublished = query.IsComplete;
+                    publishedIndexComplete = _isSearchCachePopulated;
                     publishedCount = query.Results.Count;
                 }
                 if (query.IsComplete)
@@ -3437,6 +3436,15 @@ namespace WallstopStudios.DataVisualizer.Editor
             {
                 if (generation != _searchQueryGeneration || _activePopover != _searchPopover)
                 {
+                    return;
+                }
+                if (!discardInFlight && indexGeneration == _searchCacheGeneration && snapshotVersion == _assetObjectCache.Version)
+                {
+                    if (query.IsComplete && publishedIndexComplete != _isSearchCachePopulated)
+                    {
+                        RenderSearchResults(query, snapshotIsCurrent: true);
+                        publishedIndexComplete = _isSearchCachePopulated;
+                    }
                     return;
                 }
                 if (discardInFlight || query.IsComplete)
