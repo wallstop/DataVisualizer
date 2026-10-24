@@ -2,7 +2,11 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
+    using System.Globalization;
+    using System.IO;
     using System.Linq;
+    using System.Text;
     using NUnit.Framework;
     using UnityEngine;
     using UnityEngine.UIElements;
@@ -14,6 +18,34 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
 
     public sealed class NamespaceOrderingTests
     {
+        private static KeyValuePair<string, List<Type>>[] InsertionOrderBaseline(Dictionary<string, List<Type>> managedTypes, Dictionary<string, int> namespaceOrder)
+        {
+            KeyValuePair<string, List<Type>>[] entries = new KeyValuePair<string, List<Type>>[managedTypes.Count];
+            int[] keys = new int[entries.Length];
+            int index = 0;
+            foreach (KeyValuePair<string, List<Type>> entry in managedTypes)
+            {
+                entries[index] = entry;
+                keys[index] = namespaceOrder.GetValueOrDefault(entry.Key, namespaceOrder.Count);
+                index++;
+            }
+            for (int outer = 1; outer < entries.Length; outer++)
+            {
+                int rank = keys[outer];
+                KeyValuePair<string, List<Type>> entry = entries[outer];
+                int inner = outer - 1;
+                while (0 <= inner && rank < keys[inner])
+                {
+                    keys[inner + 1] = keys[inner];
+                    entries[inner + 1] = entries[inner];
+                    inner--;
+                }
+                keys[inner + 1] = rank;
+                entries[inner + 1] = entry;
+            }
+            return entries;
+        }
+
         private static TestCaseData Case(string name, string[] managedTypeNames, string[] removedTypeNames, string[] expectedTypeNames) =>
             new TestCaseData(managedTypeNames, removedTypeNames, expectedTypeNames).SetName(name);
 
@@ -51,6 +83,131 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             );
 
             yield return Case("Removal_drops_every_ordinal_equal_name", new[] { "Gameplay.EnemyData", "UI.MenuData" }, new[] { "UI.MenuData" }, new[] { "Gameplay.EnemyData" });
+        }
+
+        [Test, Explicit("Component measurement; creates no Unity assets or catalog visuals")]
+        public void ShouldMeasureNamespaceOrderingAtScale()
+        {
+            BenchmarkCodeIdentity production = new(
+                typeof(NamespaceController).Assembly,
+                "Packages/com.wallstop-studios.data-visualizer/Editor/DataVisualizer/NamespaceController.cs"
+            );
+            BenchmarkCodeIdentity driver = new(typeof(NamespaceOrderingTests).Assembly, "Packages/com.wallstop-studios.data-visualizer/Tests/Editor/NamespaceOrderingTests.cs");
+            production.Verify();
+            driver.Verify();
+            StringBuilder json = new();
+            json.Append("{\"complete\":false,\"unity\":\"").Append(PerfBaseline.JsonEscape(Application.unityVersion));
+            json.Append("\",\"os\":\"").Append(PerfBaseline.JsonEscape(SystemInfo.operatingSystem));
+            json.Append("\",\"cpu\":\"").Append(PerfBaseline.JsonEscape(SystemInfo.processorType));
+            json.Append("\",\"productionSource\":\"").Append(production.SourceSha256);
+            json.Append("\",\"productionModule\":\"").Append(production.LoadedModuleId);
+            json.Append("\",\"driverSource\":\"").Append(driver.SourceSha256);
+            json.Append("\",\"driverModule\":\"").Append(driver.LoadedModuleId);
+            json.Append("\",\"warmups\":5,\"samplesPerCondition\":30,\"samples\":[");
+            bool first = true;
+            Stopwatch budget = Stopwatch.StartNew();
+            foreach (int count in new[] { 100, 1000, 10000 })
+            {
+                foreach (string ordering in new[] { "forward", "reverse", "ties" })
+                {
+                    Dictionary<string, List<Type>> managed = new(StringComparer.Ordinal);
+                    Dictionary<string, int> ranks = new(StringComparer.Ordinal);
+                    for (int i = 0; i < count; i++)
+                    {
+                        string key = "Namespace" + i;
+                        managed.Add(key, new List<Type>());
+                        ranks.Add(
+                            key,
+                            ordering == "reverse" ? count - i
+                                : ordering == "ties" ? i % 7
+                                : i
+                        );
+                    }
+                    string[] expected = managed.OrderBy(entry => ranks[entry.Key]).Select(entry => entry.Key).ToArray();
+                    for (int repetition = -5; repetition < 30; repetition++)
+                    {
+                        // Alternate the pair order to limit consistent first-run bias.
+                        foreach (bool baseline in repetition % 2 == 0 ? new[] { true, false } : new[] { false, true })
+                        {
+                            Assert.That(budget.Elapsed.TotalMinutes, Is.LessThan(5), "Stop between calls after the declared five-minute component budget");
+                            long allocated = GC.GetAllocatedBytesForCurrentThread();
+                            long started = Stopwatch.GetTimestamp();
+                            KeyValuePair<string, List<Type>>[] actual = baseline
+                                ? InsertionOrderBaseline(managed, ranks)
+                                : NamespaceController.GetOrderedNamespaceEntries(managed, ranks);
+                            double milliseconds = (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency;
+                            allocated = GC.GetAllocatedBytesForCurrentThread() - allocated;
+                            Assert.That(actual.Select(entry => entry.Key), Is.EqualTo(expected));
+                            if (repetition < 0)
+                            {
+                                continue;
+                            }
+                            if (!first)
+                            {
+                                json.Append(',');
+                            }
+                            first = false;
+                            json.Append("{\"count\":").Append(count).Append(",\"order\":\"").Append(ordering);
+                            json.Append("\",\"baseline\":").Append(baseline ? "true" : "false");
+                            json.Append(",\"repetition\":").Append(repetition);
+                            json.Append(",\"milliseconds\":").Append(milliseconds.ToString("R", CultureInfo.InvariantCulture));
+                            json.Append(",\"allocatedBytes\":").Append(allocated).Append('}');
+                        }
+                    }
+                }
+            }
+            production.Verify();
+            driver.Verify();
+            json.Append("],\"verifiedAfter\":true,\"elapsedMilliseconds\":").Append(budget.Elapsed.TotalMilliseconds.ToString("R", CultureInfo.InvariantCulture)).Append('}');
+            json.Replace("\"complete\":false", "\"complete\":true");
+            Directory.CreateDirectory("Temp");
+            File.WriteAllText("Temp/catalog-ordering.json", json.ToString());
+        }
+
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(1000)]
+        public void ShouldPreserveStableNamespaceOrderAndTypeLists(int count)
+        {
+            Dictionary<string, List<Type>> managed = new(StringComparer.Ordinal);
+            Dictionary<string, int> order = new(StringComparer.Ordinal);
+            System.Random random = new(174);
+            for (int i = 0; i < count; i++)
+            {
+                string key = "Namespace" + i;
+                managed.Add(key, new List<Type> { typeof(NamespaceOrderingTests) });
+                if (i % 4 != 0)
+                {
+                    order.Add(
+                        key,
+                        i % 7 == 0 ? int.MinValue
+                            : i % 7 == 1 ? int.MaxValue
+                            : random.Next(-5, 5)
+                    );
+                }
+            }
+            string[] expected = managed.OrderBy(entry => order.GetValueOrDefault(entry.Key, order.Count)).Select(entry => entry.Key).ToArray();
+            KeyValuePair<string, List<Type>>[] actual = NamespaceController.GetOrderedNamespaceEntries(managed, order);
+            Assert.That(actual.Select(entry => entry.Key), Is.EqualTo(expected), "Equal ranks and missing ranks keep input order");
+            Assert.That(managed.Keys, Is.EqualTo(Enumerable.Range(0, count).Select(i => "Namespace" + i)), "Sorting must not mutate the catalog");
+            foreach (KeyValuePair<string, List<Type>> entry in actual)
+            {
+                Assert.That(entry.Value, Is.SameAs(managed[entry.Key]), "Type lists retain their shared mutation owner");
+            }
+        }
+
+        [Test]
+        public void ShouldOrderReverseRankedNamespaces()
+        {
+            Dictionary<string, List<Type>> managed = new(StringComparer.Ordinal);
+            Dictionary<string, int> order = new(StringComparer.Ordinal);
+            for (int i = 0; i < 2000; i++)
+            {
+                string key = "Namespace" + i;
+                managed.Add(key, new List<Type>());
+                order.Add(key, 2000 - i);
+            }
+            Assert.That(NamespaceController.GetOrderedNamespaceEntries(managed, order).Select(entry => entry.Key), Is.EqualTo(managed.Keys.Reverse()));
         }
 
         [TestCase(true, false)]

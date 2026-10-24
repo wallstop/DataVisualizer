@@ -151,6 +151,28 @@ namespace WallstopStudios.DataVisualizer.Editor
             return null;
         }
 
+        /// <summary>Orders namespace entries by saved rank, preserving input order for ties.</summary>
+        public static KeyValuePair<string, List<Type>>[] GetOrderedNamespaceEntries(Dictionary<string, List<Type>> managedTypes, Dictionary<string, int> namespaceOrder)
+        {
+            KeyValuePair<string, List<Type>>[] entries = new KeyValuePair<string, List<Type>>[managedTypes.Count];
+            long[] sortKeys = new long[entries.Length];
+            int defaultOrder = namespaceOrder.Count;
+            int index = 0;
+            foreach (KeyValuePair<string, List<Type>> entry in managedTypes)
+            {
+                entries[index] = entry;
+                int rank = namespaceOrder.GetValueOrDefault(entry.Key, defaultOrder);
+                /*
+                    Array.Sort is not stable. A unique input-index suffix preserves the former
+                    stable order, including ties and missing ranks, across the full Int32 range.
+                */
+                sortKeys[index] = ((long)rank << 32) | (uint)index;
+                index++;
+            }
+            Array.Sort(sortKeys, entries);
+            return entries;
+        }
+
         internal static bool IsTypeRemovable(Type type)
         {
             return type == null || (!typeof(BaseDataObject).IsAssignableFrom(type) && !type.IsAttributeDefined<CustomDataVisualizationAttribute>());
@@ -373,43 +395,6 @@ namespace WallstopStudios.DataVisualizer.Editor
             return managedTypeSet;
         }
 
-        /*
-            Stable ordering parity with the removed `OrderBy` chain: entries with a persisted
-            order key sort by that key ascending, and equal-key entries keep dictionary
-            enumeration order. The insertion sort is what provides that stability.
-        */
-        private static KeyValuePair<string, List<Type>>[] OrderedNamespaceEntries(Dictionary<string, List<Type>> managedTypes, Dictionary<string, int> namespaceOrder)
-        {
-            KeyValuePair<string, List<Type>>[] entries = new KeyValuePair<string, List<Type>>[managedTypes.Count];
-            int[] orderKeys = new int[entries.Length];
-            int defaultOrder = namespaceOrder.Count;
-            int index = 0;
-            foreach (KeyValuePair<string, List<Type>> entry in managedTypes)
-            {
-                entries[index] = entry;
-                orderKeys[index] = namespaceOrder.GetValueOrDefault(entry.Key, defaultOrder);
-                index += 1;
-            }
-
-            for (int outer = 1; outer < entries.Length; outer++)
-            {
-                int currentOrder = orderKeys[outer];
-                KeyValuePair<string, List<Type>> currentEntry = entries[outer];
-                int inner = outer - 1;
-                while (0 <= inner && currentOrder < orderKeys[inner])
-                {
-                    orderKeys[inner + 1] = orderKeys[inner];
-                    entries[inner + 1] = entries[inner];
-                    inner -= 1;
-                }
-
-                orderKeys[inner + 1] = currentOrder;
-                entries[inner + 1] = currentEntry;
-            }
-
-            return entries;
-        }
-
         public void Clear()
         {
             _selectedType = null;
@@ -496,7 +481,7 @@ namespace WallstopStudios.DataVisualizer.Editor
             namespaceListContainer.Clear();
             VisualElement namespaceContainer = namespaceListContainer;
             _namespaceCache.Clear();
-            KeyValuePair<string, List<Type>>[] orderedEntries = OrderedNamespaceEntries(_managedTypes, _namespaceOrder);
+            KeyValuePair<string, List<Type>>[] orderedEntries = GetOrderedNamespaceEntries(_managedTypes, _namespaceOrder);
             for (int index = 0; index < orderedEntries.Length; index++)
             {
                 (string key, List<Type> types) = orderedEntries[index];
