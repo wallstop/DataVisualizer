@@ -177,6 +177,13 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
             Assert.That(absent.firstSnapshotPaintMilliseconds, Is.EqualTo(-1));
         }
 
+        [TearDown]
+        public void CancelBaselineAfterTest()
+        {
+            // Unity timeouts can skip coroutine disposal; this fixture owns its baseline runs.
+            PerfBaseline.Cancel();
+        }
+
         [UnityTest]
         public IEnumerator ShouldKeepLegacyReadinessSeparateFromPendingSharedIndexWork()
         {
@@ -209,18 +216,21 @@ namespace WallstopStudios.DataVisualizer.Tests.Editor
         }
 
         [UnityTest]
+        [Timeout(360000)]
         public IEnumerator ShouldMeasurePausedPartialAndCompleteIndexesSeparately()
         {
             return MeasurePartialAndCompleteIndexes(true);
         }
 
         [UnityTest]
+        [Timeout(360000)]
         public IEnumerator ShouldMeasureLiveRebuildAndCompleteIndexesSeparately()
         {
             return MeasurePartialAndCompleteIndexes(false);
         }
 
         [UnityTest]
+        [Timeout(360000)]
         public IEnumerator ShouldSkipUnsupportedRareFieldsDuringLiveRebuilds()
         {
             return MeasurePartialAndCompleteIndexes(false, false);
